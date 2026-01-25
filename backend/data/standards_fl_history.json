@@ -1,0 +1,82 @@
+{
+  "state": "FL",
+  "subject": "History",
+  "grade": "8",
+  "standards": [
+    {
+      "code": "SS.8.A.1.1",
+      "benchmark": "Provide supporting details for an answer from text, interview for oral history, check validity of information from research/text, and identify strong vs. weak arguments.",
+      "topics": ["Research Skills", "Primary Sources", "Analysis"]
+    },
+    {
+      "code": "SS.8.A.1.3",
+      "benchmark": "Analyze timelines, charts, graphs, and photographs to determine cause and effect.",
+      "topics": ["Data Analysis", "Timelines", "Cause and Effect"]
+    },
+    {
+      "code": "SS.8.A.2.1",
+      "benchmark": "Compare the relationships among the British, French, Spanish, and Dutch in their struggle for colonization of North America.",
+      "topics": ["Colonization", "European Powers", "North America"]
+    },
+    {
+      "code": "SS.8.A.2.2",
+      "benchmark": "Compare the characteristics of the New England, Middle, and Southern colonies.",
+      "topics": ["Colonial Regions", "Economy", "Geography"]
+    },
+    {
+      "code": "SS.8.A.2.4",
+      "benchmark": "Identify the impact of key colonial figures on the economic, political, and social development of the colonies.",
+      "topics": ["Colonial Figures", "Leadership"]
+    },
+    {
+      "code": "SS.8.A.3.1",
+      "benchmark": "Explain the consequences of the French and Indian War in British policies for the American colonies from 1763 - 1774.",
+      "topics": ["French and Indian War", "British Policy", "Taxation"]
+    },
+    {
+      "code": "SS.8.A.3.2",
+      "benchmark": "Explain American colonial reaction to British policy from 1763 - 1774.",
+      "topics": ["Protest", "Revolutionary Spirit", "Sons of Liberty"]
+    },
+    {
+      "code": "SS.8.A.3.6",
+      "benchmark": "Examine the causes, course, and consequences of the American Revolution.",
+      "topics": ["American Revolution", "War of Independence"]
+    },
+    {
+      "code": "SS.8.A.3.10",
+      "benchmark": "Examine the course and consequences of the Constitutional Convention (New Jersey Plan, Virginia Plan, Great Compromise, 3/5 Compromise).",
+      "topics": ["Constitution", "Compromises", "Founding Fathers"]
+    },
+    {
+      "code": "SS.8.A.4.1",
+      "benchmark": "Examine the causes, course, and consequences of United States westward expansion and its growing diplomatic assertiveness.",
+      "topics": ["Westward Expansion", "Manifest Destiny", "Louisiana Purchase"]
+    },
+    {
+      "code": "SS.8.A.4.2",
+      "benchmark": "Describe the debate surrounding the spread of slavery into western territories and Florida.",
+      "topics": ["Slavery", "Sectionalism", "Expansion"]
+    },
+    {
+      "code": "SS.8.A.4.6",
+      "benchmark": "Identify significant individuals and groups who helped to define American culture and beliefs.",
+      "topics": ["Reform Movements", "Culture", "Social Change"]
+    },
+    {
+      "code": "SS.8.A.5.1",
+      "benchmark": "Explain the causes, course, and consequence of the Civil War (sectionalism, slavery, states' rights, family/gender roles).",
+      "topics": ["Civil War", "Causes of War", "Sectional Crisis"]
+    },
+    {
+      "code": "SS.8.A.5.3",
+      "benchmark": "Explain major domestic and international economic, military, political, and socio-cultural events of Abraham Lincoln's presidency.",
+      "topics": ["Lincoln", "Civil War Leadership", "Emancipation"]
+    },
+    {
+      "code": "SS.8.A.5.6",
+      "benchmark": "Explain the causes, course, and consequences of the 13th, 14th, and 15th amendments and the rise of Jim Crow laws.",
+      "topics": ["Reconstruction", "Amendments", "Civil Rights", "Jim Crow"]
+    }
+  ]
+}
