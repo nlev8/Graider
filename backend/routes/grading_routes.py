@@ -42,7 +42,7 @@ def check_new_files():
     output_folder = data.get('output_folder', '')
 
     if not assignments_folder or not os.path.exists(assignments_folder):
-        return jsonify({"error": "Folder not found", "new_files": 0})
+        return jsonify({"error": f"Folder not found: {assignments_folder}", "new_files": 0})
 
     # Load already graded files from master CSV
     already_graded = set()
@@ -58,6 +58,12 @@ def check_new_files():
         except:
             pass
 
+    # Also check in-memory results (from grading_state)
+    if grading_state and grading_state.get("results"):
+        for r in grading_state["results"]:
+            if r.get("filename"):
+                already_graded.add(r["filename"])
+
     # Count new files
     all_files = []
     for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png']:
@@ -69,7 +75,8 @@ def check_new_files():
         "total_files": len(all_files),
         "already_graded": len(already_graded),
         "new_files": len(new_files),
-        "new_file_names": [f.name for f in new_files[:5]]
+        "new_file_names": [f.name for f in new_files[:5]],
+        "folder_checked": assignments_folder
     })
 
 
@@ -86,6 +93,75 @@ def stop_grading():
         return jsonify({"stopped": True, "message": "Stop requested, saving progress..."})
 
     return jsonify({"stopped": False, "message": "Grading not running"})
+
+
+@grading_bp.route('/api/clear-results', methods=['POST'])
+def clear_results():
+    """Clear all grading results."""
+    if grading_state is None:
+        return jsonify({"error": "Grading not initialized"}), 500
+
+    if grading_state["is_running"]:
+        return jsonify({"error": "Cannot clear results while grading is in progress"}), 400
+
+    # Clear results in state
+    grading_state["results"] = []
+    grading_state["log"] = []
+    grading_state["complete"] = False
+
+    # Clear saved results file
+    import os
+    results_file = os.path.expanduser("~/.graider_results.json")
+    if os.path.exists(results_file):
+        try:
+            os.remove(results_file)
+        except:
+            pass
+
+    return jsonify({"status": "cleared"})
+
+
+@grading_bp.route('/api/delete-result', methods=['POST'])
+def delete_result():
+    """Delete a single grading result by filename."""
+    import json
+
+    if grading_state is None:
+        return jsonify({"error": "Grading not initialized"}), 500
+
+    if grading_state["is_running"]:
+        return jsonify({"error": "Cannot delete results while grading is in progress"}), 400
+
+    data = request.json
+    filename = data.get('filename', '')
+
+    if not filename:
+        return jsonify({"error": "Filename is required"}), 400
+
+    # Find and remove the result from state
+    original_count = len(grading_state["results"])
+    grading_state["results"] = [
+        r for r in grading_state["results"]
+        if r.get('filename', '') != filename
+    ]
+
+    if len(grading_state["results"]) == original_count:
+        return jsonify({"error": "Result not found"}), 404
+
+    # Save updated results to file
+    results_file = os.path.expanduser("~/.graider_results.json")
+    try:
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(grading_state["results"], f, indent=2)
+    except Exception as e:
+        # Log but don't fail - state is already updated
+        pass
+
+    return jsonify({
+        "status": "deleted",
+        "filename": filename,
+        "remaining_count": len(grading_state["results"])
+    })
 
 
 # NOTE: The /api/grade POST route and run_grading_thread function

@@ -12,6 +12,11 @@ import os
 import sys
 import threading
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from this file's directory, override any existing env vars
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_app_dir, '.env'), override=True)
 
 app = Flask(__name__)
 CORS(app)
@@ -53,11 +58,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graider - AI-Powered Grading</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/recharts@2.1.9/umd/Recharts.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -95,11 +100,43 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             return <span ref={ref} style={{ display: 'inline-flex', alignItems: 'center' }} />;
         };
 
+        const StandardCard = ({ standard, isSelected, onToggle }) => {
+            return (
+                <div 
+                    onClick={onToggle}
+                    style={{ 
+                        background: isSelected ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.03)', 
+                        border: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '12px',
+                        padding: '15px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        position: 'relative',
+                        marginBottom: '10px'
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 700, color: isSelected ? '#a5b4fc' : '#fff', fontSize: '0.9rem' }}>{standard.code}</span>
+                        {isSelected && <Icon name="CheckCircle" size={18} style={{ color: '#6366f1' }} />}
+                    </div>
+                    <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', lineHeight: '1.5', margin: '0 0 10px 0' }}>{standard.benchmark}</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {standard.topics.map(topic => (
+                            <span key={topic} style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>
+                                {topic}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [config, setConfig] = useState({
                 assignments_folder: "/Users/alexc/Library/CloudStorage/OneDrive-VolusiaCountySchools/Assignments",
                 output_folder: "/Users/alexc/Downloads/Graider/Results",
-                roster_file: "/Users/alexc/Downloads/Graider/all_students_updated.xlsx"
+                roster_file: "/Users/alexc/Downloads/Graider/all_students_updated.xlsx",
+                grading_period: "Q3"
             });
             const [status, setStatus] = useState({
                 is_running: false, progress: 0, total: 0, current_file: "",
@@ -108,9 +145,29 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             const [activeTab, setActiveTab] = useState('grade');
             const [analytics, setAnalytics] = useState(null);
             const [selectedStudent, setSelectedStudent] = useState(null);
+            const [analyticsPeriod, setAnalyticsPeriod] = useState('all');
             const [autoGrade, setAutoGrade] = useState(false);
             const [watchStatus, setWatchStatus] = useState({ watching: false, lastCheck: null, newFiles: 0 });
             const logRef = useRef(null);
+
+            // Planner State
+            const [plannerConfig, setPlannerConfig] = useState({
+                state: 'FL',
+                grade: '7',
+                subject: 'Civics'
+            });
+            const [standards, setStandards] = useState([]);
+            const [selectedStandards, setSelectedStandards] = useState([]);
+            const [lessonPlan, setLessonPlan] = useState(null);
+            const [plannerLoading, setPlannerLoading] = useState(false);
+            const [unitConfig, setUnitConfig] = useState({
+                title: '',
+                duration: 1,
+                periodLength: 50,
+                startDate: '',
+                type: 'Lesson Plan',
+                format: 'Word'
+            });
             
             // Recharts components - safely get from window
             const RC = window.Recharts || {};
@@ -127,7 +184,53 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 }, 500);
                 return () => clearInterval(interval);
             }, []);
-            
+
+            // Load saved settings on startup
+            const [settingsLoaded, setSettingsLoaded] = React.useState(false);
+            useEffect(() => {
+                // Load rubric
+                fetch('/api/load-rubric')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.rubric) setRubric(data.rubric);
+                    })
+                    .catch(e => console.error('Failed to load rubric:', e));
+
+                // Load global settings (AI notes)
+                fetch('/api/load-global-settings')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.settings?.globalAINotes) {
+                            setGlobalAINotes(data.settings.globalAINotes);
+                        }
+                    })
+                    .catch(e => console.error('Failed to load settings:', e));
+
+                // Load saved assignments list
+                fetch('/api/list-assignments')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.assignments) setSavedAssignments(data.assignments);
+                    })
+                    .catch(e => console.error('Failed to load assignments:', e));
+
+                // Mark settings as loaded after a short delay
+                setTimeout(() => setSettingsLoaded(true), 500);
+            }, []);
+
+            // Auto-save rubric when it changes (after initial load)
+            useEffect(() => {
+                if (!settingsLoaded) return;
+                const timer = setTimeout(() => {
+                    fetch('/api/save-rubric', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(rubric)
+                    }).catch(e => console.error('Failed to save rubric:', e));
+                }, 500);
+                return () => clearTimeout(timer);
+            }, [rubric, settingsLoaded]);
+
             // Auto-grade watcher
             useEffect(() => {
                 if (!autoGrade) return;
@@ -161,15 +264,16 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 };
             }, [autoGrade, config.assignments_folder, config.output_folder]);
             
-            // Fetch analytics when tab opens
+            // Fetch analytics when tab opens or period changes
             useEffect(() => {
                 if (activeTab === 'analytics') {
-                    fetch('/api/analytics')
+                    const url = analyticsPeriod === 'all' ? '/api/analytics' : '/api/analytics?period=' + encodeURIComponent(analyticsPeriod);
+                    fetch(url)
                         .then(res => res.json())
                         .then(data => setAnalytics(data))
                         .catch(e => console.error(e));
                 }
-            }, [activeTab]);
+            }, [activeTab, analyticsPeriod]);
 
             useEffect(() => {
                 if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -179,10 +283,66 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 const res = await fetch('/api/grade', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
+                    body: JSON.stringify({
+                        ...config,
+                        assignmentConfig: selectedGradingConfig,
+                        globalAINotes: globalAINotes
+                    })
                 });
                 const data = await res.json();
                 if (data.error && !data.error.includes('already in progress')) alert(data.error);
+            };
+
+            const loadGradingConfig = async (name) => {
+                if (!name) {
+                    setSelectedGradingConfig(null);
+                    return;
+                }
+
+                // Special case: load ALL configs and combine markers + notes
+                if (name === '__ALL__') {
+                    try {
+                        let allMarkers = [];
+                        let allNotes = [];
+                        for (const assignmentName of savedAssignments) {
+                            const res = await fetch('/api/load-assignment?name=' + encodeURIComponent(assignmentName));
+                            const data = await res.json();
+                            if (data.assignment) {
+                                if (data.assignment.customMarkers) {
+                                    allMarkers = [...allMarkers, ...data.assignment.customMarkers];
+                                }
+                                if (data.assignment.gradingNotes) {
+                                    allNotes.push('[' + assignmentName + ']: ' + data.assignment.gradingNotes);
+                                }
+                            }
+                        }
+                        // Remove duplicate markers
+                        const uniqueMarkers = [...new Set(allMarkers)];
+                        // Combine global notes + all individual notes
+                        const separator = String.fromCharCode(10) + String.fromCharCode(10) + '--- Per-Assignment Notes ---' + String.fromCharCode(10) + String.fromCharCode(10);
+                        const combinedNotes = globalAINotes
+                            ? globalAINotes + separator + allNotes.join(String.fromCharCode(10) + String.fromCharCode(10))
+                            : allNotes.join(String.fromCharCode(10) + String.fromCharCode(10));
+                        setSelectedGradingConfig({
+                            title: 'All Assignments Combined',
+                            customMarkers: uniqueMarkers,
+                            gradingNotes: combinedNotes
+                        });
+                    } catch (e) {
+                        console.error('Error loading all configs:', e);
+                    }
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/load-assignment?name=' + encodeURIComponent(name));
+                    const data = await res.json();
+                    if (data.assignment) {
+                        setSelectedGradingConfig(data.assignment);
+                    }
+                } catch (e) {
+                    console.error('Error loading config:', e);
+                }
             };
 
             const openResults = () => fetch('/api/open-folder', {
@@ -231,6 +391,9 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 gradingNotes: ''
             });
             const [savedAssignments, setSavedAssignments] = React.useState([]);
+            const [loadedAssignmentName, setLoadedAssignmentName] = React.useState('');
+            const [globalAINotes, setGlobalAINotes] = React.useState('');
+            const [selectedGradingConfig, setSelectedGradingConfig] = React.useState(null);
             const [importedDoc, setImportedDoc] = React.useState({ text: '', html: '', filename: '', loading: false });
             const [docEditorModal, setDocEditorModal] = React.useState({ show: false, editedText: '', editedHtml: '', viewMode: 'formatted' });
             const [selectedMarkers, setSelectedMarkers] = React.useState([]);
@@ -257,12 +420,15 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                         alert('Error parsing document: ' + data.error);
                         setImportedDoc({ text: '', html: '', filename: '', loading: false });
                     } else {
-                        setImportedDoc({ 
-                            text: data.text || '', 
-                            html: data.html || '', 
-                            filename: file.name, 
-                            loading: false 
+                        setImportedDoc({
+                            text: data.text || '',
+                            html: data.html || '',
+                            filename: file.name,
+                            loading: false
                         });
+                        // Clear loadedAssignmentName since we're importing a new document
+                        // This ensures save will warn if the title matches an existing assignment
+                        setLoadedAssignmentName('');
                         setDocEditorModal({ show: true, editedText: data.text || '', editedHtml: data.html || '', viewMode: 'formatted' });
                         // Auto-fill title from filename
                         if (!assignment.title) {
@@ -384,16 +550,45 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             
             const saveAssignmentConfig = async () => {
                 try {
+                    let titleToSave = assignment.title;
+
+                    // Check if this title already exists and we're not editing that same assignment
+                    // Only check for exact match (case-insensitive)
+                    const titleExists = savedAssignments.some(name =>
+                        name.toLowerCase() === titleToSave.toLowerCase()
+                    );
+
+                    if (titleExists && loadedAssignmentName !== titleToSave) {
+                        const choice = confirm(
+                            `"${titleToSave}" already exists.\n\nClick OK to OVERWRITE it, or Cancel to enter a new name.`
+                        );
+                        if (!choice) {
+                            const newTitle = prompt('Enter a new assignment name:', titleToSave + ' (new)');
+                            if (!newTitle || !newTitle.trim()) {
+                                return; // User cancelled
+                            }
+                            titleToSave = newTitle.trim();
+                            setAssignment({ ...assignment, title: titleToSave });
+                        }
+                    }
+
+                    // Include the imported document content so it can be restored when loading
+                    const dataToSave = {
+                        ...assignment,
+                        title: titleToSave,
+                        importedDoc: importedDoc
+                    };
                     const res = await fetch('/api/save-assignment-config', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(assignment)
+                        body: JSON.stringify(dataToSave)
                     });
                     const data = await res.json();
                     if (data.error) {
                         alert('Error: ' + data.error);
                     } else {
                         alert('Assignment saved! Markers will be used when grading.');
+                        setLoadedAssignmentName(titleToSave);
                         loadSavedAssignments();
                     }
                 } catch (e) {
@@ -411,12 +606,112 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 }
             };
             
+            const loadStandards = async () => {
+                setPlannerLoading(true);
+                try {
+                    const res = await fetch('/api/get-standards', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(plannerConfig)
+                    });
+                    const data = await res.json();
+                    setStandards(data.standards || []);
+                } catch (e) {
+                    alert('Error loading standards: ' + e.message);
+                } finally {
+                    setPlannerLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                loadStandards();
+            }, [plannerConfig.state, plannerConfig.grade, plannerConfig.subject, activeTab]);
+
+            const toggleStandard = (code) => {
+                const newSelected = selectedStandards.includes(code)
+                    ? selectedStandards.filter(c => c !== code)
+                    : [...selectedStandards, code];
+                setSelectedStandards(newSelected);
+            };
+
+            const generateLessonPlan = async () => {
+                if (selectedStandards.length === 0) {
+                    alert('Please select at least one standard.');
+                    return;
+                }
+                if (!unitConfig.title) {
+                    alert('Please enter a title.');
+                    return;
+                }
+                
+                setPlannerLoading(true);
+                try {
+                    const res = await fetch('/api/generate-lesson-plan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            standards: selectedStandards,
+                            config: { ...plannerConfig, ...unitConfig }
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        setLessonPlan(data.plan || data);
+                    }
+                } catch (e) {
+                    alert('Error generating plan: ' + e.message);
+                } finally {
+                    setPlannerLoading(false);
+                }
+            };
+
+            const exportLessonPlan = async () => {
+                if (!lessonPlan) return;
+                try {
+                    const res = await fetch('/api/export-lesson-plan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(lessonPlan)
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                        alert('Error exporting: ' + data.error);
+                    } else {
+                        alert('Lesson plan exported to: ' + data.path);
+                    }
+                } catch (e) {
+                    alert('Error exporting: ' + e.message);
+                }
+            };
+
             const loadAssignment = async (name) => {
                 try {
                     const res = await fetch('/api/load-assignment?name=' + encodeURIComponent(name));
                     const data = await res.json();
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                        return;
+                    }
                     if (data.assignment) {
-                        setAssignment(data.assignment);
+                        // Fully replace assignment with loaded data, ensuring all fields are set
+                        setAssignment({
+                            title: data.assignment.title || '',
+                            subject: data.assignment.subject || 'Social Studies',
+                            totalPoints: data.assignment.totalPoints || 100,
+                            instructions: data.assignment.instructions || '',
+                            questions: data.assignment.questions || [],
+                            customMarkers: data.assignment.customMarkers || [],
+                            gradingNotes: data.assignment.gradingNotes || ''
+                        });
+                        setLoadedAssignmentName(name);
+                        // Also load the imported document if it was saved
+                        if (data.assignment.importedDoc) {
+                            setImportedDoc(data.assignment.importedDoc);
+                        } else {
+                            setImportedDoc({ text: '', html: '', filename: '', loading: false });
+                        }
                     }
                 } catch (e) {
                     alert('Error loading: ' + e.message);
@@ -662,32 +957,73 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                 
                                 {/* Right Panel - Marked Sections + Grading Notes */}
                                 <div style={{ width: '380px', display: 'flex', flexDirection: 'column', background: '#1a1a2e' }}>
-                                    {/* Grading Notes Section */}
+                                    {/* Global AI Notes - Applies to ALL assignments */}
                                     <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <div style={{ padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(99,102,241,0.1)' }}>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                                                <Icon name="MessageSquare" size={18} style={{ color: '#a5b4fc' }} />
-                                                AI Grading Instructions
+                                        <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(16,185,129,0.1)' }}>
+                                            <h3 style={{ fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                                <Icon name="Globe" size={16} style={{ color: '#10b981' }} />
+                                                Global AI Notes
                                             </h3>
-                                            <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', margin: '5px 0 0 0' }}>
-                                                Tell the AI how to grade this assignment
+                                            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0 0' }}>
+                                                Applies to ALL assignments (persists across restarts)
                                             </p>
                                         </div>
-                                        <div style={{ padding: '15px' }}>
+                                        <div style={{ padding: '12px' }}>
+                                            <textarea
+                                                value={globalAINotes}
+                                                onChange={e => setGlobalAINotes(e.target.value)}
+                                                onBlur={() => {
+                                                    fetch('/api/save-global-settings', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ globalAINotes })
+                                                    });
+                                                }}
+                                                placeholder="Global instructions for AI grading:&#10;• Always accept student's interpretation&#10;• Be lenient on spelling/grammar&#10;• Focus on content, not formatting"
+                                                style={{
+                                                    width: '100%',
+                                                    minHeight: '80px',
+                                                    padding: '10px',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid rgba(16,185,129,0.3)',
+                                                    background: 'rgba(0,0,0,0.3)',
+                                                    color: '#fff',
+                                                    fontSize: '0.85rem',
+                                                    lineHeight: '1.4',
+                                                    resize: 'vertical',
+                                                    outline: 'none',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Assignment-Specific Grading Notes */}
+                                    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(99,102,241,0.1)' }}>
+                                            <h3 style={{ fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                                <Icon name="MessageSquare" size={16} style={{ color: '#a5b4fc' }} />
+                                                Assignment-Specific Notes
+                                            </h3>
+                                            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0 0' }}>
+                                                Saved with this assignment configuration
+                                            </p>
+                                        </div>
+                                        <div style={{ padding: '12px' }}>
                                             <textarea
                                                 value={assignment.gradingNotes || ''}
                                                 onChange={e => setAssignment({ ...assignment, gradingNotes: e.target.value })}
-                                                placeholder="Examples:&#10;• Be lenient on spelling&#10;• Full credit if they mention 3+ causes&#10;• Deduct points for missing dates&#10;• Accept any reasonable interpretation&#10;• Look for specific keywords: treaty, territory, expansion"
+                                                placeholder="Examples:&#10;• Full credit if they mention 3+ causes&#10;• Deduct points for missing dates&#10;• Look for keywords: treaty, territory"
                                                 style={{
                                                     width: '100%',
-                                                    minHeight: '150px',
-                                                    padding: '12px',
+                                                    minHeight: '100px',
+                                                    padding: '10px',
                                                     borderRadius: '8px',
                                                     border: '1px solid rgba(99,102,241,0.3)',
                                                     background: 'rgba(0,0,0,0.3)',
                                                     color: '#fff',
-                                                    fontSize: '0.9rem',
-                                                    lineHeight: '1.5',
+                                                    fontSize: '0.85rem',
+                                                    lineHeight: '1.4',
                                                     resize: 'vertical',
                                                     outline: 'none',
                                                     boxSizing: 'border-box'
@@ -832,12 +1168,12 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                 Graider
                             </h1>
                         </div>
-                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.1rem' }}>AI-Powered Assignment Grading • {rubric.gradeLevel} Grade {rubric.subject}</p>
+                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.1rem' }}>Your AI-Powered Teaching Assistant</p>
                     </header>
 
                     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
                         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                            {[{id:'grade',icon:'Home',label:'Home'},{id:'results',icon:'BarChart3',label:'Results'},{id:'builder',icon:'FileEdit',label:'Builder'},{id:'analytics',icon:'TrendingUp',label:'Analytics'},{id:'settings',icon:'Settings',label:'Settings'}].map(tab => (
+                            {[{id:'grade',icon:'Home',label:'Home'},{id:'results',icon:'BarChart3',label:'Results'},{id:'builder',icon:'FileEdit',label:'Builder'},{id:'planner',icon:'BookOpen',label:'Planner'},{id:'analytics',icon:'TrendingUp',label:'Analytics'},{id:'settings',icon:'Settings',label:'Settings'}].map(tab => (
                                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                                     style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', border: 'none',
                                         background: activeTab === tab.id ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.05)',
@@ -862,6 +1198,31 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                             </div>
                                         </div>
                                     )}
+                                    {/* Assignment Config Selector */}
+                                    {savedAssignments.length > 0 && (
+                                        <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(251,191,36,0.1)', borderRadius: '12px', border: '1px solid rgba(251,191,36,0.3)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <Icon name="FileCheck" size={18} style={{ color: '#fbbf24' }} />
+                                                    <span style={{ fontWeight: 600, color: '#fbbf24' }}>Assignment Config:</span>
+                                                </div>
+                                                <select
+                                                    onChange={e => loadGradingConfig(e.target.value)}
+                                                    style={{ padding: '8px 15px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.9rem', minWidth: '200px' }}
+                                                >
+                                                    <option value="">Use default markers</option>
+                                                    <option value="__ALL__">Use ALL markers (all assignments)</option>
+                                                    {savedAssignments.map(a => <option key={a} value={a}>{a}</option>)}
+                                                </select>
+                                                {selectedGradingConfig && (
+                                                    <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
+                                                        {(selectedGradingConfig.customMarkers || []).length} markers, {selectedGradingConfig.gradingNotes ? 'has notes' : 'no notes'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
                                         {!status.is_running ? (
                                             <button onClick={startGrading} disabled={autoGrade}
@@ -1015,7 +1376,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                         {activeTab === 'settings' && (
                             <div className="fade-in" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '30px' }}>
                                 <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px' }}><Icon name="Settings" size={24} />Configuration</h2>
-                                {[{key:'assignments_folder',label:'Assignments Folder',icon:'FolderInput',type:'folder'},{key:'output_folder',label:'Output Folder',icon:'FolderOutput',type:'folder'},{key:'roster_file',label:'Roster File',icon:'FileSpreadsheet',type:'file'}].map(f => (
+                                {[{key:'assignments_folder',label:'Assignments Folder',icon:'FolderInput',type:'folder'},{key:'output_folder',label:'Output Folder',icon:'FolderOutput',type:'folder'},{key:'roster_file',label:'Roster File (Excel or CSV)',icon:'FileSpreadsheet',type:'file'}].map(f => (
                                     <div key={f.key} style={{ marginBottom: '20px' }}>
                                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}><Icon name={f.icon} size={18} />{f.label}</label>
                                         <div style={{ display: 'flex', gap: '10px' }}>
@@ -1033,6 +1394,18 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                         </div>
                                     </div>
                                 ))}
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}><Icon name="Calendar" size={18} />Grading Period</label>
+                                    <select value={config.grading_period} onChange={e => setConfig({ ...config, grading_period: e.target.value })} style={{ padding: '14px 18px', borderRadius: '12px', border: '2px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff', fontSize: '0.95rem', minWidth: '200px' }}>
+                                        <option value="Q1">Q1 - Quarter 1</option>
+                                        <option value="Q2">Q2 - Quarter 2</option>
+                                        <option value="Q3">Q3 - Quarter 3</option>
+                                        <option value="Q4">Q4 - Quarter 4</option>
+                                        <option value="S1">S1 - Semester 1</option>
+                                        <option value="S2">S2 - Semester 2</option>
+                                    </select>
+                                </div>
+
                                 <div style={{ marginTop: '30px', padding: '20px', background: 'rgba(99,102,241,0.1)', borderRadius: '12px', border: '1px solid rgba(99,102,241,0.2)' }}>
                                     <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}><Icon name="FileCheck" size={18} />Supported File Types</h3>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -1041,7 +1414,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                         ))}
                                     </div>
                                 </div>
-                                
+
                                 {/* Rubric Editor */}
                                 <div style={{ marginTop: '30px', padding: '25px', background: 'rgba(16,185,129,0.1)', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.2)' }}>
                                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}><Icon name="ClipboardList" size={20} />Grading Rubric</h3>
@@ -1101,14 +1474,88 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                         )}
                         
                         {activeTab === 'builder' && (
-                            <div className="fade-in" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '30px' }}>
+                            <div className="fade-in">
+                                {/* Saved Assignments Section */}
+                                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', marginBottom: '20px' }}>
+                                    <button
+                                        onClick={() => {
+                                            setAssignment({ title: '', subject: 'Social Studies', totalPoints: 100, instructions: '', questions: [], customMarkers: [], gradingNotes: '' });
+                                            setImportedDoc({ text: '', html: '', filename: '', loading: false });
+                                            setLoadedAssignmentName('');
+                                        }}
+                                        style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', marginBottom: '15px' }}
+                                    >+ New Assignment</button>
+                                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px', margin: '0 0 15px 0' }}>
+                                        <Icon name="FolderOpen" size={20} style={{ color: '#10b981' }} />
+                                        Saved Assignment Configs ({savedAssignments.length})
+                                    </h3>
+
+                                    {savedAssignments.length === 0 ? (
+                                        <div style={{ padding: '30px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+                                            <Icon name="FileQuestion" size={40} style={{ marginBottom: '10px', opacity: 0.5 }} />
+                                            <p style={{ margin: 0 }}>No saved assignments yet. Create one below!</p>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                                            {savedAssignments.map(name => (
+                                                <div
+                                                    key={name}
+                                                    style={{
+                                                        padding: '15px',
+                                                        background: loadedAssignmentName === name ? 'rgba(99,102,241,0.2)' : 'rgba(0,0,0,0.2)',
+                                                        borderRadius: '12px',
+                                                        border: loadedAssignmentName === name ? '2px solid rgba(99,102,241,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onClick={() => loadAssignment(name)}
+                                                >
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontWeight: 600, marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <Icon name="FileText" size={16} style={{ color: '#a5b4fc' }} />
+                                                                {name}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
+                                                                Click to load and edit
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (confirm(`Delete "${name}"?`)) {
+                                                                    fetch('/api/delete-assignment?name=' + encodeURIComponent(name), { method: 'DELETE' })
+                                                                        .then(() => {
+                                                                            setSavedAssignments(savedAssignments.filter(a => a !== name));
+                                                                            if (loadedAssignmentName === name) {
+                                                                                setAssignment({ title: '', subject: 'Social Studies', totalPoints: 100, instructions: '', questions: [], customMarkers: [], gradingNotes: '' });
+                                                                                setLoadedAssignmentName('');
+                                                                            }
+                                                                        });
+                                                                }
+                                                            }}
+                                                            style={{ padding: '4px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}
+                                                        >
+                                                            <Icon name="Trash2" size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Assignment Editor */}
+                                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '30px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-                                    <h2 style={{ fontSize: '1.3rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}><Icon name="FileEdit" size={24} />Assignment Builder</h2>
-                                    {savedAssignments.length > 0 && (
-                                        <select onChange={e => e.target.value && loadAssignment(e.target.value)} style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.9rem' }}>
-                                            <option value="">Load saved assignment...</option>
-                                            {savedAssignments.map(a => <option key={a} value={a}>{a}</option>)}
-                                        </select>
+                                    <h2 style={{ fontSize: '1.3rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <Icon name="FileEdit" size={24} />
+                                        {assignment.title ? `Editing: ${assignment.title}` : 'New Assignment'}
+                                    </h2>
+                                    {assignment.title && (
+                                        <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
+                                            {(assignment.customMarkers || []).length} markers • {assignment.gradingNotes ? 'Has notes' : 'No notes'}
+                                        </span>
                                     )}
                                 </div>
                                 
@@ -1132,13 +1579,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                             style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: '2px solid rgba(99,102,241,0.3)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '1rem', textAlign: 'center' }} />
                                     </div>
                                 </div>
-                                
-                                <div style={{ marginBottom: '25px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>Instructions (shown at top of assignment)</label>
-                                    <textarea value={assignment.instructions} onChange={e => setAssignment({ ...assignment, instructions: e.target.value })} placeholder="Enter any instructions for students..."
-                                        style={{ width: '100%', minHeight: '80px', padding: '12px 15px', borderRadius: '10px', border: '2px solid rgba(99,102,241,0.3)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.95rem', resize: 'vertical' }} />
-                                </div>
-                                
+
                                 {/* Import Document Section */}
                                 <div style={{ marginBottom: '25px', padding: '20px', background: 'rgba(251,191,36,0.1)', borderRadius: '12px', border: '1px solid rgba(251,191,36,0.3)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1162,9 +1603,56 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                             <button onClick={() => fileInputRef.current?.click()} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <Icon name="Upload" size={16} />{importedDoc.loading ? 'Loading...' : importedDoc.text ? 'Import New' : 'Import Word/PDF'}
                                             </button>
+                                            <button
+                                                onClick={() => {
+                                                    const nl = String.fromCharCode(10);
+                                                    const blankHtml = '<h1>' + (assignment.title || 'New Assignment') + '</h1><p>Name: ___________________ Date: ___________</p><h2>Directions:</h2><p>Enter your directions here...</p><h2>Question 1:</h2><p></p><h2>Question 2:</h2><p></p>';
+                                                    const blankText = 'New Assignment' + nl + 'Name: ___________________ Date: ___________' + nl + 'Directions:' + nl + 'Enter your directions here...' + nl + 'Question 1:' + nl + nl + 'Question 2:' + nl;
+                                                    setImportedDoc({ text: blankText, html: blankHtml, filename: 'New Document', loading: false });
+                                                    setLoadedAssignmentName('');
+                                                    setDocEditorModal({ show: true, editedText: '', editedHtml: blankHtml, viewMode: 'formatted' });
+                                                }}
+                                                style={{ padding: '10px 20px', borderRadius: '8px', border: '2px solid rgba(99,102,241,0.5)', background: 'transparent', color: '#a5b4fc', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
+                                            >
+                                                <Icon name="FilePlus" size={16} />Create Blank
+                                            </button>
                                         </div>
                                     </div>
                                     
+                                    {/* Manual Marker Input */}
+                                    <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                        <input
+                                            type="text"
+                                            id="manualMarkerInput"
+                                            placeholder="Type a marker phrase and press Add..."
+                                            style={{ flex: 1, padding: '10px 15px', borderRadius: '8px', border: '1px solid rgba(251,191,36,0.3)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.9rem' }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && e.target.value.trim()) {
+                                                    const newMarker = e.target.value.trim();
+                                                    if (!(assignment.customMarkers || []).includes(newMarker)) {
+                                                        setAssignment({ ...assignment, customMarkers: [...(assignment.customMarkers || []), newMarker] });
+                                                    }
+                                                    e.target.value = '';
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const input = document.getElementById('manualMarkerInput');
+                                                if (input && input.value.trim()) {
+                                                    const newMarker = input.value.trim();
+                                                    if (!(assignment.customMarkers || []).includes(newMarker)) {
+                                                        setAssignment({ ...assignment, customMarkers: [...(assignment.customMarkers || []), newMarker] });
+                                                    }
+                                                    input.value = '';
+                                                }
+                                            }}
+                                            style={{ padding: '10px 16px', borderRadius: '8px', border: 'none', background: 'rgba(251,191,36,0.3)', color: '#fbbf24', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
+                                        >
+                                            <Icon name="Plus" size={16} />Add
+                                        </button>
+                                    </div>
+
                                     {/* Custom Markers Summary */}
                                     {(assignment.customMarkers || []).length > 0 && (
                                         <div style={{ marginTop: '15px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -1284,8 +1772,9 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                     </div>
                                 )}
                             </div>
+                            </div>
                         )}
-                        
+
                         {activeTab === 'analytics' && (
                             <div className="fade-in">
                                 {!analytics || analytics.error ? (
@@ -1296,6 +1785,26 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                     </div>
                                 ) : (
                                     <>
+                                        {/* Period Filter */}
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                                            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <Icon name="BarChart3" size={24} /> Class Analytics
+                                            </h2>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <label style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.6)' }}>Filter by Period:</label>
+                                                <select
+                                                    value={analyticsPeriod}
+                                                    onChange={e => setAnalyticsPeriod(e.target.value)}
+                                                    style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '0.9rem', cursor: 'pointer' }}
+                                                >
+                                                    <option value="all">All Periods</option>
+                                                    {(analytics.available_periods || []).map(p => (
+                                                        <option key={p} value={p}>{p}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
                                         {/* Class Stats Cards */}
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
                                             {[
@@ -1357,18 +1866,54 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                         )}
                                         
                                         {/* Student Progress Line Chart */}
-                                        <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', marginBottom: '20px' }}>
-                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}><Icon name="TrendingUp" size={20} />Student Progress Over Time</h3>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px' }}>
-                                                <button onClick={() => setSelectedStudent(null)} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: !selectedStudent ? '#6366f1' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', cursor: 'pointer' }}>All Students</button>
-                                                {(analytics.student_progress || []).map(s => (
-                                                    <button key={s.name} onClick={() => setSelectedStudent(s.name)} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: selectedStudent === s.name ? '#6366f1' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', cursor: 'pointer' }}>{s.name.split(' ')[0]}</button>
-                                                ))}
+                                        <div id="student-progress-section" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: selectedStudent ? '2px solid #6366f1' : '1px solid rgba(255,255,255,0.1)', padding: '25px', marginBottom: '20px', transition: 'border 0.3s' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <Icon name="TrendingUp" size={20} />
+                                                    {selectedStudent ? selectedStudent + "'s Progress" : 'Student Progress Over Time'}
+                                                </h3>
+                                                {selectedStudent && (
+                                                    <button onClick={() => setSelectedStudent(null)} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <Icon name="X" size={14} /> Clear Selection
+                                                    </button>
+                                                )}
                                             </div>
+                                            {selectedStudent && (() => {
+                                                const studentData = (analytics.student_progress || []).find(s => s.name === selectedStudent);
+                                                if (!studentData) return null;
+                                                const grades = studentData.grades || [];
+                                                const highest = grades.length > 0 ? Math.max(...grades.map(g => g.score)) : 0;
+                                                const lowest = grades.length > 0 ? Math.min(...grades.map(g => g.score)) : 0;
+                                                return (
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
+                                                        <div style={{ background: 'rgba(99,102,241,0.1)', borderRadius: '12px', padding: '15px', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '5px' }}>Average</div>
+                                                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#6366f1' }}>{studentData.average}%</div>
+                                                        </div>
+                                                        <div style={{ background: 'rgba(74,222,128,0.1)', borderRadius: '12px', padding: '15px', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '5px' }}>Highest</div>
+                                                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#4ade80' }}>{highest}%</div>
+                                                        </div>
+                                                        <div style={{ background: 'rgba(248,113,113,0.1)', borderRadius: '12px', padding: '15px', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '5px' }}>Lowest</div>
+                                                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#f87171' }}>{lowest}%</div>
+                                                        </div>
+                                                        <div style={{ background: 'rgba(251,191,36,0.1)', borderRadius: '12px', padding: '15px', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '5px' }}>Assignments</div>
+                                                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fbbf24' }}>{grades.length}</div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                            {!selectedStudent && (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px' }}>
+                                                <span style={{ padding: '6px 12px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>Click a student name below to view details</span>
+                                            </div>
+                                            )}
                                             {chartsLoaded && (
                                             <ResponsiveContainer width="100%" height={250}>
                                                 <LineChart data={(() => {
-                                                    const filtered = selectedStudent 
+                                                    const filtered = selectedStudent
                                                         ? (analytics.student_progress || []).filter(s => s.name === selectedStudent)
                                                         : (analytics.student_progress || []);
                                                     const allGrades = filtered.flatMap(s => s.grades.map(g => ({...g, student: s.name.split(' ')[0]})));
@@ -1382,6 +1927,29 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                                 </LineChart>
                                             </ResponsiveContainer>
                                             )}
+                                            {selectedStudent && (() => {
+                                                const studentData = (analytics.student_progress || []).find(s => s.name === selectedStudent);
+                                                if (!studentData || !studentData.grades || studentData.grades.length === 0) return null;
+                                                return (
+                                                    <div style={{ marginTop: '20px' }}>
+                                                        <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '10px', color: 'rgba(255,255,255,0.7)' }}>Assignment History</h4>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                                                            {studentData.grades.map((g, i) => (
+                                                                <div key={i} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <div>
+                                                                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{g.assignment}</div>
+                                                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>{g.date}</div>
+                                                                    </div>
+                                                                    <span style={{ padding: '4px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '0.9rem',
+                                                                        background: g.score >= 90 ? 'rgba(74,222,128,0.2)' : g.score >= 80 ? 'rgba(96,165,250,0.2)' : g.score >= 70 ? 'rgba(251,191,36,0.2)' : 'rgba(248,113,113,0.2)',
+                                                                        color: g.score >= 90 ? '#4ade80' : g.score >= 80 ? '#60a5fa' : g.score >= 70 ? '#fbbf24' : '#f87171'
+                                                                    }}>{g.score}%</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                         
                                         {/* Two columns: Attention Needed + Top Performers */}
@@ -1394,8 +1962,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                                 ) : (
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                                         {(analytics.attention_needed || []).slice(0, 5).map((s, i) => (
-                                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
-                                                                <span>{s.name}</span>
+                                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', cursor: 'pointer', transition: 'background 0.2s' }} onClick={() => setSelectedStudent(s.name)} onMouseOver={e => e.currentTarget.style.background = 'rgba(0,0,0,0.4)'} onMouseOut={e => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'}>
+                                                                <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted' }}>{s.name}</span>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                                     <span style={{ color: '#f87171', fontWeight: 700 }}>{s.average}%</span>
                                                                     <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', background: s.trend === 'declining' ? 'rgba(239,68,68,0.3)' : 'rgba(251,191,36,0.3)', color: s.trend === 'declining' ? '#f87171' : '#fbbf24' }}>{s.trend}</span>
@@ -1411,10 +1979,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px', color: '#4ade80' }}><Icon name="Award" size={20} />Top Performers</h3>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                                     {(analytics.top_performers || []).map((s, i) => (
-                                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', cursor: 'pointer', transition: 'background 0.2s' }} onClick={() => setSelectedStudent(s.name)} onMouseOver={e => e.currentTarget.style.background = 'rgba(0,0,0,0.4)'} onMouseOut={e => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                                 <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>{i + 1}</span>
-                                                                <span>{s.name}</span>
+                                                                <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted' }}>{s.name}</span>
                                                             </div>
                                                             <span style={{ color: '#4ade80', fontWeight: 700 }}>{s.average}%</span>
                                                         </div>
@@ -1438,8 +2006,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                                     </thead>
                                                     <tbody>
                                                         {(analytics.student_progress || []).map((s, i) => (
-                                                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                                <td style={{ padding: '12px', fontWeight: 600 }}>{s.name}</td>
+                                                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', background: selectedStudent === s.name ? 'rgba(99,102,241,0.2)' : 'transparent', transition: 'background 0.2s' }} onClick={() => setSelectedStudent(s.name)} onMouseOver={e => { if (selectedStudent !== s.name) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }} onMouseOut={e => { if (selectedStudent !== s.name) e.currentTarget.style.background = 'transparent'; }}>
+                                                                <td style={{ padding: '12px', fontWeight: 600, textDecoration: 'underline', textDecorationStyle: 'dotted' }}>{s.name}</td>
                                                                 <td style={{ padding: '12px', textAlign: 'center' }}>{s.grades.length}</td>
                                                                 <td style={{ padding: '12px', textAlign: 'center' }}>
                                                                     <span style={{ padding: '4px 12px', borderRadius: '20px', fontWeight: 700,
@@ -1463,6 +2031,504 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                                 )}
                             </div>
                         )}
+                        
+                        {activeTab === 'planner' && (
+                            <div className="fade-in">
+                                <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '25px' }}>
+                                    {/* Sidebar: Configuration */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                        {/* Basic Settings */}
+                                        <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '20px' }}>
+                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <Icon name="Settings2" size={20} /> Configuration
+                                            </h3>
+                                            
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>State</label>
+                                                    <select 
+                                                        value={plannerConfig.state}
+                                                        onChange={e => setPlannerConfig({...plannerConfig, state: e.target.value})}
+                                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                    >
+                                                        <option value="FL">Florida</option>
+                                                        <option value="TX">Texas</option>
+                                                        <option value="NY">New York</option>
+                                                        <option value="CA">California</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Grade Level</label>
+                                                    <select 
+                                                        value={plannerConfig.grade}
+                                                        onChange={e => setPlannerConfig({...plannerConfig, grade: e.target.value})}
+                                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                    >
+                                                        <option value="K">Kindergarten</option>
+                                                        <option value="1">1st Grade</option>
+                                                        <option value="2">2nd Grade</option>
+                                                        <option value="3">3rd Grade</option>
+                                                        <option value="4">4th Grade</option>
+                                                        <option value="5">5th Grade</option>
+                                                        <option value="6">6th Grade</option>
+                                                        <option value="7">7th Grade</option>
+                                                        <option value="8">8th Grade</option>
+                                                        <option value="9">9th Grade</option>
+                                                        <option value="10">10th Grade</option>
+                                                        <option value="11">11th Grade</option>
+                                                        <option value="12">12th Grade</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Subject</label>
+                                                    <select 
+                                                        value={plannerConfig.subject}
+                                                        onChange={e => setPlannerConfig({...plannerConfig, subject: e.target.value})}
+                                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                    >
+                                                        <option value="Civics">Civics</option>
+                                                        <option value="History">History</option>
+                                                        <option value="Geography">Geography</option>
+                                                        <option value="Economics">Economics</option>
+                                                        <option value="Math">Math</option>
+                                                        <option value="Science">Science</option>
+                                                        <option value="ELA">English / ELA</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+
+
+
+
+                                        {/* Unit Details */}
+                                        <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '20px' }}>
+                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <Icon name="FileText" size={20} /> Details
+                                            </h3>
+                                            
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Content Type</label>
+                                                    <select 
+                                                        value={unitConfig.type}
+                                                        onChange={e => setUnitConfig({...unitConfig, type: e.target.value})}
+                                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                    >
+                                                        <option value="Unit Plan">Unit Plan</option>
+                                                        <option value="Lesson Plan">Lesson Plan</option>
+                                                        <option value="Assignment">Assignment</option>
+                                                        <option value="Project">Project</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Title</label>
+                                                    <input 
+                                                        type="text"
+                                                        value={unitConfig.title}
+                                                        onChange={e => setUnitConfig({...unitConfig, title: e.target.value})}
+                                                        placeholder="e.g., Foundations of Government"
+                                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                    />
+                                                </div>
+                                                
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                                    <div>
+                                                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Duration (Days)</label>
+                                                        <input
+                                                            type="number"
+                                                            value={unitConfig.duration}
+                                                            onChange={e => setUnitConfig({...unitConfig, duration: parseInt(e.target.value) || 1})}
+                                                            min="1" max="20"
+                                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Period Length (min)</label>
+                                                        <input
+                                                            type="number"
+                                                            value={unitConfig.periodLength}
+                                                            onChange={e => setUnitConfig({...unitConfig, periodLength: parseInt(e.target.value) || 50})}
+                                                            min="20" max="120"
+                                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Output Format</label>
+                                                    <select 
+                                                        value={unitConfig.format}
+                                                        onChange={e => setUnitConfig({...unitConfig, format: e.target.value})}
+                                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                                                    >
+                                                        <option value="Word">Word Document (.docx)</option>
+                                                        <option value="Text">Plain Text (.txt)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Additional Requirements / Directions</label>
+                                                    <textarea 
+                                                        value={unitConfig.requirements || ''}
+                                                        onChange={e => setUnitConfig({...unitConfig, requirements: e.target.value})}
+                                                        placeholder="e.g. Focus on primary sources, make it a group project, include a debate..."
+                                                        style={{ width: '100%', minHeight: '80px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem', resize: 'vertical' }}
+                                                    />
+                                                </div>
+                                                
+                                                <button 
+                                                    onClick={generateLessonPlan}
+                                                    disabled={plannerLoading || selectedStandards.length === 0}
+                                                    style={{ 
+                                                        width: '100%', padding: '12px', borderRadius: '10px', border: 'none', 
+                                                        background: plannerLoading || selectedStandards.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #10b981, #059669)',
+                                                        color: '#fff', fontSize: '0.95rem', fontWeight: 600, cursor: plannerLoading || selectedStandards.length === 0 ? 'not-allowed' : 'pointer',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '10px'
+                                                    }}
+                                                >
+                                                    {plannerLoading ? <Icon name="Loader2" size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Icon name="Sparkles" size={18} />}
+                                                    {plannerLoading ? 'Generating...' : 'Generate Plan'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Main Content: Standards & Preview */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                        
+                                        {lessonPlan ? (
+                                            <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '30px', maxHeight: '80vh', overflowY: 'auto' }}>
+                                                {/* Header */}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                                            <h2 style={{ fontSize: '1.8rem', fontWeight: 700, margin: 0 }}>{lessonPlan.title}</h2>
+                                                            <span style={{
+                                                                background: (lessonPlan.overview || '').includes('MOCK MODE') ? 'rgba(251,191,36,0.2)' : 'rgba(74,222,128,0.2)',
+                                                                color: (lessonPlan.overview || '').includes('MOCK MODE') ? '#fbbf24' : '#4ade80',
+                                                                fontSize: '0.7rem', fontWeight: 700, padding: '4px 8px', borderRadius: '4px',
+                                                                border: (lessonPlan.overview || '').includes('MOCK MODE') ? '1px solid rgba(251,191,36,0.3)' : '1px solid rgba(74,222,128,0.3)'
+                                                            }}>
+                                                                {(lessonPlan.overview || '').includes('MOCK MODE') ? 'MOCK MODE' : 'AI GENERATED'}
+                                                            </span>
+                                                        </div>
+                                                        <p style={{ color: 'rgba(255,255,255,0.6)', lineHeight: '1.6', marginBottom: '15px' }}>{lessonPlan.overview}</p>
+
+                                                        {/* Essential Questions */}
+                                                        {lessonPlan.essential_questions && lessonPlan.essential_questions.length > 0 && (
+                                                            <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '15px', marginTop: '15px' }}>
+                                                                <h4 style={{ fontSize: '0.85rem', color: '#a5b4fc', marginBottom: '10px', fontWeight: 600 }}>Essential Questions</h4>
+                                                                <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                                                    {lessonPlan.essential_questions.map((q, i) => (
+                                                                        <li key={i} style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', marginBottom: '5px' }}>{q}</li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '10px', marginLeft: '20px' }}>
+                                                        <button onClick={exportLessonPlan} style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>
+                                                            <Icon name="Download" size={16} /> Export
+                                                        </button>
+                                                        <button onClick={() => setLessonPlan(null)} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+                                                            Close
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Days */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                                                    {(lessonPlan.days || []).map((day, i) => (
+                                                        <div key={i} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '16px', padding: '25px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                            {/* Day Header */}
+                                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                                                <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.2rem', flexShrink: 0 }}>
+                                                                    {day.day}
+                                                                </div>
+                                                                <div style={{ flex: 1 }}>
+                                                                    <h3 style={{ fontSize: '1.3rem', fontWeight: 600, margin: '0 0 8px 0' }}>{day.topic}</h3>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                                                        <Icon name="Target" size={14} style={{ color: '#10b981' }} />
+                                                                        <span style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 500 }}>Learning Objective:</span>
+                                                                    </div>
+                                                                    <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', margin: 0, lineHeight: '1.5' }}>{day.objective}</p>
+
+                                                                    {/* Standards Addressed */}
+                                                                    {day.standards_addressed && day.standards_addressed.length > 0 && (
+                                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                                                                            {day.standards_addressed.map((std, idx) => (
+                                                                                <span key={idx} style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }}>{std}</span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Vocabulary */}
+                                                            {day.vocabulary && day.vocabulary.length > 0 && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '10px' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="BookOpen" size={14} /> Vocabulary</h4>
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px' }}>
+                                                                        {day.vocabulary.map((v, idx) => (
+                                                                            <div key={idx} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                                                                                <span style={{ fontWeight: 600, color: '#fbbf24' }}>{typeof v === 'object' ? v.term : v}</span>
+                                                                                {typeof v === 'object' && v.definition && (
+                                                                                    <span style={{ color: 'rgba(255,255,255,0.6)', marginLeft: '8px' }}>- {v.definition}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Timing Schedule */}
+                                                            {day.timing && day.timing.length > 0 && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '10px' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#60a5fa', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Clock" size={14} /> Lesson Timing</h4>
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                        {day.timing.map((t, idx) => (
+                                                                            <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                                                                                <div style={{ minWidth: '70px', fontFamily: 'monospace', color: '#60a5fa', fontWeight: 600 }}>{t.minutes || t.duration}</div>
+                                                                                <div style={{ flex: 1 }}>
+                                                                                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{t.activity}</div>
+                                                                                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>{t.description}</div>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Bell Ringer Detail */}
+                                                            {day.bell_ringer && typeof day.bell_ringer === 'object' && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(165,180,252,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(165,180,252,0.2)' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#a5b4fc', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Zap" size={14} /> Bell Ringer</h4>
+                                                                    <p style={{ fontWeight: 500, marginBottom: '10px', fontSize: '0.95rem' }}>{day.bell_ringer.prompt}</p>
+                                                                    {day.bell_ringer.expected_responses && (
+                                                                        <div style={{ marginTop: '10px' }}>
+                                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '5px' }}>Expected Responses:</div>
+                                                                            <ul style={{ margin: 0, paddingLeft: '20px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                                                                                {day.bell_ringer.expected_responses.map((r, idx) => <li key={idx}>{r}</li>)}
+                                                                            </ul>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Simple Bell Ringer */}
+                                                            {day.bell_ringer && typeof day.bell_ringer === 'string' && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(165,180,252,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(165,180,252,0.2)' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#a5b4fc', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Zap" size={14} /> Bell Ringer</h4>
+                                                                    <p style={{ margin: 0, fontSize: '0.9rem' }}>{day.bell_ringer}</p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Direct Instruction */}
+                                                            {day.direct_instruction && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(251,191,36,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(251,191,36,0.2)' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Presentation" size={14} /> Direct Instruction</h4>
+                                                                    {day.direct_instruction.key_points && (
+                                                                        <div style={{ marginBottom: '12px' }}>
+                                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Key Points:</div>
+                                                                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                                                                {day.direct_instruction.key_points.map((p, idx) => (
+                                                                                    <li key={idx} style={{ marginBottom: '6px', fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>{p}</li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </div>
+                                                                    )}
+                                                                    {day.direct_instruction.check_for_understanding && (
+                                                                        <div>
+                                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Check for Understanding:</div>
+                                                                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                                                                {day.direct_instruction.check_for_understanding.map((q, idx) => (
+                                                                                    <li key={idx} style={{ marginBottom: '4px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', fontStyle: 'italic' }}>"{q}"</li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Activity Detail */}
+                                                            {day.activity && typeof day.activity === 'object' && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(74,222,128,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(74,222,128,0.2)' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#4ade80', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Activity" size={14} /> {day.activity.name || 'Main Activity'}</h4>
+                                                                    <p style={{ marginBottom: '12px', fontSize: '0.9rem' }}>{day.activity.description}</p>
+                                                                    {day.activity.grouping && (
+                                                                        <div style={{ display: 'inline-block', padding: '4px 10px', background: 'rgba(74,222,128,0.2)', borderRadius: '6px', fontSize: '0.8rem', marginBottom: '12px' }}>
+                                                                            Grouping: {day.activity.grouping}
+                                                                        </div>
+                                                                    )}
+                                                                    {day.activity.student_tasks && (
+                                                                        <div style={{ marginTop: '10px' }}>
+                                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Student Tasks:</div>
+                                                                            <ol style={{ margin: 0, paddingLeft: '20px' }}>
+                                                                                {day.activity.student_tasks.map((t, idx) => (
+                                                                                    <li key={idx} style={{ marginBottom: '4px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>{t}</li>
+                                                                                ))}
+                                                                            </ol>
+                                                                        </div>
+                                                                    )}
+                                                                    {day.activity.differentiation && (
+                                                                        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                                            {day.activity.differentiation.struggling && (
+                                                                                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                                                                                    <div style={{ fontSize: '0.75rem', color: '#f87171', marginBottom: '4px' }}>Support for Struggling:</div>
+                                                                                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>{day.activity.differentiation.struggling}</div>
+                                                                                </div>
+                                                                            )}
+                                                                            {day.activity.differentiation.advanced && (
+                                                                                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                                                                                    <div style={{ fontSize: '0.75rem', color: '#a78bfa', marginBottom: '4px' }}>Extension for Advanced:</div>
+                                                                                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>{day.activity.differentiation.advanced}</div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Simple Activity */}
+                                                            {day.activity && typeof day.activity === 'string' && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(74,222,128,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(74,222,128,0.2)' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#4ade80', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Activity" size={14} /> Main Activity</h4>
+                                                                    <p style={{ margin: 0, fontSize: '0.9rem' }}>{day.activity}</p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Assessment */}
+                                                            {day.assessment && (
+                                                                <div style={{ marginBottom: '20px', background: 'rgba(248,113,113,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(248,113,113,0.2)' }}>
+                                                                    <h4 style={{ fontSize: '0.9rem', color: '#f87171', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="CheckCircle" size={14} /> Assessment</h4>
+                                                                    {typeof day.assessment === 'object' ? (
+                                                                        <>
+                                                                            {day.assessment.type && <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Type: {day.assessment.type}</div>}
+                                                                            <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>{day.assessment.description}</p>
+                                                                            {day.assessment.exit_ticket && (
+                                                                                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', marginTop: '10px' }}>
+                                                                                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Exit Ticket:</div>
+                                                                                    <div style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>"{day.assessment.exit_ticket}"</div>
+                                                                                </div>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <p style={{ margin: 0, fontSize: '0.9rem' }}>{day.assessment}</p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Bottom Row: Materials, Homework, Teacher Notes */}
+                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                                                                {day.materials && day.materials.length > 0 && (
+                                                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px' }}>
+                                                                        <h4 style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Box" size={14} /> Materials</h4>
+                                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                                            {day.materials.map((m, idx) => (
+                                                                                <span key={idx} style={{ fontSize: '0.8rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)' }}>{m}</span>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {day.homework && (
+                                                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px' }}>
+                                                                        <h4 style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="Home" size={14} /> Homework</h4>
+                                                                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>{day.homework}</p>
+                                                                    </div>
+                                                                )}
+                                                                {day.teacher_notes && (
+                                                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px' }}>
+                                                                        <h4 style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="StickyNote" size={14} /> Teacher Notes</h4>
+                                                                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>{day.teacher_notes}</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Unit Assessment */}
+                                                {lessonPlan.unit_assessment && (
+                                                    <div style={{ marginTop: '30px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '16px', padding: '20px' }}>
+                                                        <h3 style={{ fontSize: '1.1rem', color: '#a5b4fc', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}><Icon name="Award" size={18} /> Summative Assessment</h3>
+                                                        {typeof lessonPlan.unit_assessment === 'object' ? (
+                                                            <>
+                                                                {lessonPlan.unit_assessment.type && <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '10px' }}>Type: {lessonPlan.unit_assessment.type}</div>}
+                                                                <p style={{ marginBottom: '15px', fontSize: '0.95rem' }}>{lessonPlan.unit_assessment.description}</p>
+                                                                {lessonPlan.unit_assessment.components && (
+                                                                    <div style={{ marginTop: '10px' }}>
+                                                                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Components:</div>
+                                                                        <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                                                            {lessonPlan.unit_assessment.components.map((c, idx) => (
+                                                                                <li key={idx} style={{ marginBottom: '4px', fontSize: '0.85rem' }}>{c}</li>
+                                                                            ))}
+                                                                        </ul>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <p style={{ margin: 0, fontSize: '0.95rem' }}>{lessonPlan.unit_assessment}</p>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Resources */}
+                                                {lessonPlan.resources && lessonPlan.resources.length > 0 && (
+                                                    <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+                                                        <h4 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '10px' }}>Resources</h4>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                            {lessonPlan.resources.map((r, idx) => (
+                                                                <span key={idx} style={{ fontSize: '0.8rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.1)' }}>{r}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                        /* Standards List */
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <Icon name="Library" size={20} /> Select Standards ({selectedStandards.length})
+                                                </h3>
+                                                <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)' }}>
+                                                    {standards.length} standards available
+                                                </div>
+                                            </div>
+                                            
+                                            <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '5px' }}>
+                                                {plannerLoading ? (
+                                                    <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255,255,255,0.5)' }}>
+                                                        <Icon name="Loader2" size={30} style={{ animation: 'spin 1s linear infinite' }} />
+                                                        <p style={{ marginTop: '10px' }}>Loading standards...</p>
+                                                    </div>
+                                                ) : standards.length > 0 ? (
+                                                    standards.map(std => (
+                                                        <StandardCard
+                                                            key={std.code}
+                                                            standard={std}
+                                                            isSelected={selectedStandards.includes(std.code)}
+                                                            onToggle={() => toggleStandard(std.code)}
+                                                        />
+                                                    ))
+                                                ) : (
+                                                    <div style={{ textAlign: 'center', padding: '40px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+                                                        <p style={{ color: 'rgba(255,255,255,0.5)' }}>No standards found for this configuration.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
 
                         <footer style={{ textAlign: 'center', marginTop: '30px', padding: '20px', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>
                             Powered by OpenAI GPT-4o • Built with ❤️ for education
@@ -1762,40 +2828,105 @@ def stop_grading():
 @app.route('/api/grade', methods=['POST'])
 def start_grading():
     global grading_state
-    
+
     if grading_state["is_running"]:
         return jsonify({"error": "Grading already in progress"}), 400
-    
+
     data = request.json
     assignments_folder = data.get('assignments_folder', '/Users/alexc/Library/CloudStorage/OneDrive-VolusiaCountySchools/Assignments')
     output_folder = data.get('output_folder', '/Users/alexc/Downloads/Graider/Results')
     roster_file = data.get('roster_file', '/Users/alexc/Downloads/Graider/all_students_updated.xlsx')
-    
+    grading_period = data.get('grading_period', 'Q3')
+
+    # Get custom assignment config and global AI notes
+    assignment_config = data.get('assignmentConfig')  # Contains customMarkers, gradingNotes
+    global_ai_notes = data.get('globalAINotes', '')
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
         return jsonify({"error": f"Roster file not found: {roster_file}"}), 400
-    
+
     reset_state()
     grading_state["is_running"] = True
-    
-    thread = threading.Thread(target=run_grading_thread, args=(assignments_folder, output_folder, roster_file))
+
+    thread = threading.Thread(target=run_grading_thread, args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period))
     thread.start()
-    
+
     return jsonify({"status": "started"})
 
-def run_grading_thread(assignments_folder, output_folder, roster_file):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3'):
     global grading_state
-    
+
+    # Load ALL saved assignment configs for auto-matching
+    all_configs = {}
+    assignments_dir = os.path.expanduser("~/.graider_assignments")
+    if os.path.exists(assignments_dir):
+        for f in os.listdir(assignments_dir):
+            if f.endswith('.json'):
+                config_name = f.replace('.json', '')
+                try:
+                    with open(os.path.join(assignments_dir, f), 'r') as cf:
+                        all_configs[config_name.lower()] = json.load(cf)
+                except:
+                    pass
+
+    # Function to find matching config for a filename
+    def find_matching_config(filename):
+        filename_lower = filename.lower()
+        # Remove student name prefix (everything before " - " or "_")
+        if ' - ' in filename_lower:
+            assignment_part = filename_lower.split(' - ', 1)[1]
+        elif '_' in filename_lower:
+            parts = filename_lower.split('_')
+            assignment_part = '_'.join(parts[2:]) if len(parts) > 2 else filename_lower
+        else:
+            assignment_part = filename_lower
+
+        # Remove extension
+        assignment_part = os.path.splitext(assignment_part)[0]
+
+        # Try to match against saved config names
+        best_match = None
+        best_score = 0
+        for config_name, config_data in all_configs.items():
+            # Check if config name appears in assignment part or vice versa
+            if config_name in assignment_part or assignment_part in config_name:
+                score = len(config_name)
+                if score > best_score:
+                    best_score = score
+                    best_match = config_data
+            # Also check the title field inside the config
+            config_title = config_data.get('title', '').lower()
+            if config_title and (config_title in assignment_part or assignment_part in config_title):
+                score = len(config_title)
+                if score > best_score:
+                    best_score = score
+                    best_match = config_data
+        return best_match
+
+    # Extract custom markers and notes from selected config (fallback)
+    fallback_markers = []
+    fallback_notes = ''
+    if assignment_config:
+        fallback_markers = assignment_config.get('customMarkers', [])
+        fallback_notes = assignment_config.get('gradingNotes', '')
+
     try:
         from assignment_grader import (
             load_roster, parse_filename, read_assignment_file,
             extract_student_work, grade_assignment, export_focus_csv,
             export_detailed_report, save_emails_to_folder, save_to_master_csv,
-            ASSIGNMENT_NAME
+            ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
         )
         import csv
-        
+
+        if all_configs:
+            grading_state["log"].append(f"📚 Loaded {len(all_configs)} assignment configs for auto-matching")
+
+        if global_ai_notes:
+            grading_state["log"].append(f"📝 Global AI notes loaded")
+
         os.makedirs(output_folder, exist_ok=True)
         
         # Load already graded files from master CSV
@@ -1862,12 +2993,38 @@ def run_grading_thread(assignments_folder, output_folder, roster_file):
                 student_info = {"student_id": "UNKNOWN", "student_name": student_name, "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
             
             grading_state["log"].append(f"[{i}/{len(new_files)}] {student_info['student_name']}")
-            
+
+            # Try to auto-match assignment config based on filename
+            matched_config = find_matching_config(filepath.name)
+            if matched_config:
+                file_markers = matched_config.get('customMarkers', [])
+                file_notes = matched_config.get('gradingNotes', '')
+                matched_title = matched_config.get('title', 'Unknown')
+                grading_state["log"].append(f"  📎 Matched config: {matched_title}")
+            else:
+                file_markers = fallback_markers
+                file_notes = fallback_notes
+
+            # Build combined AI notes for this file
+            file_ai_notes = ''
+            if global_ai_notes:
+                file_ai_notes += f"GLOBAL GRADING INSTRUCTIONS:\n{global_ai_notes}\n\n"
+            if file_notes:
+                file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
+
+            # Add file-specific markers to the markers list temporarily
+            original_markers = STUDENT_WORK_MARKERS.copy()
+            for marker in file_markers:
+                if marker not in STUDENT_WORK_MARKERS:
+                    STUDENT_WORK_MARKERS.append(marker)
+
             file_data = read_assignment_file(filepath)
             if not file_data:
                 grading_state["log"].append(f"  ❌ Could not read file")
+                STUDENT_WORK_MARKERS.clear()
+                STUDENT_WORK_MARKERS.extend(original_markers)
                 continue
-            
+
             markers_found = []
             if file_data["type"] == "text":
                 student_work, markers_found = extract_student_work(file_data["content"])
@@ -1877,9 +3034,13 @@ def run_grading_thread(assignments_folder, output_folder, roster_file):
             else:
                 grading_state["log"].append(f"  🖼️ Image file")
                 grade_data = file_data
-            
+
             grading_state["log"].append(f"  🤖 Grading...")
-            grade_result = grade_assignment(student_info['student_name'], grade_data)
+            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes)
+
+            # Restore original markers
+            STUDENT_WORK_MARKERS.clear()
+            STUDENT_WORK_MARKERS.extend(original_markers)
             grading_state["log"].append(f"  ✅ Score: {grade_result['score']} ({grade_result['letter_grade']})")
             
             # Extract assignment name from filename
@@ -1901,6 +3062,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file):
                 **grade_result,
                 "filename": filepath.name,
                 "assignment": assignment_from_file,
+                "grading_period": grading_period,
                 "has_markers": len(markers_found) > 0
             }
             all_grades.append(grade_record)
@@ -2046,14 +3208,63 @@ def send_emails():
 def save_rubric():
     """Save rubric configuration to JSON file."""
     import json
-    
+
     data = request.json
     rubric_path = os.path.expanduser("~/.graider_rubric.json")
-    
+
     try:
         with open(rubric_path, 'w') as f:
             json.dump(data, f, indent=2)
         return jsonify({"status": "saved"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/load-rubric')
+def load_rubric():
+    """Load rubric configuration from JSON file."""
+    import json
+
+    rubric_path = os.path.expanduser("~/.graider_rubric.json")
+
+    if not os.path.exists(rubric_path):
+        return jsonify({"rubric": None})
+
+    try:
+        with open(rubric_path, 'r') as f:
+            data = json.load(f)
+        return jsonify({"rubric": data})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/save-global-settings', methods=['POST'])
+def save_global_settings():
+    """Save global AI notes and settings."""
+    import json
+
+    data = request.json
+    settings_path = os.path.expanduser("~/.graider_settings.json")
+
+    try:
+        with open(settings_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        return jsonify({"status": "saved"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/load-global-settings')
+def load_global_settings():
+    """Load global AI notes and settings."""
+    import json
+
+    settings_path = os.path.expanduser("~/.graider_settings.json")
+
+    if not os.path.exists(settings_path):
+        return jsonify({"settings": None})
+
+    try:
+        with open(settings_path, 'r') as f:
+            data = json.load(f)
+        return jsonify({"settings": data})
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -2101,18 +3312,34 @@ def list_assignments():
 def load_assignment():
     """Load a saved assignment configuration."""
     import json
-    
+
     name = request.args.get('name', '')
     assignments_dir = os.path.expanduser("~/.graider_assignments")
     filepath = os.path.join(assignments_dir, f"{name}.json")
-    
+
     if not os.path.exists(filepath):
         return jsonify({"error": "Assignment not found"})
-    
+
     try:
         with open(filepath, 'r') as f:
             data = json.load(f)
         return jsonify({"assignment": data})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/delete-assignment', methods=['DELETE'])
+def delete_assignment():
+    """Delete a saved assignment configuration."""
+    name = request.args.get('name', '')
+    assignments_dir = os.path.expanduser("~/.graider_assignments")
+    filepath = os.path.join(assignments_dir, f"{name}.json")
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Assignment not found"})
+
+    try:
+        os.remove(filepath)
+        return jsonify({"status": "deleted"})
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -2278,28 +3505,41 @@ def get_analytics():
     """Load master CSV and return analytics data for charts."""
     import csv
     from collections import defaultdict
-    
+
+    # Get period filter from query params
+    period_filter = request.args.get('period', 'all')
+
     master_file = "/Users/alexc/Downloads/Graider/Results/master_grades.csv"
-    
+
     if not os.path.exists(master_file):
         return jsonify({"error": "No data yet", "students": [], "assignments": [], "trends": []})
-    
+
     students = defaultdict(list)
     assignments = defaultdict(list)
     categories = defaultdict(lambda: {"content": [], "completeness": [], "writing": [], "effort": []})
     all_grades = []
-    
+    available_periods = set()
+
     try:
         with open(master_file, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
+                # Track all available periods
+                row_quarter = row.get("Quarter", "")
+                if row_quarter:
+                    available_periods.add(row_quarter)
+
+                # Filter by period if specified
+                if period_filter != 'all' and row_quarter != period_filter:
+                    continue
+
                 grade_data = {
                     "date": row.get("Date", ""),
                     "student_id": row.get("Student ID", ""),
                     "student_name": row.get("Student Name", ""),
                     "first_name": row.get("First Name", ""),
                     "assignment": row.get("Assignment", ""),
-                    "quarter": row.get("Quarter", ""),
+                    "quarter": row_quarter,
                     "score": int(float(row.get("Overall Score", 0) or 0)),
                     "letter_grade": row.get("Letter Grade", ""),
                     "content": int(float(row.get("Content Accuracy", 0) or 0)),
@@ -2387,8 +3627,585 @@ def get_analytics():
         "category_stats": category_stats,
         "attention_needed": attention_needed,
         "top_performers": top_performers,
-        "all_grades": all_grades
+        "all_grades": all_grades,
+        "available_periods": sorted(list(available_periods))
     })
+
+@app.route('/api/get-standards', methods=['POST'])
+def get_standards():
+    """Get standards for a specific state, grade, and subject."""
+    data = request.json
+    state = data.get('state', 'FL')
+    grade = data.get('grade', '7')
+    subject = data.get('subject', 'Civics')
+    
+    # In a real app, this would query a database
+    # For now, we'll return hardcoded Florida Civics standards
+    
+    standards = []
+    
+    if state == 'FL' and subject == 'History':
+        standards = [
+            # 1. Research & Inquiry
+            {
+                "code": "SS.8.A.1.1",
+                "benchmark": "Provide supporting details for an answer from text, interview for oral history, check validity of information from research/text, and identify strong vs. weak arguments.",
+                "topics": ["Research Skills", "Primary Sources", "Analysis"]
+            },
+            {
+                "code": "SS.8.A.1.3",
+                "benchmark": "Analyze timelines, charts, graphs, and photographs to determine cause and effect.",
+                "topics": ["Data Analysis", "Timelines", "Cause and Effect"]
+            },
+            
+            # 2. Colonial Era
+            {
+                "code": "SS.8.A.2.1",
+                "benchmark": "Compare the relationships among the British, French, Spanish, and Dutch in their struggle for colonization of North America.",
+                "topics": ["Colonization", "European Powers", "North America"]
+            },
+            {
+                "code": "SS.8.A.2.2",
+                "benchmark": "Compare the characteristics of the New England, Middle, and Southern colonies.",
+                "topics": ["Colonial Regions", "Economy", "Geography"]
+            },
+            {
+                "code": "SS.8.A.2.4",
+                "benchmark": "Identify the impact of key colonial figures on the economic, political, and social development of the colonies.",
+                "topics": ["Colonial Figures", "Leadership"]
+            },
+            
+            # 3. Revolution & Constitution
+            {
+                "code": "SS.8.A.3.1",
+                "benchmark": "Explain the consequences of the French and Indian War in British policies for the American colonies from 1763 - 1774.",
+                "topics": ["French and Indian War", "British Policy", "Taxation"]
+            },
+            {
+                "code": "SS.8.A.3.2",
+                "benchmark": "Explain American colonial reaction to British policy from 1763 - 1774.",
+                "topics": ["Protest", "Revolutionary Spirit", "Sons of Liberty"]
+            },
+            {
+                "code": "SS.8.A.3.6",
+                "benchmark": "Examine the causes, course, and consequences of the American Revolution.",
+                "topics": ["American Revolution", "War of Independence"]
+            },
+            {
+                "code": "SS.8.A.3.10",
+                "benchmark": "Examine the course and consequences of the Constitutional Convention (New Jersey Plan, Virginia Plan, Great Compromise, 3/5 Compromise).",
+                "topics": ["Constitution", "Compromises", "Founding Fathers"]
+            },
+            
+            # 4. Expansion & Reform
+            {
+                "code": "SS.8.A.4.1",
+                "benchmark": "Examine the causes, course, and consequences of United States westward expansion and its growing diplomatic assertiveness.",
+                "topics": ["Westward Expansion", "Manifest Destiny", "Louisiana Purchase"]
+            },
+            {
+                "code": "SS.8.A.4.2",
+                "benchmark": "Describe the debate surrounding the spread of slavery into western territories and Florida.",
+                "topics": ["Slavery", "Sectionalism", "Expansion"]
+            },
+            {
+                "code": "SS.8.A.4.6",
+                "benchmark": "Identify significant individuals and groups who helped to define American culture and beliefs.",
+                "topics": ["Reform Movements", "Culture", "Social Change"]
+            },
+            
+            # 5. Civil War & Reconstruction
+            {
+                "code": "SS.8.A.5.1",
+                "benchmark": "Explain the causes, course, and consequence of the Civil War (sectionalism, slavery, states' rights, family/gender roles).",
+                "topics": ["Civil War", "Causes of War", "Sectional Crisis"]
+            },
+            {
+                "code": "SS.8.A.5.3",
+                "benchmark": "Explain major domestic and international economic, military, political, and socio-cultural events of Abraham Lincoln's presidency.",
+                "topics": ["Lincoln", "Civil War Leadership", "Emancipation"]
+            },
+            {
+                "code": "SS.8.A.5.6",
+                "benchmark": "Explain the causes, course, and consequences of the 13th, 14th, and 15th amendments and the rise of Jim Crow laws.",
+                "topics": ["Reconstruction", "Amendments", "Civil Rights", "Jim Crow"]
+            }
+        ]
+    
+    elif state == 'FL' and subject == 'Civics':
+        standards = [
+            {
+                "code": "SS.7.C.1.1",
+                "benchmark": "Recognize how Enlightenment ideas including Montesquieu's view of separation of power and John Locke's theories related to natural law and how John Locke's social contract influenced the Founding Fathers.",
+                "topics": ["Enlightenment", "Natural Law", "Social Contract", "Separation of Powers"]
+            },
+            {
+                "code": "SS.7.C.1.2",
+                "benchmark": "Trace the impact that the Magna Carta, English Bill of Rights, Mayflower Compact, and Thomas Paine's Common Sense had on colonists' views of government.",
+                "topics": ["Founding Documents", "Colonial Government", "Limited Government"]
+            },
+            {
+                "code": "SS.7.C.1.3",
+                "benchmark": "Describe how English policies and responses to colonial concerns led to the writing of the Declaration of Independence.",
+                "topics": ["Colonial Grievances", "Declaration of Independence", "Revolution"]
+            },
+            {
+                "code": "SS.7.C.1.4",
+                "benchmark": "Analyze the ideas (natural rights, role of the government) and complaints set forth in the Declaration of Independence.",
+                "topics": ["Natural Rights", "Declaration of Independence", "Grievances"]
+            },
+            {
+                "code": "SS.7.C.1.5",
+                "benchmark": "Identify how the weaknesses of the Articles of Confederation led to the writing of the Constitution.",
+                "topics": ["Articles of Confederation", "Constitution", "Federalism"]
+            },
+            {
+                "code": "SS.7.C.1.6",
+                "benchmark": "Interpret the intentions of the Preamble of the Constitution.",
+                "topics": ["Preamble", "Constitution", "Goals of Government"]
+            },
+            {
+                "code": "SS.7.C.1.7",
+                "benchmark": "Describe how the Constitution limits the powers of government through separation of powers and checks and balances.",
+                "topics": ["Separation of Powers", "Checks and Balances", "Limited Government"]
+            },
+            {
+                "code": "SS.7.C.1.8",
+                "benchmark": "Explain the viewpoints of the Federalists and the Anti-Federalists regarding the ratification of the Constitution and inclusion of a bill of rights.",
+                "topics": ["Federalists", "Anti-Federalists", "Ratification", "Bill of Rights"]
+            },
+            {
+                "code": "SS.7.C.1.9",
+                "benchmark": "Define the rule of law and recognize its influence on the development of the American legal, political, and governmental systems.",
+                "topics": ["Rule of Law", "Fairness", "Accountability"]
+            },
+            {
+                "code": "SS.7.C.2.1",
+                "benchmark": "Define the term 'citizen,' and identify legal means of becoming a United States citizen.",
+                "topics": ["Citizenship", "Naturalization", "Rights and Responsibilities"]
+            },
+            {
+                "code": "SS.7.C.2.2",
+                "benchmark": "Evaluate the obligations citizens have to obey laws, pay taxes, defend the nation, and serve on juries.",
+                "topics": ["Obligations", "Citizenship", "Civic Duty"]
+            },
+            {
+                "code": "SS.7.C.2.4",
+                "benchmark": "Evaluate rights contained in the Bill of Rights and other amendments to the Constitution.",
+                "topics": ["Bill of Rights", "Amendments", "Civil Liberties"]
+            },
+            {
+                "code": "SS.7.C.2.8",
+                "benchmark": "Identify America's current political parties, and illustrate their ideas about government.",
+                "topics": ["Political Parties", "Ideologies", "Two-Party System"]
+            },
+            {
+                "code": "SS.7.C.3.1",
+                "benchmark": "Compare different forms of government (direct democracy, representative democracy, socialism, communism, monarchy, oligarchy, autocracy).",
+                "topics": ["Forms of Government", "Democracy", "Authoritarianism"]
+            },
+            {
+                "code": "SS.7.C.3.3",
+                "benchmark": "Illustrate the structure and function (three branches of government established in Articles I, II, and III with corresponding powers) of government in the United States as established in the Constitution.",
+                "topics": ["Three Branches", "Structure of Government", "Articles I-III"]
+            },
+            {
+                "code": "SS.7.C.3.12",
+                "benchmark": "Analyze the significance and outcomes of landmark Supreme Court cases including, but not limited to, Marbury v. Madison, Plessy v. Ferguson, Brown v. Board of Education, Gideon v. Wainwright, Miranda v. Arizona, in re Gault, Tinker v. Des Moines, Hazelwood v. Kuhlmeier, United States v. Nixon, and Bush v. Gore.",
+                "topics": ["Supreme Court", "Landmark Cases", "Judicial Review"]
+            }
+        ]
+    
+    return jsonify({"standards": standards})
+
+@app.route('/api/generate-lesson-plan', methods=['POST'])
+def generate_lesson_plan():
+    """Generate a lesson plan using AI."""
+    data = request.json
+    selected_standards = data.get('standards', [])
+    config = data.get('config', {})
+    
+    if not selected_standards:
+        return jsonify({"error": "No standards selected"})
+        
+    try:
+        try:
+            from openai import OpenAI
+            from dotenv import load_dotenv
+            import os
+            import json
+            
+            # Load .env from the app directory, override any existing env vars
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+            load_dotenv(os.path.join(app_dir, '.env'), override=True)
+            api_key = os.getenv("OPENAI_API_KEY")
+            
+            # Use mock if key is missing or explicitly placeholder
+            if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+                raise Exception("Missing or placeholder API Key")
+                
+            client = OpenAI(api_key=api_key)
+
+            period_length = config.get('periodLength', 50)
+            content_type = config.get('type', 'Lesson Plan')
+
+            prompt = f"""
+You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
+
+Title: "{config.get('title', 'Untitled')}"
+Duration: {config.get('duration', 1)} day(s)
+Class Period Length: {period_length} minutes
+
+Standards to Cover:
+{', '.join(selected_standards)}
+
+Additional Requirements:
+{config.get('requirements', 'None specified')}
+
+Create a COMPREHENSIVE, DETAILED plan that a teacher can use immediately without any additional preparation. Include specific content, exact questions to ask, sample answers, and minute-by-minute timing.
+
+Return JSON with this structure:
+{{
+    "title": "Full descriptive title",
+    "overview": "2-3 sentence summary of what students will learn and accomplish",
+    "essential_questions": ["Driving question 1", "Driving question 2"],
+    "days": [
+        {{
+            "day": 1,
+            "topic": "Specific topic for this day",
+            "objective": "Students will be able to... (measurable, specific)",
+            "standards_addressed": ["Which standards this day covers"],
+            "vocabulary": [
+                {{"term": "word", "definition": "student-friendly definition"}}
+            ],
+            "timing": [
+                {{"minutes": "0-5", "duration": "5 min", "activity": "Bell Ringer", "description": "Detailed description of what students do"}},
+                {{"minutes": "5-15", "duration": "10 min", "activity": "Direct Instruction", "description": "Exactly what teacher presents"}},
+                {{"minutes": "15-35", "duration": "20 min", "activity": "Guided Practice", "description": "Step-by-step activity"}},
+                {{"minutes": "35-45", "duration": "10 min", "activity": "Independent Practice", "description": "What students do independently"}},
+                {{"minutes": "45-{period_length}", "duration": "5 min", "activity": "Closure", "description": "Exit ticket or wrap-up"}}
+            ],
+            "bell_ringer": {{
+                "prompt": "The exact question or task for students",
+                "expected_responses": ["Possible student answers"],
+                "discussion_points": ["Follow-up questions to ask"]
+            }},
+            "direct_instruction": {{
+                "key_points": ["Main concept 1 with explanation", "Main concept 2 with explanation"],
+                "examples": ["Specific example to share with students"],
+                "check_for_understanding": ["Questions to ask during instruction"]
+            }},
+            "activity": {{
+                "name": "Activity name",
+                "description": "Detailed step-by-step instructions",
+                "grouping": "Individual/Pairs/Small Groups/Whole Class",
+                "student_tasks": ["Step 1", "Step 2", "Step 3"],
+                "teacher_role": "What teacher does during activity",
+                "differentiation": {{
+                    "struggling": "Support for struggling students",
+                    "advanced": "Extension for advanced students"
+                }}
+            }},
+            "assessment": {{
+                "type": "Formative/Summative",
+                "description": "How learning is assessed",
+                "criteria": ["What demonstrates mastery"],
+                "exit_ticket": "Specific exit ticket question if applicable"
+            }},
+            "materials": ["Specific item 1", "Specific item 2"],
+            "homework": "Assignment if any, or null",
+            "teacher_notes": "Tips, common misconceptions, or things to watch for"
+        }}
+    ],
+    "unit_assessment": {{
+        "type": "Test/Project/Presentation/Essay",
+        "description": "Detailed description of summative assessment",
+        "components": ["What the assessment includes"],
+        "rubric_criteria": ["Grading criteria"]
+    }},
+    "resources": ["Textbook pages", "Websites", "Handouts needed"]
+}}
+
+Make the content SPECIFIC and DETAILED - include actual facts, real examples, specific questions with sample answers. This should be a complete lesson a teacher can walk into class and teach."""
+            
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            content = completion.choices[0].message.content
+            plan = json.loads(content)
+            return jsonify({"plan": plan, "method": "AI"})
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"OpenAI API Error: {error_msg}. Falling back to Mock Mode.")
+            
+            # Fallback Mock Plan based on Type
+            content_type = config.get('type', 'Unit Plan')
+            
+            # Use specific mock content if requirements are present
+            req_note = f" (Note: Custom requirements '{config.get('requirements')}' were ignored in Mock Mode)" if config.get('requirements') else ""
+            
+            mock_plan = {
+                "title": f"{config.get('title', 'Unit Plan')} ({content_type} - Mock)",
+                "overview": f"⚠️ GENERATED IN MOCK MODE. Real AI generation failed.\n\nError Details: {error_msg}\n\nThis is a simulated {content_type} for {config.get('subject')} covering standards: {', '.join(selected_standards)}. Check your API key and connection.{req_note}",
+                "days": [],
+                "unit_assessment": "Mock Assessment Idea"
+            }
+            
+            # Generate days based on content type
+            if content_type == 'Assignment':
+                 mock_plan['days'] = [{
+                    "day": 1,
+                    "topic": "Assignment: Core Concepts",
+                    "objective": "Students will demonstrate understanding through this assignment.",
+                    "vocabulary": ["Key Term 1", "Key Term 2"],
+                    "bell_ringer": "Review instructions.",
+                    "activity": "Complete the worksheet/project.",
+                    "assessment": "Graded submission.",
+                    "materials": ["Worksheet", "Resources"]
+                 }]
+            else:
+                mock_plan['days'] = [
+                    {
+                        "day": i + 1,
+                        "topic": f"Mock Topic {i + 1}: Foundations",
+                        "objective": "Students will understand key concepts relating to the selected standards.",
+                        "vocabulary": ["Democracy", "Liberty", "Constitution", "Rights", "Government"],
+                        "bell_ringer": "Students will answer a prompt on the board.",
+                        "activity": "Group activity: Analyze primary source documents.",
+                        "assessment": "Exit Ticket.",
+                        "materials": ["Textbook", "Worksheet", "Pencils"]
+                    } for i in range(int(config.get('duration', 5)))
+                ]
+
+            return jsonify({"plan": mock_plan, "method": "Mock", "error": error_msg})
+            
+    except Exception as e:
+        print(f"Error generating plan: {e}")
+        return jsonify({"error": str(e)})
+
+
+@app.route('/api/export-lesson-plan', methods=['POST'])
+def export_lesson_plan():
+    """Export the lesson plan to a Word document."""
+    data = request.json
+    plan = data.get('plan', data)  # Handle both {plan: ...} and direct plan object
+
+    try:
+        from docx import Document
+        from docx.shared import Pt, Inches
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        import subprocess
+
+        doc = Document()
+
+        # Helper to format vocabulary
+        def format_vocab(vocab_list):
+            if not vocab_list:
+                return ""
+            items = []
+            for v in vocab_list:
+                if isinstance(v, dict):
+                    term = v.get('term', '')
+                    defn = v.get('definition', '')
+                    items.append(f"{term}: {defn}" if defn else term)
+                else:
+                    items.append(str(v))
+            return '\n'.join(items)
+
+        # Helper to format bell ringer
+        def format_bell_ringer(br):
+            if not br:
+                return ""
+            if isinstance(br, str):
+                return br
+            prompt = br.get('prompt', '')
+            responses = br.get('expected_responses', [])
+            result = prompt
+            if responses:
+                result += "\n\nExpected Responses:\n" + '\n'.join(f"- {r}" for r in responses)
+            return result
+
+        # Helper to format activity
+        def format_activity(act):
+            if not act:
+                return ""
+            if isinstance(act, str):
+                return act
+            parts = []
+            if act.get('name'):
+                parts.append(f"Activity: {act['name']}")
+            if act.get('description'):
+                parts.append(act['description'])
+            if act.get('grouping'):
+                parts.append(f"Grouping: {act['grouping']}")
+            if act.get('student_tasks'):
+                parts.append("\nStudent Tasks:")
+                for i, t in enumerate(act['student_tasks'], 1):
+                    parts.append(f"  {i}. {t}")
+            if act.get('differentiation'):
+                diff = act['differentiation']
+                if diff.get('struggling'):
+                    parts.append(f"\nSupport for Struggling: {diff['struggling']}")
+                if diff.get('advanced'):
+                    parts.append(f"Extension for Advanced: {diff['advanced']}")
+            return '\n'.join(parts)
+
+        # Helper to format assessment
+        def format_assessment(asmt):
+            if not asmt:
+                return ""
+            if isinstance(asmt, str):
+                return asmt
+            parts = []
+            if asmt.get('type'):
+                parts.append(f"Type: {asmt['type']}")
+            if asmt.get('description'):
+                parts.append(asmt['description'])
+            if asmt.get('exit_ticket'):
+                parts.append(f"\nExit Ticket: \"{asmt['exit_ticket']}\"")
+            return '\n'.join(parts)
+
+        # Title
+        title = doc.add_heading(plan.get('title', 'Lesson Plan'), 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Overview
+        if plan.get('overview'):
+            doc.add_heading('Overview', level=1)
+            doc.add_paragraph(plan['overview'])
+
+        # Essential Questions
+        if plan.get('essential_questions'):
+            doc.add_heading('Essential Questions', level=1)
+            for q in plan['essential_questions']:
+                doc.add_paragraph(f"• {q}")
+
+        # Daily Plans
+        if plan.get('days'):
+            doc.add_heading('Daily Lesson Plans', level=1)
+
+            for day in plan['days']:
+                doc.add_heading(f"Day {day.get('day')}: {day.get('topic')}", level=2)
+
+                # Objective
+                if day.get('objective'):
+                    p = doc.add_paragraph()
+                    p.add_run('Learning Objective: ').bold = True
+                    p.add_run(day['objective'])
+
+                # Standards
+                if day.get('standards_addressed'):
+                    p = doc.add_paragraph()
+                    p.add_run('Standards: ').bold = True
+                    p.add_run(', '.join(day['standards_addressed']))
+
+                # Timing
+                if day.get('timing'):
+                    doc.add_heading('Lesson Timing', level=3)
+                    for t in day['timing']:
+                        time_str = t.get('minutes') or t.get('duration', '')
+                        doc.add_paragraph(f"{time_str} - {t.get('activity', '')}: {t.get('description', '')}")
+
+                # Vocabulary
+                vocab_text = format_vocab(day.get('vocabulary'))
+                if vocab_text:
+                    doc.add_heading('Vocabulary', level=3)
+                    doc.add_paragraph(vocab_text)
+
+                # Bell Ringer
+                br_text = format_bell_ringer(day.get('bell_ringer'))
+                if br_text:
+                    doc.add_heading('Bell Ringer', level=3)
+                    doc.add_paragraph(br_text)
+
+                # Direct Instruction
+                if day.get('direct_instruction'):
+                    di = day['direct_instruction']
+                    doc.add_heading('Direct Instruction', level=3)
+                    if di.get('key_points'):
+                        doc.add_paragraph('Key Points:')
+                        for kp in di['key_points']:
+                            doc.add_paragraph(f"• {kp}")
+                    if di.get('check_for_understanding'):
+                        doc.add_paragraph('\nCheck for Understanding:')
+                        for q in di['check_for_understanding']:
+                            doc.add_paragraph(f"• \"{q}\"")
+
+                # Activity
+                act_text = format_activity(day.get('activity'))
+                if act_text:
+                    doc.add_heading('Main Activity', level=3)
+                    doc.add_paragraph(act_text)
+
+                # Assessment
+                asmt_text = format_assessment(day.get('assessment'))
+                if asmt_text:
+                    doc.add_heading('Assessment', level=3)
+                    doc.add_paragraph(asmt_text)
+
+                # Materials
+                if day.get('materials'):
+                    doc.add_heading('Materials', level=3)
+                    doc.add_paragraph(', '.join(day['materials']))
+
+                # Homework
+                if day.get('homework'):
+                    doc.add_heading('Homework', level=3)
+                    doc.add_paragraph(day['homework'])
+
+                # Teacher Notes
+                if day.get('teacher_notes'):
+                    doc.add_heading('Teacher Notes', level=3)
+                    doc.add_paragraph(day['teacher_notes'])
+
+                doc.add_paragraph()  # Spacer
+
+        # Unit Assessment
+        if plan.get('unit_assessment'):
+            doc.add_heading('Summative Assessment', level=1)
+            ua = plan['unit_assessment']
+            if isinstance(ua, dict):
+                if ua.get('type'):
+                    doc.add_paragraph(f"Type: {ua['type']}")
+                if ua.get('description'):
+                    doc.add_paragraph(ua['description'])
+                if ua.get('components'):
+                    doc.add_paragraph('\nComponents:')
+                    for c in ua['components']:
+                        doc.add_paragraph(f"• {c}")
+            else:
+                doc.add_paragraph(str(ua))
+
+        # Resources
+        if plan.get('resources'):
+            doc.add_heading('Resources', level=1)
+            for r in plan['resources']:
+                doc.add_paragraph(f"• {r}")
+
+        # Save file
+        filename = f"Lesson_Plan_{int(time.time())}.docx"
+        # Try to get output folder, fall back to Downloads
+        output_folder = grading_state.get("config", {}).get("assignments_folder", os.path.expanduser("~/Downloads"))
+        filepath = os.path.join(output_folder, filename)
+        doc.save(filepath)
+
+        # Open the file
+        subprocess.run(['open', filepath])
+
+        return jsonify({"status": "success", "path": filepath})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error exporting plan: {e}")
+        return jsonify({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════
 # MAIN

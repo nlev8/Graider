@@ -584,7 +584,7 @@ def extract_student_work(content: str) -> tuple:
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '') -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies') -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -597,12 +597,16 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - student_name: Name of the student (kept local, not sent to API)
     - assignment_data: dict with "type" ("text" or "image") and "content"
     - custom_ai_instructions: Additional grading instructions from the teacher
+    - grade_level: The student's grade level (e.g., '6', '7', '8')
+    - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
 
     Returns dict with:
     - score: numeric grade (0-100)
     - letter_grade: A, B, C, D, or F
     - feedback: detailed feedback for the student
     - breakdown: points for each rubric category
+    - authenticity_flag: 'clean', 'review', or 'flagged'
+    - authenticity_reason: Explanation for flagged or review status
     """
     try:
         from openai import OpenAI
@@ -625,6 +629,14 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 ---
 """
 
+    # Map grade level to age range for context
+    grade_age_map = {
+        'K': '5-6', '1': '6-7', '2': '7-8', '3': '8-9', '4': '9-10', '5': '10-11',
+        '6': '11-12', '7': '12-13', '8': '13-14', '9': '14-15', '10': '15-16',
+        '11': '16-17', '12': '17-18'
+    }
+    age_range = grade_age_map.get(str(grade_level), '11-12')
+
     prompt_text = f"""
 {GRADING_RUBRIC}
 
@@ -632,13 +644,33 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 {custom_section}
 ---
 
+STUDENT CONTEXT:
+- Grade Level: {grade_level}
+- Subject: {subject}
+- Expected Age Range: {age_range} years old
+
 Please grade this student's work.
 - Assess EVERY answer the student provided.
 - For fill-in-the-blank: check if the answer is factually correct or close enough.
 - Accept multiple valid answers and synonyms.
 - DO NOT penalize spelling mistakes if the meaning is clear.
-- Be GENEROUS - these are 6th graders! A student who completes all work and gets most answers right deserves an A or B.
+- Be GENEROUS - these are grade {grade_level} students ({age_range} years old)! A student who completes all work and gets most answers right deserves an A or B.
 - IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
+
+IMPORTANT - AI/PLAGIARISM DETECTION:
+Analyze the writing for signs that it may NOT be the student's original work.
+Consider what is typical for a grade {grade_level} student ({age_range} years old) in {subject}:
+- Is the vocabulary and sentence structure appropriate for grade {grade_level}?
+- Are there sudden shifts in writing quality or voice?
+- Does the writing sound overly formal, polished, or "adult" for a {age_range} year old?
+- Are there unusual phrases or technical jargon that a grade {grade_level} student wouldn't typically use?
+- Does the writing lack the natural errors and simplicity expected from this age group?
+- Is the content suspiciously comprehensive or professionally structured?
+
+Set "authenticity_flag" to one of:
+- "clean" - Writing appears authentic and appropriate for grade {grade_level}
+- "review" - Some concerns about writing level, teacher should review
+- "flagged" - Writing significantly above expected grade {grade_level} level, likely AI-generated or copied
 
 Provide your response in the following JSON format ONLY (no other text):
 {{
@@ -650,7 +682,9 @@ Provide your response in the following JSON format ONLY (no other text):
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
-    "feedback": "<2-3 paragraphs of encouraging feedback written directly to the student. Use simple, friendly language a 6th grader can understand. Start with specific praise for what they did well, then gently mention 1-2 areas to improve (if any), then end with encouragement. Be positive and supportive! Do NOT use the student's name - just say 'you' or 'your'.>"
+    "authenticity_flag": "<clean, review, or flagged>",
+    "authenticity_reason": "<Brief explanation if review or flagged, otherwise empty string>",
+    "feedback": "<2-3 paragraphs of encouraging feedback written directly to the student. Use simple, friendly language a grade {grade_level} student can understand. Start with specific praise for what they did well, then gently mention 1-2 areas to improve (if any), then end with encouragement. Be positive and supportive! Do NOT use the student's name - just say 'you' or 'your'.>"
 }}
 """
 
@@ -726,16 +760,23 @@ Provide your response in the following JSON format ONLY (no other text):
 # EMAIL GENERATION
 # =============================================================================
 
-def generate_email_content(student_info: dict, grade_result: dict, assignment_name: str) -> tuple:
+def generate_email_content(student_info: dict, grade_result: dict, assignment_name: str, teacher_name: str = '', subject_taught: str = '', school_name: str = '') -> tuple:
     """
     Generate email subject and body for a student.
-    
+
     Returns: (subject, body)
     """
     first_name = student_info.get('first_name', 'Student').split()[0]  # Just first name
-    
+
     subject = f"Grade for {assignment_name}: {grade_result['letter_grade']}"
-    
+
+    # Build signature
+    signature = teacher_name if teacher_name else "Your Teacher"
+    if subject_taught:
+        signature += f"\n{subject_taught}"
+    if school_name:
+        signature += f"\n{school_name}"
+
     body = f"""Hi {first_name},
 
 Here is your grade and feedback for {assignment_name}:
@@ -747,12 +788,12 @@ FEEDBACK:
 
 If you have any questions about your grade, please see me during class.
 
-- Mr. Crionas US History
+- {signature}
 """
     return subject, body
 
 
-def save_emails_to_folder(grades: list, output_folder: str):
+def save_emails_to_folder(grades: list, output_folder: str, teacher_name: str = '', subject: str = '', school_name: str = ''):
     """
     Save emails as individual text files - ONE EMAIL PER STUDENT
     with feedback for ALL their assignments combined.
@@ -809,7 +850,13 @@ def save_emails_to_folder(grades: list, output_folder: str):
                 body += f"FEEDBACK:\n{a.get('feedback', 'No feedback available.')}\n\n"
         
         body += "\nIf you have any questions about your grades, please see me during class.\n\n"
-        body += "- Mr. Crionas US History\n"
+        # Build signature from teacher info
+        signature = teacher_name if teacher_name else "Your Teacher"
+        if subject:
+            signature += f"\n{subject}"
+        if school_name:
+            signature += f"\n{school_name}"
+        body += f"- {signature}\n"
         
         # Save file
         safe_name = re.sub(r'[^\w\s-]', '', student_name).replace(' ', '_')
@@ -1018,7 +1065,7 @@ def save_to_master_csv(grades: list, output_folder: str):
                 'Period', 'Assignment', 'Unit', 'Quarter',
                 'Overall Score', 'Letter Grade',
                 'Content Accuracy', 'Completeness', 'Writing Quality', 'Effort Engagement',
-                'Feedback'
+                'AI Flag', 'AI Reason', 'Feedback'
             ])
         
         # Write each grade
@@ -1044,6 +1091,8 @@ def save_to_master_csv(grades: list, output_folder: str):
                 breakdown.get('completeness', 0),
                 breakdown.get('writing_quality', 0),
                 breakdown.get('effort_engagement', 0),
+                grade.get('authenticity_flag', 'clean'),
+                grade.get('authenticity_reason', ''),
                 grade.get('feedback', '')[:500]  # Truncate feedback for CSV
             ])
     
@@ -1063,9 +1112,9 @@ def export_detailed_report(grades: list, output_folder: str, assignment_name: st
         writer.writerow([
             'Student ID', 'Student Name', 'Email', 'Assignment', 'Score', 'Letter Grade',
             'Content (40)', 'Completeness (25)', 'Writing (20)', 'Effort (15)',
-            'Feedback', 'Filename'
+            'AI Flag', 'AI Reason', 'Feedback', 'Filename'
         ])
-        
+
         for grade in grades:
             breakdown = grade.get('breakdown', {})
             writer.writerow([
@@ -1079,6 +1128,8 @@ def export_detailed_report(grades: list, output_folder: str, assignment_name: st
                 breakdown.get('completeness', ''),
                 breakdown.get('writing_quality', ''),
                 breakdown.get('effort_engagement', breakdown.get('critical_thinking', '')),
+                grade.get('authenticity_flag', 'clean'),
+                grade.get('authenticity_reason', ''),
                 grade.get('feedback', ''),
                 grade.get('filename', '')
             ])

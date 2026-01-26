@@ -17,7 +17,9 @@ DATA_DIR = Path(__file__).parent.parent / 'data'
 
 def load_standards(state, subject):
     """Load standards from JSON file."""
-    filename = f"standards_{state.lower()}_{subject.lower()}.json"
+    # Replace spaces with underscores for filename
+    subject_clean = subject.lower().replace(' ', '_')
+    filename = f"standards_{state.lower()}_{subject_clean}.json"
     filepath = DATA_DIR / filename
 
     if filepath.exists():

@@ -12,6 +12,7 @@ import json
 import csv
 import threading
 from pathlib import Path
+from datetime import datetime
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -32,6 +33,31 @@ CORS(app)
 # GRADING STATE MANAGEMENT
 # ══════════════════════════════════════════════════════════════
 
+RESULTS_FILE = os.path.expanduser("~/.graider_results.json")
+
+def load_saved_results():
+    """Load results from file on startup."""
+    if os.path.exists(RESULTS_FILE):
+        try:
+            with open(RESULTS_FILE, 'r') as f:
+                results = json.load(f)
+                # Add placeholder timestamp to results that don't have one
+                for r in results:
+                    if 'graded_at' not in r:
+                        r['graded_at'] = None  # Will show as '-' in frontend
+                return results
+        except:
+            pass
+    return []
+
+def save_results(results):
+    """Save results to file for persistence."""
+    try:
+        with open(RESULTS_FILE, 'w') as f:
+            json.dump(results, f, indent=2)
+    except Exception as e:
+        print(f"Error saving results: {e}")
+
 grading_state = {
     "is_running": False,
     "stop_requested": False,
@@ -39,13 +65,13 @@ grading_state = {
     "total": 0,
     "current_file": "",
     "log": [],
-    "results": [],
+    "results": load_saved_results(),  # Load saved results on startup
     "complete": False,
     "error": None
 }
 
 
-def reset_state():
+def reset_state(clear_results=False):
     global grading_state
     grading_state.update({
         "is_running": False,
@@ -54,7 +80,7 @@ def reset_state():
         "total": 0,
         "current_file": "",
         "log": [],
-        "results": [],
+        "results": [] if clear_results else grading_state.get("results", []),
         "complete": False,
         "error": None
     })
@@ -64,7 +90,7 @@ def reset_state():
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3'):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name=''):
     """Run the grading process in a background thread."""
     global grading_state
 
@@ -110,12 +136,14 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     best_match = config_data
         return best_match
 
-    # Extract custom markers and notes from selected config (fallback)
+    # Extract custom markers, notes, and response sections from selected config (fallback)
     fallback_markers = []
     fallback_notes = ''
+    fallback_sections = []
     if assignment_config:
         fallback_markers = assignment_config.get('customMarkers', [])
         fallback_notes = assignment_config.get('gradingNotes', '')
+        fallback_sections = assignment_config.get('responseSections', [])
 
     try:
         from assignment_grader import (
@@ -133,8 +161,10 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
         os.makedirs(output_folder, exist_ok=True)
 
-        # Load already graded files from master CSV
+        # Load already graded files from master CSV AND in-memory results
         already_graded = set()
+
+        # Check master CSV
         master_file = os.path.join(output_folder, "master_grades.csv")
         if os.path.exists(master_file):
             try:
@@ -144,9 +174,16 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                         filename = row.get('Filename', '')
                         if filename:
                             already_graded.add(filename)
-                grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
             except:
                 pass
+
+        # Also check in-memory results (loaded from saved JSON)
+        for r in grading_state.get("results", []):
+            if r.get("filename"):
+                already_graded.add(r["filename"])
+
+        if already_graded:
+            grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
 
         grading_state["log"].append("Loading student roster...")
         roster = load_roster(roster_file)
@@ -203,18 +240,33 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             if matched_config:
                 file_markers = matched_config.get('customMarkers', [])
                 file_notes = matched_config.get('gradingNotes', '')
+                file_sections = matched_config.get('responseSections', [])
                 matched_title = matched_config.get('title', 'Unknown')
                 grading_state["log"].append(f"  Matched config: {matched_title}")
             else:
                 file_markers = fallback_markers
                 file_notes = fallback_notes
+                file_sections = fallback_sections
 
             # Build combined AI notes for this file
             file_ai_notes = ''
             if global_ai_notes:
                 file_ai_notes += f"GLOBAL GRADING INSTRUCTIONS:\n{global_ai_notes}\n\n"
             if file_notes:
-                file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
+                file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}\n\n"
+
+            # Add response sections (highlighted areas where student work should be found)
+            if file_sections:
+                sections_text = "HIGHLIGHTED RESPONSE SECTIONS (Focus on content within these ranges):\n"
+                for idx, section in enumerate(file_sections, 1):
+                    start = section.get('start', '')
+                    end = section.get('end')
+                    if end:
+                        sections_text += f"  {idx}. From \"{start}\" to \"{end}\"\n"
+                    else:
+                        sections_text += f"  {idx}. From \"{start}\" to end of document\n"
+                sections_text += "\nStudent responses should be found WITHIN these highlighted sections. Content outside these sections is likely teacher instructions or questions.\n"
+                file_ai_notes += sections_text
 
             # Add file-specific markers to the markers list temporarily
             original_markers = STUDENT_WORK_MARKERS.copy()
@@ -231,16 +283,17 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
             markers_found = []
             if file_data["type"] == "text":
-                student_work, markers_found = extract_student_work(file_data["content"])
-                if markers_found:
-                    grading_state["log"].append(f"  Markers: {', '.join(markers_found[:2])}")
-                grade_data = {"type": "text", "content": student_work}
+                # Send FULL document to AI - let it identify student work
+                # The AI is better at distinguishing questions from answers
+                full_doc_content = file_data["content"]
+                grade_data = {"type": "text", "content": full_doc_content}
+                grading_state["log"].append(f"  Document: {len(full_doc_content)} chars")
             else:
                 grading_state["log"].append(f"  Image file")
                 grade_data = file_data
 
             grading_state["log"].append(f"  Grading...")
-            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes)
+            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes, grade_level, subject)
 
             # Restore original markers
             STUDENT_WORK_MARKERS.clear()
@@ -254,11 +307,14 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             else:
                 assignment_from_file = ASSIGNMENT_NAME
 
-            # Get student content for review
+            # Get student content for review - show full document
             if file_data["type"] == "text":
-                student_content = student_work if student_work else file_data.get("content", "")
+                full_content = file_data.get("content", "")
+                # Show full document - AI grades the whole thing
+                student_content = full_content
             else:
                 student_content = "[Image file - view in original document]"
+                full_content = "[Image file - view in original document]"
 
             # Build full grade record for export
             grade_record = {
@@ -282,7 +338,13 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 "letter_grade": grade_result['letter_grade'],
                 "feedback": grade_result.get('feedback', ''),
                 "student_content": student_content[:5000],
-                "breakdown": grade_result.get('breakdown', {})
+                "full_content": full_content[:10000],
+                "breakdown": grade_result.get('breakdown', {}),
+                "student_responses": grade_result.get('student_responses', []),
+                "unanswered_questions": grade_result.get('unanswered_questions', []),
+                "authenticity_flag": grade_result.get('authenticity_flag', 'clean'),
+                "authenticity_reason": grade_result.get('authenticity_reason', ''),
+                "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
 
         # Export CSVs and emails
@@ -299,7 +361,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             grading_state["log"].append("  Detailed report created")
 
             # Email files
-            save_emails_to_folder(all_grades, output_folder)
+            save_emails_to_folder(all_grades, output_folder, teacher_name, subject, school_name)
             grading_state["log"].append("  Email files created")
 
             # Master tracking CSV
@@ -318,12 +380,18 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         grading_state["log"].append(f"Results saved to: {output_folder}")
         grading_state["complete"] = True
 
+        # Save results to file for persistence across restarts
+        save_results(grading_state["results"])
+
     except Exception as e:
         grading_state["error"] = str(e)
         grading_state["log"].append(f"Error: {str(e)}")
     finally:
         grading_state["is_running"] = False
         grading_state["stop_requested"] = False
+        # Also save on stop/error to preserve partial results
+        if grading_state["results"]:
+            save_results(grading_state["results"])
 
 
 # ══════════════════════════════════════════════════════════════
@@ -351,6 +419,10 @@ def start_grading():
     output_folder = data.get('output_folder', '/Users/alexc/Downloads/Graider/Results')
     roster_file = data.get('roster_file', '/Users/alexc/Downloads/Graider/all_students_updated.xlsx')
     grading_period = data.get('grading_period', 'Q3')
+    grade_level = data.get('grade_level', '7')
+    subject = data.get('subject', 'US History')
+    teacher_name = data.get('teacher_name', '')
+    school_name = data.get('school_name', '')
 
     # Get custom assignment config and global AI notes
     assignment_config = data.get('assignmentConfig')
@@ -366,11 +438,49 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name)
     )
     thread.start()
 
     return jsonify({"status": "started"})
+
+
+# ══════════════════════════════════════════════════════════════
+# DELETE SINGLE RESULT
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/delete-result', methods=['POST'])
+def delete_single_result():
+    """Delete a single grading result by filename."""
+    global grading_state
+
+    if grading_state["is_running"]:
+        return jsonify({"error": "Cannot delete results while grading is in progress"}), 400
+
+    data = request.json
+    filename = data.get('filename', '')
+
+    if not filename:
+        return jsonify({"error": "Filename is required"}), 400
+
+    # Find and remove the result from state
+    original_count = len(grading_state["results"])
+    grading_state["results"] = [
+        r for r in grading_state["results"]
+        if r.get('filename', '') != filename
+    ]
+
+    if len(grading_state["results"]) == original_count:
+        return jsonify({"error": "Result not found"}), 404
+
+    # Save updated results to file
+    save_results(grading_state["results"])
+
+    return jsonify({
+        "status": "deleted",
+        "filename": filename,
+        "remaining_count": len(grading_state["results"])
+    })
 
 
 # ══════════════════════════════════════════════════════════════

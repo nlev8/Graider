@@ -16,8 +16,20 @@ def get_analytics():
     # Get period filter from query params
     period_filter = request.args.get('period', 'all')
 
-    # TODO: Make this configurable
-    master_file = os.path.expanduser("~/Downloads/Graider/Results/master_grades.csv")
+    # Try to get output folder from global settings, fallback to default
+    settings_file = os.path.expanduser("~/.graider_global_settings.json")
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+
+    if os.path.exists(settings_file):
+        try:
+            import json
+            with open(settings_file, 'r') as f:
+                settings = json.load(f)
+                output_folder = settings.get('output_folder', output_folder)
+        except:
+            pass
+
+    master_file = os.path.join(output_folder, "master_grades.csv")
 
     if not os.path.exists(master_file):
         return jsonify({"error": "No data yet", "students": [], "assignments": [], "trends": []})

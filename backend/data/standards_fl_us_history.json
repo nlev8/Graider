@@ -1,12 +1,17 @@
 {
   "state": "FL",
-  "subject": "History",
+  "subject": "US History",
   "grade": "8",
   "standards": [
     {
       "code": "SS.8.A.1.1",
       "benchmark": "Provide supporting details for an answer from text, interview for oral history, check validity of information from research/text, and identify strong vs. weak arguments.",
       "topics": ["Research Skills", "Primary Sources", "Analysis"]
+    },
+    {
+      "code": "SS.8.A.1.2",
+      "benchmark": "Analyze charts, graphs, maps, photographs, and timelines; analyze political cartoons; determine cause and effect.",
+      "topics": ["Data Analysis", "Maps", "Political Cartoons", "Cause and Effect"]
     },
     {
       "code": "SS.8.A.1.3",

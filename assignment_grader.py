@@ -29,8 +29,10 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (override system env vars)
+import os
+app_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(app_dir, '.env'), override=True)
 
 # =============================================================================
 # CONFIGURATION - UPDATE THESE FOR EACH GRADING SESSION
@@ -215,68 +217,122 @@ Requirements:
 
 def load_roster(roster_path: str) -> dict:
     """
-    Load student roster from Excel file.
-    
-    Your roster has columns: Student, Student ID, Local ID, Email, Grade, Team
-    Student format: "LastName; FirstName"
-    
+    Load student roster from Excel or CSV file.
+
+    Excel format: Student, Student ID, Local ID, Email, Grade, Team
+    CSV format: FirstName, LastName, StudentID, Email, Period
+
     Returns dict mapping "firstname lastname" (lowercase) -> student info
     """
+    roster = {}
+
+    if not Path(roster_path).exists():
+        print(f"⚠️  Roster file not found: {roster_path}")
+        return {}
+
+    roster_path_lower = roster_path.lower()
+
+    # Handle CSV files
+    if roster_path_lower.endswith('.csv'):
+        import csv
+        with open(roster_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Try various column name formats
+                first_name = row.get('FirstName') or row.get('First Name') or row.get('first_name') or row.get('First') or ''
+                last_name = row.get('LastName') or row.get('Last Name') or row.get('last_name') or row.get('Last') or ''
+                student_id = row.get('StudentID') or row.get('Student ID') or row.get('student_id') or row.get('ID') or ''
+                email = row.get('Email') or row.get('email') or ''
+                period = row.get('Period') or row.get('period') or row.get('Class') or ''
+
+                # If Student column exists with "Last; First" format
+                if not first_name and not last_name:
+                    student_col = row.get('Student') or row.get('Name') or ''
+                    if ';' in student_col:
+                        parts = student_col.split(';')
+                        last_name = parts[0].strip()
+                        first_name = parts[1].strip() if len(parts) > 1 else ''
+                    elif ',' in student_col:
+                        parts = student_col.split(',')
+                        last_name = parts[0].strip()
+                        first_name = parts[1].strip() if len(parts) > 1 else ''
+
+                if not first_name and not last_name:
+                    continue
+
+                first_name_simple = first_name.split()[0] if first_name else ''
+                lookup_key = f"{first_name_simple} {last_name}".lower().strip()
+
+                roster[lookup_key] = {
+                    "student_id": str(student_id),
+                    "student_name": f"{first_name} {last_name}".strip(),
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": email or "",
+                    "period": str(period) if period else ""
+                }
+
+                reverse_key = f"{last_name} {first_name_simple}".lower().strip()
+                roster[reverse_key] = roster[lookup_key]
+
+        print(f"📋 Loaded {len(roster)//2} students from CSV roster")
+        return roster
+
+    # Handle Excel files
     try:
         import openpyxl
     except ImportError:
         print("❌ openpyxl not installed. Run: pip install openpyxl")
         return {}
-    
-    roster = {}
-    
-    if not Path(roster_path).exists():
-        print(f"⚠️  Roster file not found: {roster_path}")
-        return {}
-    
+
     wb = openpyxl.load_workbook(roster_path)
     sheet = wb.active
-    
+
+    # Get header row to find column indices
+    headers = [str(cell.value).lower() if cell.value else '' for cell in sheet[1]]
+
+    # Try to find period column
+    period_col = None
+    for i, h in enumerate(headers):
+        if 'period' in h or 'class' in h or 'team' in h:
+            period_col = i
+            break
+
     # Skip header row
     for row in sheet.iter_rows(min_row=2, values_only=True):
-        if not row[0]:  # Skip empty rows
+        if not row[0]:
             continue
-            
-        # Row format: (Student, Student ID, Local ID, Email, Grade, Team)
-        student_name = row[0]      # "LastName; FirstName"
-        student_id = row[1]        # Numeric ID for Focus
-        email = row[3]             # Email address
-        
-        # Parse "LastName; FirstName" into separate parts
-        if ';' in student_name:
-            parts = student_name.split(';')
+
+        student_name = row[0]
+        student_id = row[1]
+        email = row[3] if len(row) > 3 else ''
+        period = row[period_col] if period_col is not None and len(row) > period_col else ''
+
+        if ';' in str(student_name):
+            parts = str(student_name).split(';')
             last_name = parts[0].strip()
             first_name = parts[1].strip() if len(parts) > 1 else ""
-            
-            # Handle middle names - just take first part of first name for matching
             first_name_simple = first_name.split()[0] if first_name else ""
         else:
-            # Fallback if format is different
-            last_name = student_name
+            last_name = str(student_name)
             first_name = ""
             first_name_simple = ""
-        
-        # Create lookup key: "firstname lastname" (lowercase, for matching filenames)
+
         lookup_key = f"{first_name_simple} {last_name}".lower().strip()
-        
+
         roster[lookup_key] = {
             "student_id": str(student_id),
             "student_name": f"{first_name} {last_name}".strip(),
             "first_name": first_name,
             "last_name": last_name,
-            "email": email or ""
+            "email": email or "",
+            "period": str(period) if period else ""
         }
-        
-        # Also add reverse lookup: "lastname firstname"
+
         reverse_key = f"{last_name} {first_name_simple}".lower().strip()
         roster[reverse_key] = roster[lookup_key]
-    
-    print(f"📋 Loaded {len(roster)//2} students from roster")
+
+    print(f"📋 Loaded {len(roster)//2} students from Excel roster")
     return roster
 
 
@@ -325,30 +381,41 @@ def parse_filename(filename: str) -> dict:
 
 def read_docx_file(filepath: str) -> str:
     """
-    Read text content from a Word document (.docx)
+    Read text content from a Word document (.docx) in document order.
+    This properly interleaves paragraphs and tables as they appear.
     """
     try:
         from docx import Document
+        from docx.document import Document as DocType
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
     except ImportError:
         print("❌ python-docx not installed. Run: pip install python-docx")
         return None
-    
+
     try:
         doc = Document(filepath)
         full_text = []
-        
-        # Get text from paragraphs
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                full_text.append(paragraph.text)
-        
-        # Also get text from tables (Cornell notes often use tables)
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.text.strip():
-                        full_text.append(cell.text)
-        
+
+        # Iterate through document body elements in order
+        # This ensures tables and paragraphs appear in their actual document order
+        for element in doc.element.body:
+            # Check if it's a paragraph
+            if element.tag.endswith('p'):
+                para = Paragraph(element, doc)
+                if para.text.strip():
+                    full_text.append(para.text)
+            # Check if it's a table
+            elif element.tag.endswith('tbl'):
+                table = Table(element, doc)
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            row_text.append(cell.text.strip())
+                    if row_text:
+                        full_text.append(' | '.join(row_text))
+
         return '\n'.join(full_text)
     except Exception as e:
         print(f"  ⚠️  Error reading file: {e}")
@@ -442,110 +509,74 @@ def read_assignment_file(filepath: str) -> dict:
 def extract_student_work(content: str) -> tuple:
     """
     Extract only the student work portions of the document.
-    
-    Looks for marker phrases and extracts content from each marked section
-    until the next section header (like "Vocabulary" or "Notes").
-    
-    This ensures we only grade student responses, not teacher-provided content.
-    
+
+    Finds the first student work marker and returns everything after it.
+    This ensures we capture student responses without duplicating content.
+
     Returns: (student_work, markers_found)
     - student_work: The extracted student content (or full content if no marker)
     - markers_found: List of markers that were found
     """
     content_lower = content.lower()
-    lines = content.split('\n')
-    
-    # Find all marker positions
+
+    # Find the earliest marker position
     found_markers = []
-    marker_positions = []
-    
+    earliest_pos = len(content)
+    earliest_marker = None
+
     for marker in STUDENT_WORK_MARKERS:
         marker_lower = marker.lower()
         pos = content_lower.find(marker_lower)
         if pos != -1:
-            marker_positions.append((pos, marker, len(marker)))
             if marker not in found_markers:
                 found_markers.append(marker)
-    
-    if not marker_positions:
+            if pos < earliest_pos:
+                earliest_pos = pos
+                earliest_marker = marker
+
+    if not earliest_marker:
         # No markers found - return full content
         return content, []
-    
-    # Sort by position
-    marker_positions.sort(key=lambda x: x[0])
-    
-    # Find all section header positions (these END a student section)
-    header_positions = []
-    for header in SECTION_HEADERS:
-        header_lower = header.lower()
-        pos = 0
-        while True:
-            pos = content_lower.find(header_lower, pos)
-            if pos == -1:
-                break
-            header_positions.append(pos)
-            pos += 1
-    
-    # Also treat markers as potential section boundaries
-    all_boundaries = sorted(set(header_positions + [m[0] for m in marker_positions]))
-    
-    # Extract content from each marker section
-    student_sections = []
-    
-    for marker_pos, marker_name, marker_len in marker_positions:
-        # Start after the marker
-        start_pos = marker_pos + marker_len
-        
-        # Find the next boundary (header or another marker) after this marker
-        end_pos = len(content)
-        for boundary in all_boundaries:
-            if boundary > start_pos + 10:  # At least 10 chars after marker start
-                # Check if this boundary is a non-student header
-                boundary_text = content_lower[max(0, boundary-5):boundary+50]
-                is_student_marker = any(m.lower() in boundary_text for m in STUDENT_WORK_MARKERS)
-                is_header = any(h.lower() in boundary_text for h in SECTION_HEADERS)
-                
-                if is_header and not is_student_marker:
-                    end_pos = boundary
-                    break
-        
-        # Extract this section
-        section_content = content[start_pos:end_pos].strip()
-        if section_content and len(section_content) > 10:
-            student_sections.append(section_content)
-    
-    # Combine all student sections
-    if student_sections:
-        combined = '\n\n---\n\n'.join(student_sections)
-        return combined, found_markers
-    
-    # Fallback: return everything after first marker
-    first_pos = marker_positions[0][0] + marker_positions[0][2]
-    return content[first_pos:].strip(), found_markers
+
+    # Return everything from the first marker onward
+    # Find the line containing the marker and start from there
+    line_start = content.rfind('\n', 0, earliest_pos)
+    if line_start == -1:
+        line_start = 0
+    else:
+        line_start += 1  # Skip the newline character
+
+    student_work = content[line_start:].strip()
+    return student_work, found_markers
 
 
 # =============================================================================
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies') -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
-    
+
     FERPA COMPLIANCE: Student name is NOT sent to OpenAI.
     We use "Student" as a placeholder to protect privacy.
-    
+
     Supports both text and image inputs.
-    
+
     Parameters:
     - student_name: Name of the student (kept local, not sent to API)
     - assignment_data: dict with "type" ("text" or "image") and "content"
-    
+    - custom_ai_instructions: Additional grading instructions from the teacher
+    - grade_level: The student's grade level (e.g., '6', '7', '8')
+    - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
+
     Returns dict with:
     - score: numeric grade (0-100)
     - letter_grade: A, B, C, D, or F
     - feedback: detailed feedback for the student
     - breakdown: points for each rubric category
+    - authenticity_flag: 'clean', 'review', or 'flagged'
+    - authenticity_reason: Explanation for flagged or review status
     """
     try:
         from openai import OpenAI
@@ -558,19 +589,79 @@ def grade_assignment(student_name: str, assignment_data: dict) -> dict:
     # FERPA: Use anonymous placeholder instead of real student name
     anonymous_name = "Student"
     
+    # Build custom instructions section if provided
+    custom_section = ''
+    if custom_ai_instructions:
+        custom_section = f"""
+---
+TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
+{custom_ai_instructions}
+---
+"""
+
+    # Map grade level to age range for context
+    grade_age_map = {
+        'K': '5-6', '1': '6-7', '2': '7-8', '3': '8-9', '4': '9-10', '5': '10-11',
+        '6': '11-12', '7': '12-13', '8': '13-14', '9': '14-15', '10': '15-16',
+        '11': '16-17', '12': '17-18'
+    }
+    age_range = grade_age_map.get(str(grade_level), '11-12')
+
     prompt_text = f"""
 {GRADING_RUBRIC}
 
 {ASSIGNMENT_INSTRUCTIONS}
-
+{custom_section}
 ---
 
-Please grade this student's work. 
+STUDENT CONTEXT:
+- Grade Level: {grade_level}
+- Subject: {subject}
+- Expected Age Range: {age_range} years old
+
+Please grade this student's work.
+
+IMPORTANT - IDENTIFY STUDENT RESPONSES:
+The document contains BOTH teacher-provided content (instructions, questions) AND student responses (answers).
+
+Student responses can be in many formats:
+- Fill-in-the-blank: text between underscores like ___1803___ or after blanks
+- Written answers: paragraphs or sentences after questions
+- MATCHING EXERCISES: Numbers written next to terms to match with numbered definitions
+  (e.g., if "Judicial Review" has "3" next to it, the student matched it to definition #3)
+- Multiple choice: letters or numbers indicating selected answers
+- Short answer: brief responses to questions
+
+For MATCHING exercises specifically:
+- Look for numbers placed next to vocabulary terms
+- The number indicates which definition the student chose
+- Grade whether they matched correctly
+
+DO NOT grade the questions/prompts themselves - only grade the STUDENT'S ANSWERS.
+List each specific student response you found in the "student_responses" field.
+
+GRADING GUIDELINES:
 - Assess EVERY answer the student provided.
 - For fill-in-the-blank: check if the answer is factually correct or close enough.
 - Accept multiple valid answers and synonyms.
 - DO NOT penalize spelling mistakes if the meaning is clear.
-- Be GENEROUS - these are 6th graders! A student who completes all work and gets most answers right deserves an A or B.
+- Be GENEROUS - these are grade {grade_level} students ({age_range} years old)! A student who completes all work and gets most answers right deserves an A or B.
+- IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
+
+IMPORTANT - AI/PLAGIARISM DETECTION:
+Analyze the writing for signs that it may NOT be the student's original work.
+Consider what is typical for a grade {grade_level} student ({age_range} years old) in {subject}:
+- Is the vocabulary and sentence structure appropriate for grade {grade_level}?
+- Are there sudden shifts in writing quality or voice?
+- Does the writing sound overly formal, polished, or "adult" for a {age_range} year old?
+- Are there unusual phrases or technical jargon that a grade {grade_level} student wouldn't typically use?
+- Does the writing lack the natural errors and simplicity expected from this age group?
+- Is the content suspiciously comprehensive or professionally structured?
+
+Set "authenticity_flag" to one of:
+- "clean" - Writing appears authentic and appropriate for grade {grade_level}
+- "review" - Some concerns about writing level, teacher should review
+- "flagged" - Writing significantly above expected grade {grade_level} level, likely AI-generated or copied
 
 Provide your response in the following JSON format ONLY (no other text):
 {{
@@ -582,7 +673,11 @@ Provide your response in the following JSON format ONLY (no other text):
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
-    "feedback": "<2-3 paragraphs of encouraging feedback written directly to the student. Use simple, friendly language a 6th grader can understand. Start with specific praise for what they did well, then gently mention 1-2 areas to improve (if any), then end with encouragement. Be positive and supportive! Do NOT use the student's name - just say 'you' or 'your'.>"
+    "student_responses": ["<list each student answer you found, e.g. '1803', 'France', 'It helped trade...' etc>"],
+    "unanswered_questions": ["<list any questions the student left blank or didn't answer>"],
+    "authenticity_flag": "<clean, review, or flagged>",
+    "authenticity_reason": "<Brief explanation if review or flagged, otherwise empty string>",
+    "feedback": "<2-3 paragraphs of encouraging feedback written directly to the student. Use simple, friendly language a grade {grade_level} student can understand. Start with specific praise for what they did well, then gently mention 1-2 areas to improve (if any), then end with encouragement. Be positive and supportive! Do NOT use the student's name - just say 'you' or 'your'.>"
 }}
 """
 
@@ -684,7 +779,7 @@ If you have any questions about your grade, please see me during class.
     return subject, body
 
 
-def save_emails_to_folder(grades: list, output_folder: str):
+def save_emails_to_folder(grades: list, output_folder: str, teacher_name: str = '', subject: str = '', school_name: str = ''):
     """
     Save emails as individual text files - ONE EMAIL PER STUDENT
     with feedback for ALL their assignments combined.
@@ -716,11 +811,11 @@ def save_emails_to_folder(grades: list, output_folder: str):
         assignments = data['assignments']
         first_name = data['first_name']
         
-        # Subject line
+        # Email subject line
         if len(assignments) == 1:
-            subject = f"Grade for {assignments[0].get('assignment', 'Assignment')}: {assignments[0]['letter_grade']}"
+            email_subject = f"Grade for {assignments[0].get('assignment', 'Assignment')}: {assignments[0]['letter_grade']}"
         else:
-            subject = f"Grades for {len(assignments)} Assignments"
+            email_subject = f"Grades for {len(assignments)} Assignments"
         
         # Body
         body = f"Hi {first_name},\n\n"
@@ -741,7 +836,10 @@ def save_emails_to_folder(grades: list, output_folder: str):
                 body += f"FEEDBACK:\n{a.get('feedback', 'No feedback available.')}\n\n"
         
         body += "\nIf you have any questions about your grades, please see me during class.\n\n"
-        body += "- Mr. Crionas US History\n"
+        signature = teacher_name if teacher_name else "Your Teacher"
+        if subject:
+            signature += f" {subject}"
+        body += f"- {signature}\n"
         
         # Save file
         safe_name = re.sub(r'[^\w\s-]', '', student_name).replace(' ', '_')
@@ -749,7 +847,7 @@ def save_emails_to_folder(grades: list, output_folder: str):
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(f"TO: {data['email']}\n")
-            f.write(f"SUBJECT: {subject}\n")
+            f.write(f"SUBJECT: {email_subject}\n")
             f.write(f"{'='*50}\n\n")
             f.write(body)
         
@@ -969,7 +1067,7 @@ def save_to_master_csv(grades: list, output_folder: str):
                 grade.get('period', ''),
                 grade.get('assignment', ''),
                 grade.get('unit', ''),
-                quarter,
+                grade.get('grading_period', quarter),  # Use grading_period from settings, fallback to calculated
                 grade.get('score', 0),
                 grade.get('letter_grade', ''),
                 breakdown.get('content_accuracy', 0),

@@ -48,6 +48,19 @@ export async function stopGrading() {
   })
 }
 
+export async function clearResults() {
+  return fetchApi('/api/clear-results', {
+    method: 'POST',
+  })
+}
+
+export async function deleteResult(filename) {
+  return fetchApi('/api/delete-result', {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  })
+}
+
 export async function checkNewFiles(folder, outputFolder) {
   return fetchApi('/api/check-new-files', {
     method: 'POST',
@@ -257,6 +270,8 @@ export default {
   getStatus,
   startGrading,
   stopGrading,
+  clearResults,
+  deleteResult,
   checkNewFiles,
   saveRubric,
   loadRubric,

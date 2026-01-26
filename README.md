@@ -35,10 +35,12 @@ Graider automates the grading process using AI, saving teachers hours of work wh
 - Add custom AI grading instructions
 - Export assignments with answer keys
 
-### 📚 Lesson Planner (Coming Soon)
+### 📚 Lesson Planner
 - Browse state standards (Florida B.E.S.T.)
-- AI-generated lesson plans
-- Day-by-day activities aligned to standards
+- AI-generated comprehensive lesson plans
+- Detailed timing, activities, and assessments
+- Essential questions and learning objectives
+- Differentiation strategies included
 - Export to Word
 
 ### ⚡ Auto-Grade Mode

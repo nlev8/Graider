@@ -1,0 +1,107 @@
+{
+  "state": "FL",
+  "subject": "World History",
+  "grade": "9-10",
+  "standards": [
+    {
+      "code": "SS.912.W.1.1",
+      "benchmark": "Use timelines to establish cause and effect relationships of historical events.",
+      "topics": ["Timelines", "Cause and Effect", "Chronology"]
+    },
+    {
+      "code": "SS.912.W.1.3",
+      "benchmark": "Interpret and evaluate primary and secondary sources.",
+      "topics": ["Primary Sources", "Secondary Sources", "Analysis"]
+    },
+    {
+      "code": "SS.912.W.2.1",
+      "benchmark": "Locate the extent of Byzantine territory at the height of the empire.",
+      "topics": ["Byzantine Empire", "Geography", "Eastern Roman Empire"]
+    },
+    {
+      "code": "SS.912.W.2.3",
+      "benchmark": "Analyze the extent to which the Byzantine Empire was a continuation of the old Roman Empire.",
+      "topics": ["Byzantine Empire", "Roman Empire", "Continuity"]
+    },
+    {
+      "code": "SS.912.W.2.5",
+      "benchmark": "Explain the contributions of the Byzantine Empire.",
+      "topics": ["Byzantine Contributions", "Art", "Architecture", "Law"]
+    },
+    {
+      "code": "SS.912.W.2.7",
+      "benchmark": "Describe the causes and effects of the Crusades on Western Europe and the Middle East.",
+      "topics": ["Crusades", "Medieval Europe", "Middle East"]
+    },
+    {
+      "code": "SS.912.W.2.10",
+      "benchmark": "Describe the development of feudalism and manorialism and their impact on medieval Europe.",
+      "topics": ["Feudalism", "Manorialism", "Medieval Society"]
+    },
+    {
+      "code": "SS.912.W.3.1",
+      "benchmark": "Discuss significant people and beliefs associated with Islam.",
+      "topics": ["Islam", "Muhammad", "Religious Beliefs"]
+    },
+    {
+      "code": "SS.912.W.3.6",
+      "benchmark": "Describe the interaction among Muslim, Christian, and Jewish societies in Medieval Spain.",
+      "topics": ["Medieval Spain", "Religious Interaction", "Al-Andalus"]
+    },
+    {
+      "code": "SS.912.W.4.1",
+      "benchmark": "Identify the economic and political causes for the rise of the Italian city-states during the Renaissance.",
+      "topics": ["Renaissance", "Italian City-States", "Trade"]
+    },
+    {
+      "code": "SS.912.W.4.3",
+      "benchmark": "Identify the major artistic, literary, and technological contributions of individuals during the Renaissance.",
+      "topics": ["Renaissance Art", "Literature", "Da Vinci", "Michelangelo"]
+    },
+    {
+      "code": "SS.912.W.4.6",
+      "benchmark": "Describe the causes and effects of the Protestant Reformation.",
+      "topics": ["Protestant Reformation", "Martin Luther", "Religious Change"]
+    },
+    {
+      "code": "SS.912.W.4.9",
+      "benchmark": "Analyze the Roman Catholic Church's response to the Protestant Reformation.",
+      "topics": ["Counter-Reformation", "Catholic Church", "Council of Trent"]
+    },
+    {
+      "code": "SS.912.W.4.11",
+      "benchmark": "Summarize the causes that led to the Age of Exploration.",
+      "topics": ["Age of Exploration", "Navigation", "Trade Routes"]
+    },
+    {
+      "code": "SS.912.W.4.13",
+      "benchmark": "Examine the various economic and political systems of Portugal, Spain, the Netherlands, France, and England in the Americas.",
+      "topics": ["Colonization", "European Powers", "Americas"]
+    },
+    {
+      "code": "SS.912.W.5.1",
+      "benchmark": "Compare the causes and effects of the development of constitutional monarchy in England with those of the development of absolute monarchy in France, Spain, and Russia.",
+      "topics": ["Absolute Monarchy", "Constitutional Monarchy", "Government"]
+    },
+    {
+      "code": "SS.912.W.5.4",
+      "benchmark": "Evaluate the impact of Enlightenment ideals on the development of economic, political, and religious structures in Western civilization.",
+      "topics": ["Enlightenment", "Philosophy", "Political Theory"]
+    },
+    {
+      "code": "SS.912.W.6.1",
+      "benchmark": "Describe the causes and effects of the Scientific Revolution.",
+      "topics": ["Scientific Revolution", "Scientific Method", "Discovery"]
+    },
+    {
+      "code": "SS.912.W.6.3",
+      "benchmark": "Compare the causes and effects of the French Revolution.",
+      "topics": ["French Revolution", "Revolution", "Social Change"]
+    },
+    {
+      "code": "SS.912.W.6.6",
+      "benchmark": "Analyze the causes and effects of the Industrial Revolution.",
+      "topics": ["Industrial Revolution", "Industrialization", "Technology"]
+    }
+  ]
+}
