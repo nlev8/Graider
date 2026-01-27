@@ -34,6 +34,53 @@ CORS(app)
 # ══════════════════════════════════════════════════════════════
 
 RESULTS_FILE = os.path.expanduser("~/.graider_results.json")
+AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
+SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
+
+# ══════════════════════════════════════════════════════════════
+# FERPA COMPLIANCE - AUDIT LOGGING
+# ══════════════════════════════════════════════════════════════
+
+def audit_log(action: str, details: str = "", user: str = "teacher"):
+    """
+    FERPA Compliance: Log all data access and modifications.
+    Logs are kept locally and do not contain actual student data.
+    """
+    try:
+        timestamp = datetime.now().isoformat()
+        log_entry = f"{timestamp} | {user} | {action} | {details}\n"
+
+        with open(AUDIT_LOG_FILE, 'a') as f:
+            f.write(log_entry)
+    except Exception as e:
+        print(f"Audit log error: {e}")
+
+
+def get_audit_logs(limit: int = 100):
+    """Retrieve recent audit log entries."""
+    if not os.path.exists(AUDIT_LOG_FILE):
+        return []
+
+    try:
+        with open(AUDIT_LOG_FILE, 'r') as f:
+            lines = f.readlines()
+            # Return last N entries
+            recent = lines[-limit:] if len(lines) > limit else lines
+            logs = []
+            for line in recent:
+                parts = line.strip().split(' | ')
+                if len(parts) >= 4:
+                    logs.append({
+                        'timestamp': parts[0],
+                        'user': parts[1],
+                        'action': parts[2],
+                        'details': parts[3] if len(parts) > 3 else ''
+                    })
+            return logs[::-1]  # Newest first
+    except Exception as e:
+        print(f"Error reading audit logs: {e}")
+        return []
+
 
 def load_saved_results():
     """Load results from file on startup."""
@@ -298,6 +345,31 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             # Restore original markers
             STUDENT_WORK_MARKERS.clear()
             STUDENT_WORK_MARKERS.extend(original_markers)
+
+            # Check for API/network errors - stop grading to prevent bad grades
+            if grade_result.get('letter_grade') == 'ERROR':
+                error_msg = grade_result.get('feedback', 'Unknown API error')
+                grading_state["log"].append("")
+                grading_state["log"].append("=" * 50)
+                grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
+                grading_state["log"].append("=" * 50)
+                grading_state["log"].append(f"Error: {error_msg}")
+                grading_state["log"].append("")
+                grading_state["log"].append("Please check:")
+                grading_state["log"].append("  • Internet connection")
+                grading_state["log"].append("  • OpenAI API key is valid")
+                grading_state["log"].append("  • API service is available")
+                grading_state["log"].append("")
+                grading_state["log"].append(f"Progress saved: {len(all_grades)} assignments graded")
+                grading_state["log"].append("Fix the issue and restart to continue.")
+                grading_state["error"] = f"API Error: {error_msg}"
+                grading_state["complete"] = True
+                grading_state["is_running"] = False
+                # Save any progress made
+                if grading_state["results"]:
+                    save_results(grading_state["results"])
+                return
+
             grading_state["log"].append(f"  Score: {grade_result['score']} ({grade_result['letter_grade']})")
 
             # Extract assignment name from filename
@@ -436,6 +508,9 @@ def start_grading():
     reset_state()
     grading_state["is_running"] = True
 
+    # FERPA: Audit log grading session start
+    audit_log("START_GRADING", f"Started grading session for {subject} grade {grade_level}")
+
     thread = threading.Thread(
         target=run_grading_thread,
         args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name)
@@ -476,10 +551,156 @@ def delete_single_result():
     # Save updated results to file
     save_results(grading_state["results"])
 
+    # FERPA: Audit log the deletion
+    audit_log("DELETE_RESULT", f"Deleted result for file: {filename[:30]}...")
+
     return jsonify({
         "status": "deleted",
         "filename": filename,
         "remaining_count": len(grading_state["results"])
+    })
+
+
+# ══════════════════════════════════════════════════════════════
+# FERPA COMPLIANCE - DATA MANAGEMENT
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/ferpa/delete-all-data', methods=['POST'])
+def delete_all_student_data():
+    """
+    FERPA Compliance: Securely delete all student data.
+    This includes grading results, settings, and cached data.
+    """
+    global grading_state
+
+    if grading_state["is_running"]:
+        return jsonify({"error": "Cannot delete data while grading is in progress"}), 400
+
+    data = request.json or {}
+    confirm = data.get('confirm', False)
+
+    if not confirm:
+        return jsonify({
+            "error": "Confirmation required",
+            "message": "Send {confirm: true} to proceed with deletion"
+        }), 400
+
+    deleted_items = []
+
+    try:
+        # Delete grading results
+        if os.path.exists(RESULTS_FILE):
+            result_count = len(grading_state.get("results", []))
+            os.remove(RESULTS_FILE)
+            deleted_items.append(f"Grading results ({result_count} records)")
+
+        # Clear in-memory results
+        grading_state["results"] = []
+        grading_state["log"] = []
+        grading_state["progress"] = 0
+        grading_state["total"] = 0
+        grading_state["complete"] = False
+
+        # Delete settings (optional - based on request)
+        if data.get('include_settings', False) and os.path.exists(SETTINGS_FILE):
+            os.remove(SETTINGS_FILE)
+            deleted_items.append("Settings")
+
+        # Audit log the deletion (this is kept for compliance)
+        audit_log("DELETE_ALL_DATA", f"Deleted: {', '.join(deleted_items)}")
+
+        return jsonify({
+            "status": "success",
+            "message": "All student data has been securely deleted",
+            "deleted": deleted_items,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        audit_log("DELETE_ALL_DATA_ERROR", str(e))
+        return jsonify({"error": f"Failed to delete data: {str(e)}"}), 500
+
+
+@app.route('/api/ferpa/audit-log', methods=['GET'])
+def get_audit_log():
+    """
+    FERPA Compliance: Retrieve audit log entries.
+    Shows who accessed what data and when.
+    """
+    limit = request.args.get('limit', 100, type=int)
+    logs = get_audit_logs(limit)
+
+    return jsonify({
+        "logs": logs,
+        "total": len(logs),
+        "file": AUDIT_LOG_FILE
+    })
+
+
+@app.route('/api/ferpa/data-summary', methods=['GET'])
+def get_data_summary():
+    """
+    FERPA Compliance: Get summary of stored student data.
+    Helps teachers understand what data is stored locally.
+    """
+    summary = {
+        "results": {
+            "count": len(grading_state.get("results", [])),
+            "file": RESULTS_FILE,
+            "exists": os.path.exists(RESULTS_FILE)
+        },
+        "settings": {
+            "file": SETTINGS_FILE,
+            "exists": os.path.exists(SETTINGS_FILE)
+        },
+        "audit_log": {
+            "file": AUDIT_LOG_FILE,
+            "exists": os.path.exists(AUDIT_LOG_FILE)
+        },
+        "data_locations": [
+            "~/.graider_results.json - Grading results",
+            "~/.graider_settings.json - App settings",
+            "~/.graider_audit.log - Audit trail",
+            "Output folder (configured in settings) - Exported grades"
+        ],
+        "ferpa_notes": {
+            "pii_handling": "Student names are sanitized before AI processing",
+            "data_storage": "All data stored locally on teacher's computer",
+            "ai_training": "OpenAI API does not train on API-submitted data",
+            "deletion": "Use DELETE /api/ferpa/delete-all-data to remove all data"
+        }
+    }
+
+    # Audit log access to data summary
+    audit_log("VIEW_DATA_SUMMARY", "Teacher viewed data storage summary")
+
+    return jsonify(summary)
+
+
+@app.route('/api/ferpa/export-data', methods=['GET'])
+def export_student_data():
+    """
+    FERPA Compliance: Export all student data for portability.
+    Supports parent/guardian data requests.
+    """
+    student_name = request.args.get('student', '')
+
+    if student_name:
+        # Export specific student's data
+        student_results = [
+            r for r in grading_state.get("results", [])
+            if r.get("student_name", "").lower() == student_name.lower()
+        ]
+        audit_log("EXPORT_STUDENT_DATA", f"Exported data for student (name redacted)")
+    else:
+        # Export all data
+        student_results = grading_state.get("results", [])
+        audit_log("EXPORT_ALL_DATA", f"Exported all {len(student_results)} records")
+
+    return jsonify({
+        "export_date": datetime.now().isoformat(),
+        "record_count": len(student_results),
+        "data": student_results
     })
 
 

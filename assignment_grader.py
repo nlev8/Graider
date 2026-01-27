@@ -551,6 +551,85 @@ def extract_student_work(content: str) -> tuple:
 
 
 # =============================================================================
+# FERPA COMPLIANCE - PII SANITIZATION
+# =============================================================================
+
+import hashlib
+
+def sanitize_pii_for_ai(student_name: str, content: str) -> tuple:
+    """
+    FERPA Compliance: Remove all Personally Identifiable Information (PII)
+    before sending student work to external AI services.
+
+    Returns:
+        tuple: (anonymous_id, sanitized_content)
+    """
+    if not content:
+        return "Student_0000", ""
+
+    # Create consistent anonymous identifier from student name
+    if student_name:
+        hash_val = int(hashlib.md5(student_name.encode()).hexdigest(), 16) % 10000
+        anon_id = f"Student_{hash_val:04d}"
+    else:
+        anon_id = "Student_0000"
+
+    sanitized = content
+
+    # Remove student name variations (first name, last name, full name)
+    if student_name:
+        name_parts = student_name.split()
+        for part in name_parts:
+            if len(part) > 2:  # Avoid removing short words like "I" or "A"
+                sanitized = re.sub(
+                    rf'\b{re.escape(part)}\b',
+                    '[STUDENT]',
+                    sanitized,
+                    flags=re.IGNORECASE
+                )
+
+    # Remove Social Security Numbers (XXX-XX-XXXX)
+    sanitized = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[SSN-REMOVED]', sanitized)
+
+    # Remove Student ID numbers (7-10 digit numbers that look like IDs)
+    sanitized = re.sub(r'\b\d{7,10}\b', '[ID-REMOVED]', sanitized)
+
+    # Remove email addresses
+    sanitized = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL-REMOVED]', sanitized)
+
+    # Remove phone numbers (various formats)
+    sanitized = re.sub(r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b', '[PHONE-REMOVED]', sanitized)
+    sanitized = re.sub(r'\(\d{3}\)\s*\d{3}[-.\s]?\d{4}', '[PHONE-REMOVED]', sanitized)
+
+    # Remove dates that might be birthdates (MM/DD/YYYY, MM-DD-YYYY, etc.)
+    # But preserve historical dates (years before 2000 are likely historical)
+    sanitized = re.sub(r'\b\d{1,2}[/-]\d{1,2}[/-](20\d{2}|19[89]\d)\b', '[DATE-REMOVED]', sanitized)
+
+    # Remove street addresses (basic pattern)
+    sanitized = re.sub(
+        r'\b\d+\s+[\w\s]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|way|court|ct|boulevard|blvd|circle|cir|place|pl)\.?\b',
+        '[ADDRESS-REMOVED]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+
+    # Remove zip codes (5 digit or 5+4 format)
+    sanitized = re.sub(r'\b\d{5}(-\d{4})?\b', '[ZIP-REMOVED]', sanitized)
+
+    return anon_id, sanitized
+
+
+def log_pii_sanitization(student_name: str, original_len: int, sanitized_len: int, removals: dict):
+    """
+    Log PII sanitization actions for audit purposes.
+    Does not log actual PII - only counts and types of removals.
+    """
+    # This could be extended to write to an audit log file
+    if any(removals.values()):
+        print(f"  🔒 PII sanitized for student submission (removed: {', '.join(k for k, v in removals.items() if v > 0)})")
+
+
+# =============================================================================
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
@@ -648,20 +727,21 @@ GRADING GUIDELINES:
 - Be GENEROUS - these are grade {grade_level} students ({age_range} years old)! A student who completes all work and gets most answers right deserves an A or B.
 - IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
 
-IMPORTANT - AI/PLAGIARISM DETECTION:
-Analyze the writing for signs that it may NOT be the student's original work.
-Consider what is typical for a grade {grade_level} student ({age_range} years old) in {subject}:
-- Is the vocabulary and sentence structure appropriate for grade {grade_level}?
-- Are there sudden shifts in writing quality or voice?
+IMPORTANT - AUTHENTICITY CHECKS:
+
+1. AI DETECTION - Analyze the writing for signs of AI-generated content:
+- Is the vocabulary and sentence structure too sophisticated for grade {grade_level}?
 - Does the writing sound overly formal, polished, or "adult" for a {age_range} year old?
 - Are there unusual phrases or technical jargon that a grade {grade_level} student wouldn't typically use?
 - Does the writing lack the natural errors and simplicity expected from this age group?
 - Is the content suspiciously comprehensive or professionally structured?
+- Are there repetitive sentence patterns or overly consistent paragraph lengths?
 
-Set "authenticity_flag" to one of:
-- "clean" - Writing appears authentic and appropriate for grade {grade_level}
-- "review" - Some concerns about writing level, teacher should review
-- "flagged" - Writing significantly above expected grade {grade_level} level, likely AI-generated or copied
+2. PLAGIARISM DETECTION - Look for signs of copied content:
+- Are there sudden shifts in writing quality or voice within the work?
+- Does the writing style change noticeably between sections?
+- Are there phrases that seem memorized or out of context?
+- Does any content seem directly lifted from a textbook or reference material?
 
 Provide your response in the following JSON format ONLY (no other text):
 {{
@@ -675,23 +755,40 @@ Provide your response in the following JSON format ONLY (no other text):
     }},
     "student_responses": ["<list each student answer you found, e.g. '1803', 'France', 'It helped trade...' etc>"],
     "unanswered_questions": ["<list any questions the student left blank or didn't answer>"],
-    "authenticity_flag": "<clean, review, or flagged>",
-    "authenticity_reason": "<Brief explanation if review or flagged, otherwise empty string>",
-    "feedback": "<2-3 paragraphs of encouraging feedback written directly to the student. Use simple, friendly language a grade {grade_level} student can understand. Start with specific praise for what they did well, then gently mention 1-2 areas to improve (if any), then end with encouragement. Be positive and supportive! Do NOT use the student's name - just say 'you' or 'your'.>"
+    "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
+    "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
+    "ai_detection": {{
+        "flag": "<none, unlikely, possible, or likely>",
+        "confidence": <number 0-100 representing confidence in the assessment>,
+        "reason": "<Brief explanation if not 'none', otherwise empty string>"
+    }},
+    "plagiarism_detection": {{
+        "flag": "<none, possible, or likely>",
+        "reason": "<Brief explanation if not 'none', otherwise empty string>"
+    }},
+    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up!>"
 }}
 """
 
     print(f"  🤖 Grading with AI...")
-    
+
     try:
-        # Build the message content based on input type
+        # FERPA COMPLIANCE: Sanitize PII from text content before sending to AI
         if assignment_data["type"] == "text":
-            # Text-based assignment
-            full_prompt = prompt_text + f"\n\nSTUDENT'S RESPONSES/WORK:\n{assignment_data['content']}"
+            original_content = assignment_data['content']
+            anon_id, sanitized_content = sanitize_pii_for_ai(student_name, original_content)
+
+            # Log if any PII was removed (for audit trail)
+            if sanitized_content != original_content:
+                print(f"  🔒 PII sanitized from submission before AI processing")
+
+            # Build the message content based on input type
+            full_prompt = prompt_text + f"\n\nSTUDENT'S RESPONSES/WORK:\n{sanitized_content}"
             messages = [{"role": "user", "content": full_prompt}]
-        
+
         elif assignment_data["type"] == "image":
             # Image-based assignment - use vision
+            # Note: Cannot sanitize PII from images, but names are not sent in prompt
             messages = [{
                 "role": "user",
                 "content": [

@@ -166,6 +166,59 @@ function StandardCard({ standard, isSelected, onToggle }) {
   );
 }
 
+// Helper functions for authenticity checks
+const getAuthenticityStatus = (result) => {
+  // New format with separate AI and plagiarism detection
+  if (result.ai_detection || result.plagiarism_detection) {
+    const ai = result.ai_detection || { flag: "none", confidence: 0, reason: "" };
+    const plag = result.plagiarism_detection || { flag: "none", reason: "" };
+
+    // Determine overall status for summary views
+    const aiConcern = ai.flag === "likely" || ai.flag === "possible";
+    const plagConcern = plag.flag === "likely" || plag.flag === "possible";
+
+    let overallStatus = "clean";
+    if (ai.flag === "likely" || plag.flag === "likely") {
+      overallStatus = "flagged";
+    } else if (aiConcern || plagConcern) {
+      overallStatus = "review";
+    }
+
+    return { ai, plag, overallStatus, isNewFormat: true };
+  }
+
+  // Backward compatibility with old format
+  const flag = result.authenticity_flag || "clean";
+  const reason = result.authenticity_reason || "";
+  return {
+    ai: {
+      flag: flag === "flagged" ? "likely" : flag === "review" ? "possible" : "none",
+      confidence: flag === "flagged" ? 80 : flag === "review" ? 50 : 0,
+      reason: flag !== "clean" ? reason : ""
+    },
+    plag: { flag: "none", reason: "" },
+    overallStatus: flag,
+    isNewFormat: false
+  };
+};
+
+const getAIFlagColor = (flag) => {
+  switch (flag) {
+    case "likely": return { bg: "rgba(248,113,113,0.2)", text: "#f87171" };
+    case "possible": return { bg: "rgba(251,191,36,0.2)", text: "#fbbf24" };
+    case "unlikely": return { bg: "rgba(96,165,250,0.2)", text: "#60a5fa" };
+    default: return { bg: "rgba(74,222,128,0.2)", text: "#4ade80" };
+  }
+};
+
+const getPlagFlagColor = (flag) => {
+  switch (flag) {
+    case "likely": return { bg: "rgba(248,113,113,0.2)", text: "#f87171" };
+    case "possible": return { bg: "rgba(251,191,36,0.2)", text: "#fbbf24" };
+    default: return { bg: "rgba(74,222,128,0.2)", text: "#4ade80" };
+  }
+};
+
 function App() {
   // Theme state with localStorage persistence
   const [theme, setTheme] = useState(() => {
@@ -194,6 +247,7 @@ function App() {
     state: "FL",
     teacher_name: "",
     school_name: "",
+    showToastNotifications: true,
   });
 
   const [status, setStatus] = useState({
@@ -219,6 +273,21 @@ function App() {
     lastCheck: null,
     newFiles: 0,
   });
+
+  // Toast notifications
+  const [toasts, setToasts] = useState([]);
+  const lastResultCount = useRef(0);
+
+  const addToast = (message, type = "success", duration = 4000) => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, duration);
+  };
+
+  // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Builder state
   const [assignment, setAssignment] = useState({
@@ -259,6 +328,7 @@ function App() {
   // Results state
   const [editedResults, setEditedResults] = useState([]);
   const [reviewModal, setReviewModal] = useState({ show: false, index: -1 });
+  const [reviewModalTab, setReviewModalTab] = useState("detected"); // "detected" or "raw"
   const [emailPreview, setEmailPreview] = useState({ show: false, emails: [] });
   const [emailStatus, setEmailStatus] = useState({
     sending: false,
@@ -509,6 +579,13 @@ function App() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [status.log]);
 
+  // Auto-expand Activity Monitor when error occurs
+  useEffect(() => {
+    if (status.error) {
+      setShowActivityLog(true);
+    }
+  }, [status.error]);
+
   // Sync editedResults with status.results
   useEffect(() => {
     if (
@@ -518,6 +595,23 @@ function App() {
       setEditedResults(status.results.map((r) => ({ ...r, edited: false })));
     }
   }, [status.results]);
+
+  // Show toast when new assignments are graded
+  useEffect(() => {
+    const currentCount = status.results.length;
+    if (config.showToastNotifications && currentCount > lastResultCount.current && lastResultCount.current > 0) {
+      const newResults = status.results.slice(lastResultCount.current);
+      newResults.forEach((result) => {
+        const grade = result.letter_grade || "N/A";
+        const score = result.score !== undefined ? `${result.score}%` : "";
+        addToast(
+          `Graded: ${result.student_name} - ${grade} ${score}`,
+          grade === "A" || grade === "B" ? "success" : grade === "C" ? "info" : "warning"
+        );
+      });
+    }
+    lastResultCount.current = currentCount;
+  }, [status.results, config.showToastNotifications]);
 
   // Grading functions
   const handleStartGrading = async () => {
@@ -1058,7 +1152,7 @@ ${signature}`;
             left: 0,
             right: 0,
             bottom: 0,
-            background: "var(--modal-bg)",
+            background: "var(--modal-content-bg)",
             zIndex: 1000,
             display: "flex",
             flexDirection: "column",
@@ -1066,15 +1160,14 @@ ${signature}`;
         >
           <div
             style={{
-              padding: "15px 25px",
+              padding: "20px 30px",
               borderBottom: "1px solid var(--glass-border)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              background: "var(--modal-content-bg)",
             }}
           >
-            <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>
+            <h2 style={{ fontSize: "1.4rem", fontWeight: 700 }}>
               Review:{" "}
               {
                 (
@@ -1086,16 +1179,24 @@ ${signature}`;
             <button
               onClick={() => setReviewModal({ show: false, index: -1 })}
               style={{
-                background: "none",
-                border: "none",
+                background: "var(--glass-bg)",
+                border: "1px solid var(--glass-border)",
+                borderRadius: "8px",
+                padding: "8px",
                 color: "var(--text-secondary)",
                 cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
               }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--glass-hover)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "var(--glass-bg)"}
             >
-              <Icon name="X" size={24} />
+              <Icon name="X" size={20} />
             </button>
           </div>
-          <div style={{ flex: 1, overflow: "hidden", padding: "20px" }}>
+          <div style={{ flex: 1, overflow: "hidden", padding: "25px 30px" }}>
             {(() => {
               const r =
                 editedResults[reviewModal.index] ||
@@ -1106,7 +1207,7 @@ ${signature}`;
                   style={{
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
-                    gap: "20px",
+                    gap: "30px",
                     height: "100%",
                   }}
                 >
@@ -1115,17 +1216,68 @@ ${signature}`;
                       display: "flex",
                       flexDirection: "column",
                       height: "100%",
+                      background: "var(--glass-bg)",
+                      borderRadius: "16px",
+                      border: "1px solid var(--glass-border)",
+                      overflow: "hidden",
                     }}
                   >
+                    {/* Header with tabs */}
                     <div
                       style={{
+                        padding: "16px 20px",
+                        borderBottom: "1px solid var(--glass-border)",
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        marginBottom: "15px",
                       }}
                     >
-                      <h3>Student Work</h3>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          onClick={() => setReviewModalTab("detected")}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "8px",
+                            border: "none",
+                            background: reviewModalTab === "detected"
+                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                              : "var(--glass-hover)",
+                            color: reviewModalTab === "detected" ? "#fff" : "var(--text-secondary)",
+                            fontWeight: 600,
+                            fontSize: "0.85rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <Icon name="CheckCircle" size={14} />
+                          AI Detected
+                        </button>
+                        <button
+                          onClick={() => setReviewModalTab("raw")}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "8px",
+                            border: "none",
+                            background: reviewModalTab === "raw"
+                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                              : "var(--glass-hover)",
+                            color: reviewModalTab === "raw" ? "#fff" : "var(--text-secondary)",
+                            fontWeight: 600,
+                            fontSize: "0.85rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <Icon name="FileText" size={14} />
+                          Raw Text
+                        </button>
+                      </div>
                       <button
                         onClick={async () => {
                           try {
@@ -1134,117 +1286,132 @@ ${signature}`;
                             alert("Could not open file: " + e.message);
                           }
                         }}
-                        className="btn btn-secondary"
-                        style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid var(--glass-border)",
+                          background: "var(--glass-bg)",
+                          color: "var(--text-secondary)",
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.2s",
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "var(--glass-hover)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "var(--glass-bg)"}
                       >
                         <Icon name="ExternalLink" size={14} />
                         Open Original
                       </button>
                     </div>
-                    {/* Student Responses - Highlighted */}
-                    {r.student_responses && r.student_responses.length > 0 && (
-                      <div
-                        style={{
-                          marginBottom: "15px",
-                          padding: "15px",
-                          background: "rgba(74,222,128,0.1)",
-                          border: "1px solid rgba(74,222,128,0.3)",
-                          borderRadius: "10px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontWeight: 700,
-                            marginBottom: "10px",
-                            color: "#4ade80",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                          }}
-                        >
-                          <Icon name="CheckCircle" size={16} />
-                          AI Detected Student Responses (
-                          {r.student_responses.length})
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "8px",
-                          }}
-                        >
-                          {r.student_responses.map((resp, i) => (
-                            <span
-                              key={i}
+
+                    {/* Tab Content */}
+                    <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
+                      {reviewModalTab === "detected" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                          {/* AI Detected Responses */}
+                          {r.student_responses && r.student_responses.length > 0 ? (
+                            <div>
+                              <div
+                                style={{
+                                  fontWeight: 600,
+                                  marginBottom: "12px",
+                                  color: "#4ade80",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                <Icon name="CheckCircle" size={16} />
+                                Detected Responses ({r.student_responses.length})
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                {r.student_responses.map((resp, i) => (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      padding: "14px 16px",
+                                      background: "rgba(74,222,128,0.08)",
+                                      borderRadius: "10px",
+                                      fontSize: "0.9rem",
+                                      color: "var(--text-primary)",
+                                      border: "1px solid rgba(74,222,128,0.2)",
+                                      lineHeight: 1.5,
+                                    }}
+                                  >
+                                    {resp}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div
                               style={{
-                                padding: "6px 12px",
-                                background: "rgba(74,222,128,0.2)",
-                                borderRadius: "6px",
-                                fontSize: "0.85rem",
-                                color: "#4ade80",
-                                border: "1px solid rgba(74,222,128,0.4)",
+                                padding: "30px",
+                                textAlign: "center",
+                                color: "var(--text-muted)",
+                                fontSize: "0.9rem",
                               }}
                             >
-                              {resp.length > 80
-                                ? resp.substring(0, 80) + "..."
-                                : resp}
-                            </span>
-                          ))}
+                              No student responses detected
+                            </div>
+                          )}
+
+                          {/* Unanswered Questions */}
+                          {r.unanswered_questions && r.unanswered_questions.length > 0 && (
+                            <div style={{ marginTop: "8px" }}>
+                              <div
+                                style={{
+                                  fontWeight: 600,
+                                  marginBottom: "12px",
+                                  color: "#fbbf24",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                <Icon name="AlertCircle" size={16} />
+                                Unanswered ({r.unanswered_questions.length})
+                              </div>
+                              <div
+                                style={{
+                                  padding: "14px 16px",
+                                  background: "rgba(251,191,36,0.08)",
+                                  borderRadius: "10px",
+                                  fontSize: "0.9rem",
+                                  color: "var(--text-secondary)",
+                                  border: "1px solid rgba(251,191,36,0.2)",
+                                  lineHeight: 1.6,
+                                }}
+                              >
+                                {r.unanswered_questions.join(" • ")}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
-                    {/* Unanswered Questions */}
-                    {r.unanswered_questions &&
-                      r.unanswered_questions.length > 0 && (
+                      ) : (
                         <div
                           style={{
-                            marginBottom: "15px",
-                            padding: "15px",
-                            background: "rgba(251,191,36,0.1)",
-                            border: "1px solid rgba(251,191,36,0.3)",
+                            height: "100%",
+                            background: "var(--input-bg)",
+                            padding: "20px",
                             borderRadius: "10px",
+                            whiteSpace: "pre-wrap",
+                            fontSize: "0.85rem",
+                            lineHeight: 1.6,
+                            color: "var(--text-secondary)",
+                            fontFamily: "monospace",
+                            overflowY: "auto",
                           }}
                         >
-                          <div
-                            style={{
-                              fontWeight: 700,
-                              marginBottom: "10px",
-                              color: "#fbbf24",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "8px",
-                            }}
-                          >
-                            <Icon name="AlertCircle" size={16} />
-                            Unanswered ({r.unanswered_questions.length})
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            {r.unanswered_questions.join(" • ")}
-                          </div>
+                          {r.full_content || r.student_content || "[No content - click Open Original to view]"}
                         </div>
                       )}
-                    {/* Text Content Preview */}
-                    <div
-                      style={{
-                        flex: 1,
-                        background: "var(--input-bg)",
-                        padding: "20px",
-                        borderRadius: "10px",
-                        overflowY: "auto",
-                        whiteSpace: "pre-wrap",
-                        fontSize: "0.85rem",
-                        lineHeight: 1.5,
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      {r.full_content ||
-                        r.student_content ||
-                        "[No content - click Open Original to view]"}
                     </div>
                   </div>
                   <div
@@ -1252,61 +1419,84 @@ ${signature}`;
                       display: "flex",
                       flexDirection: "column",
                       height: "100%",
+                      background: "var(--glass-bg)",
+                      borderRadius: "16px",
+                      border: "1px solid var(--glass-border)",
+                      overflow: "hidden",
                     }}
                   >
-                    <h3 style={{ marginBottom: "15px" }}>Grade & Feedback</h3>
-                    <div style={{ marginBottom: "15px" }}>
-                      <label className="label">Score</label>
-                      <input
-                        type="number"
-                        className="input"
-                        value={r.score}
-                        onChange={(e) =>
-                          updateGrade(
-                            reviewModal.index,
-                            "score",
-                            e.target.value,
-                          )
-                        }
-                        style={{ width: "100px" }}
-                      />
-                      <span
-                        style={{
-                          marginLeft: "10px",
-                          fontWeight: 700,
-                          color:
-                            r.score >= 90
-                              ? "#4ade80"
-                              : r.score >= 80
-                                ? "#60a5fa"
-                                : r.score >= 70
-                                  ? "#fbbf24"
-                                  : "#f87171",
-                        }}
-                      >
-                        {r.letter_grade}
-                      </span>
-                    </div>
                     <div
                       style={{
-                        flex: 1,
+                        padding: "16px 20px",
+                        borderBottom: "1px solid var(--glass-border)",
                         display: "flex",
-                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "10px",
                       }}
                     >
-                      <label className="label">Feedback</label>
-                      <textarea
-                        className="input"
-                        value={r.feedback}
-                        onChange={(e) =>
-                          updateGrade(
-                            reviewModal.index,
-                            "feedback",
-                            e.target.value,
-                          )
-                        }
-                        style={{ flex: 1, minHeight: "200px" }}
-                      />
+                      <Icon name="Award" size={18} style={{ color: "var(--accent-primary)" }} />
+                      <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>Grade & Feedback</h3>
+                    </div>
+                    <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", gap: "20px", overflow: "auto" }}>
+                      <div>
+                        <label className="label">Score</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <input
+                            type="number"
+                            className="input"
+                            value={r.score}
+                            onChange={(e) =>
+                              updateGrade(
+                                reviewModal.index,
+                                "score",
+                                e.target.value,
+                              )
+                            }
+                            style={{ width: "100px" }}
+                          />
+                          <span
+                            style={{
+                              padding: "6px 14px",
+                              borderRadius: "8px",
+                              fontWeight: 700,
+                              fontSize: "0.9rem",
+                              background:
+                                r.score >= 90
+                                  ? "rgba(74,222,128,0.15)"
+                                  : r.score >= 80
+                                    ? "rgba(96,165,250,0.15)"
+                                    : r.score >= 70
+                                      ? "rgba(251,191,36,0.15)"
+                                      : "rgba(248,113,113,0.15)",
+                              color:
+                                r.score >= 90
+                                  ? "#4ade80"
+                                  : r.score >= 80
+                                    ? "#60a5fa"
+                                    : r.score >= 70
+                                      ? "#fbbf24"
+                                      : "#f87171",
+                            }}
+                          >
+                            {r.letter_grade}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                        <label className="label">Feedback</label>
+                        <textarea
+                          className="input"
+                          value={r.feedback}
+                          onChange={(e) =>
+                            updateGrade(
+                              reviewModal.index,
+                              "feedback",
+                              e.target.value,
+                            )
+                          }
+                          style={{ flex: 1, minHeight: "200px", resize: "none" }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1315,17 +1505,17 @@ ${signature}`;
           </div>
           <div
             style={{
-              padding: "15px 25px",
+              padding: "20px 30px",
               borderTop: "1px solid var(--glass-border)",
               display: "flex",
-              gap: "15px",
+              gap: "12px",
               justifyContent: "flex-end",
-              background: "var(--modal-content-bg)",
             }}
           >
             <button
               onClick={() => setReviewModal({ show: false, index: -1 })}
               className="btn btn-primary"
+              style={{ padding: "10px 24px" }}
             >
               Done
             </button>
@@ -1648,9 +1838,11 @@ ${signature}`;
         {/* Sidebar */}
         <div
           style={{
-            width: "260px",
-            background: "var(--sidebar-bg)",
-            borderRight: "1px solid var(--glass-border)",
+            width: sidebarCollapsed ? "70px" : "260px",
+            background: theme === "dark"
+              ? "#000000"
+              : "linear-gradient(180deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)",
+            borderRight: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"}`,
             padding: "0",
             display: "flex",
             flexDirection: "column",
@@ -1659,11 +1851,53 @@ ${signature}`;
             left: 0,
             bottom: 0,
             zIndex: 100,
-            transition: "background 0.3s ease, border-color 0.3s ease",
+            transition: "width 0.3s ease",
           }}
         >
+          {/* Collapse Toggle - Right Edge */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            style={{
+              position: "absolute",
+              right: "-12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: "24px",
+              height: "24px",
+              borderRadius: "50%",
+              border: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"}`,
+              background: theme === "dark" ? "#1f1f2a" : "#ffffff",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+              zIndex: 101,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--accent-primary)";
+              e.currentTarget.style.color = "#fff";
+              e.currentTarget.style.borderColor = "var(--accent-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = theme === "dark" ? "#1f1f2a" : "#ffffff";
+              e.currentTarget.style.color = "var(--text-secondary)";
+              e.currentTarget.style.borderColor = theme === "dark" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)";
+            }}
+          >
+            <Icon name={sidebarCollapsed ? "ChevronRight" : "ChevronLeft"} size={14} />
+          </button>
+
           {/* Logo */}
-          <div style={{ overflow: "hidden", marginBottom: "-130px" }}>
+          <div
+            style={{
+              overflow: "hidden",
+              marginBottom: "-130px",
+              display: sidebarCollapsed ? "none" : "block",
+            }}
+          >
             <img
               src="/logo.svg"
               alt="Graider"
@@ -1676,15 +1910,36 @@ ${signature}`;
             />
           </div>
 
+          {/* Collapsed Logo */}
+          {sidebarCollapsed && (
+            <div
+              style={{
+                padding: "20px 0",
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
+              <img
+                src="/Justbrain.svg"
+                alt="Graider"
+                style={{
+                  width: "40px",
+                  height: "40px",
+                }}
+              />
+            </div>
+          )}
+
           {/* Navigation */}
-          <nav style={{ flex: 1, padding: "0 10px" }}>
+          <nav style={{ flex: 1, padding: sidebarCollapsed ? "10px 8px 0 8px" : "0 10px", marginTop: sidebarCollapsed ? "0" : "0" }}>
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                title={sidebarCollapsed ? tab.label : ""}
                 style={{
                   width: "100%",
-                  padding: "14px 16px",
+                  padding: sidebarCollapsed ? "14px 0" : "14px 16px",
                   marginBottom: "6px",
                   borderRadius: "10px",
                   border: "none",
@@ -1699,6 +1954,7 @@ ${signature}`;
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: sidebarCollapsed ? "center" : "flex-start",
                   gap: "12px",
                   transition: "all 0.2s",
                   textAlign: "left",
@@ -1713,39 +1969,42 @@ ${signature}`;
                 }}
               >
                 <Icon name={tab.icon} size={20} />
-                {tab.label}
+                {!sidebarCollapsed && tab.label}
               </button>
             ))}
           </nav>
 
           {/* Footer */}
-          <div
-            style={{
-              padding: "15px 20px",
-              borderTop: "1px solid var(--glass-border)",
-            }}
-          >
+          {!sidebarCollapsed && (
             <div
               style={{
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                textAlign: "center",
+                padding: "15px 20px",
+                borderTop: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
               }}
             >
-              Your AI-Powered Teaching Assistant
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: "var(--text-muted)",
+                  textAlign: "center",
+                }}
+              >
+                AI-Powered Teaching Assistant
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Main Content */}
         <div
           style={{
             flex: 1,
-            marginLeft: "260px",
+            marginLeft: sidebarCollapsed ? "70px" : "260px",
             padding: "0",
-            maxWidth: "calc(100vw - 260px)",
+            maxWidth: sidebarCollapsed ? "calc(100vw - 70px)" : "calc(100vw - 260px)",
             display: "flex",
             flexDirection: "column",
+            transition: "all 0.3s ease",
           }}
         >
           {/* Top Header Bar */}
@@ -1827,14 +2086,65 @@ ${signature}`;
             {/* Grade Tab */}
             {activeTab === "grade" && (
               <div className="fade-in">
+                {/* Error Alert Banner */}
+                {status.error && (
+                  <div
+                    className="glass-card fade-in"
+                    style={{
+                      padding: "15px 20px",
+                      marginBottom: "20px",
+                      background: "rgba(248,113,113,0.1)",
+                      border: "1px solid rgba(248,113,113,0.4)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                    }}
+                  >
+                    <Icon name="AlertTriangle" size={24} style={{ color: "#f87171" }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: "#f87171", marginBottom: "4px" }}>
+                        Grading Stopped - Error Detected
+                      </div>
+                      <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+                        {status.error}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setStatus((prev) => ({ ...prev, error: null }))}
+                      style={{
+                        background: "rgba(248,113,113,0.2)",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        color: "#f87171",
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
                 {/* Activity Monitor - Horizontal Collapsible */}
                 <div
                   className="glass-card"
                   style={{
                     padding: "15px 20px",
                     marginBottom: "20px",
-                    background: status.is_running ? "rgba(74,222,128,0.05)" : "var(--glass-bg)",
-                    border: `1px solid ${status.is_running ? "rgba(74,222,128,0.3)" : "var(--glass-border)"}`,
+                    background: status.error
+                      ? "rgba(248,113,113,0.05)"
+                      : status.is_running
+                      ? "rgba(74,222,128,0.05)"
+                      : "var(--glass-bg)",
+                    border: `1px solid ${
+                      status.error
+                        ? "rgba(248,113,113,0.3)"
+                        : status.is_running
+                        ? "rgba(74,222,128,0.3)"
+                        : "var(--glass-border)"
+                    }`,
                   }}
                 >
                   <button
@@ -1853,12 +2163,30 @@ ${signature}`;
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       <Icon
-                        name="Terminal"
+                        name={status.error ? "AlertCircle" : "Terminal"}
                         size={18}
-                        style={{ color: status.is_running ? "#4ade80" : "var(--text-secondary)" }}
+                        style={{
+                          color: status.error
+                            ? "#f87171"
+                            : status.is_running
+                            ? "#4ade80"
+                            : "var(--text-secondary)",
+                        }}
                       />
                       <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Activity Monitor</span>
-                      {status.is_running && (
+                      {status.error && (
+                        <span style={{
+                          fontSize: "0.75rem",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          background: "rgba(248,113,113,0.2)",
+                          color: "#f87171",
+                          fontWeight: 500,
+                        }}>
+                          Error
+                        </span>
+                      )}
+                      {status.is_running && !status.error && (
                         <span style={{
                           fontSize: "0.75rem",
                           padding: "3px 10px",
@@ -2594,99 +2922,107 @@ ${signature}`;
                     )}
                   </div>
 
-                  {/* Flagged Assignments Alert */}
+                  {/* Authenticity Summary Alert */}
                   {status.results.length > 0 &&
-                    (status.results.filter(
-                      (r) => r.authenticity_flag === "flagged",
-                    ).length > 0 ||
-                      status.results.filter(
-                        (r) => r.authenticity_flag === "review",
-                      ).length > 0) && (
-                      <div
-                        style={{
-                          marginBottom: "20px",
-                          padding: "15px 20px",
-                          borderRadius: "12px",
-                          background:
-                            "linear-gradient(135deg, rgba(248,113,113,0.1), rgba(251,191,36,0.1))",
-                          border: "1px solid rgba(248,113,113,0.3)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "15px",
-                        }}
-                      >
-                        <Icon
-                          name="Shield"
-                          size={24}
-                          style={{ color: "#f87171" }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, marginBottom: "4px" }}>
-                            AI Detection Summary
+                    (() => {
+                      const authStats = status.results.reduce((acc, r) => {
+                        const auth = getAuthenticityStatus(r);
+                        if (auth.ai.flag === "likely") acc.aiLikely++;
+                        else if (auth.ai.flag === "possible") acc.aiPossible++;
+                        if (auth.plag.flag === "likely") acc.plagLikely++;
+                        else if (auth.plag.flag === "possible") acc.plagPossible++;
+                        return acc;
+                      }, { aiLikely: 0, aiPossible: 0, plagLikely: 0, plagPossible: 0 });
+
+                      const hasConcerns = authStats.aiLikely + authStats.aiPossible + authStats.plagLikely + authStats.plagPossible > 0;
+
+                      return hasConcerns ? (
+                        <div
+                          style={{
+                            marginBottom: "20px",
+                            padding: "15px 20px",
+                            borderRadius: "12px",
+                            background:
+                              "linear-gradient(135deg, rgba(248,113,113,0.1), rgba(251,191,36,0.1))",
+                            border: "1px solid rgba(248,113,113,0.3)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "15px",
+                          }}
+                        >
+                          <Icon
+                            name="Shield"
+                            size={24}
+                            style={{ color: "#f87171" }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, marginBottom: "8px" }}>
+                              Authenticity Summary
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "20px",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {/* AI Detection Stats */}
+                              <div>
+                                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: "4px" }}>
+                                  <Icon name="Bot" size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                                  AI Detection
+                                </div>
+                                <div style={{ display: "flex", gap: "10px" }}>
+                                  {authStats.aiLikely > 0 && (
+                                    <span style={{ color: "#f87171" }}>
+                                      {authStats.aiLikely} likely
+                                    </span>
+                                  )}
+                                  {authStats.aiPossible > 0 && (
+                                    <span style={{ color: "#fbbf24" }}>
+                                      {authStats.aiPossible} possible
+                                    </span>
+                                  )}
+                                  {authStats.aiLikely === 0 && authStats.aiPossible === 0 && (
+                                    <span style={{ color: "#4ade80" }}>All clear</span>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Plagiarism Stats */}
+                              <div>
+                                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: "4px" }}>
+                                  <Icon name="Copy" size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                                  Plagiarism
+                                </div>
+                                <div style={{ display: "flex", gap: "10px" }}>
+                                  {authStats.plagLikely > 0 && (
+                                    <span style={{ color: "#f87171" }}>
+                                      {authStats.plagLikely} likely
+                                    </span>
+                                  )}
+                                  {authStats.plagPossible > 0 && (
+                                    <span style={{ color: "#fbbf24" }}>
+                                      {authStats.plagPossible} possible
+                                    </span>
+                                  )}
+                                  {authStats.plagLikely === 0 && authStats.plagPossible === 0 && (
+                                    <span style={{ color: "#4ade80" }}>All clear</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                           <div
                             style={{
-                              fontSize: "0.9rem",
+                              fontSize: "0.85rem",
                               color: "var(--text-secondary)",
                             }}
                           >
-                            {status.results.filter(
-                              (r) => r.authenticity_flag === "flagged",
-                            ).length > 0 && (
-                              <span
-                                style={{
-                                  color: "#f87171",
-                                  marginRight: "15px",
-                                }}
-                              >
-                                <Icon
-                                  name="AlertTriangle"
-                                  size={14}
-                                  style={{
-                                    marginRight: "4px",
-                                    verticalAlign: "middle",
-                                  }}
-                                />
-                                {
-                                  status.results.filter(
-                                    (r) => r.authenticity_flag === "flagged",
-                                  ).length
-                                }{" "}
-                                flagged
-                              </span>
-                            )}
-                            {status.results.filter(
-                              (r) => r.authenticity_flag === "review",
-                            ).length > 0 && (
-                              <span style={{ color: "#fbbf24" }}>
-                                <Icon
-                                  name="AlertCircle"
-                                  size={14}
-                                  style={{
-                                    marginRight: "4px",
-                                    verticalAlign: "middle",
-                                  }}
-                                />
-                                {
-                                  status.results.filter(
-                                    (r) => r.authenticity_flag === "review",
-                                  ).length
-                                }{" "}
-                                need review
-                              </span>
-                            )}
+                            Hover for details
                           </div>
                         </div>
-                        <div
-                          style={{
-                            fontSize: "0.85rem",
-                            color: "var(--text-secondary)",
-                          }}
-                        >
-                          Click row to see details
-                        </div>
-                      </div>
-                    )}
+                      ) : null;
+                    })()}
 
                   {/* Auto-Approve Toggle */}
                   {status.results.length > 0 && (
@@ -2866,7 +3202,7 @@ ${signature}`;
                             <th>Time</th>
                             <th>Score</th>
                             <th>Grade</th>
-                            <th>AI Check</th>
+                            <th>Authenticity</th>
                             <th>Email</th>
                             <th>Actions</th>
                           </tr>
@@ -2962,68 +3298,60 @@ ${signature}`;
                                     </span>
                                   </td>
                                   <td>
-                                    {r.authenticity_flag === "flagged" ? (
-                                      <span
-                                        title={
-                                          r.authenticity_reason ||
-                                          "Flagged for review"
-                                        }
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          padding: "4px 10px",
-                                          borderRadius: "20px",
-                                          fontWeight: 600,
-                                          background: "rgba(248,113,113,0.2)",
-                                          color: "#f87171",
-                                          fontSize: "0.8rem",
-                                          cursor: "help",
-                                        }}
-                                      >
-                                        <Icon name="AlertTriangle" size={14} />
-                                        Flagged
-                                      </span>
-                                    ) : r.authenticity_flag === "review" ? (
-                                      <span
-                                        title={
-                                          r.authenticity_reason ||
-                                          "Needs review"
-                                        }
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          padding: "4px 10px",
-                                          borderRadius: "20px",
-                                          fontWeight: 600,
-                                          background: "rgba(251,191,36,0.2)",
-                                          color: "#fbbf24",
-                                          fontSize: "0.8rem",
-                                          cursor: "help",
-                                        }}
-                                      >
-                                        <Icon name="AlertCircle" size={14} />
-                                        Review
-                                      </span>
-                                    ) : (
-                                      <span
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          padding: "4px 10px",
-                                          borderRadius: "20px",
-                                          fontWeight: 600,
-                                          background: "rgba(74,222,128,0.2)",
-                                          color: "#4ade80",
-                                          fontSize: "0.8rem",
-                                        }}
-                                      >
-                                        <Icon name="CheckCircle" size={14} />
-                                        Clean
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const auth = getAuthenticityStatus(r);
+                                      const aiColor = getAIFlagColor(auth.ai.flag);
+                                      const plagColor = getPlagFlagColor(auth.plag.flag);
+                                      return (
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                          {/* AI Detection */}
+                                          <span
+                                            title={auth.ai.reason || `AI: ${auth.ai.flag}${auth.ai.confidence ? ` (${auth.ai.confidence}%)` : ""}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "4px",
+                                              padding: "3px 8px",
+                                              borderRadius: "12px",
+                                              fontWeight: 500,
+                                              background: aiColor.bg,
+                                              color: aiColor.text,
+                                              fontSize: "0.75rem",
+                                              cursor: auth.ai.reason ? "help" : "default",
+                                            }}
+                                          >
+                                            <Icon
+                                              name={auth.ai.flag === "likely" ? "Bot" : auth.ai.flag === "possible" ? "Bot" : "CheckCircle"}
+                                              size={12}
+                                            />
+                                            AI: {auth.ai.flag === "none" ? "Clear" : auth.ai.flag}
+                                            {auth.ai.confidence > 0 && ` ${auth.ai.confidence}%`}
+                                          </span>
+                                          {/* Plagiarism Detection */}
+                                          <span
+                                            title={auth.plag.reason || `Plagiarism: ${auth.plag.flag}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "4px",
+                                              padding: "3px 8px",
+                                              borderRadius: "12px",
+                                              fontWeight: 500,
+                                              background: plagColor.bg,
+                                              color: plagColor.text,
+                                              fontSize: "0.75rem",
+                                              cursor: auth.plag.reason ? "help" : "default",
+                                            }}
+                                          >
+                                            <Icon
+                                              name={auth.plag.flag === "likely" ? "Copy" : auth.plag.flag === "possible" ? "Copy" : "CheckCircle"}
+                                              size={12}
+                                            />
+                                            Copy: {auth.plag.flag === "none" ? "Clear" : auth.plag.flag}
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
                                   </td>
                                   <td>
                                     {autoApproveEmails ? (
@@ -3303,82 +3631,119 @@ ${signature}`;
                     <div
                       style={{ padding: "25px", overflowY: "auto", flex: 1 }}
                     >
-                      {/* AI Detection Alert */}
-                      {(status.results[viewingEmailIndex].authenticity_flag ===
-                        "flagged" ||
-                        status.results[viewingEmailIndex].authenticity_flag ===
-                          "review") && (
-                        <div
-                          style={{
-                            marginBottom: "20px",
-                            padding: "15px",
-                            borderRadius: "10px",
-                            background:
-                              status.results[viewingEmailIndex]
-                                .authenticity_flag === "flagged"
-                                ? "rgba(248,113,113,0.15)"
-                                : "rgba(251,191,36,0.15)",
-                            border:
-                              status.results[viewingEmailIndex]
-                                .authenticity_flag === "flagged"
-                                ? "1px solid rgba(248,113,113,0.4)"
-                                : "1px solid rgba(251,191,36,0.4)",
-                          }}
-                        >
+                      {/* Authenticity Check Alert */}
+                      {(() => {
+                        const auth = getAuthenticityStatus(status.results[viewingEmailIndex]);
+                        const hasAIConcern = auth.ai.flag === "likely" || auth.ai.flag === "possible";
+                        const hasPlagConcern = auth.plag.flag === "likely" || auth.plag.flag === "possible";
+
+                        if (!hasAIConcern && !hasPlagConcern) return null;
+
+                        return (
                           <div
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "10px",
-                              marginBottom: "8px",
+                              marginBottom: "20px",
+                              padding: "15px",
+                              borderRadius: "10px",
+                              background: "rgba(248,113,113,0.1)",
+                              border: "1px solid rgba(248,113,113,0.3)",
                             }}
                           >
-                            <Icon
-                              name={
-                                status.results[viewingEmailIndex]
-                                  .authenticity_flag === "flagged"
-                                  ? "AlertTriangle"
-                                  : "AlertCircle"
-                              }
-                              size={20}
+                            <div
                               style={{
-                                color:
-                                  status.results[viewingEmailIndex]
-                                    .authenticity_flag === "flagged"
-                                    ? "#f87171"
-                                    : "#fbbf24",
-                              }}
-                            />
-                            <span
-                              style={{
-                                fontWeight: 700,
-                                color:
-                                  status.results[viewingEmailIndex]
-                                    .authenticity_flag === "flagged"
-                                    ? "#f87171"
-                                    : "#fbbf24",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                marginBottom: "12px",
                               }}
                             >
-                              {status.results[viewingEmailIndex]
-                                .authenticity_flag === "flagged"
-                                ? "AI/Plagiarism Alert"
-                                : "Review Recommended"}
-                            </span>
+                              <Icon name="Shield" size={20} style={{ color: "#f87171" }} />
+                              <span style={{ fontWeight: 700, color: "#f87171" }}>
+                                Authenticity Alert
+                              </span>
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                              {/* AI Detection */}
+                              {hasAIConcern && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "10px",
+                                    padding: "10px",
+                                    borderRadius: "8px",
+                                    background: auth.ai.flag === "likely" ? "rgba(248,113,113,0.15)" : "rgba(251,191,36,0.15)",
+                                  }}
+                                >
+                                  <Icon
+                                    name="Bot"
+                                    size={16}
+                                    style={{
+                                      color: auth.ai.flag === "likely" ? "#f87171" : "#fbbf24",
+                                      marginTop: "2px",
+                                    }}
+                                  />
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: auth.ai.flag === "likely" ? "#f87171" : "#fbbf24", marginBottom: "4px" }}>
+                                      AI Generated: {auth.ai.flag} {auth.ai.confidence > 0 && `(${auth.ai.confidence}% confidence)`}
+                                    </div>
+                                    {auth.ai.reason && (
+                                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>
+                                        {auth.ai.reason}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Plagiarism Detection */}
+                              {hasPlagConcern && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "10px",
+                                    padding: "10px",
+                                    borderRadius: "8px",
+                                    background: auth.plag.flag === "likely" ? "rgba(248,113,113,0.15)" : "rgba(251,191,36,0.15)",
+                                  }}
+                                >
+                                  <Icon
+                                    name="Copy"
+                                    size={16}
+                                    style={{
+                                      color: auth.plag.flag === "likely" ? "#f87171" : "#fbbf24",
+                                      marginTop: "2px",
+                                    }}
+                                  />
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: auth.plag.flag === "likely" ? "#f87171" : "#fbbf24", marginBottom: "4px" }}>
+                                      Plagiarism: {auth.plag.flag}
+                                    </div>
+                                    {auth.plag.reason && (
+                                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>
+                                        {auth.plag.reason}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <p
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "var(--text-muted)",
+                                margin: "12px 0 0 0",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              Please review the student's work before sending the email.
+                            </p>
                           </div>
-                          <p
-                            style={{
-                              fontSize: "0.9rem",
-                              color: "var(--text-primary)",
-                              margin: 0,
-                              lineHeight: "1.5",
-                            }}
-                          >
-                            {status.results[viewingEmailIndex]
-                              .authenticity_reason ||
-                              "Writing appears above expected grade level. Please review before sending."}
-                          </p>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       <div style={{ marginBottom: "20px" }}>
                         <div
@@ -3815,6 +4180,67 @@ ${signature}`;
                       placeholder="Instructions that apply to ALL assignments..."
                       style={{ minHeight: "120px", resize: "vertical" }}
                     />
+                  </div>
+
+                  {/* Preferences */}
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--glass-border)",
+                      paddingTop: "20px",
+                      marginTop: "20px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="Bell" size={20} />
+                      Notifications
+                    </h3>
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        cursor: "pointer",
+                        padding: "12px 16px",
+                        background: "var(--input-bg)",
+                        borderRadius: "12px",
+                        border: "1px solid var(--input-border)",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={config.showToastNotifications}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            showToastNotifications: e.target.checked,
+                          }))
+                        }
+                        style={{
+                          width: "18px",
+                          height: "18px",
+                          accentColor: "var(--accent-primary)",
+                          cursor: "pointer",
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                          Toast Notifications
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                          Show popup notifications when assignments are graded
+                        </div>
+                      </div>
+                    </label>
                   </div>
 
                   {/* Rubric Configuration */}
@@ -4352,6 +4778,223 @@ ${signature}`;
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* FERPA Compliance & Data Privacy */}
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--glass-border)",
+                      paddingTop: "25px",
+                      marginTop: "25px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
+                    >
+                      <Icon
+                        name="Shield"
+                        size={20}
+                        style={{ color: "#10b981" }}
+                      />
+                      Privacy & Data (FERPA)
+                    </h3>
+                    <p
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "var(--text-secondary)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      Graider is designed for FERPA compliance. Student names are
+                      sanitized before AI processing, and all data is stored locally
+                      on your computer.
+                    </p>
+
+                    {/* Privacy Features */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, 1fr)",
+                        gap: "15px",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "rgba(74,222,128,0.1)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(74,222,128,0.2)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
+                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>PII Sanitization</span>
+                        </div>
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                          Student names, IDs, emails, and phone numbers are removed before AI processing
+                        </p>
+                      </div>
+
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "rgba(74,222,128,0.1)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(74,222,128,0.2)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
+                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Local Storage Only</span>
+                        </div>
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                          All data stays on your computer. No cloud storage of student information
+                        </p>
+                      </div>
+
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "rgba(74,222,128,0.1)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(74,222,128,0.2)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
+                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>No AI Training</span>
+                        </div>
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                          OpenAI API does not use submitted data to train models (per their policy)
+                        </p>
+                      </div>
+
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "rgba(74,222,128,0.1)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(74,222,128,0.2)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
+                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Audit Logging</span>
+                        </div>
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                          All data access is logged locally for compliance tracking
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Data Management Actions */}
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "var(--input-bg)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--input-border)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: "12px" }}>Data Management</div>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await fetch("/api/ferpa/data-summary");
+                              const data = await response.json();
+                              alert(
+                                `Data Storage Summary\n\n` +
+                                `• Grading Results: ${data.results.count} records\n` +
+                                `• Settings: ${data.settings.exists ? "Saved" : "Not saved"}\n` +
+                                `• Audit Log: ${data.audit_log.exists ? "Active" : "Not started"}\n\n` +
+                                `Data Locations:\n` +
+                                data.data_locations.join("\n")
+                              );
+                            } catch (err) {
+                              alert("Failed to fetch data summary");
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          <Icon name="Database" size={16} />
+                          View Data Summary
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await fetch("/api/ferpa/export-data");
+                              const data = await response.json();
+                              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `graider_export_${new Date().toISOString().split("T")[0]}.json`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            } catch (err) {
+                              alert("Failed to export data");
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          <Icon name="Download" size={16} />
+                          Export All Data
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            if (!confirm(
+                              "⚠️ DELETE ALL STUDENT DATA?\n\n" +
+                              "This will permanently delete:\n" +
+                              "• All grading results\n" +
+                              "• Current session data\n\n" +
+                              "This action cannot be undone.\n\n" +
+                              "Type 'DELETE' in the next prompt to confirm."
+                            )) return;
+
+                            const confirmText = prompt("Type DELETE to confirm:");
+                            if (confirmText !== "DELETE") {
+                              alert("Deletion cancelled");
+                              return;
+                            }
+
+                            try {
+                              const response = await fetch("/api/ferpa/delete-all-data", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ confirm: true }),
+                              });
+                              const data = await response.json();
+                              if (data.status === "success") {
+                                alert("✓ All student data has been deleted.\n\n" + data.deleted.join("\n"));
+                                window.location.reload();
+                              } else {
+                                alert("Error: " + (data.error || "Unknown error"));
+                              }
+                            } catch (err) {
+                              alert("Failed to delete data: " + err.message);
+                            }
+                          }}
+                          className="btn btn-danger"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          <Icon name="Trash2" size={16} />
+                          Delete All Data
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -6802,6 +7445,97 @@ ${signature}`;
           </div>
           </div>
         </div>
+      </div>
+
+      {/* Toast Notifications */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: "20px",
+          right: "20px",
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          maxWidth: "350px",
+        }}
+      >
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="glass-card fade-in"
+            style={{
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              background:
+                toast.type === "success"
+                  ? "rgba(74,222,128,0.15)"
+                  : toast.type === "warning"
+                  ? "rgba(251,191,36,0.15)"
+                  : toast.type === "error"
+                  ? "rgba(248,113,113,0.15)"
+                  : "rgba(96,165,250,0.15)",
+              border: `1px solid ${
+                toast.type === "success"
+                  ? "rgba(74,222,128,0.4)"
+                  : toast.type === "warning"
+                  ? "rgba(251,191,36,0.4)"
+                  : toast.type === "error"
+                  ? "rgba(248,113,113,0.4)"
+                  : "rgba(96,165,250,0.4)"
+              }`,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            }}
+          >
+            <Icon
+              name={
+                toast.type === "success"
+                  ? "CheckCircle"
+                  : toast.type === "warning"
+                  ? "AlertTriangle"
+                  : toast.type === "error"
+                  ? "XCircle"
+                  : "Info"
+              }
+              size={18}
+              style={{
+                color:
+                  toast.type === "success"
+                    ? "#4ade80"
+                    : toast.type === "warning"
+                    ? "#fbbf24"
+                    : toast.type === "error"
+                    ? "#f87171"
+                    : "#60a5fa",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: "0.9rem",
+                color: "var(--text-primary)",
+                flex: 1,
+              }}
+            >
+              {toast.message}
+            </span>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "2px",
+                color: "var(--text-muted)",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="X" size={14} />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );
