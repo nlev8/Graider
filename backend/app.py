@@ -137,8 +137,12 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name=''):
-    """Run the grading process in a background thread."""
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None):
+    """Run the grading process in a background thread.
+
+    Args:
+        selected_files: List of filenames to grade, or None to grade all files
+    """
     global grading_state
 
     # Load ALL saved assignment configs for auto-matching
@@ -238,18 +242,29 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
         assignment_path = Path(assignments_folder)
         all_files = []
-        for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png']:
+        for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
             all_files.extend(assignment_path.glob(ext))
 
-        # Filter out already graded files
-        new_files = [f for f in all_files if f.name not in already_graded]
-        skipped = len(all_files) - len(new_files)
+        # Filter by selected files if provided
+        if selected_files is not None and len(selected_files) > 0:
+            selected_set = set(selected_files)
+            all_files = [f for f in all_files if f.name in selected_set]
+            grading_state["log"].append(f"Grading {len(all_files)} selected files")
+        else:
+            grading_state["log"].append(f"Found {len(all_files)} total files")
 
-        if skipped > 0:
-            grading_state["log"].append(f"Skipping {skipped} already-graded files")
+        # Filter out already graded files (only if not using selection)
+        if selected_files is None:
+            new_files = [f for f in all_files if f.name not in already_graded]
+            skipped = len(all_files) - len(new_files)
+            if skipped > 0:
+                grading_state["log"].append(f"Skipping {skipped} already-graded files")
+        else:
+            # When files are selected, grade them even if previously graded (re-grade)
+            new_files = all_files
 
         grading_state["total"] = len(new_files)
-        grading_state["log"].append(f"Found {len(new_files)} NEW files to grade")
+        grading_state["log"].append(f"Queued {len(new_files)} files for grading")
 
         if len(new_files) == 0:
             grading_state["log"].append("")
@@ -500,6 +515,9 @@ def start_grading():
     assignment_config = data.get('assignmentConfig')
     global_ai_notes = data.get('globalAINotes', '')
 
+    # Get selected files (if any) for selective grading
+    selected_files = data.get('selectedFiles', None)  # None means grade all
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -509,15 +527,59 @@ def start_grading():
     grading_state["is_running"] = True
 
     # FERPA: Audit log grading session start
-    audit_log("START_GRADING", f"Started grading session for {subject} grade {grade_level}")
+    file_count = len(selected_files) if selected_files else "all"
+    audit_log("START_GRADING", f"Started grading session for {subject} grade {grade_level} ({file_count} files)")
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files)
     )
     thread.start()
 
     return jsonify({"status": "started"})
+
+
+# ══════════════════════════════════════════════════════════════
+# LIST FILES IN FOLDER
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/list-files', methods=['POST'])
+def list_files():
+    """List assignment files in a folder for selective grading."""
+    data = request.json
+    folder = data.get('folder', '')
+
+    if not folder or not os.path.exists(folder):
+        return jsonify({"files": [], "error": "Folder not found"})
+
+    # Get already graded files
+    already_graded = set()
+    for result in grading_state.get("results", []):
+        if result.get("filename"):
+            already_graded.add(result["filename"])
+
+    # Scan folder for supported files
+    supported_extensions = ['.docx', '.txt', '.jpg', '.jpeg', '.png', '.pdf']
+    files = []
+
+    try:
+        for f in os.listdir(folder):
+            ext = os.path.splitext(f)[1].lower()
+            if ext in supported_extensions:
+                filepath = os.path.join(folder, f)
+                stat = os.stat(filepath)
+                files.append({
+                    "name": f,
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "graded": f in already_graded
+                })
+
+        # Sort by name
+        files.sort(key=lambda x: x["name"].lower())
+        return jsonify({"files": files})
+    except Exception as e:
+        return jsonify({"files": [], "error": str(e)})
 
 
 # ══════════════════════════════════════════════════════════════

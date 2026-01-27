@@ -288,6 +288,78 @@ def delete_period():
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route('/api/get-period-students', methods=['POST'])
+def get_period_students():
+    """Get student names from a period CSV file."""
+    import csv
+    import pandas as pd
+
+    data = request.json
+    filename = data.get('filename')
+
+    if not filename:
+        return jsonify({"error": "No filename provided"}), 400
+
+    filepath = os.path.join(PERIODS_DIR, secure_filename(filename))
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Period file not found"}), 404
+
+    students = []
+    try:
+        # Try pandas first for Excel files
+        if filepath.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(filepath)
+            # Look for name columns
+            name_cols = [c for c in df.columns if any(x in c.lower() for x in ['name', 'student', 'first', 'last'])]
+            if name_cols:
+                # Try to find first and last name columns
+                first_col = next((c for c in name_cols if 'first' in c.lower()), None)
+                last_col = next((c for c in name_cols if 'last' in c.lower()), None)
+                if first_col and last_col:
+                    for _, row in df.iterrows():
+                        first = str(row[first_col]).strip() if pd.notna(row[first_col]) else ''
+                        last = str(row[last_col]).strip() if pd.notna(row[last_col]) else ''
+                        if first or last:
+                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
+                else:
+                    # Use the first name-like column as full name
+                    name_col = name_cols[0]
+                    for _, row in df.iterrows():
+                        name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
+                        if name:
+                            parts = name.split()
+                            first = parts[0] if parts else ''
+                            last = parts[-1] if len(parts) > 1 else ''
+                            students.append({"first": first, "last": last, "full": name})
+        else:
+            # CSV file
+            with open(filepath, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                headers = [h.lower() for h in reader.fieldnames] if reader.fieldnames else []
+                first_col = next((h for h in reader.fieldnames if 'first' in h.lower()), None)
+                last_col = next((h for h in reader.fieldnames if 'last' in h.lower()), None)
+                name_col = next((h for h in reader.fieldnames if any(x in h.lower() for x in ['name', 'student'])), None)
+
+                for row in reader:
+                    if first_col and last_col:
+                        first = row.get(first_col, '').strip()
+                        last = row.get(last_col, '').strip()
+                        if first or last:
+                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
+                    elif name_col:
+                        name = row.get(name_col, '').strip()
+                        if name:
+                            parts = name.split()
+                            first = parts[0] if parts else ''
+                            last = parts[-1] if len(parts) > 1 else ''
+                            students.append({"first": first, "last": last, "full": name})
+
+        return jsonify({"students": students, "count": len(students)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route('/api/upload-document', methods=['POST'])
 def upload_document():
     """Upload a supporting document for lesson planning/grading."""

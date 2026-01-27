@@ -261,6 +261,13 @@ function App() {
     error: null,
   });
 
+  // File selection state
+  const [availableFiles, setAvailableFiles] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [periodStudents, setPeriodStudents] = useState([]);
+
   const [activeTab, setActiveTab] = useState("grade");
   const [analytics, setAnalytics] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -518,7 +525,27 @@ function App() {
           newFiles: data.new_files || 0,
         });
         if (data.new_files > 0 && !status.is_running) {
-          handleStartGrading();
+          // Load files and filter by period before auto-grading
+          const filesData = await api.listFiles(config.assignments_folder);
+          if (filesData.files) {
+            let filesToGrade = filesData.files.filter(f => !f.graded);
+
+            // Filter by period if one is selected
+            if (selectedPeriod && periodStudents.length > 0) {
+              filesToGrade = filesToGrade.filter(f =>
+                fileMatchesPeriodStudent(f.name, periodStudents)
+              );
+            }
+
+            if (filesToGrade.length > 0) {
+              // Update selected files and start grading
+              const fileNames = filesToGrade.map(f => f.name);
+              setSelectedFiles(fileNames);
+              setAvailableFiles(filesData.files);
+              // Small delay to ensure state updates before grading starts
+              setTimeout(() => handleStartGrading(), 100);
+            }
+          }
         }
       } catch (e) {
         console.error("Watch error:", e);
@@ -534,6 +561,8 @@ function App() {
     config.assignments_folder,
     config.output_folder,
     status.is_running,
+    selectedPeriod,
+    periodStudents,
   ]);
 
   // Fetch analytics when tab opens
@@ -613,9 +642,91 @@ function App() {
     lastResultCount.current = currentCount;
   }, [status.results, config.showToastNotifications]);
 
+  // Load files from assignments folder
+  const loadAvailableFiles = async () => {
+    if (!config.assignments_folder) return;
+    setFilesLoading(true);
+    try {
+      const data = await api.listFiles(config.assignments_folder);
+      if (data.files) {
+        setAvailableFiles(data.files);
+        // By default, select all ungraded files
+        const ungraded = data.files.filter(f => !f.graded).map(f => f.name);
+        setSelectedFiles(ungraded);
+      }
+    } catch (e) {
+      console.error("Failed to load files:", e);
+    }
+    setFilesLoading(false);
+  };
+
+  // Load students from selected period
+  const loadPeriodStudents = async (periodFilename) => {
+    if (!periodFilename) {
+      setPeriodStudents([]);
+      return;
+    }
+    try {
+      const data = await api.getPeriodStudents(periodFilename);
+      if (data.students) {
+        setPeriodStudents(data.students);
+      }
+    } catch (e) {
+      console.error("Failed to load period students:", e);
+      setPeriodStudents([]);
+    }
+  };
+
+  // Check if a filename matches any student in the period
+  const fileMatchesPeriodStudent = (filename, students) => {
+    if (!students || students.length === 0) return true; // No filter
+    const lowerFilename = filename.toLowerCase();
+    return students.some(student => {
+      const first = (student.first || "").toLowerCase();
+      const last = (student.last || "").toLowerCase();
+      // Match "LastName, FirstName" or "FirstName LastName" or just last name
+      return (last && lowerFilename.includes(last)) ||
+             (first && last && lowerFilename.includes(`${last}, ${first}`)) ||
+             (first && last && lowerFilename.includes(`${first} ${last}`)) ||
+             (first && last && lowerFilename.includes(`${last}_${first}`)) ||
+             (first && last && lowerFilename.includes(`${first}_${last}`));
+    });
+  };
+
+  // Get filtered files based on period selection
+  const getFilteredFiles = () => {
+    if (!selectedPeriod || periodStudents.length === 0) {
+      return availableFiles;
+    }
+    return availableFiles.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
+  };
+
   // Grading functions
   const handleStartGrading = async () => {
     try {
+      // Auto-save assignment config if it has a title and content
+      const hasGradeConfig = gradeAssignment.title && (
+        gradeAssignment.customMarkers.length > 0 ||
+        gradeAssignment.gradingNotes ||
+        (gradeAssignment.responseSections || []).length > 0 ||
+        gradeImportedDoc.filename
+      );
+
+      if (hasGradeConfig) {
+        try {
+          const dataToSave = {
+            ...gradeAssignment,
+            importedDoc: gradeImportedDoc.filename ? gradeImportedDoc : null
+          };
+          await api.saveAssignmentConfig(dataToSave);
+          // Refresh saved assignments list
+          const list = await api.listAssignments();
+          if (list.assignments) setSavedAssignments(list.assignments);
+        } catch (saveError) {
+          console.error("Failed to auto-save assignment config:", saveError);
+        }
+      }
+
       await api.startGrading({
         ...config,
         grade_level: config.grade_level,
@@ -629,6 +740,8 @@ function App() {
             ? gradeAssignment
             : null,
         globalAINotes,
+        // Pass selected files (null means grade all new files)
+        selectedFiles: selectedFiles.length > 0 ? selectedFiles : null,
       });
       setStatus((prev) => ({
         ...prev,
@@ -2297,32 +2410,94 @@ ${signature}`;
                           />
                           Assignment Config (Optional)
                         </h3>
-                        {(gradeAssignment.customMarkers.length > 0 ||
-                          gradeAssignment.gradingNotes ||
-                          (gradeAssignment.responseSections || []).length > 0 ||
-                          gradeImportedDoc.filename) && (
-                          <button
-                            onClick={() => {
-                              setGradeAssignment({
-                                title: "",
-                                customMarkers: [],
-                                gradingNotes: "",
-                                responseSections: [],
-                              });
-                              setGradeImportedDoc({
-                                text: "",
-                                html: "",
-                                filename: "",
-                              });
-                            }}
-                            className="btn btn-secondary"
-                            style={{ padding: "6px 12px", fontSize: "0.85rem" }}
-                          >
-                            <Icon name="X" size={14} />
-                            Clear All
-                          </button>
-                        )}
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          {gradeAssignment.title && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const dataToSave = {
+                                    ...gradeAssignment,
+                                    importedDoc: gradeImportedDoc.filename ? gradeImportedDoc : null
+                                  };
+                                  await api.saveAssignmentConfig(dataToSave);
+                                  const list = await api.listAssignments();
+                                  if (list.assignments) setSavedAssignments(list.assignments);
+                                  alert("Assignment saved!");
+                                } catch (e) {
+                                  alert("Error saving: " + e.message);
+                                }
+                              }}
+                              className="btn btn-primary"
+                              style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                            >
+                              <Icon name="Save" size={14} />
+                              Save
+                            </button>
+                          )}
+                          {(gradeAssignment.customMarkers.length > 0 ||
+                            gradeAssignment.gradingNotes ||
+                            (gradeAssignment.responseSections || []).length > 0 ||
+                            gradeImportedDoc.filename) && (
+                            <button
+                              onClick={() => {
+                                setGradeAssignment({
+                                  title: "",
+                                  customMarkers: [],
+                                  gradingNotes: "",
+                                  responseSections: [],
+                                });
+                                setGradeImportedDoc({
+                                  text: "",
+                                  html: "",
+                                  filename: "",
+                                });
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                            >
+                              <Icon name="X" size={14} />
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Load Saved Assignment */}
+                      {savedAssignments.length > 0 && (
+                        <div style={{ marginBottom: "20px" }}>
+                          <label className="label">Load Saved Assignment</label>
+                          <select
+                            className="input"
+                            value=""
+                            onChange={async (e) => {
+                              const name = e.target.value;
+                              if (!name) return;
+                              try {
+                                const data = await api.loadAssignment(name);
+                                if (data.assignment) {
+                                  setGradeAssignment({
+                                    title: data.assignment.title || "",
+                                    customMarkers: data.assignment.customMarkers || [],
+                                    gradingNotes: data.assignment.gradingNotes || "",
+                                    responseSections: data.assignment.responseSections || [],
+                                  });
+                                  if (data.assignment.importedDoc) {
+                                    setGradeImportedDoc(data.assignment.importedDoc);
+                                  }
+                                }
+                              } catch (err) {
+                                console.error("Load error:", err);
+                              }
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <option value="">Select a saved assignment...</option>
+                            {savedAssignments.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       {/* Assignment Title */}
                       <div style={{ marginBottom: "20px" }}>
@@ -3974,6 +4149,14 @@ ${signature}`;
                       >
                         Browse
                       </button>
+                      <button
+                        onClick={loadAvailableFiles}
+                        disabled={!config.assignments_folder || filesLoading}
+                        className="btn btn-secondary"
+                        style={{ opacity: !config.assignments_folder ? 0.5 : 1 }}
+                      >
+                        {filesLoading ? "Loading..." : "Load Files"}
+                      </button>
                     </div>
                   </div>
 
@@ -4022,6 +4205,137 @@ ${signature}`;
                       </button>
                     </div>
                   </div>
+
+                  {/* File Selection */}
+                  {availableFiles.length > 0 && (
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "var(--glass-bg)",
+                        borderRadius: "12px",
+                        border: "1px solid var(--glass-border)",
+                      }}
+                    >
+                      {/* Period Filter */}
+                      {periods.length > 0 && (
+                        <div style={{ marginBottom: "15px" }}>
+                          <label className="label">Filter by Period</label>
+                          <select
+                            className="input"
+                            value={selectedPeriod}
+                            onChange={async (e) => {
+                              const periodFilename = e.target.value;
+                              setSelectedPeriod(periodFilename);
+                              await loadPeriodStudents(periodFilename);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <option value="">All Periods</option>
+                            {periods.map((p) => (
+                              <option key={p.filename} value={p.filename}>
+                                {p.period_name} ({p.row_count} students)
+                              </option>
+                            ))}
+                          </select>
+                          {selectedPeriod && periodStudents.length > 0 && (
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "6px" }}>
+                              Showing files for {periodStudents.length} students in this period
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <label className="label" style={{ marginBottom: 0 }}>
+                          Select Files to Grade ({selectedFiles.length} of {getFilteredFiles().length} shown)
+                        </label>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button
+                            onClick={() => setSelectedFiles(getFilteredFiles().map(f => f.name))}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                          >
+                            Select All
+                          </button>
+                          <button
+                            onClick={() => setSelectedFiles(getFilteredFiles().filter(f => !f.graded).map(f => f.name))}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                          >
+                            Ungraded Only
+                          </button>
+                          <button
+                            onClick={() => setSelectedFiles([])}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                        }}
+                      >
+                        {getFilteredFiles().length === 0 ? (
+                          <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px", fontSize: "0.85rem" }}>
+                            No files match the selected period filter
+                          </p>
+                        ) : (
+                          getFilteredFiles().map((file) => (
+                            <label
+                              key={file.name}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                padding: "8px 12px",
+                                background: selectedFiles.includes(file.name)
+                                  ? "rgba(99, 102, 241, 0.1)"
+                                  : "transparent",
+                                borderRadius: "8px",
+                                cursor: "pointer",
+                                transition: "all 0.15s",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedFiles.includes(file.name)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedFiles([...selectedFiles, file.name]);
+                                  } else {
+                                    setSelectedFiles(selectedFiles.filter(f => f !== file.name));
+                                  }
+                                }}
+                                style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                              />
+                              <span style={{ flex: 1, fontSize: "0.85rem" }}>{file.name}</span>
+                              {file.graded && (
+                                <span
+                                  style={{
+                                    padding: "2px 8px",
+                                    borderRadius: "4px",
+                                    background: "rgba(74, 222, 128, 0.2)",
+                                    color: "#4ade80",
+                                    fontSize: "0.7rem",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  Graded
+                                </span>
+                              )}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Teacher & School Info */}
                   <div

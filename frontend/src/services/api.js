@@ -48,6 +48,13 @@ export async function stopGrading() {
   })
 }
 
+export async function listFiles(folder) {
+  return fetchApi('/api/list-files', {
+    method: 'POST',
+    body: JSON.stringify({ folder }),
+  })
+}
+
 export async function clearResults() {
   return fetchApi('/api/clear-results', {
     method: 'POST',
@@ -233,6 +240,13 @@ export async function listPeriods() {
   return fetchApi('/api/list-periods')
 }
 
+export async function getPeriodStudents(filename) {
+  return fetchApi('/api/get-period-students', {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  })
+}
+
 export async function deletePeriod(filename) {
   return fetchApi('/api/delete-period', {
     method: 'POST',
@@ -296,8 +310,10 @@ export default {
   saveRosterMapping,
   uploadPeriod,
   listPeriods,
+  getPeriodStudents,
   deletePeriod,
   uploadSupportDocument,
   listSupportDocuments,
   deleteSupportDocument,
+  listFiles,
 }
