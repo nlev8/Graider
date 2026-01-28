@@ -180,6 +180,22 @@ Use the search box above the results table to filter by:
 
 Results update as you type.
 
+### Sort Results
+
+Sort the results table using the dropdown:
+
+| Sort Option | Description |
+|-------------|-------------|
+| **Newest First** | Most recently graded at top (default) |
+| **Oldest First** | Earliest graded at top |
+| **Name (A-Z)** | Alphabetical by student name |
+| **Name (Z-A)** | Reverse alphabetical |
+| **Score (High-Low)** | Highest scores first |
+| **Score (Low-High)** | Lowest scores first |
+| **Assignment (A-Z)** | Alphabetical by assignment name |
+| **Grade (A-F)** | Best grades first |
+| **Grade (F-A)** | Worst grades first |
+
 ### Filter Results
 
 Filter the results table by type:
@@ -767,6 +783,7 @@ Each student's file contains:
 - **AI Model Selection**: Choose between GPT-4o (better quality) and GPT-4o-mini (lower cost)
 - **Individual Upload**: Grade paper/handwritten assignments by uploading photos
 - **Handwritten Assignment Support**: Auto-uses GPT-4o vision for image-based submissions
+- **Results Sorting**: Sort by time, name, score, assignment, or grade
 - **Results Filtering**: Filter results by handwritten vs typed assignments
 - **Toast Notifications**: Real-time popups when assignments are graded (can be disabled)
 - **API Error Handling**: Automatic stop on errors with prominent alerts

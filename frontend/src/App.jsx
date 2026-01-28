@@ -285,6 +285,7 @@ function App() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all");
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed"
+  const [resultsSort, setResultsSort] = useState({ field: "time", direction: "desc" }); // field: time, name, assignment, score, grade
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
@@ -3486,6 +3487,27 @@ ${signature}`;
                     </h2>
                     {status.results.length > 0 && (
                       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        {/* Sort Dropdown */}
+                        <select
+                          className="input"
+                          value={resultsSort.field + "_" + resultsSort.direction}
+                          onChange={(e) => {
+                            const [field, direction] = e.target.value.split("_");
+                            setResultsSort({ field, direction });
+                          }}
+                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                        >
+                          <option value="time_desc">Newest First</option>
+                          <option value="time_asc">Oldest First</option>
+                          <option value="name_asc">Name (A-Z)</option>
+                          <option value="name_desc">Name (Z-A)</option>
+                          <option value="score_desc">Score (High-Low)</option>
+                          <option value="score_asc">Score (Low-High)</option>
+                          <option value="assignment_asc">Assignment (A-Z)</option>
+                          <option value="assignment_desc">Assignment (Z-A)</option>
+                          <option value="grade_asc">Grade (A-F)</option>
+                          <option value="grade_desc">Grade (F-A)</option>
+                        </select>
                         {/* Filter Dropdown */}
                         <select
                           className="input"
@@ -3842,6 +3864,33 @@ ${signature}`;
                                   .toLowerCase()
                                   .includes(search)
                               );
+                            })
+                            .sort((a, b) => {
+                              const { field, direction } = resultsSort;
+                              let cmp = 0;
+                              switch (field) {
+                                case "time":
+                                  const timeA = a.graded_at || "";
+                                  const timeB = b.graded_at || "";
+                                  cmp = timeA.localeCompare(timeB);
+                                  break;
+                                case "name":
+                                  cmp = (a.student_name || "").localeCompare(b.student_name || "");
+                                  break;
+                                case "assignment":
+                                  cmp = (a.assignment || "").localeCompare(b.assignment || "");
+                                  break;
+                                case "score":
+                                  cmp = (a.score || 0) - (b.score || 0);
+                                  break;
+                                case "grade":
+                                  const gradeOrder = { A: 1, B: 2, C: 3, D: 4, F: 5, ERROR: 6 };
+                                  cmp = (gradeOrder[a.letter_grade] || 99) - (gradeOrder[b.letter_grade] || 99);
+                                  break;
+                                default:
+                                  cmp = 0;
+                              }
+                              return direction === "desc" ? -cmp : cmp;
                             })
                             .map((r, i) => {
                               // Find the original index for actions that need it
