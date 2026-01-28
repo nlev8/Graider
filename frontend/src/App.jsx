@@ -248,6 +248,7 @@ function App() {
     teacher_name: "",
     school_name: "",
     showToastNotifications: true,
+    ai_model: "gpt-4o-mini",
   });
 
   const [status, setStatus] = useState({
@@ -4532,6 +4533,26 @@ ${signature}`;
                         <option value="S1">Semester 1 (S1)</option>
                         <option value="S2">Semester 2 (S2)</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="label">AI Model</label>
+                      <select
+                        className="input"
+                        value={config.ai_model}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            ai_model: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap - $0.09/100 assignments)</option>
+                        <option value="gpt-4o">GPT-4o (Best Quality - $1.43/100 assignments)</option>
+                      </select>
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "6px" }}>
+                        GPT-4o Mini is recommended for most grading. Use GPT-4o for essays or if you need better AI detection.
+                      </p>
                     </div>
                   </div>
 

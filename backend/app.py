@@ -137,11 +137,12 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini'):
     """Run the grading process in a background thread.
 
     Args:
         selected_files: List of filenames to grade, or None to grade all files
+        ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
     """
     global grading_state
 
@@ -354,8 +355,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 grading_state["log"].append(f"  Image file")
                 grade_data = file_data
 
-            grading_state["log"].append(f"  Grading...")
-            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes, grade_level, subject)
+            grading_state["log"].append(f"  Grading with {ai_model}...")
+            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes, grade_level, subject, ai_model)
 
             # Restore original markers
             STUDENT_WORK_MARKERS.clear()
@@ -510,6 +511,7 @@ def start_grading():
     subject = data.get('subject', 'US History')
     teacher_name = data.get('teacher_name', '')
     school_name = data.get('school_name', '')
+    ai_model = data.get('ai_model', 'gpt-4o-mini')
 
     # Get custom assignment config and global AI notes
     assignment_config = data.get('assignmentConfig')
@@ -532,7 +534,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model)
     )
     thread.start()
 

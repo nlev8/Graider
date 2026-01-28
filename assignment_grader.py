@@ -633,7 +633,7 @@ def log_pii_sanitization(student_name: str, original_len: int, sanitized_len: in
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies') -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini') -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -648,6 +648,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - custom_ai_instructions: Additional grading instructions from the teacher
     - grade_level: The student's grade level (e.g., '6', '7', '8')
     - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
+    - ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
 
     Returns dict with:
     - score: numeric grade (0-100)
@@ -805,7 +806,7 @@ Provide your response in the following JSON format ONLY (no other text):
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Unknown content type"}
         
         response = client.chat.completions.create(
-            model="gpt-4o",  # Use gpt-4o for vision capability
+            model=ai_model,  # Configurable: gpt-4o or gpt-4o-mini
             messages=messages,
             max_tokens=1500,
             temperature=0.3
