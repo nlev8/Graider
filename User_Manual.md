@@ -10,7 +10,8 @@
 7. [Resources Tab](#resources-tab)
 8. [Settings](#settings)
 9. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-10. [Troubleshooting](#troubleshooting)
+10. [Student Progress Tracking](#student-progress-tracking)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -486,10 +487,102 @@ Report issues at: https://github.com/acrionas/Graider/issues
 
 ---
 
+## Student Progress Tracking
+
+### Overview
+
+Graider tracks each student's performance over time to provide personalized feedback and detect potential academic integrity issues.
+
+### How It Works
+
+After grading 3+ assignments for a student, Graider builds a **baseline profile** that includes:
+- Average scores per rubric category
+- Typical skill strengths (reading comprehension, critical thinking, etc.)
+- Performance trends over time
+
+### Personalized Feedback
+
+The AI uses student history to generate feedback like:
+- "You're on a 3-assignment improvement streak in writing quality!"
+- "Your reading comprehension continues to be a real strength!"
+- "I notice your critical thinking is getting sharper - great progress!"
+
+### Skill Tracking (Beyond the Rubric)
+
+Graider identifies skills demonstrated in each assignment:
+
+**Skills Tracked:**
+- Reading comprehension
+- Critical thinking
+- Source analysis
+- Making connections
+- Vocabulary usage
+- Following directions
+- Organization
+- Cause-and-effect reasoning
+- Comparing/contrasting
+- Using evidence
+- Drawing conclusions
+- Attention to detail
+
+**Pattern Detection:**
+- **Consistent Strengths**: Skills shown in 2+ of last 5 assignments
+- **Improving Skills**: Skills moving from "developing" to "strength"
+- **Needs Focus**: Skills persistently in development
+
+### Baseline Deviation Detection
+
+When a submission significantly deviates from a student's established baseline, it's flagged for review:
+
+| Flag | Meaning |
+|------|---------|
+| **Normal** | Submission matches student's typical performance |
+| **Review** | Minor deviation - worth a second look |
+| **Significant Deviation** | Major deviation - possible plagiarism/AI use |
+
+**What Triggers a Flag:**
+- Score more than 2.5 standard deviations above baseline
+- Sudden 20+ point improvement from recent average
+- New sophisticated skills not previously demonstrated
+- Category scores exceeding student's historical maximum
+
+**Example:**
+> A student with a 73% average suddenly submits a 98% paper with advanced vocabulary and critical analysis skills they've never shown before → **Flagged for review**
+
+### Viewing Student History
+
+Access student history via API:
+```
+GET /api/student-history/<student_id>
+GET /api/student-baseline/<student_id>
+```
+
+### Data Storage
+
+Student history is stored locally at:
+```
+~/.graider_data/student_history/{student_id}.json
+```
+
+Each student's file contains:
+- Last 20 assignments
+- Skill averages and trends
+- Detected patterns
+- Baseline metrics
+
+---
+
 ## Recent Updates (January 2026)
 
 ### New Features
 
+- **Student Progress Tracking**: Personalized feedback based on historical performance
+- **Skill Pattern Detection**: Tracks skills beyond rubric categories (reading comprehension, critical thinking, etc.)
+- **Baseline Deviation Detection**: Flags submissions that deviate significantly from student's typical work
+- **AI Model Selection**: Choose between GPT-4o (better quality) and GPT-4o-mini (lower cost)
+- **Individual Upload**: Grade paper/handwritten assignments by uploading photos
+- **Handwritten Assignment Support**: Auto-uses GPT-4o vision for image-based submissions
+- **Results Filtering**: Filter results by handwritten vs typed assignments
 - **Toast Notifications**: Real-time popups when assignments are graded (can be disabled)
 - **API Error Handling**: Automatic stop on errors with prominent alerts
 - **Separate AI/Plagiarism Detection**: Independent indicators with confidence levels
@@ -504,7 +597,9 @@ Report issues at: https://github.com/acrionas/Graider/issues
 - Theme toggle simplified (icon only)
 - Authenticity summary in Results tab
 - Privacy & Data section in Settings
+- Handwritten indicator icon in Results table
+- AI model selector in Settings
 
 ---
 
-*Last updated: January 26, 2026*
+*Last updated: January 28, 2026*

@@ -29,6 +29,14 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Import student history for personalized feedback
+try:
+    from backend.student_history import build_history_context
+except ImportError:
+    # Fallback if running standalone or module not available
+    def build_history_context(student_id):
+        return ""
+
 # Load environment variables from .env file (override system env vars)
 import os
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -633,7 +641,7 @@ def log_pii_sanitization(student_name: str, original_len: int, sanitized_len: in
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini') -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -679,6 +687,14 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 ---
 """
 
+    # Build student history context for personalized feedback
+    history_context = ''
+    if student_id and student_id != "UNKNOWN":
+        try:
+            history_context = build_history_context(student_id)
+        except Exception as e:
+            print(f"  Note: Could not load student history: {e}")
+
     # Map grade level to age range for context
     grade_age_map = {
         'K': '5-6', '1': '6-7', '2': '7-8', '3': '8-9', '4': '9-10', '5': '10-11',
@@ -692,6 +708,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 
 {ASSIGNMENT_INSTRUCTIONS}
 {custom_section}
+{history_context}
 ---
 
 STUDENT CONTEXT:
@@ -758,6 +775,10 @@ Provide your response in the following JSON format ONLY (no other text):
     "unanswered_questions": ["<list any questions the student left blank or didn't answer>"],
     "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
     "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
+    "skills_demonstrated": {{
+        "strengths": ["<List 2-4 specific skills the student showed strength in. Go BEYOND the rubric categories - identify skills like: reading comprehension, critical thinking, source analysis, making connections, vocabulary usage, following directions, organization, creativity, historical thinking, cause-and-effect reasoning, comparing/contrasting, using evidence, drawing conclusions, summarizing, note-taking, attention to detail, etc. Only include skills clearly demonstrated in THIS assignment.>"],
+        "developing": ["<List 1-2 skills the student is still developing or struggled with. Same skill types as above. Be specific about what skill needs work based on their answers.>"]
+    }},
     "ai_detection": {{
         "flag": "<none, unlikely, possible, or likely>",
         "confidence": <number 0-100 representing confidence in the assessment>,
@@ -767,7 +788,7 @@ Provide your response in the following JSON format ONLY (no other text):
         "flag": "<none, possible, or likely>",
         "reason": "<Brief explanation if not 'none', otherwise empty string>"
     }},
-    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up!>"
+    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant.>"
 }}
 """
 

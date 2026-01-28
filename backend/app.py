@@ -18,6 +18,23 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+# Import student history for progress tracking
+try:
+    from backend.student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary
+except ImportError:
+    try:
+        from student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary
+    except ImportError:
+        # Fallback if module not available
+        def add_assignment_to_history(student_id, result):
+            return None
+        def load_student_history(student_id):
+            return None
+        def detect_baseline_deviation(student_id, result):
+            return {"flag": "normal", "reasons": [], "details": {}}
+        def get_baseline_summary(student_id):
+            return None
+
 # Load environment variables
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 _root_dir = os.path.dirname(_app_dir)
@@ -356,7 +373,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 grade_data = file_data
 
             grading_state["log"].append(f"  Grading with {ai_model}...")
-            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes, grade_level, subject, ai_model)
+            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes, grade_level, subject, ai_model, student_info.get('student_id'))
 
             # Restore original markers
             STUDENT_WORK_MARKERS.clear()
@@ -415,6 +432,23 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             }
             all_grades.append(grade_record)
 
+            # Check for baseline deviation BEFORE saving to history (compare to existing baseline)
+            baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
+            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                try:
+                    baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
+                    if baseline_deviation.get('flag') != 'normal':
+                        grading_state["log"].append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
+                except Exception as e:
+                    print(f"  Note: Could not check baseline deviation: {e}")
+
+            # Save to student history for progress tracking
+            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                try:
+                    add_assignment_to_history(student_info['student_id'], grade_record)
+                except Exception as e:
+                    print(f"  Note: Could not update student history: {e}")
+
             grading_state["results"].append({
                 "student_name": student_info['student_name'],
                 "student_id": student_info['student_id'],
@@ -432,6 +466,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 "unanswered_questions": grade_result.get('unanswered_questions', []),
                 "authenticity_flag": grade_result.get('authenticity_flag', 'clean'),
                 "authenticity_reason": grade_result.get('authenticity_reason', ''),
+                "baseline_deviation": baseline_deviation,
+                "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
                 "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
 
@@ -622,8 +658,11 @@ def grade_individual():
         # ALWAYS use GPT-4o for images (better handwriting recognition)
         ai_model = 'gpt-4o'
 
+        # Get student ID for history tracking
+        individual_student_id = student_info.get('id', '') if student_info else None
+
         # Grade the assignment
-        grade_result = grade_assignment(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model)
+        grade_result = grade_assignment(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id)
 
         if grade_result.get('letter_grade') == 'ERROR':
             return jsonify({"error": grade_result.get('feedback', 'Grading failed')}), 500
@@ -673,6 +712,13 @@ def grade_individual():
             result_path = os.path.join(output_folder, result_filename)
             with open(result_path, 'w') as f:
                 json.dump(result, f, indent=2)
+
+        # Save to student history for progress tracking
+        if result.get('student_id'):
+            try:
+                add_assignment_to_history(result['student_id'], result)
+            except Exception as e:
+                print(f"  Note: Could not update student history: {e}")
 
         # FERPA audit log
         audit_log("GRADE_INDIVIDUAL", f"Graded individual upload for student (image-based, GPT-4o)")
@@ -909,6 +955,36 @@ def export_student_data():
         "record_count": len(student_results),
         "data": student_results
     })
+
+
+# ══════════════════════════════════════════════════════════════
+# STUDENT PROGRESS HISTORY
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/student-history/<student_id>', methods=['GET'])
+def get_student_history_api(student_id):
+    """Get a student's grading history and progress patterns."""
+    history = load_student_history(student_id)
+    if not history:
+        return jsonify({"error": "No history found"}), 404
+
+    # FERPA: Audit log access
+    audit_log("VIEW_STUDENT_HISTORY", f"Viewed history for student ID: {student_id[:6]}...")
+
+    return jsonify(history)
+
+
+@app.route('/api/student-baseline/<student_id>', methods=['GET'])
+def get_student_baseline_api(student_id):
+    """Get a student's baseline performance metrics for deviation detection."""
+    baseline = get_baseline_summary(student_id)
+    if not baseline:
+        return jsonify({"error": "Insufficient history for baseline (need 3+ assignments)"}), 404
+
+    # FERPA: Audit log access
+    audit_log("VIEW_STUDENT_BASELINE", f"Viewed baseline for student ID: {student_id[:6]}...")
+
+    return jsonify(baseline)
 
 
 # ══════════════════════════════════════════════════════════════
