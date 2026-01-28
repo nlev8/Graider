@@ -294,6 +294,40 @@ def get_period_students():
     import csv
     import pandas as pd
 
+    def parse_student_name(name):
+        """Parse various student name formats and return (first, last)."""
+        if not name:
+            return '', ''
+
+        name = name.strip()
+
+        # Format: "Last; First Middle" (semicolon separator)
+        if ';' in name:
+            parts = name.split(';', 1)
+            last = parts[0].strip()
+            first_middle = parts[1].strip() if len(parts) > 1 else ''
+            first = first_middle.split()[0] if first_middle else ''
+            return first, last
+
+        # Format: "Last, First Middle" (comma separator)
+        if ',' in name:
+            parts = name.split(',', 1)
+            last = parts[0].strip()
+            first_middle = parts[1].strip() if len(parts) > 1 else ''
+            first = first_middle.split()[0] if first_middle else ''
+            return first, last
+
+        # Format: "First Last" or "First Middle Last" (space separated)
+        parts = name.split()
+        if len(parts) >= 2:
+            first = parts[0]
+            last = parts[-1]
+            return first, last
+        elif len(parts) == 1:
+            return parts[0], ''
+
+        return '', ''
+
     data = request.json
     filename = data.get('filename')
 
@@ -328,15 +362,12 @@ def get_period_students():
                     for _, row in df.iterrows():
                         name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
                         if name:
-                            parts = name.split()
-                            first = parts[0] if parts else ''
-                            last = parts[-1] if len(parts) > 1 else ''
+                            first, last = parse_student_name(name)
                             students.append({"first": first, "last": last, "full": name})
         else:
             # CSV file
             with open(filepath, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                headers = [h.lower() for h in reader.fieldnames] if reader.fieldnames else []
                 first_col = next((h for h in reader.fieldnames if 'first' in h.lower()), None)
                 last_col = next((h for h in reader.fieldnames if 'last' in h.lower()), None)
                 name_col = next((h for h in reader.fieldnames if any(x in h.lower() for x in ['name', 'student'])), None)
@@ -350,9 +381,7 @@ def get_period_students():
                     elif name_col:
                         name = row.get(name_col, '').strip()
                         if name:
-                            parts = name.split()
-                            first = parts[0] if parts else ''
-                            last = parts[-1] if len(parts) > 1 else ''
+                            first, last = parse_student_name(name)
                             students.append({"first": first, "last": last, "full": name})
 
         return jsonify({"students": students, "count": len(students)})

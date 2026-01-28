@@ -682,14 +682,32 @@ function App() {
     if (!students || students.length === 0) return true; // No filter
     const lowerFilename = filename.toLowerCase();
     return students.some(student => {
-      const first = (student.first || "").toLowerCase();
-      const last = (student.last || "").toLowerCase();
-      // Match "LastName, FirstName" or "FirstName LastName" or just last name
-      return (last && lowerFilename.includes(last)) ||
-             (first && last && lowerFilename.includes(`${last}, ${first}`)) ||
-             (first && last && lowerFilename.includes(`${first} ${last}`)) ||
-             (first && last && lowerFilename.includes(`${last}_${first}`)) ||
-             (first && last && lowerFilename.includes(`${first}_${last}`));
+      const first = (student.first || "").toLowerCase().trim();
+      const last = (student.last || "").toLowerCase().trim();
+      const lastInitial = last.charAt(0);
+
+      // Match patterns:
+      // "First, Last" or "First, L" (common format)
+      // "Last, First"
+      // "First Last" or "First_Last"
+      // Just first name + last initial
+      return (
+        // "First, Last" - e.g., "John, Smith"
+        (first && last && lowerFilename.includes(`${first}, ${last}`)) ||
+        // "First, L" - e.g., "John, S" (last initial only)
+        (first && lastInitial && lowerFilename.includes(`${first}, ${lastInitial}`)) ||
+        // "First L" - e.g., "John S" (no comma, last initial)
+        (first && lastInitial && lowerFilename.match(new RegExp(`${first}\\s+${lastInitial}[^a-z]`, 'i'))) ||
+        // "Last, First" - e.g., "Smith, John"
+        (first && last && lowerFilename.includes(`${last}, ${first}`)) ||
+        // "First Last" - e.g., "John Smith"
+        (first && last && lowerFilename.includes(`${first} ${last}`)) ||
+        // "First_Last" - e.g., "John_Smith"
+        (first && last && lowerFilename.includes(`${first}_${last}`)) ||
+        // Just first name at start of filename
+        (first && lowerFilename.startsWith(`${first},`)) ||
+        (first && lowerFilename.startsWith(`${first} `))
+      );
     });
   };
 
@@ -727,6 +745,28 @@ function App() {
         }
       }
 
+      // Determine which files to grade
+      let filesToGrade = selectedFiles.length > 0 ? selectedFiles : null;
+
+      // If no files selected but period filter is active, load and filter files
+      if (!filesToGrade && selectedPeriod && periodStudents.length > 0) {
+        try {
+          const filesData = await api.listFiles(config.assignments_folder);
+          if (filesData.files) {
+            const ungraded = filesData.files.filter(f => !f.graded);
+            const filtered = ungraded.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
+            if (filtered.length > 0) {
+              filesToGrade = filtered.map(f => f.name);
+            } else {
+              alert("No ungraded files found for the selected period.");
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load files for period filter:", e);
+        }
+      }
+
       await api.startGrading({
         ...config,
         grade_level: config.grade_level,
@@ -741,7 +781,7 @@ function App() {
             : null,
         globalAINotes,
         // Pass selected files (null means grade all new files)
-        selectedFiles: selectedFiles.length > 0 ? selectedFiles : null,
+        selectedFiles: filesToGrade,
       });
       setStatus((prev) => ({
         ...prev,
@@ -2375,6 +2415,46 @@ ${signature}`;
                     <Icon name="Play" size={24} />
                     Start Grading
                   </h2>
+
+                  {/* Period Filter - Show when periods exist */}
+                  {periods.length > 0 && (
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.05))",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(99, 102, 241, 0.2)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon name="Users" size={16} style={{ color: "var(--accent-primary)" }} />
+                        Filter by Class Period
+                      </label>
+                      <select
+                        className="input"
+                        value={selectedPeriod}
+                        onChange={async (e) => {
+                          const periodFilename = e.target.value;
+                          setSelectedPeriod(periodFilename);
+                          await loadPeriodStudents(periodFilename);
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <option value="">All Periods (No Filter)</option>
+                        {periods.map((p) => (
+                          <option key={p.filename} value={p.filename}>
+                            {p.period_name} ({p.row_count} students)
+                          </option>
+                        ))}
+                      </select>
+                      {selectedPeriod && periodStudents.length > 0 && (
+                        <p style={{ fontSize: "0.75rem", color: "var(--accent-primary)", marginTop: "8px", fontWeight: 500 }}>
+                          ✓ Filtering to {periodStudents.length} students in {periods.find(p => p.filename === selectedPeriod)?.period_name}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                     {/* Assignment Editing - Same as Builder */}
                     <div
@@ -4216,34 +4296,6 @@ ${signature}`;
                         border: "1px solid var(--glass-border)",
                       }}
                     >
-                      {/* Period Filter */}
-                      {periods.length > 0 && (
-                        <div style={{ marginBottom: "15px" }}>
-                          <label className="label">Filter by Period</label>
-                          <select
-                            className="input"
-                            value={selectedPeriod}
-                            onChange={async (e) => {
-                              const periodFilename = e.target.value;
-                              setSelectedPeriod(periodFilename);
-                              await loadPeriodStudents(periodFilename);
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <option value="">All Periods</option>
-                            {periods.map((p) => (
-                              <option key={p.filename} value={p.filename}>
-                                {p.period_name} ({p.row_count} students)
-                              </option>
-                            ))}
-                          </select>
-                          {selectedPeriod && periodStudents.length > 0 && (
-                            <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "6px" }}>
-                              Showing files for {periodStudents.length} students in this period
-                            </p>
-                          )}
-                        </div>
-                      )}
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                         <label className="label" style={{ marginBottom: 0 }}>
@@ -4973,7 +5025,7 @@ ${signature}`;
                     <input
                       ref={periodInputRef}
                       type="file"
-                      accept=".csv"
+                      accept=".csv,.xlsx,.xls"
                       style={{ display: "none" }}
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
@@ -5023,11 +5075,21 @@ ${signature}`;
                         onClick={() => periodInputRef.current?.click()}
                         className="btn btn-secondary"
                         disabled={uploadingPeriod || !newPeriodName.trim()}
+                        style={{
+                          opacity: (!newPeriodName.trim() || uploadingPeriod) ? 0.5 : 1,
+                          cursor: (!newPeriodName.trim() || uploadingPeriod) ? "not-allowed" : "pointer",
+                        }}
+                        title={!newPeriodName.trim() ? "Enter a period name first" : ""}
                       >
                         <Icon name="Upload" size={18} />
-                        {uploadingPeriod ? "Uploading..." : "Upload Period CSV"}
+                        {uploadingPeriod ? "Uploading..." : "Upload CSV/Excel"}
                       </button>
                     </div>
+                    {!newPeriodName.trim() && (
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "-10px", marginBottom: "10px" }}>
+                        Enter a period name above, then click Upload
+                      </p>
+                    )}
 
                     {periods.length > 0 && (
                       <div
