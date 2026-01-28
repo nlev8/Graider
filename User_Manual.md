@@ -4,14 +4,15 @@
 1. [Getting Started](#getting-started)
 2. [Grade Tab - Grading Assignments](#grade-tab---grading-assignments)
 3. [Results Tab](#results-tab)
-4. [Assignment Builder](#assignment-builder)
-5. [Analytics Tab](#analytics-tab)
-6. [Lesson Planner](#lesson-planner)
-7. [Resources Tab](#resources-tab)
-8. [Settings](#settings)
-9. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-10. [Student Progress Tracking](#student-progress-tracking)
-11. [Troubleshooting](#troubleshooting)
+4. [Exports](#exports)
+5. [Assignment Builder](#assignment-builder)
+6. [Analytics Tab](#analytics-tab)
+7. [Lesson Planner](#lesson-planner)
+8. [Resources Tab](#resources-tab)
+9. [Settings](#settings)
+10. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+11. [Student Progress Tracking](#student-progress-tracking)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -86,6 +87,58 @@ To disable toast notifications: **Settings > Notifications > Toast Notifications
 3. Each file is read, analyzed by AI, and scored
 4. Results appear in the Activity Monitor and Results tab
 
+### Period Filtering
+
+Filter grading by class period to grade only specific classes:
+
+1. Upload period rosters in **Settings > Class Periods**
+2. In the Grade tab, select a period from the **Period Filter** dropdown
+3. Only files matching students in that period will be graded
+4. Works with both Start Grading and Auto-Grade Mode
+
+### Selective File Grading
+
+Choose specific files to grade instead of grading everything:
+
+1. Click **Load Files** to see all files in your Assignments Folder
+2. Check/uncheck individual files in the list
+3. Use **Select All** / **Deselect All** for bulk selection
+4. Already-graded files show a checkmark indicator
+5. Click **Start Grading** to grade only selected files
+
+> **Tip:** Combine with Period Filter to see only files from a specific class.
+
+### Stop Grading
+
+To stop grading in progress:
+
+1. Click the **Stop Grading** button (appears while grading)
+2. Current file completes, then grading stops
+3. All progress is saved automatically
+4. Resume by clicking Start Grading again
+
+### Individual Upload (Paper/Handwritten Assignments)
+
+Grade paper assignments by uploading photos:
+
+1. In the Grade tab, find the **Individual Upload** section
+2. Click **Choose File** and select an image (JPG, PNG, etc.)
+3. Enter the student's name (autocompletes from period roster)
+4. Click **Grade This Assignment**
+5. Graider uses GPT-4o vision to read handwriting and grade
+
+**Supported formats:** JPG, JPEG, PNG, GIF, WEBP, HEIC
+
+**Note:** Individual uploads automatically use GPT-4o for better handwriting recognition (regardless of your model setting).
+
+### Open Results Folder
+
+Click **Open Results Folder** to open your output folder in Finder/Explorer. Quick access to:
+- Focus CSV files
+- Detailed reports
+- Email text files
+- Master grades spreadsheet
+
 ### Using Assignment Configs
 
 If you have saved assignment configurations (from the Builder):
@@ -114,10 +167,100 @@ View all graded assignments with columns:
 - **Score** - Percentage score
 - **Grade** - Letter grade (color-coded)
 - **Authenticity** - AI and plagiarism detection status
+- **Baseline** - Deviation indicator (if student has history)
 - **Email** - Email status
 - **Actions** - View/edit options
 
-### Authenticity Detection
+### Search Results
+
+Use the search box above the results table to filter by:
+- Student name
+- Assignment name
+- Filename
+
+Results update as you type.
+
+### Filter Results
+
+Filter the results table by type:
+- **All** - Show all results
+- **Handwritten** - Only paper/scanned assignments (pen icon)
+- **Typed** - Only digital submissions
+
+### Delete Single Result
+
+To delete an individual grading result:
+
+1. Find the result in the table
+2. Click the **trash icon** in the Actions column
+3. Confirm deletion
+
+The file can then be re-graded if needed.
+
+### Baseline Deviation Indicator
+
+When a student has 3+ graded assignments, results show a baseline deviation indicator:
+
+- **Normal** (no indicator) - Matches student's typical performance
+- **Review** (yellow) - Minor deviation, worth checking
+- **Significant** (red) - Major deviation, possible plagiarism/AI use
+
+Click to see details about why the submission was flagged.
+
+---
+
+## Exports
+
+### Automatic Exports
+
+When grading completes, Graider automatically creates these files in your Output Folder:
+
+### Focus CSV Files
+
+Grade import files for Focus (student information system):
+
+- **Format:** Student ID, Score, Comment
+- **Separated by assignment** - One CSV per assignment type
+- **Location:** `{Output Folder}/{Assignment}_{timestamp}.csv`
+
+**Example:**
+```csv
+Student ID,Score,Comment
+1950304,85,"Great job, Jackson! You correctly identified..."
+1956701,92,"Excellent work, Maria!..."
+```
+
+### Detailed Report
+
+Complete grading data for your records:
+
+- **Location:** `{Output Folder}/Detailed_Report_{Assignment}_{timestamp}.csv`
+- **Includes:** Student ID, name, email, score, letter grade, all rubric breakdowns, feedback
+
+### Master Grades CSV
+
+Cumulative grade tracking across the school year:
+
+- **Location:** `{Output Folder}/master_grades.csv`
+- **Appends** new grades each grading session
+- **Columns:** Date, Student ID, Name, Period, Assignment, Quarter, Score, Letter Grade, Rubric Breakdowns, Feedback
+
+Use this for:
+- Progress reports
+- Parent conferences
+- Grade analysis over time
+
+### Email Files
+
+Text files ready to copy/paste or import:
+
+- **Location:** `{Output Folder}/emails/`
+- **One file per student** with all their assignments combined
+- **Format:** TO, SUBJECT, then email body
+
+---
+
+## Authenticity Detection
 
 Each result shows two separate indicators:
 
@@ -145,12 +288,43 @@ When concerns are detected, a summary banner appears showing:
 
 Each graded result includes the exact date and time it was graded, displayed in the "Time" column.
 
-### Email Preview
+### Email Preview & Approval
 
 Click a row to preview the feedback email:
 - Shows any authenticity alerts
 - Allows editing subject and body
 - Send directly from the app
+
+### Email Approval Workflow
+
+Before sending emails, you can review and approve each one:
+
+1. Click **Preview Emails** to see all pending emails
+2. Each email shows:
+   - Student name and email address
+   - Subject line
+   - Full feedback body
+3. For each email, choose:
+   - **Approve** (green check) - Ready to send
+   - **Reject** (red X) - Don't send
+   - **Edit** - Modify subject or body before approving
+4. Click **Send Approved** to send all approved emails
+
+### Auto-Approve Emails
+
+Toggle **Auto-Approve** to skip manual approval:
+- All emails are automatically marked as approved
+- Useful when you trust the AI feedback
+- Can still review individual emails before sending
+
+### Editing Emails
+
+To edit an email before sending:
+
+1. Click the email row to expand it
+2. Edit the subject line or body text
+3. Your changes are saved automatically
+4. Approve the email when ready
 
 ---
 
@@ -312,6 +486,17 @@ These resources can enhance AI grading and lesson planning accuracy.
 | Grade Level | K-12 selection |
 | Subject | U.S. History, World History, Civics, etc. |
 | Grading Period | Q1, Q2, Q3, Q4, S1, S2 |
+
+### AI Model Selection
+
+Choose which OpenAI model to use for grading:
+
+| Model | Cost | Best For |
+|-------|------|----------|
+| **GPT-4o-mini** (default) | ~$0.09 per 100 assignments | Routine grading, cost savings |
+| **GPT-4o** | ~$1.43 per 100 assignments | Complex assignments, better nuance |
+
+**Note:** Individual uploads (handwritten/scanned) always use GPT-4o for better handwriting recognition.
 
 ### Global AI Instructions
 
