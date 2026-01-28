@@ -269,10 +269,22 @@ function App() {
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [periodStudents, setPeriodStudents] = useState([]);
 
+  // Individual upload state (for paper/handwritten assignments)
+  const [individualUpload, setIndividualUpload] = useState({
+    file: null,
+    studentName: "",
+    studentInfo: null, // Full student info from CSV (id, email, etc.)
+    preview: null,
+    isGrading: false,
+    result: null,
+    showSuggestions: false,
+  });
+
   const [activeTab, setActiveTab] = useState("grade");
   const [analytics, setAnalytics] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all");
+  const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed"
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
@@ -802,6 +814,103 @@ function App() {
     } catch (error) {
       console.error("Failed to stop grading:", error);
     }
+  };
+
+  // Handle individual file upload for paper/handwritten assignments
+  const handleIndividualFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Create preview URL for images
+    const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+    setIndividualUpload((prev) => ({
+      ...prev,
+      file,
+      preview,
+      result: null,
+    }));
+  };
+
+  const handleIndividualGrade = async () => {
+    if (!individualUpload.file || !individualUpload.studentName.trim()) {
+      alert("Please select a file and enter the student name.");
+      return;
+    }
+
+    setIndividualUpload((prev) => ({ ...prev, isGrading: true, result: null }));
+
+    try {
+      const formData = new FormData();
+      formData.append("file", individualUpload.file);
+      formData.append("student_name", individualUpload.studentName.trim());
+      formData.append("grade_level", config.grade_level);
+      formData.append("subject", config.subject);
+      formData.append("output_folder", config.output_folder);
+      formData.append("globalAINotes", globalAINotes);
+      formData.append("teacher_name", config.teacher_name || "");
+      formData.append("school_name", config.school_name || "");
+      // Pass student info from CSV if available
+      if (individualUpload.studentInfo) {
+        formData.append("studentInfo", JSON.stringify(individualUpload.studentInfo));
+      }
+      // Pass assignment config if available
+      if (gradeAssignment.gradingNotes || gradeAssignment.customMarkers?.length > 0 || gradeAssignment.title) {
+        formData.append("assignmentConfig", JSON.stringify(gradeAssignment));
+      }
+
+      const response = await fetch("/api/grade-individual", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+
+      if (result.error) {
+        alert("Grading error: " + result.error);
+        setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
+        return;
+      }
+
+      setIndividualUpload((prev) => ({ ...prev, isGrading: false, result }));
+
+      // Add to results list
+      setStatus((prev) => ({
+        ...prev,
+        results: [...prev.results, result],
+      }));
+
+      addToast(`Graded ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`, "success");
+    } catch (error) {
+      console.error("Individual grading error:", error);
+      alert("Failed to grade: " + error.message);
+      setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
+    }
+  };
+
+  const clearIndividualUpload = () => {
+    if (individualUpload.preview) {
+      URL.revokeObjectURL(individualUpload.preview);
+    }
+    setIndividualUpload({
+      file: null,
+      studentName: "",
+      studentInfo: null,
+      preview: null,
+      isGrading: false,
+      result: null,
+      showSuggestions: false,
+    });
+  };
+
+  // Filter students for autocomplete
+  const getStudentSuggestions = (input) => {
+    if (!input || input.length < 2) return [];
+    const lowerInput = input.toLowerCase();
+    return periodStudents.filter((s) => {
+      const fullName = s.full?.toLowerCase() || "";
+      const first = s.first?.toLowerCase() || "";
+      const last = s.last?.toLowerCase() || "";
+      return fullName.includes(lowerInput) || first.includes(lowerInput) || last.includes(lowerInput);
+    }).slice(0, 5); // Limit to 5 suggestions
   };
 
   const handleBrowse = async (type, field) => {
@@ -1555,15 +1664,55 @@ ${signature}`;
                             background: "var(--input-bg)",
                             padding: "20px",
                             borderRadius: "10px",
-                            whiteSpace: "pre-wrap",
-                            fontSize: "0.85rem",
-                            lineHeight: 1.6,
-                            color: "var(--text-secondary)",
-                            fontFamily: "monospace",
                             overflowY: "auto",
                           }}
                         >
-                          {r.full_content || r.student_content || "[No content - click Open Original to view]"}
+                          {r.is_handwritten ? (
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "8px",
+                                marginBottom: "15px",
+                                color: "#10b981",
+                                fontWeight: 500,
+                              }}>
+                                <Icon name="PenTool" size={18} />
+                                Handwritten Assignment
+                              </div>
+                              {r.original_image_path ? (
+                                <div>
+                                  <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "15px" }}>
+                                    Original image saved to output folder
+                                  </p>
+                                  <button
+                                    onClick={() => api.openFolder(config.output_folder)}
+                                    className="btn btn-secondary"
+                                    style={{ margin: "0 auto" }}
+                                  >
+                                    <Icon name="FolderOpen" size={16} />
+                                    Open Output Folder
+                                  </button>
+                                </div>
+                              ) : (
+                                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                                  Handwritten responses were extracted by AI vision.<br/>
+                                  Check the "AI Detected" tab to see extracted answers.
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{
+                              whiteSpace: "pre-wrap",
+                              fontSize: "0.85rem",
+                              lineHeight: 1.6,
+                              color: "var(--text-secondary)",
+                              fontFamily: "monospace",
+                            }}>
+                              {r.full_content || r.student_content || "[No content - click Open Original to view]"}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3035,6 +3184,199 @@ ${signature}`;
 
                     </div>
 
+                    {/* Individual Upload - For Paper/Handwritten Assignments */}
+                    <div
+                      style={{
+                        marginTop: "20px",
+                        padding: "20px",
+                        borderRadius: "16px",
+                        background: "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
+                        border: "1px solid rgba(16, 185, 129, 0.2)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "15px" }}>
+                        <div
+                          style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "10px",
+                            background: "rgba(16, 185, 129, 0.15)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Icon name="Camera" size={20} style={{ color: "#10b981" }} />
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontWeight: 600 }}>Individual Upload</h4>
+                          <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            For paper/handwritten assignments (uses GPT-4o vision)
+                          </p>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: individualUpload.preview ? "1fr 1fr" : "1fr", gap: "15px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                          {/* Student Name with Autocomplete */}
+                          <div style={{ position: "relative" }}>
+                            <input
+                              type="text"
+                              className="input"
+                              placeholder={periodStudents.length > 0 ? "Start typing student name..." : "Student name..."}
+                              value={individualUpload.studentName}
+                              onChange={(e) => setIndividualUpload((prev) => ({
+                                ...prev,
+                                studentName: e.target.value,
+                                studentInfo: null, // Clear selected student when typing
+                                showSuggestions: e.target.value.length >= 2,
+                              }))}
+                              onFocus={() => setIndividualUpload((prev) => ({
+                                ...prev,
+                                showSuggestions: prev.studentName.length >= 2,
+                              }))}
+                              onBlur={() => setTimeout(() => setIndividualUpload((prev) => ({ ...prev, showSuggestions: false })), 200)}
+                            />
+                            {/* Autocomplete Dropdown */}
+                            {individualUpload.showSuggestions && getStudentSuggestions(individualUpload.studentName).length > 0 && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "100%",
+                                  left: 0,
+                                  right: 0,
+                                  background: "var(--card-bg)",
+                                  border: "1px solid var(--glass-border)",
+                                  borderRadius: "8px",
+                                  marginTop: "4px",
+                                  zIndex: 100,
+                                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                                  maxHeight: "200px",
+                                  overflowY: "auto",
+                                }}
+                              >
+                                {getStudentSuggestions(individualUpload.studentName).map((student, idx) => (
+                                  <div
+                                    key={idx}
+                                    onClick={() => setIndividualUpload((prev) => ({
+                                      ...prev,
+                                      studentName: student.full || `${student.first} ${student.last}`,
+                                      studentInfo: student,
+                                      showSuggestions: false,
+                                    }))}
+                                    style={{
+                                      padding: "10px 12px",
+                                      cursor: "pointer",
+                                      borderBottom: idx < getStudentSuggestions(individualUpload.studentName).length - 1 ? "1px solid var(--glass-border)" : "none",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = "var(--glass-bg)"}
+                                    onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                  >
+                                    <Icon name="User" size={16} style={{ color: "var(--text-muted)" }} />
+                                    <div>
+                                      <div style={{ fontWeight: 500 }}>{student.full || `${student.first} ${student.last}`}</div>
+                                      {student.email && (
+                                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{student.email}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {/* Selected Student Indicator */}
+                            {individualUpload.studentInfo && (
+                              <div style={{ marginTop: "6px", fontSize: "0.75rem", color: "#10b981", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <Icon name="CheckCircle" size={12} />
+                                Student matched from roster
+                              </div>
+                            )}
+                          </div>
+
+                          <div
+                            onClick={() => document.getElementById("individualFileInput")?.click()}
+                            style={{
+                              padding: "20px",
+                              border: "2px dashed var(--glass-border)",
+                              borderRadius: "10px",
+                              textAlign: "center",
+                              cursor: "pointer",
+                              background: individualUpload.file ? "rgba(16, 185, 129, 0.1)" : "var(--glass-bg)",
+                            }}
+                          >
+                            <input
+                              id="individualFileInput"
+                              type="file"
+                              accept="image/*,.pdf,.heic,.heif"
+                              onChange={handleIndividualFileSelect}
+                              style={{ display: "none" }}
+                            />
+                            {individualUpload.file ? (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                                <Icon name="CheckCircle" size={20} style={{ color: "#10b981" }} />
+                                <span style={{ fontWeight: 500, fontSize: "0.9rem" }}>{individualUpload.file.name}</span>
+                              </div>
+                            ) : (
+                              <>
+                                <Icon name="Upload" size={24} style={{ color: "var(--text-muted)" }} />
+                                <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                                  Click to upload image
+                                </p>
+                              </>
+                            )}
+                          </div>
+
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                              onClick={handleIndividualGrade}
+                              disabled={!individualUpload.file || !individualUpload.studentName.trim() || individualUpload.isGrading}
+                              className="btn btn-primary"
+                              style={{ flex: 1, opacity: (!individualUpload.file || !individualUpload.studentName.trim() || individualUpload.isGrading) ? 0.5 : 1 }}
+                            >
+                              {individualUpload.isGrading ? (
+                                <>Grading...</>
+                              ) : (
+                                <>
+                                  <Icon name="Sparkles" size={16} />
+                                  Grade
+                                </>
+                              )}
+                            </button>
+                            {individualUpload.file && (
+                              <button onClick={clearIndividualUpload} className="btn btn-secondary" style={{ padding: "8px 12px" }}>
+                                <Icon name="X" size={16} />
+                              </button>
+                            )}
+                          </div>
+
+                          {individualUpload.result && (
+                            <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(16, 185, 129, 0.15)", border: "1px solid rgba(16, 185, 129, 0.3)" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "#10b981" }}>
+                                  {individualUpload.result.letter_grade}
+                                </span>
+                                <div>
+                                  <div style={{ fontWeight: 600 }}>{individualUpload.result.score}%</div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{individualUpload.studentName}</div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {individualUpload.preview && (
+                          <div style={{ borderRadius: "10px", overflow: "hidden", border: "1px solid var(--glass-border)" }}>
+                            <img
+                              src={individualUpload.preview}
+                              alt="Preview"
+                              style={{ width: "100%", height: "auto", maxHeight: "250px", objectFit: "contain", background: "#fff" }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Progress */}
                     {status.is_running && (
@@ -3134,10 +3476,27 @@ ${signature}`;
                       }}
                     >
                       <Icon name="FileText" size={24} />
-                      Grading Results ({status.results.length})
+                      Grading Results ({
+                        resultsFilter === "all"
+                          ? status.results.length
+                          : status.results.filter(r =>
+                              resultsFilter === "handwritten" ? r.is_handwritten : !r.is_handwritten
+                            ).length
+                      }{resultsFilter !== "all" && ` of ${status.results.length}`})
                     </h2>
                     {status.results.length > 0 && (
-                      <div style={{ display: "flex", gap: "10px" }}>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        {/* Filter Dropdown */}
+                        <select
+                          className="input"
+                          value={resultsFilter}
+                          onChange={(e) => setResultsFilter(e.target.value)}
+                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                        >
+                          <option value="all">All Results</option>
+                          <option value="handwritten">Handwritten Only</option>
+                          <option value="typed">Typed Only</option>
+                        </select>
                         <button
                           onClick={openResults}
                           className="btn btn-secondary"
@@ -3469,6 +3828,10 @@ ${signature}`;
                             : status.results
                           )
                             .filter((r) => {
+                              // Apply handwritten/typed filter
+                              if (resultsFilter === "handwritten" && !r.is_handwritten) return false;
+                              if (resultsFilter === "typed" && r.is_handwritten) return false;
+                              // Apply search filter
                               if (!resultsSearch.trim()) return true;
                               const search = resultsSearch.toLowerCase();
                               return (
@@ -3505,7 +3868,28 @@ ${signature}`;
                                     )
                                   }
                                 >
-                                  <td>{r.student_name}</td>
+                                  <td>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                      {r.student_name}
+                                      {r.is_handwritten && (
+                                        <span
+                                          title="Handwritten/Scanned Assignment"
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            width: "20px",
+                                            height: "20px",
+                                            borderRadius: "4px",
+                                            background: "rgba(16, 185, 129, 0.15)",
+                                            color: "#10b981",
+                                          }}
+                                        >
+                                          <Icon name="PenTool" size={12} />
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td
                                     style={{
                                       maxWidth: "150px",

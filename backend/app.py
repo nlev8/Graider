@@ -542,6 +542,149 @@ def start_grading():
 
 
 # ══════════════════════════════════════════════════════════════
+# INDIVIDUAL FILE GRADING (for paper/handwritten assignments)
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/grade-individual', methods=['POST'])
+def grade_individual():
+    """Grade a single uploaded image file (for paper/handwritten assignments).
+
+    Automatically uses GPT-4o for better handwriting recognition.
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    student_name = request.form.get('student_name', 'Unknown Student')
+    grade_level = request.form.get('grade_level', '7')
+    subject = request.form.get('subject', 'Social Studies')
+    output_folder = request.form.get('output_folder', '')
+    global_ai_notes = request.form.get('globalAINotes', '')
+    assignment_config_str = request.form.get('assignmentConfig', '')
+    student_info_str = request.form.get('studentInfo', '')
+    teacher_name = request.form.get('teacher_name', '')
+    school_name = request.form.get('school_name', '')
+
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    # Parse student info from CSV if provided
+    student_info = None
+    if student_info_str:
+        try:
+            student_info = json.loads(student_info_str)
+        except:
+            pass
+
+    # Parse assignment config if provided
+    assignment_config = None
+    if assignment_config_str:
+        try:
+            assignment_config = json.loads(assignment_config_str)
+        except:
+            pass
+
+    # Build AI notes from config
+    file_ai_notes = global_ai_notes or ''
+    if assignment_config:
+        if assignment_config.get('gradingNotes'):
+            file_ai_notes = assignment_config['gradingNotes'] + '\n\n' + file_ai_notes
+
+    try:
+        import base64
+
+        # Read file content
+        file_content = file.read()
+        file_ext = os.path.splitext(file.filename)[1].lower()
+
+        # Determine media type
+        media_type_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.heic': 'image/heic',
+            '.heif': 'image/heif',
+        }
+        media_type = media_type_map.get(file_ext, 'image/jpeg')
+
+        # Encode as base64
+        base64_content = base64.b64encode(file_content).decode('utf-8')
+
+        # Create grade data for image
+        grade_data = {
+            "type": "image",
+            "content": base64_content,
+            "media_type": media_type
+        }
+
+        # ALWAYS use GPT-4o for images (better handwriting recognition)
+        ai_model = 'gpt-4o'
+
+        # Grade the assignment
+        grade_result = grade_assignment(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model)
+
+        if grade_result.get('letter_grade') == 'ERROR':
+            return jsonify({"error": grade_result.get('feedback', 'Grading failed')}), 500
+
+        # Save original image to output folder
+        original_image_path = None
+        if output_folder and os.path.exists(output_folder):
+            safe_name = student_name.replace(' ', '_').replace('/', '_')
+            timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+            # Save the original image
+            image_filename = f"{safe_name}_handwritten_{timestamp_str}{file_ext}"
+            original_image_path = os.path.join(output_folder, image_filename)
+            with open(original_image_path, 'wb') as img_file:
+                img_file.write(file_content)
+
+        # Build result object (matching regular grading structure)
+        result = {
+            "student_name": student_name,
+            "filename": file.filename,
+            "assignment": assignment_config.get('title', 'Individual Upload') if assignment_config else 'Individual Upload',
+            "score": grade_result.get('score', 0),
+            "letter_grade": grade_result.get('letter_grade', 'N/A'),
+            "feedback": grade_result.get('feedback', ''),
+            "breakdown": grade_result.get('breakdown', {}),
+            "ai_detection": grade_result.get('ai_detection', {}),
+            "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
+            "student_responses": grade_result.get('student_responses', []),
+            "excellent_answers": grade_result.get('excellent_answers', []),
+            "needs_improvement": grade_result.get('needs_improvement', []),
+            "unanswered_questions": grade_result.get('unanswered_questions', []),
+            "timestamp": datetime.now().isoformat(),
+            "model_used": ai_model,
+            # Handwritten/image-specific fields
+            "is_handwritten": True,
+            "original_image_path": original_image_path,
+            # Student info from CSV (if matched)
+            "student_id": student_info.get('id', '') if student_info else '',
+            "student_email": student_info.get('email', '') if student_info else '',
+            # Teacher/school info
+            "teacher_name": teacher_name,
+            "school_name": school_name,
+        }
+
+        # Save result JSON to output folder if specified
+        if output_folder and os.path.exists(output_folder):
+            result_filename = f"{safe_name}_individual_{timestamp_str}.json"
+            result_path = os.path.join(output_folder, result_filename)
+            with open(result_path, 'w') as f:
+                json.dump(result, f, indent=2)
+
+        # FERPA audit log
+        audit_log("GRADE_INDIVIDUAL", f"Graded individual upload for student (image-based, GPT-4o)")
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"Individual grading error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════
 # LIST FILES IN FOLDER
 # ══════════════════════════════════════════════════════════════
 
