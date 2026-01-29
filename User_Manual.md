@@ -5,14 +5,16 @@
 2. [Grade Tab - Grading Assignments](#grade-tab---grading-assignments)
 3. [Results Tab](#results-tab)
 4. [Exports](#exports)
-5. [Assignment Builder](#assignment-builder)
-6. [Analytics Tab](#analytics-tab)
-7. [Lesson Planner](#lesson-planner)
-8. [Resources Tab](#resources-tab)
-9. [Settings](#settings)
-10. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-11. [Student Progress Tracking](#student-progress-tracking)
-12. [Troubleshooting](#troubleshooting)
+5. [Bilingual Feedback (ELL Support)](#bilingual-feedback-ell-support)
+6. [Assignment Builder](#assignment-builder)
+7. [Analytics Tab](#analytics-tab)
+8. [Lesson Planner](#lesson-planner)
+9. [Resources Tab](#resources-tab)
+10. [Settings](#settings)
+11. [IEP/504 Accommodations](#iep504-accommodations)
+12. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+13. [Student Progress Tracking](#student-progress-tracking)
+14. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -108,6 +110,24 @@ Choose specific files to grade instead of grading everything:
 
 > **Tip:** Combine with Period Filter to see only files from a specific class.
 
+### Skip Verified Grades (Regrade Unverified Only)
+
+When you have previously graded assignments and want to regrade only the unverified ones:
+
+1. The **"Skip Verified Grades"** toggle appears when you have unverified results
+2. Enable the toggle to keep verified grades and only regrade unverified ones
+3. Shows count of unverified vs verified assignments
+4. Click **Start Grading**
+
+**When to use:**
+- You graded files before setting up the assignment config
+- You want to fix grades that were marked without proper markers
+- You added a new assignment config and want to apply it retroactively
+
+**How it works:**
+- Files that matched an assignment config during grading = **Verified** (kept)
+- Files graded without config = **Unverified** (regraded)
+
 ### Stop Grading
 
 To stop grading in progress:
@@ -202,6 +222,42 @@ Filter the results table by type:
 - **All** - Show all results
 - **Handwritten** - Only paper/scanned assignments (pen icon)
 - **Typed** - Only digital submissions
+- **Verified** - Only assignments graded with a matched config
+- **Unverified** - Only assignments without config (may need regrade)
+
+### Verified vs Unverified Grades
+
+Assignments are marked as **Verified** or **Unverified** based on whether they had an assignment config during grading:
+
+**Verified** (no indicator) - Graded with:
+- Matched assignment config
+- Custom markers
+- Grading notes
+- Response sections
+
+**Unverified** (yellow warning icon) - Graded without any configuration:
+- No assignment config matched the file
+- No custom markers or notes provided
+- Grade may be inaccurate since AI doesn't know what to look for
+
+#### Regrading Unverified Assignments
+
+If assignments were graded before you set up the assignment config:
+
+1. **Create or update the assignment config** in the Builder tab
+2. Save the config with a matching name
+3. Go to Grade tab
+4. Enable **"Skip Verified Grades (Regrade Only Unverified)"** toggle
+5. Click Start Grading
+
+This will:
+- **Skip** all verified grades (keep existing scores)
+- **Regrade** only the unverified assignments with the new config
+
+This workflow is perfect when:
+- You forgot to set up markers before initial grading
+- You want to fix grades that were marked without context
+- You added a new assignment config and want to apply it
 
 ### Delete Single Result
 
@@ -341,6 +397,76 @@ To edit an email before sending:
 2. Edit the subject line or body text
 3. Your changes are saved automatically
 4. Approve the email when ready
+
+---
+
+## Bilingual Feedback (ELL Support)
+
+### Overview
+
+Graider automatically detects when students write their responses in a language other than English and provides **bilingual feedback** - feedback in both English AND the student's native language.
+
+### Supported Languages
+
+- Spanish
+- Portuguese
+- Haitian Creole
+- French
+- And other languages (auto-detected)
+
+### How It Works
+
+1. **Automatic Detection**: When grading, the AI analyzes the student's responses and detects the language
+2. **Dual Feedback**: If the student wrote in Spanish (for example), feedback is provided in:
+   - English (for grade records and English learning)
+   - Spanish (so the student fully understands the feedback)
+3. **Separator Format**: The two versions are separated by `---` in the feedback
+
+### Example Bilingual Feedback
+
+```
+Great work on your vocabulary matching! Your answers show you really
+understood the key concepts about the Louisiana Purchase. I especially
+liked how you explained that "it doubled the size of the US" - that
+shows you grasped the significance!
+
+One area to work on: try to write in complete sentences for your
+short answer responses. This will help you communicate your ideas
+more clearly.
+
+---
+
+¡Excelente trabajo en tu emparejamiento de vocabulario! Tus respuestas
+muestran que realmente entendiste los conceptos clave sobre la Compra
+de Luisiana. ¡Me gustó especialmente cómo explicaste que "duplicó el
+tamaño de los EE.UU." - eso demuestra que comprendiste la importancia!
+
+Un área para mejorar: intenta escribir en oraciones completas para
+tus respuestas cortas. Esto te ayudará a comunicar tus ideas más
+claramente.
+```
+
+### Editing Bilingual Feedback
+
+When reviewing grades in the **Review Modal** (pencil icon):
+
+1. You can edit both the English and translated portions
+2. If you edit the English feedback, click the **Re-translate** button to update the translation
+3. The Re-translate button only appears when feedback contains bilingual content (the `---` separator)
+
+### Benefits
+
+- **ELL Students**: Understand their feedback completely in their native language
+- **Parent Communication**: Families can read feedback in their home language
+- **English Learning**: Students see both versions, helping them learn English vocabulary
+- **Inclusive**: Supports Florida's 30%+ English Language Learner population
+
+### Tips
+
+- The AI uses the same warm, encouraging tone in both languages
+- Translations preserve the specific references to the student's work
+- You can manually edit either portion if needed
+- The email preview will show the full bilingual feedback
 
 ---
 
@@ -545,6 +671,65 @@ Upload and manage student rosters:
 ### Class Periods
 
 Upload separate rosters for each class period for organized grading.
+
+### IEP/504 Accommodations
+
+Graider includes built-in support for IEP and 504 accommodations, allowing personalized feedback for students with special needs.
+
+#### Available Presets
+
+| Preset | Description |
+|--------|-------------|
+| **Simplified Language** | Shorter sentences, simpler vocabulary, clear structure |
+| **Effort-Focused** | Emphasizes participation and growth over perfection |
+| **Extra Encouragement** | More positive reinforcement and supportive tone |
+| **Chunked Feedback** | Breaks feedback into small, labeled sections (bullet points, headers) |
+| **Modified Expectations** | Focuses on content understanding, not spelling/grammar |
+| **Visual Structure** | Clear headers, bullet points, organized layout |
+| **Read-Aloud Friendly** | Natural language that flows when spoken, avoids abbreviations |
+| **Growth Mindset** | Frames all feedback around learning and potential |
+
+#### Adding Student Accommodations
+
+1. Go to **Settings** → **IEP/504 Accommodations**
+2. Click **Add Student**
+3. Enter the student ID (must match your roster)
+4. Select one or more accommodation presets
+5. Add any custom notes if needed
+6. Click **Save**
+
+#### Importing from CSV
+
+You can bulk-import accommodations by adding columns to your roster CSV:
+
+```csv
+student_id,first_name,last_name,accommodation_type,accommodation_notes
+12345,John,Smith,Simplified Language,Also needs extra time
+12346,Maria,Garcia,"Effort-Focused, Extra Encouragement",Focus on growth
+```
+
+Then use **Import from CSV** in Settings.
+
+#### How It Works
+
+When grading a student with accommodations:
+1. Graider looks up the student's accommodation settings
+2. The accommodation **type** (not student identity) is sent to the AI
+3. AI adjusts feedback tone, structure, and focus accordingly
+4. Student receives personalized feedback matching their needs
+
+#### FERPA Compliance
+
+Accommodation data is fully FERPA compliant:
+- **Local storage only** - Data stays on your computer
+- **No PII to AI** - Only accommodation type sent, never student names
+- **Audit logged** - All access is tracked
+- **Exportable** - Download for backup or transfer
+- **Deletable** - One-click removal of all accommodation data
+
+#### Viewing Accommodated Students in Results
+
+Students with accommodations show a **pink heart icon** (♥) next to their name in the Results tab. Hover over the icon to see their assigned presets.
 
 ---
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -6,12 +6,17 @@ import {
   Bar,
   PieChart,
   Pie,
+  ScatterChart,
+  Scatter,
   Cell,
   XAxis,
   YAxis,
+  ZAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
+  ReferenceLine,
 } from "recharts";
 import Icon from "./components/Icon";
 import * as api from "./services/api";
@@ -283,9 +288,12 @@ function App() {
   const [activeTab, setActiveTab] = useState("grade");
   const [analytics, setAnalytics] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [analyticsPeriod, setAnalyticsPeriod] = useState("all");
+  const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
+  const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
+  const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed"
   const [resultsSort, setResultsSort] = useState({ field: "time", direction: "desc" }); // field: time, name, assignment, score, grade
+  const [skipVerified, setSkipVerified] = useState(false); // Skip verified grades on regrade
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
@@ -322,6 +330,7 @@ function App() {
     responseSections: [],
   });
   const [savedAssignments, setSavedAssignments] = useState([]);
+  const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [gradeAssignment, setGradeAssignment] = useState({
     title: "",
@@ -350,6 +359,7 @@ function App() {
   const [editedResults, setEditedResults] = useState([]);
   const [reviewModal, setReviewModal] = useState({ show: false, index: -1 });
   const [reviewModalTab, setReviewModalTab] = useState("detected"); // "detected" or "raw"
+  const [reviewModalRightTab, setReviewModalRightTab] = useState("edit"); // "edit" or "email"
   const [emailPreview, setEmailPreview] = useState({ show: false, emails: [] });
   const [emailStatus, setEmailStatus] = useState({
     sending: false,
@@ -359,7 +369,6 @@ function App() {
   });
   const [emailApprovals, setEmailApprovals] = useState({}); // { index: 'approved' | 'rejected' | 'pending' }
   const [autoApproveEmails, setAutoApproveEmails] = useState(false);
-  const [viewingEmailIndex, setViewingEmailIndex] = useState(null);
   const [editedEmails, setEditedEmails] = useState({}); // { index: { subject, body } }
   const [resultsSearch, setResultsSearch] = useState("");
 
@@ -391,6 +400,13 @@ function App() {
     show: false,
     roster: null,
   });
+
+  // Accommodation state (IEP/504 support - FERPA compliant)
+  const [accommodationPresets, setAccommodationPresets] = useState([]);
+  const [studentAccommodations, setStudentAccommodations] = useState({});
+  const [accommodationModal, setAccommodationModal] = useState({ show: false, studentId: null });
+  const [selectedAccommodationPresets, setSelectedAccommodationPresets] = useState([]);
+  const [accommodationCustomNotes, setAccommodationCustomNotes] = useState("");
 
   // Rubric state
   const [rubric, setRubric] = useState({
@@ -484,6 +500,21 @@ function App() {
       .listSupportDocuments()
       .then((data) => {
         if (data.documents) setSupportDocs(data.documents);
+      })
+      .catch(console.error);
+
+    // Load accommodation presets and student mappings (FERPA compliant - local only)
+    api
+      .getAccommodationPresets()
+      .then((data) => {
+        if (data.presets) setAccommodationPresets(data.presets);
+      })
+      .catch(console.error);
+
+    api
+      .getStudentAccommodations()
+      .then((data) => {
+        if (data.accommodations) setStudentAccommodations(data.accommodations);
       })
       .catch(console.error);
   }, []);
@@ -589,6 +620,19 @@ function App() {
     }
   }, [activeTab, analyticsPeriod]);
 
+  // Load class period students for analytics filtering
+  useEffect(() => {
+    if (!analyticsClassPeriod) {
+      setAnalyticsClassStudents([]);
+      return;
+    }
+    api.getPeriodStudents(analyticsClassPeriod)
+      .then((data) => {
+        if (data.students) setAnalyticsClassStudents(data.students);
+      })
+      .catch(() => setAnalyticsClassStudents([]));
+  }, [analyticsClassPeriod]);
+
   // Load standards when settings config changes
   useEffect(() => {
     if (activeTab === "planner" && config.subject) {
@@ -648,7 +692,7 @@ function App() {
         const grade = result.letter_grade || "N/A";
         const score = result.score !== undefined ? `${result.score}%` : "";
         addToast(
-          `Graded: ${result.student_name} - ${grade} ${score}`,
+          `Graded - ${result.student_name}: ${grade} ${score}`,
           grade === "A" || grade === "B" ? "success" : grade === "C" ? "info" : "warning"
         );
       });
@@ -733,6 +777,73 @@ function App() {
     return availableFiles.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
   };
 
+  // Check if a student name matches any student in the period roster
+  const studentNameMatchesPeriod = (studentName, students) => {
+    if (!students || students.length === 0) return true;
+    const lowerName = (studentName || "").toLowerCase();
+    return students.some(student => {
+      const first = (student.first || "").toLowerCase().trim();
+      const last = (student.last || "").toLowerCase().trim();
+      // Match "First Last" or "Last, First" patterns
+      return (
+        (first && last && lowerName.includes(first) && lowerName.includes(last)) ||
+        (first && lowerName.startsWith(first + " ")) ||
+        (last && lowerName.endsWith(" " + last))
+      );
+    });
+  };
+
+  // Compute filtered analytics based on class period selection (memoized)
+  const filteredAnalytics = useMemo(() => {
+    if (!analytics || !analyticsClassPeriod || analyticsClassStudents.length === 0) {
+      return analytics;
+    }
+
+    // Filter all_grades by student name
+    const filteredGrades = (analytics.all_grades || []).filter(g =>
+      studentNameMatchesPeriod(g.student_name, analyticsClassStudents)
+    );
+
+    // Filter student_progress by name
+    const filteredProgress = (analytics.student_progress || []).filter(s =>
+      studentNameMatchesPeriod(s.name, analyticsClassStudents)
+    );
+
+    // Recompute class stats from filtered grades
+    const scores = filteredGrades.map(g => g.score);
+    const filteredClassStats = {
+      total_assignments: filteredGrades.length,
+      total_students: filteredProgress.length,
+      class_average: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : 0,
+      highest: scores.length > 0 ? Math.max(...scores) : 0,
+      lowest: scores.length > 0 ? Math.min(...scores) : 0,
+      grade_distribution: {
+        A: scores.filter(s => s >= 90).length,
+        B: scores.filter(s => s >= 80 && s < 90).length,
+        C: scores.filter(s => s >= 70 && s < 80).length,
+        D: scores.filter(s => s >= 60 && s < 70).length,
+        F: scores.filter(s => s < 60).length,
+      }
+    };
+
+    // Filter attention_needed and top_performers
+    const filteredAttention = (analytics.attention_needed || []).filter(s =>
+      studentNameMatchesPeriod(s.name, analyticsClassStudents)
+    );
+    const filteredTop = filteredProgress
+      .sort((a, b) => b.average - a.average)
+      .slice(0, 5);
+
+    return {
+      ...analytics,
+      all_grades: filteredGrades,
+      student_progress: filteredProgress,
+      class_stats: filteredClassStats,
+      attention_needed: filteredAttention,
+      top_performers: filteredTop,
+    };
+  }, [analytics, analyticsClassPeriod, analyticsClassStudents]);
+
   // Grading functions
   const handleStartGrading = async () => {
     try {
@@ -796,6 +907,8 @@ function App() {
         globalAINotes,
         // Pass selected files (null means grade all new files)
         selectedFiles: filesToGrade,
+        // Skip verified grades on regrade (only regrade unverified)
+        skipVerified: skipVerified,
       });
       setStatus((prev) => ({
         ...prev,
@@ -879,7 +992,7 @@ function App() {
         results: [...prev.results, result],
       }));
 
-      addToast(`Graded ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`, "success");
+      addToast(`Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`, "success");
     } catch (error) {
       console.error("Individual grading error:", error);
       alert("Failed to grade: " + error.message);
@@ -982,7 +1095,8 @@ ${signature}`;
           viewMode: "formatted",
         });
         if (!assignment.title) {
-          const title = file.name
+          // Use document title from content (full name) or fallback to filename
+          const title = data.doc_title || file.name
             .replace(/\.(docx|pdf|doc)$/i, "")
             .replace(/_/g, " ");
           setAssignment({ ...assignment, title });
@@ -1706,8 +1820,8 @@ ${signature}`;
                           ) : (
                             <div style={{
                               whiteSpace: "pre-wrap",
-                              fontSize: "0.85rem",
-                              lineHeight: 1.6,
+                              fontSize: "22px",
+                              lineHeight: 1.7,
                               color: "var(--text-secondary)",
                               fontFamily: "monospace",
                             }}>
@@ -1729,79 +1843,222 @@ ${signature}`;
                       overflow: "hidden",
                     }}
                   >
+                    {/* Right Panel Header with Tabs */}
                     <div
                       style={{
                         padding: "16px 20px",
                         borderBottom: "1px solid var(--glass-border)",
                         display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
-                        gap: "10px",
                       }}
                     >
-                      <Icon name="Award" size={18} style={{ color: "var(--accent-primary)" }} />
-                      <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>Grade & Feedback</h3>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          onClick={() => setReviewModalRightTab("edit")}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "8px",
+                            border: "none",
+                            background: reviewModalRightTab === "edit"
+                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                              : "var(--glass-hover)",
+                            color: reviewModalRightTab === "edit" ? "#fff" : "var(--text-secondary)",
+                            fontWeight: 600,
+                            fontSize: "0.85rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <Icon name="Award" size={14} />
+                          Grade & Feedback
+                        </button>
+                        <button
+                          onClick={() => setReviewModalRightTab("email")}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "8px",
+                            border: "none",
+                            background: reviewModalRightTab === "email"
+                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                              : "var(--glass-hover)",
+                            color: reviewModalRightTab === "email" ? "#fff" : "var(--text-secondary)",
+                            fontWeight: 600,
+                            fontSize: "0.85rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <Icon name="Mail" size={14} />
+                          Email Preview
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", gap: "20px", overflow: "auto" }}>
-                      <div>
-                        <label className="label">Score</label>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <input
-                            type="number"
+
+                    {/* Right Panel Content */}
+                    {reviewModalRightTab === "edit" ? (
+                      <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", gap: "20px", overflow: "auto" }}>
+                        <div>
+                          <label className="label">Score</label>
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <input
+                              type="number"
+                              className="input"
+                              value={r.score}
+                              onChange={(e) =>
+                                updateGrade(
+                                  reviewModal.index,
+                                  "score",
+                                  e.target.value,
+                                )
+                              }
+                              style={{ width: "100px" }}
+                            />
+                            <span
+                              style={{
+                                padding: "6px 14px",
+                                borderRadius: "8px",
+                                fontWeight: 700,
+                                fontSize: "0.9rem",
+                                background:
+                                  r.score >= 90
+                                    ? "rgba(74,222,128,0.15)"
+                                    : r.score >= 80
+                                      ? "rgba(96,165,250,0.15)"
+                                      : r.score >= 70
+                                        ? "rgba(251,191,36,0.15)"
+                                        : "rgba(248,113,113,0.15)",
+                                color:
+                                  r.score >= 90
+                                    ? "#4ade80"
+                                    : r.score >= 80
+                                      ? "#60a5fa"
+                                      : r.score >= 70
+                                        ? "#fbbf24"
+                                        : "#f87171",
+                              }}
+                            >
+                              {r.letter_grade}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                            <label className="label" style={{ margin: 0 }}>Feedback</label>
+                            {r.feedback && r.feedback.includes("---") && (
+                              <button
+                                onClick={async () => {
+                                  const parts = r.feedback.split("---");
+                                  if (parts.length >= 2) {
+                                    const englishPart = parts[0].trim();
+                                    try {
+                                      const result = await api.retranslateFeedback(englishPart, r.student_language || "spanish");
+                                      if (result.translation) {
+                                        const newFeedback = englishPart + "\n\n---\n\n" + result.translation;
+                                        updateGrade(reviewModal.index, "feedback", newFeedback);
+                                      } else if (result.error) {
+                                        alert("Translation error: " + result.error);
+                                      }
+                                    } catch (err) {
+                                      alert("Failed to translate: " + err.message);
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  background: "rgba(99,102,241,0.1)",
+                                  border: "1px solid rgba(99,102,241,0.3)",
+                                  borderRadius: "6px",
+                                  padding: "4px 10px",
+                                  fontSize: "0.75rem",
+                                  color: "#6366f1",
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <Icon name="Languages" size={12} />
+                                Re-translate
+                              </button>
+                            )}
+                          </div>
+                          <textarea
                             className="input"
-                            value={r.score}
+                            value={r.feedback}
                             onChange={(e) =>
                               updateGrade(
                                 reviewModal.index,
-                                "score",
+                                "feedback",
                                 e.target.value,
                               )
                             }
-                            style={{ width: "100px" }}
+                            style={{ flex: 1, minHeight: "200px", resize: "none" }}
                           />
-                          <span
-                            style={{
-                              padding: "6px 14px",
-                              borderRadius: "8px",
-                              fontWeight: 700,
-                              fontSize: "0.9rem",
-                              background:
-                                r.score >= 90
-                                  ? "rgba(74,222,128,0.15)"
-                                  : r.score >= 80
-                                    ? "rgba(96,165,250,0.15)"
-                                    : r.score >= 70
-                                      ? "rgba(251,191,36,0.15)"
-                                      : "rgba(248,113,113,0.15)",
-                              color:
-                                r.score >= 90
-                                  ? "#4ade80"
-                                  : r.score >= 80
-                                    ? "#60a5fa"
-                                    : r.score >= 70
-                                      ? "#fbbf24"
-                                      : "#f87171",
-                            }}
-                          >
-                            {r.letter_grade}
-                          </span>
                         </div>
                       </div>
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                        <label className="label">Feedback</label>
-                        <textarea
-                          className="input"
-                          value={r.feedback}
-                          onChange={(e) =>
-                            updateGrade(
-                              reviewModal.index,
-                              "feedback",
-                              e.target.value,
-                            )
-                          }
-                          style={{ flex: 1, minHeight: "200px", resize: "none" }}
-                        />
+                    ) : (
+                      <div style={{ flex: 1, padding: "20px", overflow: "auto" }}>
+                        <div
+                          style={{
+                            background: "#fff",
+                            borderRadius: "12px",
+                            padding: "30px",
+                            color: "#333",
+                            fontFamily: "Georgia, serif",
+                            lineHeight: 1.7,
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                          }}
+                        >
+                          <div style={{ marginBottom: "20px", paddingBottom: "15px", borderBottom: "1px solid #eee" }}>
+                            <div style={{ fontSize: "0.85rem", color: "#666", marginBottom: "4px" }}>To: {r.student_email || r.email || "(no email on file)"}</div>
+                            <div style={{ fontSize: "0.85rem", color: "#666", marginBottom: "4px" }}>Subject: {r.assignment || "Assignment"} - Grade: {r.letter_grade} ({r.score}%)</div>
+                          </div>
+                          <div style={{ marginBottom: "20px" }}>
+                            <p style={{ margin: "0 0 15px 0" }}>Dear {r.first_name || r.student_name?.split(" ")[0] || "Student"},</p>
+                            <p style={{ margin: "0 0 15px 0" }}>
+                              Your assignment <strong>{r.assignment || "Assignment"}</strong> has been graded.
+                            </p>
+                            <div style={{
+                              background: r.score >= 90 ? "#dcfce7" : r.score >= 80 ? "#dbeafe" : r.score >= 70 ? "#fef3c7" : "#fee2e2",
+                              padding: "15px 20px",
+                              borderRadius: "8px",
+                              marginBottom: "20px",
+                              textAlign: "center",
+                            }}>
+                              <div style={{ fontSize: "2rem", fontWeight: 700, color: r.score >= 90 ? "#16a34a" : r.score >= 80 ? "#2563eb" : r.score >= 70 ? "#d97706" : "#dc2626" }}>
+                                {r.letter_grade}
+                              </div>
+                              <div style={{ fontSize: "1rem", color: "#666" }}>{r.score} / 100</div>
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: "20px" }}>
+                            <h4 style={{ margin: "0 0 10px 0", fontSize: "1rem", color: "#333" }}>Feedback:</h4>
+                            <div style={{ whiteSpace: "pre-wrap", color: "#444" }}>
+                              {r.feedback || "(No feedback provided)"}
+                            </div>
+                          </div>
+                          <p style={{ margin: "20px 0 0 0", color: "#666", fontSize: "0.9rem" }}>
+                            If you have any questions about your grade, please see me during class or office hours.
+                          </p>
+                          <p style={{ margin: "15px 0 0 0", color: "#666" }}>
+                            Best regards,<br />
+                            <strong>{config.teacher_name || "Your Teacher"}</strong><br />
+                            {config.subject && <span>{config.subject}<br /></span>}
+                            {config.school_name && <span>{config.school_name}</span>}
+                          </p>
+                        </div>
+                        <p style={{ marginTop: "15px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center" }}>
+                          <Icon name="Info" size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                          Editing feedback in "Grade & Feedback" tab updates this preview automatically
+                        </p>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
@@ -2291,9 +2548,14 @@ ${signature}`;
                   fontSize: "0.75rem",
                   color: "var(--text-muted)",
                   textAlign: "center",
+                  lineHeight: "1.4",
                 }}
               >
                 AI-Powered Teaching Assistant
+                <br />
+                Made for Educators by Educators with ❤️
+                <br />
+                Powered by ChatGPT 4o
               </div>
             </div>
           )}
@@ -2604,6 +2866,44 @@ ${signature}`;
                           ✓ Filtering to {periodStudents.length} students in {periods.find(p => p.filename === selectedPeriod)?.period_name}
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {/* Skip Verified Toggle - Show when there are unverified results */}
+                  {status.results && status.results.some(r => r.marker_status === "unverified") && (
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.05))",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(251, 191, 36, 0.3)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={skipVerified}
+                          onChange={(e) => setSkipVerified(e.target.checked)}
+                          style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                        />
+                        <div>
+                          <span style={{ fontWeight: 600, color: "#fbbf24" }}>
+                            Skip Verified Grades (Regrade Only Unverified)
+                          </span>
+                          <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
+                            {status.results.filter(r => r.marker_status === "unverified").length} unverified assignments will be regraded.
+                            {status.results.filter(r => r.marker_status === "verified").length} verified grades will be kept.
+                          </p>
+                        </div>
+                      </label>
                     </div>
                   )}
 
@@ -2947,223 +3247,6 @@ ${signature}`;
                         )}
                       </div>
 
-                      {/* Markers Section */}
-                      <div style={{
-                        padding: "20px",
-                        borderRadius: "16px",
-                        background: "var(--glass-bg)",
-                        border: "1px solid var(--glass-border)",
-                        marginBottom: "20px",
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "15px" }}>
-                          <div style={{
-                            width: "36px",
-                            height: "36px",
-                            borderRadius: "10px",
-                            background: "rgba(99,102,241,0.15)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}>
-                            <Icon name="Target" size={18} style={{ color: "#6366f1" }} />
-                          </div>
-                          <div>
-                            <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "2px" }}>Answer Markers</h4>
-                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: 0 }}>
-                              Phrases that indicate where student answers begin
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Manual Marker Input */}
-                        <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
-                          <input
-                            type="text"
-                            id="gradeMarkerInput"
-                            placeholder="Add a marker phrase (e.g., 'Answer:', 'Response:')"
-                            className="input"
-                            style={{ flex: 1 }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && e.target.value.trim()) {
-                                const newMarker = e.target.value.trim();
-                                if (!gradeAssignment.customMarkers.includes(newMarker)) {
-                                  setGradeAssignment({
-                                    ...gradeAssignment,
-                                    customMarkers: [...gradeAssignment.customMarkers, newMarker],
-                                  });
-                                }
-                                e.target.value = "";
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => {
-                              const input = document.getElementById("gradeMarkerInput");
-                              if (input?.value.trim()) {
-                                const newMarker = input.value.trim();
-                                if (!gradeAssignment.customMarkers.includes(newMarker)) {
-                                  setGradeAssignment({
-                                    ...gradeAssignment,
-                                    customMarkers: [...gradeAssignment.customMarkers, newMarker],
-                                  });
-                                }
-                                input.value = "";
-                              }
-                            }}
-                            style={{
-                              padding: "10px 16px",
-                              borderRadius: "10px",
-                              border: "none",
-                              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                              color: "#fff",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              fontWeight: 500,
-                              fontSize: "0.85rem",
-                            }}
-                          >
-                            <Icon name="Plus" size={16} />
-                            Add
-                          </button>
-                        </div>
-
-                        {/* Custom Markers */}
-                        {gradeAssignment.customMarkers.length > 0 && (
-                          <div
-                            style={{
-                              marginTop: "15px",
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "8px",
-                            }}
-                          >
-                            {gradeAssignment.customMarkers.map((marker, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  padding: "6px 12px",
-                                  background: "rgba(251,191,36,0.2)",
-                                  borderRadius: "6px",
-                                  border: "1px solid rgba(251,191,36,0.3)",
-                                }}
-                              >
-                                <Icon
-                                  name="Target"
-                                  size={12}
-                                  style={{ color: "#fbbf24" }}
-                                />
-                                <span
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    maxWidth: "200px",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {marker}
-                                </span>
-                                <button
-                                  onClick={() =>
-                                    setGradeAssignment({
-                                      ...gradeAssignment,
-                                      customMarkers:
-                                        gradeAssignment.customMarkers.filter(
-                                          (m) => m !== marker,
-                                        ),
-                                    })
-                                  }
-                                  style={{
-                                    background: "none",
-                                    border: "none",
-                                    color: "var(--text-muted)",
-                                    cursor: "pointer",
-                                    padding: "0",
-                                  }}
-                                >
-                                  <Icon name="X" size={12} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Marker Library */}
-                      <div
-                        style={{
-                          marginBottom: "20px",
-                          padding: "15px 20px",
-                          background: "rgba(99,102,241,0.1)",
-                          borderRadius: "12px",
-                          border: "1px solid rgba(99,102,241,0.2)",
-                        }}
-                      >
-                        <label
-                          style={{
-                            display: "block",
-                            fontSize: "0.9rem",
-                            fontWeight: 600,
-                            marginBottom: "10px",
-                          }}
-                        >
-                          <Icon
-                            name="Bookmark"
-                            size={16}
-                            style={{ marginRight: "8px" }}
-                          />
-                          Suggested Markers for{" "}
-                          {config.subject || "Social Studies"}
-                        </label>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "8px",
-                          }}
-                        >
-                          {(
-                            markerLibrary[config.subject] ||
-                            markerLibrary["Social Studies"] ||
-                            []
-                          ).map((marker, i) => (
-                            <span
-                              key={i}
-                              style={{
-                                padding: "6px 12px",
-                                background: "var(--btn-secondary-bg)",
-                                borderRadius: "6px",
-                                fontSize: "0.85rem",
-                                cursor: "pointer",
-                              }}
-                              onClick={() => {
-                                if (
-                                  !gradeAssignment.customMarkers.includes(
-                                    marker,
-                                  )
-                                ) {
-                                  setGradeAssignment({
-                                    ...gradeAssignment,
-                                    customMarkers: [
-                                      ...gradeAssignment.customMarkers,
-                                      marker,
-                                    ],
-                                  });
-                                }
-                              }}
-                              title="Click to add"
-                            >
-                              {marker}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
                       {/* Grading Notes */}
                       <div>
                         <label className="label">
@@ -3452,8 +3535,7 @@ ${signature}`;
                 className="fade-in"
                 style={{
                   display: "grid",
-                  gridTemplateColumns:
-                    viewingEmailIndex !== null ? "1fr 1fr" : "1fr",
+                  gridTemplateColumns: "1fr",
                   gap: "20px",
                 }}
               >
@@ -3518,6 +3600,8 @@ ${signature}`;
                           <option value="all">All Results</option>
                           <option value="handwritten">Handwritten Only</option>
                           <option value="typed">Typed Only</option>
+                          <option value="verified">Verified Only</option>
+                          <option value="unverified">Unverified Only</option>
                         </select>
                         <button
                           onClick={openResults}
@@ -3853,6 +3937,9 @@ ${signature}`;
                               // Apply handwritten/typed filter
                               if (resultsFilter === "handwritten" && !r.is_handwritten) return false;
                               if (resultsFilter === "typed" && r.is_handwritten) return false;
+                              // Apply verified/unverified filter
+                              if (resultsFilter === "verified" && r.marker_status !== "verified") return false;
+                              if (resultsFilter === "unverified" && r.marker_status !== "unverified") return false;
                               // Apply search filter
                               if (!resultsSearch.trim()) return true;
                               const search = resultsSearch.toLowerCase();
@@ -3901,21 +3988,10 @@ ${signature}`;
                                 <tr
                                   key={r.filename || i}
                                   style={{
-                                    background:
-                                      viewingEmailIndex === originalIndex
-                                        ? "rgba(99,102,241,0.2)"
-                                        : r.edited
-                                          ? "rgba(251,191,36,0.1)"
-                                          : "transparent",
-                                    cursor: "pointer",
+                                    background: r.edited
+                                      ? "rgba(251,191,36,0.1)"
+                                      : "transparent",
                                   }}
-                                  onClick={() =>
-                                    setViewingEmailIndex(
-                                      viewingEmailIndex === originalIndex
-                                        ? null
-                                        : originalIndex,
-                                    )
-                                  }
                                 >
                                   <td>
                                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -3935,6 +4011,42 @@ ${signature}`;
                                           }}
                                         >
                                           <Icon name="PenTool" size={12} />
+                                        </span>
+                                      )}
+                                      {r.marker_status === "unverified" && (
+                                        <span
+                                          title="UNVERIFIED: No markers or config found. Grade may be inaccurate. Set up assignment config and regrade."
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            width: "20px",
+                                            height: "20px",
+                                            borderRadius: "4px",
+                                            background: "rgba(251, 191, 36, 0.2)",
+                                            color: "#fbbf24",
+                                            cursor: "help",
+                                          }}
+                                        >
+                                          <Icon name="AlertTriangle" size={12} />
+                                        </span>
+                                      )}
+                                      {r.student_id && studentAccommodations[r.student_id] && (
+                                        <span
+                                          title={"Accommodations: " + (studentAccommodations[r.student_id]?.presets?.map(p => p.name).join(", ") || "Custom")}
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            width: "20px",
+                                            height: "20px",
+                                            borderRadius: "4px",
+                                            background: "rgba(244, 114, 182, 0.15)",
+                                            color: "#f472b6",
+                                            cursor: "help",
+                                          }}
+                                        >
+                                          <Icon name="Heart" size={12} />
                                         </span>
                                       )}
                                     </div>
@@ -4246,376 +4358,6 @@ ${signature}`;
                 </div>
               </div>
             )}
-
-            {/* Email Preview Modal */}
-            {viewingEmailIndex !== null &&
-              status.results[viewingEmailIndex] && (
-                <div
-                  style={{
-                    position: "fixed",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: "var(--modal-bg)",
-                    zIndex: 1000,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "20px",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "var(--modal-content-bg)",
-                      borderRadius: "20px",
-                      border: "1px solid var(--glass-border)",
-                      width: "100%",
-                      maxWidth: "800px",
-                      maxHeight: "90vh",
-                      overflow: "hidden",
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                  >
-                    {/* Modal Header */}
-                    <div
-                      style={{
-                        padding: "20px 25px",
-                        borderBottom: "1px solid var(--glass-border)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <h3
-                        style={{
-                          fontSize: "1.2rem",
-                          fontWeight: 700,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                          margin: 0,
-                        }}
-                      >
-                        <Icon name="Mail" size={24} />
-                        Email Preview -{" "}
-                        {status.results[viewingEmailIndex].student_name}
-                      </h3>
-                      <button
-                        onClick={() => setViewingEmailIndex(null)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--text-secondary)",
-                          cursor: "pointer",
-                          padding: "5px",
-                        }}
-                      >
-                        <Icon name="X" size={24} />
-                      </button>
-                    </div>
-
-                    {/* Modal Body */}
-                    <div
-                      style={{ padding: "25px", overflowY: "auto", flex: 1 }}
-                    >
-                      {/* Authenticity Check Alert */}
-                      {(() => {
-                        const auth = getAuthenticityStatus(status.results[viewingEmailIndex]);
-                        const hasAIConcern = auth.ai.flag === "likely" || auth.ai.flag === "possible";
-                        const hasPlagConcern = auth.plag.flag === "likely" || auth.plag.flag === "possible";
-
-                        if (!hasAIConcern && !hasPlagConcern) return null;
-
-                        return (
-                          <div
-                            style={{
-                              marginBottom: "20px",
-                              padding: "15px",
-                              borderRadius: "10px",
-                              background: "rgba(248,113,113,0.1)",
-                              border: "1px solid rgba(248,113,113,0.3)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                marginBottom: "12px",
-                              }}
-                            >
-                              <Icon name="Shield" size={20} style={{ color: "#f87171" }} />
-                              <span style={{ fontWeight: 700, color: "#f87171" }}>
-                                Authenticity Alert
-                              </span>
-                            </div>
-
-                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                              {/* AI Detection */}
-                              {hasAIConcern && (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "10px",
-                                    padding: "10px",
-                                    borderRadius: "8px",
-                                    background: auth.ai.flag === "likely" ? "rgba(248,113,113,0.15)" : "rgba(251,191,36,0.15)",
-                                  }}
-                                >
-                                  <Icon
-                                    name="Bot"
-                                    size={16}
-                                    style={{
-                                      color: auth.ai.flag === "likely" ? "#f87171" : "#fbbf24",
-                                      marginTop: "2px",
-                                    }}
-                                  />
-                                  <div>
-                                    <div style={{ fontWeight: 600, color: auth.ai.flag === "likely" ? "#f87171" : "#fbbf24", marginBottom: "4px" }}>
-                                      AI Generated: {auth.ai.flag} {auth.ai.confidence > 0 && `(${auth.ai.confidence}% confidence)`}
-                                    </div>
-                                    {auth.ai.reason && (
-                                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>
-                                        {auth.ai.reason}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Plagiarism Detection */}
-                              {hasPlagConcern && (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "10px",
-                                    padding: "10px",
-                                    borderRadius: "8px",
-                                    background: auth.plag.flag === "likely" ? "rgba(248,113,113,0.15)" : "rgba(251,191,36,0.15)",
-                                  }}
-                                >
-                                  <Icon
-                                    name="Copy"
-                                    size={16}
-                                    style={{
-                                      color: auth.plag.flag === "likely" ? "#f87171" : "#fbbf24",
-                                      marginTop: "2px",
-                                    }}
-                                  />
-                                  <div>
-                                    <div style={{ fontWeight: 600, color: auth.plag.flag === "likely" ? "#f87171" : "#fbbf24", marginBottom: "4px" }}>
-                                      Plagiarism: {auth.plag.flag}
-                                    </div>
-                                    {auth.plag.reason && (
-                                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>
-                                        {auth.plag.reason}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <p
-                              style={{
-                                fontSize: "0.85rem",
-                                color: "var(--text-muted)",
-                                margin: "12px 0 0 0",
-                                fontStyle: "italic",
-                              }}
-                            >
-                              Please review the student's work before sending the email.
-                            </p>
-                          </div>
-                        );
-                      })()}
-
-                      <div style={{ marginBottom: "20px" }}>
-                        <div
-                          style={{
-                            fontSize: "0.9rem",
-                            color: "var(--text-secondary)",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          To:
-                        </div>
-                        <div style={{ fontWeight: 600, fontSize: "1.05rem" }}>
-                          {status.results[viewingEmailIndex].email ||
-                            "No email on file"}
-                        </div>
-                      </div>
-
-                      <div style={{ marginBottom: "20px" }}>
-                        <div
-                          style={{
-                            fontSize: "0.9rem",
-                            color: "var(--text-secondary)",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          Subject:
-                        </div>
-                        <input
-                          type="text"
-                          className="input"
-                          value={
-                            editedEmails[viewingEmailIndex]?.subject ??
-                            `Grade Report: ${status.results[viewingEmailIndex].assignment}`
-                          }
-                          onChange={(e) =>
-                            setEditedEmails((prev) => ({
-                              ...prev,
-                              [viewingEmailIndex]: {
-                                ...prev[viewingEmailIndex],
-                                subject: e.target.value,
-                                body:
-                                  prev[viewingEmailIndex]?.body ??
-                                  getDefaultEmailBody(viewingEmailIndex),
-                              },
-                            }))
-                          }
-                          style={{ fontWeight: 600, fontSize: "1.05rem" }}
-                        />
-                      </div>
-
-                      <div style={{ marginBottom: "20px" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: "0.9rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Message:
-                          </div>
-                          {editedEmails[viewingEmailIndex] && (
-                            <button
-                              onClick={() =>
-                                setEditedEmails((prev) => {
-                                  const updated = { ...prev };
-                                  delete updated[viewingEmailIndex];
-                                  return updated;
-                                })
-                              }
-                              style={{
-                                background: "none",
-                                border: "none",
-                                color: "#a5b4fc",
-                                fontSize: "0.85rem",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                              }}
-                            >
-                              <Icon name="RotateCcw" size={14} />
-                              Reset to Default
-                            </button>
-                          )}
-                        </div>
-                        <textarea
-                          className="input"
-                          value={
-                            editedEmails[viewingEmailIndex]?.body ??
-                            getDefaultEmailBody(viewingEmailIndex)
-                          }
-                          onChange={(e) =>
-                            setEditedEmails((prev) => ({
-                              ...prev,
-                              [viewingEmailIndex]: {
-                                ...prev[viewingEmailIndex],
-                                subject:
-                                  prev[viewingEmailIndex]?.subject ??
-                                  `Grade Report: ${status.results[viewingEmailIndex].assignment}`,
-                                body: e.target.value,
-                              },
-                            }))
-                          }
-                          style={{
-                            minHeight: "400px",
-                            fontSize: "1rem",
-                            lineHeight: "1.7",
-                            fontFamily: "monospace",
-                            resize: "vertical",
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Modal Footer */}
-                    {!autoApproveEmails && (
-                      <div
-                        style={{
-                          padding: "20px 25px",
-                          borderTop: "1px solid var(--glass-border)",
-                          display: "flex",
-                          gap: "15px",
-                          justifyContent: "flex-end",
-                        }}
-                      >
-                        <button
-                          onClick={() => setViewingEmailIndex(null)}
-                          className="btn btn-secondary"
-                        >
-                          Close
-                        </button>
-                        <button
-                          onClick={() =>
-                            setEmailApprovals((prev) => ({
-                              ...prev,
-                              [viewingEmailIndex]: "rejected",
-                            }))
-                          }
-                          className="btn btn-secondary"
-                          style={{
-                            background:
-                              emailApprovals[viewingEmailIndex] === "rejected"
-                                ? "rgba(239,68,68,0.3)"
-                                : undefined,
-                          }}
-                        >
-                          <Icon name="X" size={18} />
-                          {emailApprovals[viewingEmailIndex] === "rejected"
-                            ? "Rejected"
-                            : "Reject"}
-                        </button>
-                        <button
-                          onClick={() =>
-                            setEmailApprovals((prev) => ({
-                              ...prev,
-                              [viewingEmailIndex]: "approved",
-                            }))
-                          }
-                          className="btn btn-primary"
-                          style={{
-                            background:
-                              emailApprovals[viewingEmailIndex] === "approved"
-                                ? "#059669"
-                                : undefined,
-                          }}
-                        >
-                          <Icon name="Check" size={18} />
-                          {emailApprovals[viewingEmailIndex] === "approved"
-                            ? "Approved"
-                            : "Approve"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
             {/* Settings Tab */}
             {activeTab === "settings" && (
@@ -5610,6 +5352,286 @@ ${signature}`;
                     )}
                   </div>
 
+                  {/* IEP/504 Accommodations Section */}
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--glass-border)",
+                      paddingTop: "25px",
+                      marginTop: "25px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
+                    >
+                      <Icon
+                        name="Heart"
+                        size={20}
+                        style={{ color: "#f472b6" }}
+                      />
+                      IEP/504 Accommodations
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          padding: "2px 8px",
+                          background: "rgba(74, 222, 128, 0.2)",
+                          color: "#4ade80",
+                          borderRadius: "4px",
+                          fontWeight: 500,
+                        }}
+                      >
+                        FERPA Compliant
+                      </span>
+                    </h3>
+                    <p
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "var(--text-secondary)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      Assign accommodation presets to students for personalized feedback.
+                      Only accommodation types are sent to AI - never student names or IDs.
+                    </p>
+
+                    {/* Available Presets */}
+                    <div style={{ marginBottom: "20px" }}>
+                      <div style={{ fontWeight: 600, marginBottom: "12px", fontSize: "0.95rem" }}>
+                        Available Presets
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                          gap: "10px",
+                        }}
+                      >
+                        {accommodationPresets.map((preset) => (
+                          <div
+                            key={preset.id}
+                            style={{
+                              padding: "12px",
+                              background: "var(--input-bg)",
+                              borderRadius: "8px",
+                              border: "1px solid var(--input-border)",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                              <Icon name={preset.icon || "FileText"} size={16} style={{ color: "#f472b6" }} />
+                              <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{preset.name}</span>
+                            </div>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: 0 }}>
+                              {preset.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Student Accommodations List */}
+                    <div style={{ marginBottom: "20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                          Student Accommodations ({Object.keys(studentAccommodations).length} students)
+                        </div>
+                        <button
+                          onClick={() => setAccommodationModal({ show: true, studentId: null })}
+                          className="btn btn-primary"
+                          style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                        >
+                          <Icon name="Plus" size={14} />
+                          Add Student
+                        </button>
+                      </div>
+
+                      {Object.keys(studentAccommodations).length > 0 ? (
+                        <div
+                          style={{
+                            maxHeight: "200px",
+                            overflowY: "auto",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                          }}
+                        >
+                          {Object.entries(studentAccommodations).map(([studentId, data]) => (
+                            <div
+                              key={studentId}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "10px 14px",
+                                background: "var(--input-bg)",
+                                borderRadius: "8px",
+                                border: "1px solid var(--input-border)",
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                                  Student ID: {studentId.length > 20 ? studentId.slice(0, 20) + "..." : studentId}
+                                </div>
+                                <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap" }}>
+                                  {data.presets.map((preset) => (
+                                    <span
+                                      key={preset.id}
+                                      style={{
+                                        padding: "2px 8px",
+                                        background: "rgba(244, 114, 182, 0.15)",
+                                        color: "#f472b6",
+                                        borderRadius: "4px",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      {preset.name}
+                                    </span>
+                                  ))}
+                                  {data.custom_notes && (
+                                    <span
+                                      style={{
+                                        padding: "2px 8px",
+                                        background: "rgba(99, 102, 241, 0.15)",
+                                        color: "#818cf8",
+                                        borderRadius: "4px",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      Custom Notes
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedAccommodationPresets(data.presets.map(p => p.id));
+                                    setAccommodationCustomNotes(data.custom_notes || "");
+                                    setAccommodationModal({ show: true, studentId });
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ padding: "4px 8px" }}
+                                >
+                                  <Icon name="Edit2" size={14} />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm("Remove accommodations for this student?")) {
+                                      try {
+                                        await api.deleteStudentAccommodation(studentId);
+                                        const newData = { ...studentAccommodations };
+                                        delete newData[studentId];
+                                        setStudentAccommodations(newData);
+                                      } catch (err) {
+                                        alert("Error removing accommodation: " + err.message);
+                                      }
+                                    }
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ padding: "4px 8px", color: "#ef4444" }}
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            padding: "30px",
+                            textAlign: "center",
+                            background: "var(--input-bg)",
+                            borderRadius: "8px",
+                            border: "1px dashed var(--input-border)",
+                          }}
+                        >
+                          <Icon name="Heart" size={32} style={{ color: "var(--text-muted)", marginBottom: "10px" }} />
+                          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
+                            No students with accommodations yet. Add students from your roster.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Import/Export */}
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "var(--input-bg)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--input-border)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: "12px" }}>Import & Export</div>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <label className="btn btn-secondary" style={{ fontSize: "0.85rem", cursor: "pointer" }}>
+                          <Icon name="Upload" size={16} />
+                          Import from CSV
+                          <input
+                            type="file"
+                            accept=".csv"
+                            style={{ display: "none" }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const result = await api.importAccommodations(
+                                  file,
+                                  "student_id",
+                                  "accommodation_type",
+                                  "accommodation_notes"
+                                );
+                                alert(
+                                  "Import Complete" + String.fromCharCode(10) + String.fromCharCode(10) +
+                                  "Imported: " + result.imported + String.fromCharCode(10) +
+                                  "Skipped: " + result.skipped
+                                );
+                                // Reload accommodations
+                                const data = await api.getStudentAccommodations();
+                                if (data.accommodations) setStudentAccommodations(data.accommodations);
+                              } catch (err) {
+                                alert("Import failed: " + err.message);
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const data = await api.exportAccommodations();
+                              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = "graider_accommodations_" + new Date().toISOString().split("T")[0] + ".json";
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            } catch (err) {
+                              alert("Export failed: " + err.message);
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          <Icon name="Download" size={16} />
+                          Export Accommodations
+                        </button>
+                      </div>
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "10px" }}>
+                        CSV should have columns: student_id, accommodation_type, accommodation_notes (optional)
+                      </p>
+                    </div>
+                  </div>
+
                   {/* FERPA Compliance & Data Privacy */}
                   <div
                     style={{
@@ -6177,40 +6199,254 @@ ${signature}`;
               </div>
             )}
 
-            {/* Builder Tab */}
-            {activeTab === "builder" && (
-              <div className="fade-in">
-                {/* Saved Assignments */}
+            {/* Accommodation Assignment Modal */}
+            {accommodationModal.show && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "var(--modal-bg)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 1000,
+                }}
+              >
                 <div
                   className="glass-card"
-                  style={{ padding: "25px", marginBottom: "20px" }}
+                  style={{
+                    width: "90%",
+                    maxWidth: "500px",
+                    maxHeight: "80vh",
+                    overflow: "auto",
+                    padding: "25px",
+                  }}
                 >
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      marginBottom: "15px",
+                      marginBottom: "20px",
                     }}
+                  >
+                    <h3 style={{ fontSize: "1.2rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Icon name="Heart" size={22} style={{ color: "#f472b6" }} />
+                      {accommodationModal.studentId ? "Edit Accommodations" : "Add Student Accommodations"}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setAccommodationModal({ show: false, studentId: null });
+                        setSelectedAccommodationPresets([]);
+                        setAccommodationCustomNotes("");
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-primary)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Icon name="X" size={24} />
+                    </button>
+                  </div>
+
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--text-secondary)",
+                      marginBottom: "20px",
+                      padding: "10px",
+                      background: "rgba(74, 222, 128, 0.1)",
+                      borderRadius: "8px",
+                      border: "1px solid rgba(74, 222, 128, 0.2)",
+                    }}
+                  >
+                    <Icon name="Shield" size={14} style={{ color: "#4ade80", marginRight: "6px" }} />
+                    FERPA Compliant: Only accommodation types are sent to AI, never student names or IDs.
+                  </p>
+
+                  {/* Student ID Input (for new students) */}
+                  {!accommodationModal.studentId && (
+                    <div style={{ marginBottom: "20px" }}>
+                      <label className="label">Student ID</label>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Enter student ID from roster..."
+                        id="accommodation-student-id"
+                      />
+                    </div>
+                  )}
+
+                  {/* Preset Selection */}
+                  <div style={{ marginBottom: "20px" }}>
+                    <label className="label">Select Accommodation Presets</label>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        maxHeight: "200px",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {accommodationPresets.map((preset) => (
+                        <label
+                          key={preset.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: "10px",
+                            padding: "10px",
+                            background: selectedAccommodationPresets.includes(preset.id)
+                              ? "rgba(244, 114, 182, 0.15)"
+                              : "var(--input-bg)",
+                            borderRadius: "8px",
+                            border: selectedAccommodationPresets.includes(preset.id)
+                              ? "1px solid rgba(244, 114, 182, 0.4)"
+                              : "1px solid var(--input-border)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAccommodationPresets.includes(preset.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedAccommodationPresets([...selectedAccommodationPresets, preset.id]);
+                              } else {
+                                setSelectedAccommodationPresets(selectedAccommodationPresets.filter(id => id !== preset.id));
+                              }
+                            }}
+                            style={{ marginTop: "2px" }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <Icon name={preset.icon || "FileText"} size={14} style={{ color: "#f472b6" }} />
+                              {preset.name}
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                              {preset.description}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Notes */}
+                  <div style={{ marginBottom: "20px" }}>
+                    <label className="label">Additional Notes (Optional)</label>
+                    <textarea
+                      className="input"
+                      value={accommodationCustomNotes}
+                      onChange={(e) => setAccommodationCustomNotes(e.target.value)}
+                      placeholder="Any additional accommodation instructions..."
+                      style={{ minHeight: "80px", resize: "vertical" }}
+                    />
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "6px" }}>
+                      These notes will be included in AI grading instructions (without student identity).
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={async () => {
+                        const studentId = accommodationModal.studentId ||
+                          document.getElementById("accommodation-student-id")?.value;
+
+                        if (!studentId) {
+                          alert("Please enter a student ID");
+                          return;
+                        }
+
+                        if (selectedAccommodationPresets.length === 0 && !accommodationCustomNotes) {
+                          alert("Please select at least one preset or add custom notes");
+                          return;
+                        }
+
+                        try {
+                          await api.setStudentAccommodation(
+                            studentId,
+                            selectedAccommodationPresets,
+                            accommodationCustomNotes
+                          );
+
+                          // Reload accommodations
+                          const data = await api.getStudentAccommodations();
+                          if (data.accommodations) setStudentAccommodations(data.accommodations);
+
+                          setAccommodationModal({ show: false, studentId: null });
+                          setSelectedAccommodationPresets([]);
+                          setAccommodationCustomNotes("");
+                        } catch (err) {
+                          alert("Error saving accommodation: " + err.message);
+                        }
+                      }}
+                      className="btn btn-primary"
+                    >
+                      <Icon name="Save" size={18} />
+                      Save Accommodations
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAccommodationModal({ show: false, studentId: null });
+                        setSelectedAccommodationPresets([]);
+                        setAccommodationCustomNotes("");
+                      }}
+                      className="btn btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Builder Tab */}
+            {activeTab === "builder" && (
+              <div className="fade-in">
+                {/* Saved Assignments - Collapsible */}
+                <div
+                  className="glass-card"
+                  style={{ padding: "15px 20px", marginBottom: "20px" }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setSavedAssignmentsExpanded(!savedAssignmentsExpanded)}
                   >
                     <h3
                       style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
+                        fontSize: "1rem",
+                        fontWeight: 600,
                         display: "flex",
                         alignItems: "center",
                         gap: "10px",
+                        margin: 0,
                       }}
                     >
                       <Icon
+                        name={savedAssignmentsExpanded ? "ChevronDown" : "ChevronRight"}
+                        size={18}
+                        style={{ color: "var(--text-secondary)" }}
+                      />
+                      <Icon
                         name="FolderOpen"
-                        size={20}
+                        size={18}
                         style={{ color: "#10b981" }}
                       />
                       Saved Assignments ({savedAssignments.length})
                     </h3>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setAssignment({
                           title: "",
                           subject: "Social Studies",
@@ -6230,100 +6466,92 @@ ${signature}`;
                         setLoadedAssignmentName("");
                       }}
                       className="btn btn-primary"
+                      style={{ padding: "6px 12px", fontSize: "0.85rem" }}
                     >
-                      + New Assignment
+                      + New
                     </button>
                   </div>
 
-                  {savedAssignments.length === 0 ? (
-                    <p
-                      style={{
-                        textAlign: "center",
-                        padding: "30px",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      No saved assignments yet. Create one below!
-                    </p>
-                  ) : (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(280px, 1fr))",
-                        gap: "12px",
-                      }}
-                    >
-                      {savedAssignments.map((name) => (
-                        <div
-                          key={name}
+                  {savedAssignmentsExpanded && (
+                    <>
+                      {savedAssignments.length === 0 ? (
+                        <p
                           style={{
-                            padding: "15px",
-                            background:
-                              loadedAssignmentName === name
-                                ? "rgba(99,102,241,0.2)"
-                                : "var(--input-bg)",
-                            borderRadius: "12px",
-                            border:
-                              loadedAssignmentName === name
-                                ? "2px solid rgba(99,102,241,0.5)"
-                                : "1px solid var(--glass-border)",
-                            cursor: "pointer",
+                            textAlign: "center",
+                            padding: "20px",
+                            color: "var(--text-muted)",
+                            margin: 0,
                           }}
-                          onClick={() => loadAssignment(name)}
                         >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "flex-start",
-                            }}
-                          >
-                            <div>
+                          No saved assignments yet. Create one below!
+                        </p>
+                      ) : (
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fill, minmax(250px, 1fr))",
+                            gap: "10px",
+                            marginTop: "15px",
+                          }}
+                        >
+                          {savedAssignments.map((name) => (
+                            <div
+                              key={name}
+                              style={{
+                                padding: "12px 15px",
+                                background:
+                                  loadedAssignmentName === name
+                                    ? "rgba(99,102,241,0.2)"
+                                    : "var(--input-bg)",
+                                borderRadius: "10px",
+                                border:
+                                  loadedAssignmentName === name
+                                    ? "2px solid rgba(99,102,241,0.5)"
+                                    : "1px solid var(--glass-border)",
+                                cursor: "pointer",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                              }}
+                              onClick={() => loadAssignment(name)}
+                            >
                               <div
                                 style={{
-                                  fontWeight: 600,
-                                  marginBottom: "5px",
+                                  fontWeight: 500,
                                   display: "flex",
                                   alignItems: "center",
                                   gap: "8px",
+                                  fontSize: "0.9rem",
                                 }}
                               >
                                 <Icon
                                   name="FileText"
-                                  size={16}
+                                  size={14}
                                   style={{ color: "#a5b4fc" }}
                                 />
                                 {name}
                               </div>
-                              <div
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteAssignment(name);
+                                }}
                                 style={{
-                                  fontSize: "0.8rem",
-                                  color: "var(--text-secondary)",
+                                  padding: "4px",
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
                                 }}
                               >
-                                Click to load and edit
-                              </div>
+                                <Icon name="Trash2" size={14} />
+                              </button>
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteAssignment(name);
-                              }}
-                              style={{
-                                padding: "4px",
-                                background: "none",
-                                border: "none",
-                                color: "var(--text-muted)",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <Icon name="Trash2" size={14} />
-                            </button>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -6940,7 +7168,7 @@ ${signature}`;
             {/* Analytics Tab */}
             {activeTab === "analytics" && (
               <div className="fade-in">
-                {!analytics || analytics.error ? (
+                {!filteredAnalytics || filteredAnalytics.error ? (
                   <div
                     className="glass-card"
                     style={{ padding: "60px", textAlign: "center" }}
@@ -6985,30 +7213,85 @@ ${signature}`;
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: "10px",
+                          gap: "15px",
                         }}
                       >
-                        <label
-                          style={{
-                            fontSize: "0.9rem",
-                            color: "var(--text-secondary)",
+                        {/* Class Period Filter */}
+                        {periods.length > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <label
+                              style={{
+                                fontSize: "0.9rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Class:
+                            </label>
+                            <select
+                              value={analyticsClassPeriod}
+                              onChange={(e) => setAnalyticsClassPeriod(e.target.value)}
+                              className="input"
+                              style={{ width: "auto" }}
+                            >
+                              <option value="">All Classes</option>
+                              {periods.map((p) => (
+                                <option key={p.filename} value={p.filename}>
+                                  {p.period_name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {/* Quarter Filter */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <label
+                            style={{
+                              fontSize: "0.9rem",
+                              color: "var(--text-secondary)",
+                            }}
+                          >
+                            Quarter:
+                          </label>
+                          <select
+                            value={analyticsPeriod}
+                            onChange={(e) => setAnalyticsPeriod(e.target.value)}
+                            className="input"
+                            style={{ width: "auto" }}
+                          >
+                            <option value="all">All Quarters</option>
+                            {(filteredAnalytics.available_periods || []).map((p) => (
+                              <option key={p} value={p}>
+                                {p}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {/* Export District Report Button */}
+                        <button
+                          className="btn btn-secondary"
+                          onClick={async () => {
+                            try {
+                              const report = await api.exportDistrictReport();
+                              if (report.error) {
+                                alert(report.error);
+                                return;
+                              }
+                              const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `district_report_${new Date().toISOString().split("T")[0]}.json`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            } catch (err) {
+                              alert("Failed to export report: " + err.message);
+                            }
                           }}
+                          style={{ display: "flex", alignItems: "center", gap: "6px" }}
                         >
-                          Filter by Period:
-                        </label>
-                        <select
-                          value={analyticsPeriod}
-                          onChange={(e) => setAnalyticsPeriod(e.target.value)}
-                          className="input"
-                          style={{ width: "auto" }}
-                        >
-                          <option value="all">All Periods</option>
-                          {(analytics.available_periods || []).map((p) => (
-                            <option key={p} value={p}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
+                          <Icon name="Download" size={16} />
+                          Export District Report
+                        </button>
                       </div>
                     </div>
 
@@ -7024,25 +7307,25 @@ ${signature}`;
                       {[
                         {
                           label: "Total Graded",
-                          value: analytics.class_stats?.total_assignments || 0,
+                          value: filteredAnalytics.class_stats?.total_assignments || 0,
                           icon: "FileCheck",
                           color: "#6366f1",
                         },
                         {
                           label: "Students",
-                          value: analytics.class_stats?.total_students || 0,
+                          value: filteredAnalytics.class_stats?.total_students || 0,
                           icon: "Users",
                           color: "#8b5cf6",
                         },
                         {
                           label: "Class Average",
-                          value: `${analytics.class_stats?.class_average || 0}%`,
+                          value: `${filteredAnalytics.class_stats?.class_average || 0}%`,
                           icon: "TrendingUp",
                           color: "#10b981",
                         },
                         {
                           label: "Highest Score",
-                          value: `${analytics.class_stats?.highest || 0}%`,
+                          value: `${filteredAnalytics.class_stats?.highest || 0}%`,
                           icon: "Trophy",
                           color: "#f59e0b",
                         },
@@ -7121,31 +7404,31 @@ ${signature}`;
                                 {
                                   name: "A",
                                   value:
-                                    analytics.class_stats?.grade_distribution
+                                    filteredAnalytics.class_stats?.grade_distribution
                                       ?.A || 0,
                                 },
                                 {
                                   name: "B",
                                   value:
-                                    analytics.class_stats?.grade_distribution
+                                    filteredAnalytics.class_stats?.grade_distribution
                                       ?.B || 0,
                                 },
                                 {
                                   name: "C",
                                   value:
-                                    analytics.class_stats?.grade_distribution
+                                    filteredAnalytics.class_stats?.grade_distribution
                                       ?.C || 0,
                                 },
                                 {
                                   name: "D",
                                   value:
-                                    analytics.class_stats?.grade_distribution
+                                    filteredAnalytics.class_stats?.grade_distribution
                                       ?.D || 0,
                                 },
                                 {
                                   name: "F",
                                   value:
-                                    analytics.class_stats?.grade_distribution
+                                    filteredAnalytics.class_stats?.grade_distribution
                                       ?.F || 0,
                                 },
                               ].filter((d) => d.value > 0)}
@@ -7185,7 +7468,7 @@ ${signature}`;
                           Assignment Averages
                         </h3>
                         <ResponsiveContainer width="100%" height={200}>
-                          <BarChart data={analytics.assignment_stats || []}>
+                          <BarChart data={filteredAnalytics.assignment_stats || []}>
                             <CartesianGrid
                               strokeDasharray="3 3"
                               stroke="var(--glass-border)"
@@ -7216,6 +7499,123 @@ ${signature}`;
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
+                    </div>
+
+                    {/* Proficiency vs Growth Scatterplot */}
+                    <div className="glass-card" style={{ padding: "25px", marginBottom: "20px" }}>
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "10px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon name="Target" size={20} />
+                        Student Proficiency vs Growth
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
+                        Click any dot to view that student's detailed progress. Quadrants show performance patterns.
+                      </p>
+                      <ResponsiveContainer width="100%" height={350}>
+                        <ScatterChart margin={{ top: 20, right: 30, bottom: 60, left: 50 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+                          <XAxis
+                            type="number"
+                            dataKey="proficiency"
+                            name="Proficiency"
+                            domain={[0, 100]}
+                            tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                            label={{ value: "Average Score (%)", position: "insideBottom", offset: -5, fill: "var(--text-secondary)", fontSize: 12 }}
+                          />
+                          <YAxis
+                            type="number"
+                            dataKey="growth"
+                            name="Growth"
+                            domain={[-30, 100]}
+                            tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                            label={{ value: "Growth (pts)", angle: -90, position: "insideLeft", fill: "var(--text-secondary)", fontSize: 12 }}
+                          />
+                          <ZAxis type="number" dataKey="assignments" range={[60, 200]} name="Assignments" />
+                          <ReferenceLine x={70} stroke="#f59e0b" strokeDasharray="5 5" />
+                          <ReferenceLine y={0} stroke="#6366f1" strokeDasharray="5 5" />
+                          <Tooltip
+                            cursor={{ strokeDasharray: "3 3" }}
+                            contentStyle={{
+                              background: "var(--modal-content-bg)",
+                              border: "1px solid var(--glass-border)",
+                              borderRadius: "8px",
+                              color: "var(--text-primary)",
+                            }}
+                            labelStyle={{ color: "var(--text-primary)" }}
+                            itemStyle={{ color: "var(--text-secondary)" }}
+                            formatter={(value, name) => {
+                              if (name === "Growth") return [value > 0 ? `+${value}` : value, "Growth (pts)"];
+                              if (name === "Proficiency") return [`${value}%`, "Avg Score"];
+                              if (name === "Assignments") return [value, "# Graded"];
+                              return [value, name];
+                            }}
+                            labelFormatter={(_, payload) => payload[0]?.payload?.name || ""}
+                          />
+                          <Legend
+                            verticalAlign="bottom"
+                            align="center"
+                            wrapperStyle={{ paddingTop: "20px", fontSize: "11px" }}
+                            payload={[
+                              { value: "Star Performer", type: "circle", color: "#10b981" },
+                              { value: "Improving", type: "circle", color: "#f59e0b" },
+                              { value: "Stable", type: "circle", color: "#6366f1" },
+                              { value: "Needs Support", type: "circle", color: "#ef4444" },
+                            ]}
+                          />
+                          <Scatter
+                            name="Students"
+                            data={(filteredAnalytics.student_progress || []).map((s) => {
+                              const grades = s.grades || [];
+                              let growth = 0;
+                              if (grades.length >= 2) {
+                                const firstHalf = grades.slice(0, Math.ceil(grades.length / 2));
+                                const secondHalf = grades.slice(Math.ceil(grades.length / 2));
+                                const firstAvg = firstHalf.reduce((sum, g) => sum + g.score, 0) / firstHalf.length;
+                                const secondAvg = secondHalf.reduce((sum, g) => sum + g.score, 0) / secondHalf.length;
+                                growth = Math.round(secondAvg - firstAvg);
+                              }
+                              return {
+                                name: s.name,
+                                proficiency: s.average,
+                                growth: growth,
+                                assignments: grades.length,
+                                trend: s.trend,
+                              };
+                            })}
+                            onClick={(data) => {
+                              if (data && data.name) setSelectedStudent(data.name);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            {(filteredAnalytics.student_progress || []).map((s, index) => {
+                              const isLow = s.average < 70;
+                              const grades = s.grades || [];
+                              let growth = 0;
+                              if (grades.length >= 2) {
+                                const firstHalf = grades.slice(0, Math.ceil(grades.length / 2));
+                                const secondHalf = grades.slice(Math.ceil(grades.length / 2));
+                                const firstAvg = firstHalf.reduce((sum, g) => sum + g.score, 0) / firstHalf.length;
+                                const secondAvg = secondHalf.reduce((sum, g) => sum + g.score, 0) / secondHalf.length;
+                                growth = secondAvg - firstAvg;
+                              }
+                              let color = "#6366f1"; // Default purple
+                              if (isLow && growth <= 0) color = "#ef4444"; // Red - struggling
+                              else if (isLow && growth > 0) color = "#f59e0b"; // Orange - improving
+                              else if (!isLow && growth < -5) color = "#f97316"; // Dark orange - declining
+                              else if (!isLow && growth >= 5) color = "#10b981"; // Green - star
+                              return <Cell key={index} fill={color} />;
+                            })}
+                          </Scatter>
+                        </ScatterChart>
+                      </ResponsiveContainer>
                     </div>
 
                     {/* Student Progress */}
@@ -7265,7 +7665,7 @@ ${signature}`;
                       {selectedStudent &&
                         (() => {
                           const studentData = (
-                            analytics.student_progress || []
+                            filteredAnalytics.student_progress || []
                           ).find((s) => s.name === selectedStudent);
                           if (!studentData) return null;
                           const grades = studentData.grades || [];
@@ -7414,10 +7814,10 @@ ${signature}`;
                         <LineChart
                           data={(() => {
                             const filtered = selectedStudent
-                              ? (analytics.student_progress || []).filter(
+                              ? (filteredAnalytics.student_progress || []).filter(
                                   (s) => s.name === selectedStudent,
                                 )
-                              : analytics.student_progress || [];
+                              : filteredAnalytics.student_progress || [];
                             const allGrades = filtered.flatMap((s) =>
                               (s.grades || []).map((g) => ({
                                 ...g,
@@ -7496,7 +7896,7 @@ ${signature}`;
                           <Icon name="AlertTriangle" size={20} />
                           Needs Attention
                         </h3>
-                        {(analytics.attention_needed || []).length === 0 ? (
+                        {(filteredAnalytics.attention_needed || []).length === 0 ? (
                           <p style={{ color: "var(--text-secondary)" }}>
                             All students are doing well!
                           </p>
@@ -7508,7 +7908,7 @@ ${signature}`;
                               gap: "10px",
                             }}
                           >
-                            {(analytics.attention_needed || [])
+                            {(filteredAnalytics.attention_needed || [])
                               .slice(0, 5)
                               .map((s, i) => (
                                 <div
@@ -7599,7 +7999,7 @@ ${signature}`;
                             gap: "10px",
                           }}
                         >
-                          {(analytics.top_performers || []).map((s, i) => (
+                          {(filteredAnalytics.top_performers || []).map((s, i) => (
                             <div
                               key={i}
                               onClick={() => setSelectedStudent(s.name)}
@@ -7684,7 +8084,7 @@ ${signature}`;
                           </tr>
                         </thead>
                         <tbody>
-                          {(analytics.student_progress || []).map((s, i) => (
+                          {(filteredAnalytics.student_progress || []).map((s, i) => (
                             <tr
                               key={i}
                               onClick={() => setSelectedStudent(s.name)}

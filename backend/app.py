@@ -154,12 +154,13 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini'):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False):
     """Run the grading process in a background thread.
 
     Args:
         selected_files: List of filenames to grade, or None to grade all files
         ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
+        skip_verified: If True, skip files that were previously graded with verified status
     """
     global grading_state
 
@@ -247,12 +248,19 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 pass
 
         # Also check in-memory results (loaded from saved JSON)
+        # Track which files are verified (have markers/config) for skip_verified option
+        verified_files = set()
         for r in grading_state.get("results", []):
             if r.get("filename"):
                 already_graded.add(r["filename"])
+                # Track verified status for skip_verified filtering
+                if r.get("marker_status") == "verified":
+                    verified_files.add(r["filename"])
 
         if already_graded:
             grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
+            if verified_files:
+                grading_state["log"].append(f"  ({len(verified_files)} verified, {len(already_graded) - len(verified_files)} unverified)")
 
         grading_state["log"].append("Loading student roster...")
         roster = load_roster(roster_file)
@@ -279,7 +287,14 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 grading_state["log"].append(f"Skipping {skipped} already-graded files")
         else:
             # When files are selected, grade them even if previously graded (re-grade)
-            new_files = all_files
+            # BUT if skip_verified is True, skip files that were previously verified
+            if skip_verified and verified_files:
+                new_files = [f for f in all_files if f.name not in verified_files]
+                skipped_verified = len(all_files) - len(new_files)
+                if skipped_verified > 0:
+                    grading_state["log"].append(f"Skipping {skipped_verified} verified grades (regrading only unverified)")
+            else:
+                new_files = all_files
 
         grading_state["total"] = len(new_files)
         grading_state["log"].append(f"Queued {len(new_files)} files for grading")
@@ -405,12 +420,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
             grading_state["log"].append(f"  Score: {grade_result['score']} ({grade_result['letter_grade']})")
 
-            # Extract assignment name from filename
-            parts = Path(filepath.name).stem.split('_')
-            if len(parts) >= 3:
-                assignment_from_file = ' '.join(parts[2:])
-            else:
-                assignment_from_file = ASSIGNMENT_NAME
+            # Use assignment title from matched config (full name, not truncated filename)
+            assignment_title = matched_title if matched_config else ASSIGNMENT_NAME
 
             # Get student content for review - show full document
             if file_data["type"] == "text":
@@ -426,7 +437,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 **student_info,
                 **grade_result,
                 "filename": filepath.name,
-                "assignment": assignment_from_file,
+                "assignment": assignment_title,
                 "grading_period": grading_period,
                 "has_markers": len(markers_found) > 0
             }
@@ -449,13 +460,25 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 except Exception as e:
                     print(f"  Note: Could not update student history: {e}")
 
+            # Determine marker status: verified if has config with markers/notes/sections
+            # A file is "verified" if graded with an assignment config (markers, notes, or response sections)
+            has_config = matched_config is not None
+            has_custom_markers = len(file_markers) > 0
+            has_grading_notes = bool(file_notes.strip()) if file_notes else False
+            has_response_sections = len(file_sections) > 0
+            is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
+            marker_status = "verified" if is_verified else "unverified"
+
+            if marker_status == "unverified":
+                grading_state["log"].append(f"  ⚠️  UNVERIFIED: No assignment config - grade may be inaccurate")
+
             grading_state["results"].append({
                 "student_name": student_info['student_name'],
                 "student_id": student_info['student_id'],
                 "email": student_info.get('email', ''),
                 "filename": filepath.name,
                 "filepath": str(filepath),
-                "assignment": assignment_from_file,
+                "assignment": assignment_title,
                 "score": grade_result['score'],
                 "letter_grade": grade_result['letter_grade'],
                 "feedback": grade_result.get('feedback', ''),
@@ -468,6 +491,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 "authenticity_reason": grade_result.get('authenticity_reason', ''),
                 "baseline_deviation": baseline_deviation,
                 "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
+                "marker_status": marker_status,
                 "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
 
@@ -556,6 +580,9 @@ def start_grading():
     # Get selected files (if any) for selective grading
     selected_files = data.get('selectedFiles', None)  # None means grade all
 
+    # Skip verified grades on regrade (only regrade unverified assignments)
+    skip_verified = data.get('skipVerified', False)
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -570,7 +597,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified)
     )
     thread.start()
 
@@ -985,6 +1012,37 @@ def get_student_baseline_api(student_id):
     audit_log("VIEW_STUDENT_BASELINE", f"Viewed baseline for student ID: {student_id[:6]}...")
 
     return jsonify(baseline)
+
+
+@app.route('/api/retranslate-feedback', methods=['POST'])
+def retranslate_feedback():
+    """Re-translate English feedback to the target language."""
+    import openai
+
+    data = request.json
+    english_feedback = data.get('english_feedback', '')
+    target_language = data.get('target_language', 'spanish')
+
+    if not english_feedback:
+        return jsonify({"error": "No feedback provided"})
+
+    try:
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{
+                "role": "user",
+                "content": f"Translate the following teacher feedback to {target_language}. Keep the same warm, encouraging tone. Only output the translation, nothing else.\n\nFeedback:\n{english_feedback}"
+            }],
+            temperature=0.3
+        )
+
+        translation = response.choices[0].message.content.strip()
+        return jsonify({"translation": translation})
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 
 # ══════════════════════════════════════════════════════════════

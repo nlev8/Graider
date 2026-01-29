@@ -1258,18 +1258,13 @@ def run_grading(
         grade_result = grade_assignment(student_info['student_name'], grade_data)
         
         # Combine all info
-        # Extract assignment name from filename
-        parts = Path(filepath.name).stem.split('_')
-        if len(parts) >= 3:
-            assignment_from_file = ' '.join(parts[2:])
-        else:
-            assignment_from_file = ASSIGNMENT_NAME
-        
+        # Use assignment_name parameter (from config) instead of extracting from filename
+        # Filename extraction can truncate long names
         grade_record = {
             **student_info,
             **grade_result,
             "filename": filepath.name,
-            "assignment": assignment_from_file,
+            "assignment": assignment_name,
             "has_markers": len(markers_found) > 0
         }
         all_grades.append(grade_record)

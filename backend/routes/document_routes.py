@@ -122,10 +122,25 @@ def _parse_docx(file_data, filename):
                 if row_text:
                     plain_text.append(row_text)
 
+        # Try to extract full document title from metadata or first heading
+        doc_title = None
+        try:
+            # Check document properties for title
+            if doc.core_properties.title:
+                doc_title = doc.core_properties.title
+        except:
+            pass
+
+        # If no metadata title, use first heading or first paragraph
+        if not doc_title and plain_text:
+            # First non-empty line is likely the title
+            doc_title = plain_text[0].strip()
+
         return jsonify({
             "html": styled_html,
             "text": '\n'.join(plain_text),
             "filename": filename,
+            "doc_title": doc_title,  # Full title from document content
             "type": "html"
         })
 

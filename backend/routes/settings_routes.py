@@ -1,12 +1,32 @@
 """
 Settings-related API routes for Graider.
-Handles rubric configuration, global settings, and file uploads.
+Handles rubric configuration, global settings, file uploads, and accommodations.
 """
 import os
 import json
 import csv
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
+
+# Import accommodation module
+try:
+    from backend.accommodations import (
+        load_presets, save_preset, delete_preset,
+        load_student_accommodations, set_student_accommodation,
+        get_student_accommodation, remove_student_accommodation,
+        import_accommodations_from_csv, clear_all_accommodations,
+        get_accommodation_stats, export_student_accommodations,
+        audit_log_accommodation
+    )
+except ImportError:
+    from accommodations import (
+        load_presets, save_preset, delete_preset,
+        load_student_accommodations, set_student_accommodation,
+        get_student_accommodation, remove_student_accommodation,
+        import_accommodations_from_csv, clear_all_accommodations,
+        get_accommodation_stats, export_student_accommodations,
+        audit_log_accommodation
+    )
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -463,3 +483,174 @@ def delete_document():
         return jsonify({"status": "deleted"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# ACCOMMODATION MANAGEMENT (FERPA COMPLIANT)
+# ══════════════════════════════════════════════════════════════
+#
+# FERPA Compliance Notes:
+# - All accommodation data stored locally only (~/.graider_data/accommodations/)
+# - Student IDs are never sent to AI - only accommodation TYPE
+# - All access is audit logged
+# - Data can be exported/deleted per FERPA requirements
+# ══════════════════════════════════════════════════════════════
+
+@settings_bp.route('/api/accommodation-presets')
+def get_accommodation_presets():
+    """Get all available accommodation presets (default + custom)."""
+    presets = load_presets()
+    return jsonify({"presets": list(presets.values())})
+
+
+@settings_bp.route('/api/accommodation-presets', methods=['POST'])
+def create_accommodation_preset():
+    """Create or update a custom accommodation preset."""
+    data = request.json
+    if not data.get('name') or not data.get('ai_instructions'):
+        return jsonify({"error": "Name and AI instructions required"}), 400
+
+    if save_preset(data):
+        return jsonify({"status": "saved", "preset": data})
+    else:
+        return jsonify({"error": "Failed to save preset"}), 500
+
+
+@settings_bp.route('/api/accommodation-presets/<preset_id>', methods=['DELETE'])
+def delete_accommodation_preset(preset_id):
+    """Delete a custom accommodation preset."""
+    if delete_preset(preset_id):
+        return jsonify({"status": "deleted"})
+    else:
+        return jsonify({"error": "Cannot delete default presets or preset not found"}), 400
+
+
+@settings_bp.route('/api/student-accommodations')
+def get_all_student_accommodations():
+    """
+    Get all student accommodation mappings.
+    FERPA: Returns student IDs with their accommodation settings.
+    Data is stored and displayed locally only.
+    """
+    mappings = load_student_accommodations()
+    presets = load_presets()
+
+    # Enrich with preset details for display
+    enriched = {}
+    for student_id, data in mappings.items():
+        preset_details = []
+        for preset_id in data.get("presets", []):
+            if preset_id in presets:
+                preset_details.append({
+                    "id": preset_id,
+                    "name": presets[preset_id].get("name", preset_id),
+                    "icon": presets[preset_id].get("icon", "FileText")
+                })
+
+        enriched[student_id] = {
+            "presets": preset_details,
+            "custom_notes": data.get("custom_notes", ""),
+            "updated": data.get("updated", "")
+        }
+
+    return jsonify({"accommodations": enriched, "count": len(enriched)})
+
+
+@settings_bp.route('/api/student-accommodations/<student_id>', methods=['GET'])
+def get_single_student_accommodation(student_id):
+    """Get accommodation settings for a specific student."""
+    accommodation = get_student_accommodation(student_id)
+    if accommodation:
+        return jsonify({"accommodation": accommodation})
+    else:
+        return jsonify({"accommodation": None})
+
+
+@settings_bp.route('/api/student-accommodations/<student_id>', methods=['POST'])
+def set_single_student_accommodation(student_id):
+    """Set accommodation presets for a student."""
+    data = request.json
+    preset_ids = data.get('presets', [])
+    custom_notes = data.get('custom_notes', '')
+
+    if set_student_accommodation(student_id, preset_ids, custom_notes):
+        audit_log_accommodation("API_SET", f"Set accommodation for {student_id[:6]}...")
+        return jsonify({"status": "saved"})
+    else:
+        return jsonify({"error": "Failed to save accommodation"}), 500
+
+
+@settings_bp.route('/api/student-accommodations/<student_id>', methods=['DELETE'])
+def delete_student_accommodation(student_id):
+    """Remove accommodation settings for a student."""
+    if remove_student_accommodation(student_id):
+        return jsonify({"status": "deleted"})
+    else:
+        return jsonify({"error": "Student not found or deletion failed"}), 404
+
+
+@settings_bp.route('/api/import-accommodations', methods=['POST'])
+def import_accommodations():
+    """
+    Import accommodations from CSV file.
+    Expected columns: student_id, accommodation_type, accommodation_notes (optional)
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    id_col = request.form.get('id_column', 'student_id')
+    accommodation_col = request.form.get('accommodation_column', 'accommodation_type')
+    notes_col = request.form.get('notes_column', 'accommodation_notes')
+
+    try:
+        # Parse CSV
+        content = file.read().decode('utf-8')
+        reader = csv.DictReader(content.splitlines())
+        csv_data = list(reader)
+
+        result = import_accommodations_from_csv(csv_data, id_col, accommodation_col, notes_col)
+
+        return jsonify({
+            "status": "imported",
+            "imported": result["imported"],
+            "skipped": result["skipped"],
+            "total": result["total"]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/export-accommodations')
+def export_accommodations():
+    """
+    Export all accommodation data for backup.
+    FERPA: Supports data portability requirements.
+    """
+    data = export_student_accommodations()
+    return jsonify({
+        "accommodations": data,
+        "exported_at": __import__('datetime').datetime.now().isoformat()
+    })
+
+
+@settings_bp.route('/api/clear-accommodations', methods=['POST'])
+def clear_accommodations():
+    """
+    Delete all student accommodation data.
+    FERPA: Supports data deletion requirements.
+    """
+    if clear_all_accommodations():
+        return jsonify({"status": "cleared"})
+    else:
+        return jsonify({"error": "Failed to clear accommodations"}), 500
+
+
+@settings_bp.route('/api/accommodation-stats')
+def accommodation_stats():
+    """Get statistics about accommodation usage."""
+    stats = get_accommodation_stats()
+    return jsonify(stats)

@@ -106,7 +106,7 @@ def get_analytics():
     assignment_stats = []
     for name, grades in assignments.items():
         assignment_stats.append({
-            "name": name[:30],
+            "name": name,
             "average": round(sum(g["score"] for g in grades) / len(grades), 1) if grades else 0,
             "count": len(grades),
             "highest": max(g["score"] for g in grades) if grades else 0,
@@ -157,3 +157,140 @@ def get_analytics():
         "all_grades": all_grades,
         "available_periods": sorted(list(available_periods))
     })
+
+
+@analytics_bp.route('/api/export-district-report')
+def export_district_report():
+    """
+    Export anonymized aggregate data for district reporting.
+    Contains NO student names or PII - only aggregate statistics.
+    Principals can collect these from teachers for school-wide analysis.
+    """
+    import json
+    from datetime import datetime
+
+    # Get output folder from settings
+    settings_file = os.path.expanduser("~/.graider_global_settings.json")
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    teacher_name = "Unknown Teacher"
+    school_name = "Unknown School"
+    subject = "Social Studies"
+
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, 'r') as f:
+                settings = json.load(f)
+                output_folder = settings.get('output_folder', output_folder)
+                teacher_name = settings.get('teacher_name', teacher_name)
+                school_name = settings.get('school_name', school_name)
+                subject = settings.get('subject', subject)
+        except:
+            pass
+
+    master_file = os.path.join(output_folder, "master_grades.csv")
+
+    if not os.path.exists(master_file):
+        return jsonify({"error": "No grading data available to export"})
+
+    # Collect anonymized aggregate data
+    all_grades = []
+    students = set()
+    assignments = defaultdict(list)
+    quarters = defaultdict(list)
+    categories = {"content": [], "completeness": [], "writing": [], "effort": []}
+
+    try:
+        with open(master_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                score = int(float(row.get("Overall Score", 0) or 0))
+                all_grades.append(score)
+                students.add(row.get("Student ID", row.get("Student Name", "unknown")))
+
+                assignment = row.get("Assignment", "Unknown")
+                assignments[assignment].append(score)
+
+                quarter = row.get("Quarter", "")
+                if quarter:
+                    quarters[quarter].append(score)
+
+                # Category scores
+                categories["content"].append(int(float(row.get("Content Accuracy", 0) or 0)))
+                categories["completeness"].append(int(float(row.get("Completeness", 0) or 0)))
+                categories["writing"].append(int(float(row.get("Writing Quality", 0) or 0)))
+                categories["effort"].append(int(float(row.get("Effort Engagement", 0) or 0)))
+    except Exception as e:
+        return jsonify({"error": f"Error reading grades: {str(e)}"})
+
+    if not all_grades:
+        return jsonify({"error": "No grades found in data"})
+
+    # Calculate grade distribution
+    grade_distribution = {
+        "A (90-100)": len([s for s in all_grades if s >= 90]),
+        "B (80-89)": len([s for s in all_grades if 80 <= s < 90]),
+        "C (70-79)": len([s for s in all_grades if 70 <= s < 80]),
+        "D (60-69)": len([s for s in all_grades if 60 <= s < 70]),
+        "F (0-59)": len([s for s in all_grades if s < 60])
+    }
+
+    # Calculate assignment breakdown
+    assignment_stats = []
+    for name, scores in sorted(assignments.items()):
+        assignment_stats.append({
+            "assignment": name,
+            "submissions": len(scores),
+            "average": round(sum(scores) / len(scores), 1),
+            "highest": max(scores),
+            "lowest": min(scores)
+        })
+
+    # Calculate quarterly breakdown
+    quarter_stats = []
+    for qtr, scores in sorted(quarters.items()):
+        quarter_stats.append({
+            "quarter": qtr,
+            "submissions": len(scores),
+            "average": round(sum(scores) / len(scores), 1)
+        })
+
+    # Calculate category averages (normalized to percentage)
+    category_averages = {
+        "Content Accuracy": round(sum(categories["content"]) / len(categories["content"]) * 2.5, 1) if categories["content"] else 0,
+        "Completeness": round(sum(categories["completeness"]) / len(categories["completeness"]) * 4, 1) if categories["completeness"] else 0,
+        "Writing Quality": round(sum(categories["writing"]) / len(categories["writing"]) * 5, 1) if categories["writing"] else 0,
+        "Effort & Engagement": round(sum(categories["effort"]) / len(categories["effort"]) * 6.67, 1) if categories["effort"] else 0
+    }
+
+    # Build the report
+    report = {
+        "report_metadata": {
+            "report_type": "District Analytics Export",
+            "generated_at": datetime.now().isoformat(),
+            "teacher_name": teacher_name,
+            "school_name": school_name,
+            "subject": subject,
+            "data_period": f"{min(quarters.keys()) if quarters else 'N/A'} - {max(quarters.keys()) if quarters else 'N/A'}",
+            "ferpa_notice": "This report contains AGGREGATE DATA ONLY. No individual student information is included."
+        },
+        "summary_statistics": {
+            "total_students": len(students),
+            "total_submissions_graded": len(all_grades),
+            "total_assignments": len(assignments),
+            "class_average": round(sum(all_grades) / len(all_grades), 1),
+            "highest_score": max(all_grades),
+            "lowest_score": min(all_grades),
+            "median_score": sorted(all_grades)[len(all_grades) // 2]
+        },
+        "grade_distribution": grade_distribution,
+        "category_performance": category_averages,
+        "assignment_breakdown": assignment_stats,
+        "quarterly_trends": quarter_stats,
+        "students_at_risk": {
+            "below_70_average_count": len([s for s in all_grades if s < 70]),
+            "below_60_count": len([s for s in all_grades if s < 60]),
+            "percentage_at_risk": round(len([s for s in all_grades if s < 70]) / len(all_grades) * 100, 1)
+        }
+    }
+
+    return jsonify(report)

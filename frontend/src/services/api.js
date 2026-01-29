@@ -161,6 +161,17 @@ export async function getAnalytics(period = 'all') {
   return fetchApi(url)
 }
 
+export async function exportDistrictReport() {
+  return fetchApi('/api/export-district-report')
+}
+
+export async function retranslateFeedback(englishFeedback, targetLanguage = 'spanish') {
+  return fetchApi('/api/retranslate-feedback', {
+    method: 'POST',
+    body: JSON.stringify({ english_feedback: englishFeedback, target_language: targetLanguage }),
+  })
+}
+
 // ============ Planner ============
 
 export async function getStandards(config) {
@@ -280,6 +291,74 @@ export async function deleteSupportDocument(filename) {
   })
 }
 
+// ============ Accommodations (IEP/504) ============
+
+export async function getAccommodationPresets() {
+  return fetchApi('/api/accommodation-presets')
+}
+
+export async function saveAccommodationPreset(preset) {
+  return fetchApi('/api/accommodation-presets', {
+    method: 'POST',
+    body: JSON.stringify(preset),
+  })
+}
+
+export async function deleteAccommodationPreset(presetId) {
+  return fetchApi(`/api/accommodation-presets/${encodeURIComponent(presetId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function getStudentAccommodations() {
+  return fetchApi('/api/student-accommodations')
+}
+
+export async function getStudentAccommodation(studentId) {
+  return fetchApi(`/api/student-accommodations/${encodeURIComponent(studentId)}`)
+}
+
+export async function setStudentAccommodation(studentId, presets, customNotes = '') {
+  return fetchApi(`/api/student-accommodations/${encodeURIComponent(studentId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ presets, custom_notes: customNotes }),
+  })
+}
+
+export async function deleteStudentAccommodation(studentId) {
+  return fetchApi(`/api/student-accommodations/${encodeURIComponent(studentId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function importAccommodations(file, idColumn, accommodationColumn, notesColumn) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('id_column', idColumn)
+  formData.append('accommodation_column', accommodationColumn)
+  if (notesColumn) formData.append('notes_column', notesColumn)
+
+  const response = await fetch('/api/import-accommodations', {
+    method: 'POST',
+    body: formData,
+  })
+  return response.json()
+}
+
+export async function exportAccommodations() {
+  return fetchApi('/api/export-accommodations')
+}
+
+export async function clearAllAccommodations() {
+  return fetchApi('/api/clear-accommodations', {
+    method: 'POST',
+  })
+}
+
+export async function getAccommodationStats() {
+  return fetchApi('/api/accommodation-stats')
+}
+
 export default {
   getStatus,
   startGrading,
@@ -300,6 +379,8 @@ export default {
   parseDocument,
   openFolder,
   getAnalytics,
+  exportDistrictReport,
+  retranslateFeedback,
   getStandards,
   generateLessonPlan,
   exportLessonPlan,
@@ -316,4 +397,15 @@ export default {
   listSupportDocuments,
   deleteSupportDocument,
   listFiles,
+  getAccommodationPresets,
+  saveAccommodationPreset,
+  deleteAccommodationPreset,
+  getStudentAccommodations,
+  getStudentAccommodation,
+  setStudentAccommodation,
+  deleteStudentAccommodation,
+  importAccommodations,
+  exportAccommodations,
+  clearAllAccommodations,
+  getAccommodationStats,
 }

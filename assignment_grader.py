@@ -37,6 +37,14 @@ except ImportError:
     def build_history_context(student_id):
         return ""
 
+# Import accommodations for IEP/504 support (FERPA compliant)
+try:
+    from backend.accommodations import build_accommodation_prompt
+except ImportError:
+    # Fallback if running standalone or module not available
+    def build_accommodation_prompt(student_id):
+        return ""
+
 # Load environment variables from .env file (override system env vars)
 import os
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -695,6 +703,17 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
         except Exception as e:
             print(f"  Note: Could not load student history: {e}")
 
+    # Build accommodation context for IEP/504 students (FERPA compliant)
+    # NOTE: Only accommodation TYPE is sent to AI - no student identifying info
+    accommodation_context = ''
+    if student_id and student_id != "UNKNOWN":
+        try:
+            accommodation_context = build_accommodation_prompt(student_id)
+            if accommodation_context:
+                print(f"  Applying accommodations for student")
+        except Exception as e:
+            print(f"  Note: Could not load accommodations: {e}")
+
     # Map grade level to age range for context
     grade_age_map = {
         'K': '5-6', '1': '6-7', '2': '7-8', '3': '8-9', '4': '9-10', '5': '10-11',
@@ -708,6 +727,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 
 {ASSIGNMENT_INSTRUCTIONS}
 {custom_section}
+{accommodation_context}
 {history_context}
 ---
 
@@ -788,7 +808,8 @@ Provide your response in the following JSON format ONLY (no other text):
         "flag": "<none, possible, or likely>",
         "reason": "<Brief explanation if not 'none', otherwise empty string>"
     }},
-    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant.>"
+    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant. 9) BILINGUAL FEEDBACK: If the student wrote their answers in a language OTHER than English (e.g., Spanish, Creole, Portuguese), provide feedback in BOTH languages. First write the complete feedback in English, then add a separator '---' followed by the SAME feedback translated into the student's language. Format: [English feedback]\\n\\n---\\n\\n[Traducción / Translation]\\n[Same feedback in student's language]. This helps ELL students understand while also learning English.>",
+    "student_language": "<Detected language of student's responses: 'english', 'spanish', 'portuguese', 'creole', or other ISO language code>"
 }}
 """
 
