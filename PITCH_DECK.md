@@ -264,20 +264,171 @@ Graider includes ready-to-use accommodation profiles that adjust AI grading and 
 
 # Lesson Planning Bonus
 
-## Standards-Aligned Lesson Generator
+## AI-Powered Lesson Plan Generator
 
-Create comprehensive lesson plans in seconds:
+Create comprehensive, ready-to-use lesson plans in seconds — not hours.
 
-- **State standards aligned** (Florida, more coming)
-- **Minute-by-minute timing**
-- **Differentiation** for struggling and advanced students
-- **Bell ringers, activities, exit tickets**
-- **Export to Word document**
+---
 
-### Supports:
-- US History, World History, Civics
-- Grades 6-12
-- Multiple content types (lessons, units, projects)
+## Standards Browser with Rich Benchmark Data
+
+### Every Standard Includes:
+
+| Data Point | What It Provides |
+|------------|------------------|
+| **DOK Level** | Depth of Knowledge (1-4) with color-coded badges |
+| **Essential Questions** | Driving questions for inquiry-based learning |
+| **Learning Targets** | Student-friendly "I can..." statements |
+| **Key Vocabulary** | Terms students need to master |
+| **Item Specifications** | How the standard is typically assessed |
+| **Sample Assessment** | Example test question with answer choices |
+
+### Visual Example:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SS.7.C.1.1                                          [DOK 2]     │
+├─────────────────────────────────────────────────────────────────┤
+│ Recognize how Enlightenment ideas including Montesquieu's       │
+│ view of separation of power and John Locke's theories...        │
+├─────────────────────────────────────────────────────────────────┤
+│ Topics: Enlightenment • Natural Law • Social Contract           │
+├─────────────────────────────────────────────────────────────────┤
+│ [Show Details ▼]                                                │
+│                                                                 │
+│ 📌 Essential Questions:                                         │
+│    • How did Enlightenment ideas shape American democracy?      │
+│    • Why did the Founders believe government should be limited? │
+│                                                                 │
+│ 🎯 Learning Targets:                                            │
+│    • I can identify key Enlightenment thinkers and their ideas  │
+│    • I can explain how social contract theory influenced...     │
+│                                                                 │
+│ 📚 Vocabulary:                                                  │
+│    [Enlightenment] [natural rights] [social contract] [Locke]   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Brainstorm Mode
+
+### Generate 5 Creative Lesson Concepts Instantly
+
+Before committing to a lesson plan, brainstorm multiple approaches:
+
+| Approach | Example Concept |
+|----------|-----------------|
+| **Activity-Based** | "Constitutional Escape Room" — students solve puzzles about founding documents |
+| **Discussion** | "Founders' Debate" — Socratic seminar on Federalist vs Anti-Federalist views |
+| **Project-Based** | "Design Your Government" — students create a new nation's constitution |
+| **Simulation** | "Constitutional Convention Role-Play" — students represent different states |
+| **Primary Sources** | "Document Detective" — analyze excerpts from Locke, Montesquieu, Madison |
+
+### How It Works:
+
+```
+1. Select standards you want to cover
+           ↓
+2. Click "Brainstorm Ideas"
+           ↓
+3. AI generates 5 diverse lesson concepts
+           ↓
+4. Each idea shows: Title, Approach, Hook, Key Activity, Assessment Type
+           ↓
+5. Click an idea to select it
+           ↓
+6. Generate full lesson plan from that concept
+```
+
+---
+
+## Generate Multiple Variations
+
+### Compare 3 Different Teaching Approaches Side-by-Side
+
+Can't decide on the best approach? Generate all three:
+
+| Variation | Focus | Best For |
+|-----------|-------|----------|
+| **Activity-Based** | Hands-on learning, station rotations, interactive tasks | Kinesthetic learners, engagement |
+| **Discussion & Analysis** | Socratic questioning, primary sources, class debates | Critical thinking, depth |
+| **Project-Based** | Student research, presentations, creative products | Long-term retention, ownership |
+
+### Each Variation Includes:
+- Complete lesson plan with timing
+- Different activities aligned to the same standards
+- Unique essential questions and assessments
+- One-click to select and use
+
+---
+
+## Comprehensive Lesson Plan Output
+
+### Every Generated Plan Includes:
+
+```
+📋 LESSON PLAN: Foundations of American Government
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Overview
+   2-3 sentence summary of the lesson
+
+❓ Essential Questions
+   • Driving questions for inquiry
+
+📅 Day-by-Day Breakdown
+   ┌─────────────────────────────────────────┐
+   │ Day 1: Introduction to Enlightenment    │
+   ├─────────────────────────────────────────┤
+   │ 🎯 Objective: Students will be able to..│
+   │ 📚 Vocabulary: [terms with definitions] │
+   │ ⏱️ Timing:                              │
+   │    0-5 min   Bell Ringer                │
+   │    5-20 min  Direct Instruction         │
+   │    20-40 min Main Activity              │
+   │    40-50 min Exit Ticket                │
+   │ 🔔 Bell Ringer: [prompt + expected ans] │
+   │ 📖 Direct Instruction: [key points]     │
+   │ 🎮 Activity: [step-by-step guide]       │
+   │ ✅ Assessment: [exit ticket question]   │
+   │ 📦 Materials: [what you need]           │
+   │ 🏠 Homework: [assignment if any]        │
+   │ 💡 Teacher Notes: [tips and hints]      │
+   └─────────────────────────────────────────┘
+
+📊 Summative Assessment
+   Description, components, rubric criteria
+
+📚 Resources
+   Links, materials, references
+```
+
+---
+
+## Subjects Supported
+
+All subjects include full benchmark data (DOK, learning targets, vocabulary, etc.):
+
+| Subject | Standards |
+|---------|-----------|
+| **Civics** | Florida B.E.S.T. Grade 7 |
+| **US History** | Florida B.E.S.T. Grade 8 |
+| **World History** | Florida B.E.S.T. Grades 9-10 |
+| **Social Studies** | Florida B.E.S.T. Grades 6-8 |
+| **Geography** | Florida B.E.S.T. Grades 6-8 |
+| **English/ELA** | Florida B.E.S.T. Grades 6-8 |
+| **Math** | Florida B.E.S.T. Grades 6-8 |
+| **Science** | Florida B.E.S.T. Grades 6-8 |
+
+*More states and subjects coming soon*
+
+---
+
+## Export Options
+
+- **Word Document** — Fully formatted, print-ready
+- **Copy to clipboard** — Paste into Google Docs, Canvas, etc.
 
 ---
 
