@@ -560,9 +560,10 @@ function App() {
     const saveTimeout = setTimeout(async () => {
       try {
         let dataToSave = { ...assignment, importedDoc };
+        const isRename = loadedAssignmentName && loadedAssignmentName !== assignment.title;
 
         // If title changed from a previously loaded assignment, add old name to aliases
-        if (loadedAssignmentName && loadedAssignmentName !== assignment.title) {
+        if (isRename) {
           const currentAliases = assignment.aliases || [];
           if (!currentAliases.includes(loadedAssignmentName)) {
             dataToSave.aliases = [...currentAliases, loadedAssignmentName];
@@ -572,6 +573,12 @@ function App() {
         }
 
         await api.saveAssignmentConfig(dataToSave);
+
+        // If renamed, delete the old assignment file (alias is preserved in new file)
+        if (isRename) {
+          await api.deleteAssignment(loadedAssignmentName);
+        }
+
         // Refresh saved assignments list
         const list = await api.listAssignments();
         if (list.assignments) setSavedAssignments(list.assignments);
@@ -3118,14 +3125,24 @@ ${signature}`;
                         })}
                       </select>
                     ) : (
-                      <input
-                        type="text"
-                        className="input"
-                        value={gradeFilterStudent}
-                        onChange={(e) => setGradeFilterStudent(e.target.value)}
-                        placeholder="Type student name to filter..."
-                        style={{ fontSize: "0.9rem" }}
-                      />
+                      <>
+                        <input
+                          type="text"
+                          className="input"
+                          list="grade-student-suggestions"
+                          value={gradeFilterStudent}
+                          onChange={(e) => setGradeFilterStudent(e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                          placeholder={sortedPeriods.length > 0 ? "Type or select student..." : "Type student name to filter..."}
+                          style={{ fontSize: "0.9rem" }}
+                        />
+                        <datalist id="grade-student-suggestions">
+                          {sortedPeriods.flatMap(p => p.students || []).map((s, i) => {
+                            const name = s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim();
+                            return <option key={i} value={name} />;
+                          })}
+                        </datalist>
+                      </>
                     )}
                     {gradeFilterStudent && (
                       <p style={{ fontSize: "0.75rem", color: "#8b5cf6", marginTop: "8px", fontWeight: 500 }}>

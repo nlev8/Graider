@@ -20,10 +20,10 @@ from dotenv import load_dotenv
 
 # Import student history for progress tracking
 try:
-    from backend.student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary
+    from backend.student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
 except ImportError:
     try:
-        from student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary
+        from student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
     except ImportError:
         # Fallback if module not available
         def add_assignment_to_history(student_id, result):
@@ -34,6 +34,8 @@ except ImportError:
             return {"flag": "normal", "reasons": [], "details": {}}
         def get_baseline_summary(student_id):
             return None
+        def build_history_context(student_id):
+            return ""
 
 # Import accommodation support for IEP/504 students
 try:
@@ -64,6 +66,7 @@ CORS(app)
 RESULTS_FILE = os.path.expanduser("~/.graider_results.json")
 AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
+DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
 
 # ══════════════════════════════════════════════════════════════
 # FERPA COMPLIANCE - AUDIT LOGGING
@@ -108,6 +111,93 @@ def get_audit_logs(limit: int = 100):
     except Exception as e:
         print(f"Error reading audit logs: {e}")
         return []
+
+
+# ══════════════════════════════════════════════════════════════
+# SUPPORT DOCUMENTS FOR AI CONTEXT
+# ══════════════════════════════════════════════════════════════
+
+def load_support_documents_for_grading(subject: str = None) -> str:
+    """
+    Load relevant support documents to include in AI grading context.
+
+    Args:
+        subject: Optional subject to filter documents
+
+    Returns:
+        String with document content to include in AI prompt
+    """
+    if not os.path.exists(DOCUMENTS_DIR):
+        return ""
+
+    docs_content = []
+    total_chars = 0
+    max_chars = 8000  # Limit to avoid overwhelming the AI
+
+    # Load metadata for all documents
+    for f in os.listdir(DOCUMENTS_DIR):
+        if f.endswith('.meta.json'):
+            try:
+                with open(os.path.join(DOCUMENTS_DIR, f), 'r') as mf:
+                    metadata = json.load(mf)
+
+                doc_type = metadata.get('doc_type', 'general')
+                filepath = metadata.get('filepath', '')
+                description = metadata.get('description', '')
+
+                # Prioritize rubrics and curriculum docs
+                if doc_type not in ['rubric', 'curriculum', 'standards']:
+                    continue
+
+                if not os.path.exists(filepath):
+                    continue
+
+                # Read document content
+                content = ""
+                if filepath.endswith('.txt') or filepath.endswith('.md'):
+                    with open(filepath, 'r', encoding='utf-8') as df:
+                        content = df.read()
+                elif filepath.endswith('.docx'):
+                    try:
+                        from docx import Document
+                        doc = Document(filepath)
+                        content = '\n'.join([p.text for p in doc.paragraphs])
+                    except:
+                        continue
+                elif filepath.endswith('.pdf'):
+                    try:
+                        import fitz  # PyMuPDF
+                        pdf = fitz.open(filepath)
+                        content = '\n'.join([page.get_text() for page in pdf])
+                        pdf.close()
+                    except:
+                        continue
+
+                if content and total_chars + len(content) < max_chars:
+                    doc_label = doc_type.upper()
+                    if description:
+                        doc_label += f" - {description}"
+                    docs_content.append(f"[{doc_label}]\n{content[:2000]}")
+                    total_chars += len(content[:2000])
+
+            except Exception as e:
+                print(f"Error loading document: {e}")
+                continue
+
+    if not docs_content:
+        return ""
+
+    return "\n".join([
+        "",
+        "═══════════════════════════════════════════════════════════",
+        "REFERENCE DOCUMENTS (Use these to inform your grading):",
+        "═══════════════════════════════════════════════════════════",
+        "",
+        *docs_content,
+        "",
+        "═══════════════════════════════════════════════════════════",
+        ""
+    ])
 
 
 def load_saved_results():
@@ -239,6 +329,11 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
         if global_ai_notes:
             grading_state["log"].append(f"Global AI notes loaded")
+
+        # Load support documents (rubrics, curriculum guides, standards)
+        support_docs_content = load_support_documents_for_grading(subject)
+        if support_docs_content:
+            grading_state["log"].append(f"Loaded reference documents for AI context")
 
         os.makedirs(output_folder, exist_ok=True)
 
@@ -404,6 +499,10 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             if file_notes:
                 file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}\n\n"
 
+            # Add support documents content (rubrics, curriculum guides, standards)
+            if support_docs_content:
+                file_ai_notes += support_docs_content
+
             # Add response sections (highlighted areas where student work should be found)
             if file_sections:
                 sections_text = "HIGHLIGHTED RESPONSE SECTIONS (Focus on content within these ranges):\n"
@@ -424,6 +523,14 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 if accommodation_prompt:
                     file_ai_notes += f"\n{accommodation_prompt}\n"
                     grading_state["log"].append(f"  Applying IEP/504 accommodations")
+
+            # Add student history context for personalized feedback
+            # FERPA compliant: Only performance patterns sent to AI, never student name/ID
+            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                history_context = build_history_context(student_info['student_id'])
+                if history_context:
+                    file_ai_notes += f"\n{history_context}\n"
+                    grading_state["log"].append(f"  Including student history context")
 
             # Add file-specific markers to the markers list temporarily
             original_markers = STUDENT_WORK_MARKERS.copy()

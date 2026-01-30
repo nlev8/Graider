@@ -13,6 +13,69 @@ planner_bp = Blueprint('planner', __name__)
 
 # Path to standards data
 DATA_DIR = Path(__file__).parent.parent / 'data'
+DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
+
+
+def load_support_documents_for_planning() -> str:
+    """Load curriculum guides and standards documents for lesson planning."""
+    if not os.path.exists(DOCUMENTS_DIR):
+        return ""
+
+    docs_content = []
+    total_chars = 0
+    max_chars = 6000  # Limit for lesson planning
+
+    for f in os.listdir(DOCUMENTS_DIR):
+        if f.endswith('.meta.json'):
+            try:
+                with open(os.path.join(DOCUMENTS_DIR, f), 'r') as mf:
+                    metadata = json.load(mf)
+
+                doc_type = metadata.get('doc_type', 'general')
+                filepath = metadata.get('filepath', '')
+                description = metadata.get('description', '')
+
+                # Only include curriculum and standards docs for planning
+                if doc_type not in ['curriculum', 'standards']:
+                    continue
+
+                if not os.path.exists(filepath):
+                    continue
+
+                content = ""
+                if filepath.endswith('.txt') or filepath.endswith('.md'):
+                    with open(filepath, 'r', encoding='utf-8') as df:
+                        content = df.read()
+                elif filepath.endswith('.docx'):
+                    try:
+                        from docx import Document
+                        doc = Document(filepath)
+                        content = '\n'.join([p.text for p in doc.paragraphs])
+                    except:
+                        continue
+                elif filepath.endswith('.pdf'):
+                    try:
+                        import fitz
+                        pdf = fitz.open(filepath)
+                        content = '\n'.join([page.get_text() for page in pdf])
+                        pdf.close()
+                    except:
+                        continue
+
+                if content and total_chars + len(content) < max_chars:
+                    doc_label = doc_type.upper()
+                    if description:
+                        doc_label += f" - {description}"
+                    docs_content.append(f"[{doc_label}]\n{content[:2000]}")
+                    total_chars += len(content[:2000])
+
+            except Exception as e:
+                continue
+
+    if not docs_content:
+        return ""
+
+    return "\n\nREFERENCE DOCUMENTS:\n" + "\n\n".join(docs_content)
 
 
 def load_standards(state, subject):
@@ -74,8 +137,12 @@ def generate_lesson_plan():
         period_length = config.get('periodLength', 50)
         content_type = config.get('type', 'Lesson Plan')
 
+        # Load support documents (curriculum guides, standards)
+        support_docs = load_support_documents_for_planning()
+
         prompt = f"""
 You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
+{support_docs}
 
 Title: "{config.get('title', 'Untitled')}"
 Duration: {config.get('duration', 1)} day(s)

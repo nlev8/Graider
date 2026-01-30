@@ -153,6 +153,29 @@ DEFAULT_PRESETS = {
 - Use phrases like "You're building your skills in..."
 - Connect effort to improvement: "Your practice is paying off!"
 - Avoid fixed-ability language ("You're smart/not smart")"""
+    },
+    # ══════════════════════════════════════════════════════════════
+    # ELL (English Language Learner) ACCOMMODATION
+    # Note: Bilingual feedback is automatic when student writes in another language
+    # ══════════════════════════════════════════════════════════════
+    "ell_support": {
+        "id": "ell_support",
+        "name": "ELL Support",
+        "description": "Simplified English, no grammar penalties for ELL students",
+        "icon": "Globe",
+        "ai_instructions": """ACCOMMODATION - ELL (English Language Learner) SUPPORT:
+- Use basic, high-frequency vocabulary only
+- Keep sentences very short (8-10 words max)
+- Avoid idioms, slang, and figurative language
+- Use present tense when possible
+- Repeat key academic vocabulary with definitions
+- Use simple subject-verb-object sentence structure
+- Provide context clues for new words
+- Do NOT penalize for grammar or spelling errors related to language learning
+- Do NOT penalize for L1-influenced patterns (missing articles, verb tense, word order)
+- Focus grading on CONTENT understanding, not language accuracy
+- Celebrate effort and participation
+- Note: Bilingual feedback is provided automatically when student writes in another language"""
     }
 }
 
