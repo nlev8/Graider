@@ -8273,6 +8273,7 @@ ${signature}`;
                             placeholder="Type or select student..."
                             value={missingStudentFilter}
                             onChange={(e) => setMissingStudentFilter(e.target.value)}
+                            onFocus={(e) => e.target.select()}
                             style={{ width: "100%" }}
                           />
                           <datalist id="missing-student-suggestions">
