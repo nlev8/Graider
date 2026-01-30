@@ -3125,7 +3125,7 @@ ${signature}`;
                         })}
                       </select>
                     ) : (
-                      <>
+                      <div style={{ position: "relative" }}>
                         <input
                           type="text"
                           className="input"
@@ -3134,15 +3134,36 @@ ${signature}`;
                           onChange={(e) => setGradeFilterStudent(e.target.value)}
                           onFocus={(e) => e.target.select()}
                           placeholder={sortedPeriods.length > 0 ? "Type or select student..." : "Type student name to filter..."}
-                          style={{ fontSize: "0.9rem" }}
+                          style={{ fontSize: "0.9rem", paddingRight: gradeFilterStudent ? "30px" : undefined }}
                         />
+                        {gradeFilterStudent && (
+                          <button
+                            onClick={() => setGradeFilterStudent("")}
+                            style={{
+                              position: "absolute",
+                              right: "8px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "#888",
+                              padding: "4px",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                            title="Clear"
+                          >
+                            <Icon name="X" size={14} />
+                          </button>
+                        )}
                         <datalist id="grade-student-suggestions">
                           {sortedPeriods.flatMap(p => p.students || []).map((s, i) => {
                             const name = s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim();
                             return <option key={i} value={name} />;
                           })}
                         </datalist>
-                      </>
+                      </div>
                     )}
                     {gradeFilterStudent && (
                       <p style={{ fontSize: "0.75rem", color: "#8b5cf6", marginTop: "8px", fontWeight: 500 }}>
@@ -8327,16 +8348,39 @@ ${signature}`;
                         </div>
                         <div style={{ flex: "1", minWidth: "180px" }}>
                           <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Student</label>
-                          <input
-                            type="text"
-                            className="input"
-                            list="missing-student-suggestions"
-                            placeholder="Type or select student..."
-                            value={missingStudentFilter}
-                            onChange={(e) => setMissingStudentFilter(e.target.value)}
-                            onFocus={(e) => e.target.select()}
-                            style={{ width: "100%" }}
-                          />
+                          <div style={{ position: "relative" }}>
+                            <input
+                              type="text"
+                              className="input"
+                              list="missing-student-suggestions"
+                              placeholder="Type or select student..."
+                              value={missingStudentFilter}
+                              onChange={(e) => setMissingStudentFilter(e.target.value)}
+                              onFocus={(e) => e.target.select()}
+                              style={{ width: "100%", paddingRight: missingStudentFilter ? "30px" : undefined }}
+                            />
+                            {missingStudentFilter && (
+                              <button
+                                onClick={() => setMissingStudentFilter("")}
+                                style={{
+                                  position: "absolute",
+                                  right: "8px",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "#888",
+                                  padding: "4px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                }}
+                                title="Clear"
+                              >
+                                <Icon name="X" size={14} />
+                              </button>
+                            )}
+                          </div>
                           <datalist id="missing-student-suggestions">
                             {(missingPeriodFilter
                               ? (sortedPeriods.find(p => p.filename === missingPeriodFilter)?.students || [])
