@@ -3132,13 +3132,14 @@ ${signature}`;
                           list="grade-student-suggestions"
                           value={gradeFilterStudent}
                           onChange={(e) => setGradeFilterStudent(e.target.value)}
-                          onFocus={(e) => e.target.select()}
+                          onClick={(e) => { if (gradeFilterStudent) { e.target.dataset.prev = gradeFilterStudent; setGradeFilterStudent(""); } }}
+                          onBlur={(e) => { if (!gradeFilterStudent && e.target.dataset.prev) { setGradeFilterStudent(e.target.dataset.prev); e.target.dataset.prev = ""; } }}
                           placeholder={sortedPeriods.length > 0 ? "Type or select student..." : "Type student name to filter..."}
                           style={{ fontSize: "0.9rem", paddingRight: gradeFilterStudent ? "30px" : undefined }}
                         />
                         {gradeFilterStudent && (
                           <button
-                            onClick={() => setGradeFilterStudent("")}
+                            onClick={(e) => { e.preventDefault(); setGradeFilterStudent(""); }}
                             style={{
                               position: "absolute",
                               right: "8px",
@@ -8355,12 +8356,13 @@ ${signature}`;
                               placeholder="Type or select student..."
                               value={missingStudentFilter}
                               onChange={(e) => setMissingStudentFilter(e.target.value)}
-                              onFocus={(e) => e.target.select()}
+                              onClick={(e) => { if (missingStudentFilter) { e.target.dataset.prev = missingStudentFilter; setMissingStudentFilter(""); } }}
+                              onBlur={(e) => { if (!missingStudentFilter && e.target.dataset.prev) { setMissingStudentFilter(e.target.dataset.prev); e.target.dataset.prev = ""; } }}
                               style={{ width: "100%", paddingRight: missingStudentFilter ? "30px" : undefined }}
                             />
                             {missingStudentFilter && (
                               <button
-                                onClick={() => setMissingStudentFilter("")}
+                                onClick={(e) => { e.preventDefault(); setMissingStudentFilter(""); }}
                                 style={{
                                   position: "absolute",
                                   right: "8px",
