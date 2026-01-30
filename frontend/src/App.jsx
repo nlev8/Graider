@@ -273,6 +273,8 @@ function App() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [periodStudents, setPeriodStudents] = useState([]);
+  const [gradeFilterStudent, setGradeFilterStudent] = useState(""); // Filter by individual student
+  const [gradeFilterAssignment, setGradeFilterAssignment] = useState(""); // Filter by saved assignment
 
   // Individual upload state (for paper/handwritten assignments)
   const [individualUpload, setIndividualUpload] = useState({
@@ -541,6 +543,28 @@ function App() {
     return () => clearTimeout(saveTimeout);
   }, [rubric, settingsLoaded]);
 
+  // Auto-save Builder assignment when it changes (debounced)
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    if (!assignment.title) return; // Don't save assignments without a title
+
+    const saveTimeout = setTimeout(async () => {
+      try {
+        const dataToSave = { ...assignment, importedDoc };
+        await api.saveAssignmentConfig(dataToSave);
+        // Refresh saved assignments list
+        const list = await api.listAssignments();
+        if (list.assignments) setSavedAssignments(list.assignments);
+        // Update loaded assignment name to reflect current title
+        setLoadedAssignmentName(assignment.title);
+      } catch (error) {
+        console.error("Failed to auto-save assignment:", error);
+      }
+    }, 1500); // Debounce 1.5 seconds (slightly longer for assignment changes)
+
+    return () => clearTimeout(saveTimeout);
+  }, [assignment, importedDoc, settingsLoaded]);
+
   // Poll status while grading
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -553,6 +577,13 @@ function App() {
     }, 500);
     return () => clearInterval(interval);
   }, []);
+
+  // Load files when student filter is set (for file preview)
+  useEffect(() => {
+    if (gradeFilterStudent && availableFiles.length === 0 && config.assignments_folder) {
+      loadAvailableFiles();
+    }
+  }, [gradeFilterStudent, config.assignments_folder]);
 
   // Auto-grade watcher
   useEffect(() => {
@@ -873,22 +904,58 @@ function App() {
       // Determine which files to grade
       let filesToGrade = selectedFiles.length > 0 ? selectedFiles : null;
 
-      // If no files selected but period filter is active, load and filter files
-      if (!filesToGrade && selectedPeriod && periodStudents.length > 0) {
+      // If no files selected but filters are active, load and filter files
+      if (!filesToGrade && (selectedPeriod || gradeFilterStudent || gradeFilterAssignment)) {
         try {
           const filesData = await api.listFiles(config.assignments_folder);
           if (filesData.files) {
-            const ungraded = filesData.files.filter(f => !f.graded);
-            const filtered = ungraded.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
+            let filtered = filesData.files.filter(f => !f.graded);
+
+            // Filter by period students
+            if (selectedPeriod && periodStudents.length > 0) {
+              filtered = filtered.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
+            }
+
+            // Filter by individual student name
+            if (gradeFilterStudent) {
+              filtered = filtered.filter(f => {
+                const fileName = f.name.toLowerCase();
+                const studentName = gradeFilterStudent.toLowerCase();
+                // Check if filename contains student name (handles various naming formats)
+                return fileName.includes(studentName.replace(/\s+/g, '')) ||
+                       fileName.includes(studentName.replace(/\s+/g, '_')) ||
+                       fileName.includes(studentName.replace(/\s+/g, '-')) ||
+                       fileName.includes(studentName);
+              });
+            }
+
+            // Filter by assignment name in filename
+            if (gradeFilterAssignment) {
+              filtered = filtered.filter(f => {
+                const fileName = f.name.toLowerCase();
+                const assignmentName = gradeFilterAssignment.toLowerCase();
+                // Check if filename contains assignment name
+                return fileName.includes(assignmentName.replace(/\s+/g, '')) ||
+                       fileName.includes(assignmentName.replace(/\s+/g, '_')) ||
+                       fileName.includes(assignmentName.replace(/\s+/g, '-')) ||
+                       fileName.includes(assignmentName);
+              });
+            }
+
             if (filtered.length > 0) {
               filesToGrade = filtered.map(f => f.name);
             } else {
-              alert("No ungraded files found for the selected period.");
+              const filterDesc = [
+                gradeFilterStudent ? `student "${gradeFilterStudent}"` : null,
+                gradeFilterAssignment ? `assignment "${gradeFilterAssignment}"` : null,
+                selectedPeriod ? "selected period" : null
+              ].filter(Boolean).join(" and ");
+              addToast(`No ungraded files found for ${filterDesc}`, "warning");
               return;
             }
           }
         } catch (e) {
-          console.error("Failed to load files for period filter:", e);
+          console.error("Failed to load files for filter:", e);
         }
       }
 
@@ -947,7 +1014,7 @@ function App() {
 
   const handleIndividualGrade = async () => {
     if (!individualUpload.file || !individualUpload.studentName.trim()) {
-      alert("Please select a file and enter the student name.");
+      addToast("Please select a file and enter the student name", "warning");
       return;
     }
 
@@ -979,7 +1046,7 @@ function App() {
       const result = await response.json();
 
       if (result.error) {
-        alert("Grading error: " + result.error);
+        addToast("Grading error: " + result.error, "error");
         setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
         return;
       }
@@ -995,7 +1062,7 @@ function App() {
       addToast(`Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`, "success");
     } catch (error) {
       console.error("Individual grading error:", error);
-      alert("Failed to grade: " + error.message);
+      addToast("Failed to grade: " + error.message, "error");
       setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
     }
   };
@@ -1079,9 +1146,57 @@ ${signature}`;
     try {
       const data = await api.parseDocument(file);
       if (data.error) {
-        alert("Error parsing document: " + data.error);
+        addToast("Error parsing document: " + data.error, "error");
         setImportedDoc({ text: "", html: "", filename: "", loading: false });
       } else {
+        // Check for duplicate assignment name
+        const newTitle = data.doc_title || file.name
+          .replace(/\.(docx|pdf|doc)$/i, "")
+          .replace(/_/g, " ");
+
+        // Sanitize title the same way backend does for filename comparison
+        const safeTitle = newTitle.replace(/[^a-zA-Z0-9 \-_]/g, '').trim();
+
+        // Check if this assignment already exists (compare sanitized names)
+        const existingName = savedAssignments.find(name =>
+          name.toLowerCase() === safeTitle.toLowerCase()
+        );
+
+        if (existingName) {
+          const confirmLoad = window.confirm(
+            `An assignment named "${existingName}" already exists.\n\nDo you want to load the existing assignment instead?`
+          );
+          if (confirmLoad) {
+            // Load existing assignment instead
+            setImportedDoc({ text: "", html: "", filename: "", loading: false });
+            try {
+              const existingData = await api.loadAssignment(existingName);
+              if (existingData.assignment) {
+                setAssignment({
+                  title: existingData.assignment.title || "",
+                  subject: existingData.assignment.subject || "Social Studies",
+                  totalPoints: existingData.assignment.totalPoints || 100,
+                  instructions: existingData.assignment.instructions || "",
+                  questions: existingData.assignment.questions || [],
+                  customMarkers: existingData.assignment.customMarkers || [],
+                  gradingNotes: existingData.assignment.gradingNotes || "",
+                  responseSections: existingData.assignment.responseSections || [],
+                });
+                setLoadedAssignmentName(existingName);
+                if (existingData.assignment.importedDoc) {
+                  setImportedDoc(existingData.assignment.importedDoc);
+                }
+              }
+            } catch (loadErr) {
+              console.error("Failed to load existing assignment:", loadErr);
+            }
+            return;
+          }
+          // User chose not to load existing - cancel the import
+          setImportedDoc({ text: "", html: "", filename: "", loading: false });
+          return;
+        }
+
         setImportedDoc({
           text: data.text || "",
           html: data.html || "",
@@ -1095,15 +1210,11 @@ ${signature}`;
           viewMode: "formatted",
         });
         if (!assignment.title) {
-          // Use document title from content (full name) or fallback to filename
-          const title = data.doc_title || file.name
-            .replace(/\.(docx|pdf|doc)$/i, "")
-            .replace(/_/g, " ");
-          setAssignment({ ...assignment, title });
+          setAssignment({ ...assignment, title: newTitle });
         }
       }
     } catch (err) {
-      alert("Error: " + err.message);
+      addToast("Error: " + err.message, "error");
       setImportedDoc({ text: "", html: "", filename: "", loading: false });
     }
   };
@@ -1138,11 +1249,9 @@ ${signature}`;
         });
       }
     } else if (text.length <= 2) {
-      alert("Please select more text (at least 3 characters)");
+      addToast("Please select more text (at least 3 characters)", "warning");
     } else if (text.length >= 2000) {
-      alert(
-        "Selection too long. Please select less text (under 2000 characters)",
-      );
+      addToast("Selection too long. Please select less text (under 2000 characters)", "warning");
     }
   };
 
@@ -1186,18 +1295,18 @@ ${signature}`;
 
   const saveAssignmentConfig = async () => {
     if (!assignment.title) {
-      alert("Please enter a title");
+      addToast("Please enter a title", "warning");
       return;
     }
     try {
       const dataToSave = { ...assignment, importedDoc };
       await api.saveAssignmentConfig(dataToSave);
-      alert("Assignment saved!");
+      addToast("Assignment saved!", "success");
       setLoadedAssignmentName(assignment.title);
       const list = await api.listAssignments();
       if (list.assignments) setSavedAssignments(list.assignments);
     } catch (e) {
-      alert("Error saving: " + e.message);
+      addToast("Error saving: " + e.message, "error");
     }
   };
 
@@ -1223,7 +1332,7 @@ ${signature}`;
         }
       }
     } catch (e) {
-      alert("Error loading: " + e.message);
+      addToast("Error loading: " + e.message, "error");
     }
   };
 
@@ -1232,6 +1341,7 @@ ${signature}`;
     try {
       await api.deleteAssignment(name);
       setSavedAssignments(savedAssignments.filter((a) => a !== name));
+      addToast(`"${name}" deleted`, "success");
       if (loadedAssignmentName === name) {
         setAssignment({
           title: "",
@@ -1246,17 +1356,17 @@ ${signature}`;
         setLoadedAssignmentName("");
       }
     } catch (e) {
-      alert("Error: " + e.message);
+      addToast("Error: " + e.message, "error");
     }
   };
 
   const exportAssignment = async (format) => {
     try {
       const data = await api.exportAssignment({ assignment, format });
-      if (data.error) alert("Error: " + data.error);
-      else alert("Assignment exported!");
+      if (data.error) addToast("Error: " + data.error, "error");
+      else addToast("Assignment exported!", "success");
     } catch (e) {
-      alert("Error exporting: " + e.message);
+      addToast("Error exporting: " + e.message, "error");
     }
   };
 
@@ -1269,11 +1379,11 @@ ${signature}`;
 
   const generateLessonPlan = async () => {
     if (selectedStandards.length === 0) {
-      alert("Please select at least one standard.");
+      addToast("Please select at least one standard", "warning");
       return;
     }
     if (!unitConfig.title) {
-      alert("Please enter a title.");
+      addToast("Please enter a title", "warning");
       return;
     }
     setPlannerLoading(true);
@@ -1282,10 +1392,10 @@ ${signature}`;
         standards: selectedStandards,
         config: { state: 'FL', grade: config.grade_level, subject: config.subject, ...unitConfig },
       });
-      if (data.error) alert("Error: " + data.error);
+      if (data.error) addToast("Error: " + data.error, "error");
       else setLessonPlan(data.plan || data);
     } catch (e) {
-      alert("Error generating plan: " + e.message);
+      addToast("Error generating plan: " + e.message, "error");
     } finally {
       setPlannerLoading(false);
     }
@@ -1295,10 +1405,10 @@ ${signature}`;
     if (!lessonPlan) return;
     try {
       const data = await api.exportLessonPlan(lessonPlan);
-      if (data.error) alert("Error exporting: " + data.error);
-      else alert("Lesson plan exported to: " + data.path);
+      if (data.error) addToast("Error exporting: " + data.error, "error");
+      else addToast("Lesson plan exported!", "success");
     } catch (e) {
-      alert("Error exporting: " + e.message);
+      addToast("Error exporting: " + e.message, "error");
     }
   };
 
@@ -1661,7 +1771,7 @@ ${signature}`;
                           try {
                             await api.openFolder(r.filepath);
                           } catch (e) {
-                            alert("Could not open file: " + e.message);
+                            addToast("Could not open file: " + e.message, "error");
                           }
                         }}
                         style={{
@@ -1963,10 +2073,10 @@ ${signature}`;
                                         const newFeedback = englishPart + "\n\n---\n\n" + result.translation;
                                         updateGrade(reviewModal.index, "feedback", newFeedback);
                                       } else if (result.error) {
-                                        alert("Translation error: " + result.error);
+                                        addToast("Translation error: " + result.error, "error");
                                       }
                                     } catch (err) {
-                                      alert("Failed to translate: " + err.message);
+                                      addToast("Failed to translate: " + err.message, "error");
                                     }
                                   }
                                 }}
@@ -2121,15 +2231,73 @@ ${signature}`;
               </span>
             </div>
             <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={addSelectedAsMarker} className="btn btn-primary">
+              <button
+                onClick={() => {
+                  // Reset everything and close
+                  setAssignment({
+                    title: "",
+                    subject: "Social Studies",
+                    totalPoints: 100,
+                    instructions: "",
+                    questions: [],
+                    customMarkers: [],
+                    gradingNotes: "",
+                    responseSections: [],
+                  });
+                  setImportedDoc({
+                    text: "",
+                    html: "",
+                    filename: "",
+                    loading: false,
+                  });
+                  setLoadedAssignmentName("");
+                  setDocEditorModal({ ...docEditorModal, show: false });
+                }}
+                className="btn btn-ghost"
+                style={{ padding: "8px" }}
+                title="Cancel and reset"
+              >
+                <Icon name="X" size={18} />
+              </button>
+              <button onClick={addSelectedAsMarker} className="btn btn-secondary">
                 <Icon name="Target" size={16} />
                 Mark Selection
               </button>
               <button
-                onClick={() =>
-                  setDocEditorModal({ ...docEditorModal, show: false })
-                }
-                className="btn btn-secondary"
+                onClick={async () => {
+                  // Save assignment if it has a title and markers
+                  if (assignment.title && (assignment.customMarkers || []).length > 0) {
+                    try {
+                      const dataToSave = { ...assignment, importedDoc };
+                      await api.saveAssignmentConfig(dataToSave);
+                      // Refresh saved assignments list
+                      const list = await api.listAssignments();
+                      if (list.assignments) setSavedAssignments(list.assignments);
+                    } catch (error) {
+                      console.error("Failed to save assignment:", error);
+                    }
+                  }
+                  // Reset the form for a new assignment
+                  setAssignment({
+                    title: "",
+                    subject: "Social Studies",
+                    totalPoints: 100,
+                    instructions: "",
+                    questions: [],
+                    customMarkers: [],
+                    gradingNotes: "",
+                    responseSections: [],
+                  });
+                  setImportedDoc({
+                    text: "",
+                    html: "",
+                    filename: "",
+                    loading: false,
+                  });
+                  setLoadedAssignmentName("");
+                  setDocEditorModal({ ...docEditorModal, show: false });
+                }}
+                className="btn btn-primary"
               >
                 Done
               </button>
@@ -2850,6 +3018,7 @@ ${signature}`;
                         onChange={async (e) => {
                           const periodFilename = e.target.value;
                           setSelectedPeriod(periodFilename);
+                          setGradeFilterStudent(""); // Clear student filter when period changes
                           await loadPeriodStudents(periodFilename);
                         }}
                         style={{ cursor: "pointer" }}
@@ -2866,6 +3035,295 @@ ${signature}`;
                           ✓ Filtering to {periodStudents.length} students in {periods.find(p => p.filename === selectedPeriod)?.period_name}
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {/* Student Filter */}
+                  <div
+                    style={{
+                      padding: "15px",
+                      background: "linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.05))",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(139, 92, 246, 0.2)",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Icon name="User" size={16} style={{ color: "#8b5cf6" }} />
+                      Filter by Student
+                    </label>
+                    {selectedPeriod && periodStudents.length > 0 ? (
+                      <select
+                        className="input"
+                        value={gradeFilterStudent}
+                        onChange={(e) => setGradeFilterStudent(e.target.value)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <option value="">All Students in Period</option>
+                        {periodStudents.map((student, idx) => {
+                          const displayName = student.full || student.name || `${student.first || ''} ${student.last || ''}`.trim() || String(student);
+                          return (
+                            <option key={idx} value={displayName}>
+                              {displayName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="input"
+                        value={gradeFilterStudent}
+                        onChange={(e) => setGradeFilterStudent(e.target.value)}
+                        placeholder="Type student name to filter..."
+                        style={{ fontSize: "0.9rem" }}
+                      />
+                    )}
+                    {gradeFilterStudent && (
+                      <p style={{ fontSize: "0.75rem", color: "#8b5cf6", marginTop: "8px", fontWeight: 500 }}>
+                        ✓ Will only grade files for "{gradeFilterStudent}"
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Assignment Filter */}
+                  {savedAssignments.length > 0 && (
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(16, 185, 129, 0.2)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon name="FileText" size={16} style={{ color: "#10b981" }} />
+                        Filter by Assignment
+                      </label>
+                      <select
+                        className="input"
+                        value={gradeFilterAssignment}
+                        onChange={async (e) => {
+                          const assignmentName = e.target.value;
+                          setGradeFilterAssignment(assignmentName);
+                          // Auto-load the assignment config when selected
+                          if (assignmentName) {
+                            try {
+                              const data = await api.loadAssignment(assignmentName);
+                              if (data.assignment) {
+                                setGradeAssignment({
+                                  title: data.assignment.title || "",
+                                  customMarkers: data.assignment.customMarkers || [],
+                                  gradingNotes: data.assignment.gradingNotes || "",
+                                  responseSections: data.assignment.responseSections || [],
+                                });
+                                if (data.assignment.importedDoc) {
+                                  setGradeImportedDoc(data.assignment.importedDoc);
+                                }
+                                addToast(`Loaded "${assignmentName}"`, "success");
+                              }
+                            } catch (err) {
+                              console.error("Load error:", err);
+                            }
+                          }
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <option value="">Select Assignment...</option>
+                        {savedAssignments.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                      {gradeFilterAssignment && (
+                        <p style={{ fontSize: "0.75rem", color: "#10b981", marginTop: "8px", fontWeight: 500 }}>
+                          ✓ Using "{gradeFilterAssignment}" configuration
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Active Filters Summary */}
+                  {(gradeFilterStudent || gradeFilterAssignment) && (
+                    <div
+                      style={{
+                        padding: "12px 15px",
+                        background: "rgba(251, 191, 36, 0.1)",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(251, 191, 36, 0.3)",
+                        marginBottom: "20px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <Icon name="Filter" size={16} style={{ color: "#f59e0b" }} />
+                        <span style={{ fontSize: "0.85rem", color: "#f59e0b", fontWeight: 600 }}>
+                          Active Filters:
+                        </span>
+                        {gradeFilterStudent && (
+                          <span style={{
+                            padding: "4px 10px",
+                            background: "rgba(99, 102, 241, 0.2)",
+                            borderRadius: "6px",
+                            fontSize: "0.8rem",
+                            color: "var(--accent-primary)"
+                          }}>
+                            Student: {gradeFilterStudent}
+                          </span>
+                        )}
+                        {gradeFilterAssignment && (
+                          <span style={{
+                            padding: "4px 10px",
+                            background: "rgba(16, 185, 129, 0.2)",
+                            borderRadius: "6px",
+                            fontSize: "0.8rem",
+                            color: "#10b981"
+                          }}>
+                            Assignment: {gradeFilterAssignment}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setGradeFilterStudent("");
+                          setGradeFilterAssignment("");
+                        }}
+                        style={{
+                          padding: "4px 10px",
+                          background: "rgba(239, 68, 68, 0.1)",
+                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                          borderRadius: "6px",
+                          color: "#ef4444",
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Matching Files Preview - Show when student filter is set */}
+                  {gradeFilterStudent && availableFiles.length > 0 && (
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05))",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(59, 130, 246, 0.2)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                        <Icon name="FileSearch" size={16} style={{ color: "#3b82f6" }} />
+                        Matching Submissions for "{gradeFilterStudent}"
+                      </label>
+                      {(() => {
+                        const studentName = gradeFilterStudent.toLowerCase();
+                        const matchingFiles = availableFiles.filter(f => {
+                          const fileName = f.name.toLowerCase();
+                          return fileName.includes(studentName.replace(/\s+/g, '')) ||
+                                 fileName.includes(studentName.replace(/\s+/g, '_')) ||
+                                 fileName.includes(studentName.replace(/\s+/g, '-')) ||
+                                 fileName.includes(studentName);
+                        });
+
+                        if (matchingFiles.length === 0) {
+                          return (
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0 }}>
+                              No files found matching "{gradeFilterStudent}"
+                            </p>
+                          );
+                        }
+
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <p style={{ fontSize: "0.75rem", color: "#3b82f6", margin: "0 0 5px 0" }}>
+                              {matchingFiles.length} file{matchingFiles.length !== 1 ? 's' : ''} found - select to grade:
+                            </p>
+                            {matchingFiles.map((file, idx) => (
+                              <label
+                                key={idx}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "10px",
+                                  padding: "10px 12px",
+                                  background: selectedFiles.includes(file.name) ? "rgba(59, 130, 246, 0.2)" : "var(--input-bg)",
+                                  borderRadius: "8px",
+                                  border: selectedFiles.includes(file.name) ? "1px solid rgba(59, 130, 246, 0.4)" : "1px solid var(--glass-border)",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFiles.includes(file.name)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedFiles([...selectedFiles, file.name]);
+                                    } else {
+                                      setSelectedFiles(selectedFiles.filter(f => f !== file.name));
+                                    }
+                                  }}
+                                  style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                                />
+                                <div style={{ flex: 1 }}>
+                                  <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>{file.name}</span>
+                                  {file.graded && (
+                                    <span style={{
+                                      marginLeft: "8px",
+                                      padding: "2px 6px",
+                                      background: "rgba(16, 185, 129, 0.2)",
+                                      borderRadius: "4px",
+                                      fontSize: "0.7rem",
+                                      color: "#10b981"
+                                    }}>
+                                      Already Graded
+                                    </span>
+                                  )}
+                                </div>
+                              </label>
+                            ))}
+                            {selectedFiles.length > 0 && (
+                              <div style={{ display: "flex", gap: "10px", marginTop: "5px" }}>
+                                <button
+                                  onClick={() => setSelectedFiles(matchingFiles.map(f => f.name))}
+                                  style={{
+                                    padding: "6px 12px",
+                                    background: "rgba(59, 130, 246, 0.1)",
+                                    border: "1px solid rgba(59, 130, 246, 0.3)",
+                                    borderRadius: "6px",
+                                    color: "#3b82f6",
+                                    fontSize: "0.8rem",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Select All
+                                </button>
+                                <button
+                                  onClick={() => setSelectedFiles([])}
+                                  style={{
+                                    padding: "6px 12px",
+                                    background: "rgba(239, 68, 68, 0.1)",
+                                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                                    borderRadius: "6px",
+                                    color: "#ef4444",
+                                    fontSize: "0.8rem",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Clear Selection
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -2907,365 +3365,35 @@ ${signature}`;
                     </div>
                   )}
 
-                    {/* Assignment Editing - Same as Builder */}
+                    {/* Grading Notes - Quick notes for this grading session */}
                     <div
                       className="glass-card"
                       style={{
-                        padding: "25px",
+                        padding: "20px",
                         marginBottom: "20px",
                         background: "rgba(251,191,36,0.05)",
                         border: "1px solid rgba(251,191,36,0.2)",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: "20px",
-                        }}
-                      >
-                        <h3
-                          style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 700,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
-                          <Icon
-                            name="FileEdit"
-                            size={20}
-                            style={{ color: "#fbbf24" }}
-                          />
-                          Assignment Config (Optional)
-                        </h3>
-                        <div style={{ display: "flex", gap: "8px" }}>
-                          {gradeAssignment.title && (
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const dataToSave = {
-                                    ...gradeAssignment,
-                                    importedDoc: gradeImportedDoc.filename ? gradeImportedDoc : null
-                                  };
-                                  await api.saveAssignmentConfig(dataToSave);
-                                  const list = await api.listAssignments();
-                                  if (list.assignments) setSavedAssignments(list.assignments);
-                                  alert("Assignment saved!");
-                                } catch (e) {
-                                  alert("Error saving: " + e.message);
-                                }
-                              }}
-                              className="btn btn-primary"
-                              style={{ padding: "6px 12px", fontSize: "0.85rem" }}
-                            >
-                              <Icon name="Save" size={14} />
-                              Save
-                            </button>
-                          )}
-                          {(gradeAssignment.customMarkers.length > 0 ||
-                            gradeAssignment.gradingNotes ||
-                            (gradeAssignment.responseSections || []).length > 0 ||
-                            gradeImportedDoc.filename) && (
-                            <button
-                              onClick={() => {
-                                setGradeAssignment({
-                                  title: "",
-                                  customMarkers: [],
-                                  gradingNotes: "",
-                                  responseSections: [],
-                                });
-                                setGradeImportedDoc({
-                                  text: "",
-                                  html: "",
-                                  filename: "",
-                                });
-                              }}
-                              className="btn btn-secondary"
-                              style={{ padding: "6px 12px", fontSize: "0.85rem" }}
-                            >
-                              <Icon name="X" size={14} />
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Load Saved Assignment */}
-                      {savedAssignments.length > 0 && (
-                        <div style={{ marginBottom: "20px" }}>
-                          <label className="label">Load Saved Assignment</label>
-                          <select
-                            className="input"
-                            value=""
-                            onChange={async (e) => {
-                              const name = e.target.value;
-                              if (!name) return;
-                              try {
-                                const data = await api.loadAssignment(name);
-                                if (data.assignment) {
-                                  setGradeAssignment({
-                                    title: data.assignment.title || "",
-                                    customMarkers: data.assignment.customMarkers || [],
-                                    gradingNotes: data.assignment.gradingNotes || "",
-                                    responseSections: data.assignment.responseSections || [],
-                                  });
-                                  if (data.assignment.importedDoc) {
-                                    setGradeImportedDoc(data.assignment.importedDoc);
-                                  }
-                                }
-                              } catch (err) {
-                                console.error("Load error:", err);
-                              }
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <option value="">Select a saved assignment...</option>
-                            {savedAssignments.map((name) => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Assignment Title */}
-                      <div style={{ marginBottom: "20px" }}>
-                        <label className="label">Assignment Title</label>
-                        <input
-                          type="text"
-                          className="input"
-                          value={gradeAssignment.title}
-                          onChange={(e) =>
-                            setGradeAssignment({
-                              ...gradeAssignment,
-                              title: e.target.value,
-                            })
-                          }
-                          placeholder="e.g., Louisiana Purchase Quiz"
-                        />
-                      </div>
-
-                      {/* Import Document - Redesigned */}
-                      <div style={{ marginBottom: "20px" }}>
-                        <input
-                          type="file"
-                          id="gradeFileInput"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              const data = await api.parseDocument(file);
-                              if (data.text) {
-                                setGradeImportedDoc({
-                                  text: data.text,
-                                  html: data.html || "",
-                                  filename: file.name,
-                                });
-                                setGradeAssignment({
-                                  ...gradeAssignment,
-                                  title: file.name.replace(/\.[^/.]+$/, ""),
-                                });
-                              }
-                            } catch (err) {
-                              console.error("Import error:", err);
-                            }
-                            e.target.value = "";
-                          }}
-                          accept=".docx,.pdf,.doc,.txt"
-                          style={{ display: "none" }}
-                        />
-
-                        {!gradeImportedDoc.text ? (
-                          /* Empty state - Upload prompt */
-                          <div
-                            onClick={() => document.getElementById("gradeFileInput")?.click()}
-                            style={{
-                              padding: "30px",
-                              borderRadius: "16px",
-                              border: "2px dashed var(--glass-border)",
-                              background: "var(--glass-bg)",
-                              cursor: "pointer",
-                              transition: "all 0.2s",
-                              textAlign: "center",
-                            }}
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.borderColor = "#f59e0b";
-                              e.currentTarget.style.background = "rgba(251,191,36,0.05)";
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.borderColor = "var(--glass-border)";
-                              e.currentTarget.style.background = "var(--glass-bg)";
-                            }}
-                          >
-                            <div style={{
-                              width: "60px",
-                              height: "60px",
-                              borderRadius: "16px",
-                              background: "linear-gradient(135deg, rgba(251,191,36,0.2), rgba(217,119,6,0.2))",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              margin: "0 auto 15px",
-                            }}>
-                              <Icon name="FileUp" size={28} style={{ color: "#f59e0b" }} />
-                            </div>
-                            <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "8px" }}>
-                              Import Document
-                            </h4>
-                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
-                              Drag & drop or click to upload a Word doc or PDF
-                            </p>
-                            <div style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              padding: "10px 20px",
-                              borderRadius: "10px",
-                              background: "linear-gradient(135deg, #f59e0b, #d97706)",
-                              color: "#000",
-                              fontWeight: 600,
-                              fontSize: "0.9rem",
-                            }}>
-                              <Icon name="Upload" size={18} />
-                              Choose File
-                            </div>
-                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "12px" }}>
-                              Supports .docx, .pdf, .doc, .txt
-                            </p>
-                          </div>
-                        ) : (
-                          /* Document loaded state */
-                          <div style={{
-                            padding: "20px",
-                            borderRadius: "16px",
-                            background: "linear-gradient(135deg, rgba(251,191,36,0.08), rgba(217,119,6,0.05))",
-                            border: "1px solid rgba(251,191,36,0.25)",
-                          }}>
-                            <div style={{ display: "flex", alignItems: "flex-start", gap: "15px" }}>
-                              {/* Document icon */}
-                              <div style={{
-                                width: "50px",
-                                height: "50px",
-                                borderRadius: "12px",
-                                background: "linear-gradient(135deg, #f59e0b, #d97706)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                              }}>
-                                <Icon name="FileText" size={24} style={{ color: "#fff" }} />
-                              </div>
-
-                              {/* Document info */}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <h4 style={{
-                                  fontSize: "0.95rem",
-                                  fontWeight: 600,
-                                  marginBottom: "4px",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}>
-                                  {gradeImportedDoc.filename}
-                                </h4>
-                                <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px" }}>
-                                  <Icon name="CheckCircle" size={14} style={{ color: "#4ade80" }} />
-                                  Document loaded successfully
-                                </p>
-                              </div>
-
-                              {/* Action buttons */}
-                              <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                                <button
-                                  onClick={() => {
-                                    setImportedDoc({ ...gradeImportedDoc, loading: false });
-                                    setDocEditorModal({
-                                      show: true,
-                                      editedHtml: gradeImportedDoc.html || gradeImportedDoc.text,
-                                      viewMode: "formatted",
-                                    });
-                                  }}
-                                  style={{
-                                    padding: "10px 16px",
-                                    borderRadius: "10px",
-                                    border: "1px solid var(--glass-border)",
-                                    background: "var(--glass-bg)",
-                                    color: "var(--text-primary)",
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                    fontWeight: 500,
-                                    fontSize: "0.85rem",
-                                    transition: "all 0.2s",
-                                  }}
-                                >
-                                  <Icon name="Highlighter" size={16} style={{ color: "#f59e0b" }} />
-                                  Edit & Mark
-                                </button>
-                                <button
-                                  onClick={() => document.getElementById("gradeFileInput")?.click()}
-                                  style={{
-                                    padding: "10px",
-                                    borderRadius: "10px",
-                                    border: "1px solid var(--glass-border)",
-                                    background: "var(--glass-bg)",
-                                    color: "var(--text-secondary)",
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    transition: "all 0.2s",
-                                  }}
-                                  title="Replace document"
-                                >
-                                  <Icon name="RefreshCw" size={16} />
-                                </button>
-                                <button
-                                  onClick={() => setGradeImportedDoc({ text: '', html: '', filename: '' })}
-                                  style={{
-                                    padding: "10px",
-                                    borderRadius: "10px",
-                                    border: "1px solid rgba(239,68,68,0.3)",
-                                    background: "rgba(239,68,68,0.1)",
-                                    color: "#ef4444",
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    transition: "all 0.2s",
-                                  }}
-                                  title="Remove document"
-                                >
-                                  <Icon name="Trash2" size={16} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Grading Notes */}
-                      <div>
-                        <label className="label">
-                          Assignment-Specific Grading Notes
-                        </label>
-                        <textarea
-                          className="input"
-                          value={gradeAssignment.gradingNotes}
-                          onChange={(e) =>
-                            setGradeAssignment({
-                              ...gradeAssignment,
-                              gradingNotes: e.target.value,
-                            })
-                          }
-                          placeholder="Special instructions for grading this assignment..."
-                          style={{ minHeight: "100px" }}
-                        />
-                      </div>
-
+                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon name="FileEdit" size={16} style={{ color: "#fbbf24" }} />
+                        Grading Notes (Optional)
+                      </label>
+                      <textarea
+                        className="input"
+                        value={gradeAssignment.gradingNotes}
+                        onChange={(e) =>
+                          setGradeAssignment({
+                            ...gradeAssignment,
+                            gradingNotes: e.target.value,
+                          })
+                        }
+                        placeholder="Special instructions for this grading session..."
+                        style={{ minHeight: "80px" }}
+                      />
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "8px" }}>
+                        For full assignment setup (markers, imported docs), use the Builder tab and select via "Filter by Assignment" above.
+                      </p>
                     </div>
 
                     {/* Individual Upload - For Paper/Handwritten Assignments */}
@@ -3629,7 +3757,7 @@ ${signature}`;
                                 setEmailApprovals({});
                                 setEditedEmails({});
                               } catch (e) {
-                                alert("Error clearing results: " + e.message);
+                                addToast("Error clearing results: " + e.message, "error");
                               }
                             }
                           }}
@@ -4258,10 +4386,7 @@ ${signature}`;
                                             );
                                             setEmailApprovals(newApprovals);
                                           } catch (err) {
-                                            alert(
-                                              "Error deleting result: " +
-                                                err.message,
-                                            );
+                                            addToast("Error deleting result: " + err.message, "error");
                                           }
                                         }
                                       }}
@@ -5066,7 +5191,7 @@ ${signature}`;
                         try {
                           const result = await api.uploadRoster(file);
                           if (result.error) {
-                            alert(result.error);
+                            addToast(result.error, "error");
                           } else {
                             const rostersData = await api.listRosters();
                             setRosters(rostersData.rosters || []);
@@ -5076,7 +5201,7 @@ ${signature}`;
                             });
                           }
                         } catch (err) {
-                          alert("Upload failed: " + err.message);
+                          addToast("Upload failed: " + err.message, "error");
                         }
                         setUploadingRoster(false);
                         e.target.value = "";
@@ -5227,7 +5352,7 @@ ${signature}`;
                         const file = e.target.files?.[0];
                         if (!file) return;
                         if (!newPeriodName.trim()) {
-                          alert("Please enter a period name first");
+                          addToast("Please enter a period name first", "warning");
                           e.target.value = "";
                           return;
                         }
@@ -5238,14 +5363,14 @@ ${signature}`;
                             newPeriodName,
                           );
                           if (result.error) {
-                            alert(result.error);
+                            addToast(result.error, "error");
                           } else {
                             const periodsData = await api.listPeriods();
                             setPeriods(periodsData.periods || []);
                             setNewPeriodName("");
                           }
                         } catch (err) {
-                          alert("Upload failed: " + err.message);
+                          addToast("Upload failed: " + err.message, "error");
                         }
                         setUploadingPeriod(false);
                         e.target.value = "";
@@ -5530,7 +5655,7 @@ ${signature}`;
                                         delete newData[studentId];
                                         setStudentAccommodations(newData);
                                       } catch (err) {
-                                        alert("Error removing accommodation: " + err.message);
+                                        addToast("Error removing accommodation: " + err.message, "error");
                                       }
                                     }
                                   }}
@@ -5589,16 +5714,12 @@ ${signature}`;
                                   "accommodation_type",
                                   "accommodation_notes"
                                 );
-                                alert(
-                                  "Import Complete" + String.fromCharCode(10) + String.fromCharCode(10) +
-                                  "Imported: " + result.imported + String.fromCharCode(10) +
-                                  "Skipped: " + result.skipped
-                                );
+                                addToast("Import complete: " + result.imported + " imported, " + result.skipped + " skipped", "success");
                                 // Reload accommodations
                                 const data = await api.getStudentAccommodations();
                                 if (data.accommodations) setStudentAccommodations(data.accommodations);
                               } catch (err) {
-                                alert("Import failed: " + err.message);
+                                addToast("Import failed: " + err.message, "error");
                               }
                               e.target.value = "";
                             }}
@@ -5616,7 +5737,7 @@ ${signature}`;
                               a.click();
                               URL.revokeObjectURL(url);
                             } catch (err) {
-                              alert("Export failed: " + err.message);
+                              addToast("Export failed: " + err.message, "error");
                             }
                           }}
                           className="btn btn-secondary"
@@ -5772,7 +5893,7 @@ ${signature}`;
                                 data.data_locations.join("\n")
                               );
                             } catch (err) {
-                              alert("Failed to fetch data summary");
+                              addToast("Failed to fetch data summary", "error");
                             }
                           }}
                           className="btn btn-secondary"
@@ -5795,7 +5916,7 @@ ${signature}`;
                               a.click();
                               URL.revokeObjectURL(url);
                             } catch (err) {
-                              alert("Failed to export data");
+                              addToast("Failed to export data", "error");
                             }
                           }}
                           className="btn btn-secondary"
@@ -5818,7 +5939,7 @@ ${signature}`;
 
                             const confirmText = prompt("Type DELETE to confirm:");
                             if (confirmText !== "DELETE") {
-                              alert("Deletion cancelled");
+                              addToast("Deletion cancelled", "warning");
                               return;
                             }
 
@@ -5830,13 +5951,13 @@ ${signature}`;
                               });
                               const data = await response.json();
                               if (data.status === "success") {
-                                alert("✓ All student data has been deleted.\n\n" + data.deleted.join("\n"));
-                                window.location.reload();
+                                addToast("All student data has been deleted", "success");
+                                setTimeout(() => window.location.reload(), 1000);
                               } else {
-                                alert("Error: " + (data.error || "Unknown error"));
+                                addToast("Error: " + (data.error || "Unknown error"), "error");
                               }
                             } catch (err) {
-                              alert("Failed to delete data: " + err.message);
+                              addToast("Failed to delete data: " + err.message, "error");
                             }
                           }}
                           className="btn btn-danger"
@@ -5926,14 +6047,14 @@ ${signature}`;
                           newDocDescription,
                         );
                         if (result.error) {
-                          alert(result.error);
+                          addToast(result.error, "error");
                         } else {
                           const docsData = await api.listSupportDocuments();
                           setSupportDocs(docsData.documents || []);
                           setNewDocDescription("");
                         }
                       } catch (err) {
-                        alert("Upload failed: " + err.message);
+                        addToast("Upload failed: " + err.message, "error");
                       }
                       setUploadingDoc(false);
                       e.target.value = "";
@@ -6178,7 +6299,7 @@ ${signature}`;
                           setRosters(data.rosters || []);
                           setRosterMappingModal({ show: false, roster: null });
                         } catch (err) {
-                          alert("Error saving mapping: " + err.message);
+                          addToast("Error saving mapping: " + err.message, "error");
                         }
                       }}
                       className="btn btn-primary"
@@ -6358,12 +6479,12 @@ ${signature}`;
                           document.getElementById("accommodation-student-id")?.value;
 
                         if (!studentId) {
-                          alert("Please enter a student ID");
+                          addToast("Please enter a student ID", "warning");
                           return;
                         }
 
                         if (selectedAccommodationPresets.length === 0 && !accommodationCustomNotes) {
-                          alert("Please select at least one preset or add custom notes");
+                          addToast("Please select at least one preset or add custom notes", "warning");
                           return;
                         }
 
@@ -6382,7 +6503,7 @@ ${signature}`;
                           setSelectedAccommodationPresets([]);
                           setAccommodationCustomNotes("");
                         } catch (err) {
-                          alert("Error saving accommodation: " + err.message);
+                          addToast("Error saving accommodation: " + err.message, "error");
                         }
                       }}
                       className="btn btn-primary"
@@ -6444,32 +6565,6 @@ ${signature}`;
                       />
                       Saved Assignments ({savedAssignments.length})
                     </h3>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAssignment({
-                          title: "",
-                          subject: "Social Studies",
-                          totalPoints: 100,
-                          instructions: "",
-                          questions: [],
-                          customMarkers: [],
-                          gradingNotes: "",
-                          responseSections: [],
-                        });
-                        setImportedDoc({
-                          text: "",
-                          html: "",
-                          filename: "",
-                          loading: false,
-                        });
-                        setLoadedAssignmentName("");
-                      }}
-                      className="btn btn-primary"
-                      style={{ padding: "6px 12px", fontSize: "0.85rem" }}
-                    >
-                      + New
-                    </button>
                   </div>
 
                   {savedAssignmentsExpanded && (
@@ -7134,15 +7229,33 @@ ${signature}`;
 
                   {/* Export Buttons */}
                   <div
-                    style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}
+                    style={{ display: "flex", gap: "15px", flexWrap: "wrap", alignItems: "center" }}
                   >
+                    {assignment.title && (
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          color: "#4ade80",
+                          fontSize: "0.85rem",
+                          padding: "8px 12px",
+                          background: "rgba(74,222,128,0.1)",
+                          border: "1px solid rgba(74,222,128,0.3)",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <Icon name="Check" size={14} style={{ color: "#4ade80" }} />
+                        Auto-saves
+                      </span>
+                    )}
                     <button
                       onClick={saveAssignmentConfig}
                       disabled={!assignment.title}
-                      className="btn btn-primary"
+                      className="btn btn-secondary"
                       style={{ opacity: !assignment.title ? 0.5 : 1 }}
                     >
-                      <Icon name="Save" size={18} /> Save for Grading
+                      <Icon name="Save" size={18} /> Save Now
                     </button>
                     <button
                       onClick={() => exportAssignment("docx")}
@@ -7273,7 +7386,7 @@ ${signature}`;
                             try {
                               const report = await api.exportDistrictReport();
                               if (report.error) {
-                                alert(report.error);
+                                addToast(report.error, "error");
                                 return;
                               }
                               const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
@@ -7284,7 +7397,7 @@ ${signature}`;
                               a.click();
                               URL.revokeObjectURL(url);
                             } catch (err) {
-                              alert("Failed to export report: " + err.message);
+                              addToast("Failed to export report: " + err.message, "error");
                             }
                           }}
                           style={{ display: "flex", alignItems: "center", gap: "6px" }}
@@ -8681,7 +8794,7 @@ ${signature}`;
       <div
         style={{
           position: "fixed",
-          bottom: "20px",
+          top: "20px",
           right: "20px",
           zIndex: 9999,
           display: "flex",
