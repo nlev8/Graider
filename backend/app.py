@@ -35,6 +35,17 @@ except ImportError:
         def get_baseline_summary(student_id):
             return None
 
+# Import accommodation support for IEP/504 students
+try:
+    from backend.accommodations import build_accommodation_prompt
+except ImportError:
+    try:
+        from accommodations import build_accommodation_prompt
+    except ImportError:
+        # Fallback if module not available
+        def build_accommodation_prompt(student_id):
+            return ""
+
 # Load environment variables
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 _root_dir = os.path.dirname(_app_dir)
@@ -405,6 +416,14 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                         sections_text += f"  {idx}. From \"{start}\" to end of document\n"
                 sections_text += "\nStudent responses should be found WITHIN these highlighted sections. Content outside these sections is likely teacher instructions or questions.\n"
                 file_ai_notes += sections_text
+
+            # Add IEP/504 accommodation instructions if student has accommodations
+            # FERPA compliant: Only accommodation TYPE sent to AI, never student name/ID
+            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                accommodation_prompt = build_accommodation_prompt(student_info['student_id'])
+                if accommodation_prompt:
+                    file_ai_notes += f"\n{accommodation_prompt}\n"
+                    grading_state["log"].append(f"  Applying IEP/504 accommodations")
 
             # Add file-specific markers to the markers list temporarily
             original_markers = STUDENT_WORK_MARKERS.copy()
