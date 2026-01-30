@@ -17,13 +17,16 @@ DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
 
 
 def load_support_documents_for_planning() -> str:
-    """Load curriculum guides and standards documents for lesson planning."""
+    """Load curriculum guides, standards, and other planning documents."""
     if not os.path.exists(DOCUMENTS_DIR):
         return ""
 
     docs_content = []
     total_chars = 0
-    max_chars = 6000  # Limit for lesson planning
+    max_chars = 12000  # Increased limit for richer planning context
+
+    # Document types useful for lesson planning (prioritized)
+    planning_doc_types = ['curriculum', 'standards', 'pacing_guide', 'textbook', 'assessment', 'general']
 
     for f in os.listdir(DOCUMENTS_DIR):
         if f.endswith('.meta.json'):
@@ -35,8 +38,8 @@ def load_support_documents_for_planning() -> str:
                 filepath = metadata.get('filepath', '')
                 description = metadata.get('description', '')
 
-                # Only include curriculum and standards docs for planning
-                if doc_type not in ['curriculum', 'standards']:
+                # Include all planning-relevant document types
+                if doc_type not in planning_doc_types:
                     continue
 
                 if not os.path.exists(filepath):
@@ -66,8 +69,10 @@ def load_support_documents_for_planning() -> str:
                     doc_label = doc_type.upper()
                     if description:
                         doc_label += f" - {description}"
-                    docs_content.append(f"[{doc_label}]\n{content[:2000]}")
-                    total_chars += len(content[:2000])
+                    # Use more content per document (up to 4000 chars)
+                    chunk = content[:4000]
+                    docs_content.append(f"[{doc_label}]\n{chunk}")
+                    total_chars += len(chunk)
 
             except Exception as e:
                 continue
@@ -80,8 +85,8 @@ def load_support_documents_for_planning() -> str:
 
 def load_standards(state, subject):
     """Load standards from JSON file."""
-    # Replace spaces with underscores for filename
-    subject_clean = subject.lower().replace(' ', '_')
+    # Clean subject name for filename (replace spaces with underscores, slashes with hyphens)
+    subject_clean = subject.lower().replace(' ', '_').replace('/', '-')
     filename = f"standards_{state.lower()}_{subject_clean}.json"
     filepath = DATA_DIR / filename
 
@@ -110,12 +115,92 @@ def get_standards():
     return jsonify({"standards": []})
 
 
+@planner_bp.route('/api/brainstorm-lesson-ideas', methods=['POST'])
+def brainstorm_lesson_ideas():
+    """Generate multiple lesson plan ideas/concepts for selected standards."""
+    data = request.json
+    selected_standards = data.get('standards', [])
+    config = data.get('config', {})
+
+    if not selected_standards:
+        return jsonify({"error": "No standards selected"})
+
+    try:
+        from openai import OpenAI
+        from dotenv import load_dotenv
+
+        app_dir = Path(__file__).parent.parent.parent
+        load_dotenv(app_dir / '.env', override=True)
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+            raise Exception("Missing or placeholder API Key")
+
+        client = OpenAI(api_key=api_key)
+
+        # Load support documents for context
+        support_docs = load_support_documents_for_planning()
+
+        prompt = f"""You are an expert curriculum developer brainstorming lesson plan ideas for a {config.get('grade', '7')}th grade {config.get('subject', 'Social Studies')} class.
+{support_docs}
+
+Standards to Cover:
+{', '.join(selected_standards)}
+
+Generate 5 creative and diverse lesson plan ideas that would effectively teach these standards. Each idea should represent a DIFFERENT teaching approach.
+
+Return JSON with this structure:
+{{
+    "ideas": [
+        {{
+            "id": 1,
+            "title": "Engaging, descriptive title",
+            "approach": "Activity-Based|Discussion|Project|Simulation|Research|Collaborative|Technology-Enhanced|Primary Sources|Game-Based",
+            "brief": "1-2 sentence description of the lesson concept",
+            "hook": "The engaging opening or hook for students",
+            "key_activity": "The main learning activity in 1 sentence",
+            "assessment_type": "How learning will be assessed"
+        }}
+    ]
+}}
+
+Make each idea distinct - vary the approaches (hands-on activities, discussions, projects, simulations, research, collaborative work, technology integration, primary source analysis, games/competitions). Be creative and specific to the content."""
+
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+
+        content = completion.choices[0].message.content
+        ideas = json.loads(content)
+        return jsonify(ideas)
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Brainstorm Error: {error_msg}")
+        # Fallback mock ideas
+        mock_ideas = {
+            "ideas": [
+                {"id": 1, "title": "Interactive Discussion", "approach": "Discussion", "brief": "Engage students in guided discussion.", "hook": "Opening question", "key_activity": "Socratic seminar", "assessment_type": "Participation rubric"},
+                {"id": 2, "title": "Hands-On Activity", "approach": "Activity-Based", "brief": "Students learn through doing.", "hook": "Mystery item reveal", "key_activity": "Station rotations", "assessment_type": "Exit ticket"},
+                {"id": 3, "title": "Research Project", "approach": "Research", "brief": "Students investigate topics independently.", "hook": "Essential question", "key_activity": "Guided research", "assessment_type": "Presentation"},
+            ]
+        }
+        return jsonify({**mock_ideas, "error": error_msg, "method": "Mock"})
+
+
 @planner_bp.route('/api/generate-lesson-plan', methods=['POST'])
 def generate_lesson_plan():
     """Generate a lesson plan using AI."""
     data = request.json
     selected_standards = data.get('standards', [])
     config = data.get('config', {})
+    selected_idea = data.get('selectedIdea')  # Optional: from brainstorming
+    generate_variations = data.get('generateVariations', False)  # Generate multiple variations
 
     if not selected_standards:
         return jsonify({"error": "No standards selected"})
@@ -140,10 +225,25 @@ def generate_lesson_plan():
         # Load support documents (curriculum guides, standards)
         support_docs = load_support_documents_for_planning()
 
+        # Build idea-specific guidance if a brainstormed idea was selected
+        idea_guidance = ""
+        if selected_idea:
+            idea_guidance = f"""
+IMPORTANT: Base this plan on the following concept:
+- Title/Theme: {selected_idea.get('title', '')}
+- Teaching Approach: {selected_idea.get('approach', '')}
+- Concept: {selected_idea.get('brief', '')}
+- Opening Hook: {selected_idea.get('hook', '')}
+- Key Activity: {selected_idea.get('key_activity', '')}
+- Assessment Type: {selected_idea.get('assessment_type', '')}
+
+Develop this specific concept into a complete, detailed lesson plan.
+"""
+
         prompt = f"""
 You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
 {support_docs}
-
+{idea_guidance}
 Title: "{config.get('title', 'Untitled')}"
 Duration: {config.get('duration', 1)} day(s)
 Class Period Length: {period_length} minutes
@@ -214,6 +314,35 @@ Return JSON with this structure:
 
 Make the content SPECIFIC and DETAILED with real examples and facts."""
 
+        # If generating variations, create 3 different versions
+        if generate_variations:
+            variations = []
+            approaches = [
+                ("Activity-Based", "Focus on hands-on activities, station rotations, and interactive learning experiences."),
+                ("Discussion & Analysis", "Focus on Socratic questioning, primary source analysis, and class discussions."),
+                ("Project-Based", "Focus on student-created projects, research, and presentations.")
+            ]
+
+            for approach_name, approach_desc in approaches:
+                variation_prompt = prompt + f"\n\nIMPORTANT: Use a {approach_name} approach. {approach_desc}"
+
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
+                        {"role": "user", "content": variation_prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+
+                content = completion.choices[0].message.content
+                plan = json.loads(content)
+                plan['approach'] = approach_name
+                variations.append(plan)
+
+            return jsonify({"variations": variations, "method": "AI"})
+
+        # Single plan generation
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[

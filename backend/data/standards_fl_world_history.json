@@ -6,102 +6,362 @@
     {
       "code": "SS.912.W.1.1",
       "benchmark": "Use timelines to establish cause and effect relationships of historical events.",
-      "topics": ["Timelines", "Cause and Effect", "Chronology"]
+      "topics": ["Timelines", "Cause and Effect", "Chronology"],
+      "dok": 2,
+      "item_specs": "Students interpret timelines to identify causal relationships between events across different time periods and regions.",
+      "essential_questions": [
+        "How do historians use timelines to understand cause and effect?",
+        "Why is chronological understanding important in world history?"
+      ],
+      "learning_targets": [
+        "I can create and interpret historical timelines.",
+        "I can identify cause and effect relationships using timelines.",
+        "I can place world events in chronological order."
+      ],
+      "vocabulary": ["chronology", "cause and effect", "era", "periodization", "BCE", "CE", "concurrent"],
+      "sample_assessment": "A timeline shows the fall of Rome in 476 CE and the start of the Medieval Period. This demonstrates: A) Correlation B) Cause and effect C) Coincidence D) Bias"
     },
     {
       "code": "SS.912.W.1.3",
       "benchmark": "Interpret and evaluate primary and secondary sources.",
-      "topics": ["Primary Sources", "Secondary Sources", "Analysis"]
+      "topics": ["Primary Sources", "Secondary Sources", "Analysis"],
+      "dok": 3,
+      "item_specs": "Students analyze and evaluate historical sources for reliability, perspective, and bias.",
+      "essential_questions": [
+        "How do we determine if a historical source is reliable?",
+        "What is the difference between primary and secondary sources?"
+      ],
+      "learning_targets": [
+        "I can distinguish between primary and secondary sources.",
+        "I can evaluate sources for bias and perspective.",
+        "I can use multiple sources to corroborate information."
+      ],
+      "vocabulary": ["primary source", "secondary source", "bias", "perspective", "corroborate", "reliability", "contextualize"],
+      "sample_assessment": "A diary written by a soldier during World War I is an example of: A) A secondary source B) A primary source C) A biased source D) An unreliable source"
     },
     {
       "code": "SS.912.W.2.1",
       "benchmark": "Locate the extent of Byzantine territory at the height of the empire.",
-      "topics": ["Byzantine Empire", "Geography", "Eastern Roman Empire"]
+      "topics": ["Byzantine Empire", "Geography", "Eastern Roman Empire"],
+      "dok": 1,
+      "item_specs": "Students identify the geographic extent of the Byzantine Empire on maps.",
+      "essential_questions": [
+        "Where was the Byzantine Empire located?",
+        "How did geography influence Byzantine power?"
+      ],
+      "learning_targets": [
+        "I can locate the Byzantine Empire on a map.",
+        "I can identify Constantinople and its strategic importance.",
+        "I can describe the territory controlled at the empire's height."
+      ],
+      "vocabulary": ["Byzantine Empire", "Constantinople", "Eastern Roman Empire", "Bosporus", "Mediterranean", "Anatolia"],
+      "sample_assessment": "The capital of the Byzantine Empire was: A) Rome B) Athens C) Constantinople D) Alexandria"
     },
     {
       "code": "SS.912.W.2.3",
       "benchmark": "Analyze the extent to which the Byzantine Empire was a continuation of the old Roman Empire.",
-      "topics": ["Byzantine Empire", "Roman Empire", "Continuity"]
+      "topics": ["Byzantine Empire", "Roman Empire", "Continuity"],
+      "dok": 3,
+      "item_specs": "Students analyze continuities and changes between Roman and Byzantine civilizations.",
+      "essential_questions": [
+        "In what ways did the Byzantine Empire continue Roman traditions?",
+        "How did the Byzantine Empire differ from ancient Rome?"
+      ],
+      "learning_targets": [
+        "I can identify Roman traditions preserved by Byzantines.",
+        "I can explain how Byzantine culture evolved from Roman roots.",
+        "I can analyze continuity and change in government and culture."
+      ],
+      "vocabulary": ["continuity", "change", "Roman law", "Justinian's Code", "Eastern Orthodox", "Latin", "Greek"],
+      "sample_assessment": "Justinian's Code demonstrated Byzantine continuity with Rome by: A) Adopting Greek as the official language B) Codifying Roman law C) Converting to Islam D) Abandoning the emperor system"
     },
     {
       "code": "SS.912.W.2.5",
       "benchmark": "Explain the contributions of the Byzantine Empire.",
-      "topics": ["Byzantine Contributions", "Art", "Architecture", "Law"]
+      "topics": ["Byzantine Contributions", "Art", "Architecture", "Law"],
+      "dok": 2,
+      "item_specs": "Students explain Byzantine achievements in art, architecture, law, and religion.",
+      "essential_questions": [
+        "What lasting contributions did the Byzantine Empire make?",
+        "How did Byzantine culture influence later civilizations?"
+      ],
+      "learning_targets": [
+        "I can describe Byzantine achievements in art and architecture.",
+        "I can explain the significance of Justinian's Code.",
+        "I can identify Byzantine influence on Eastern Orthodox Christianity."
+      ],
+      "vocabulary": ["Hagia Sophia", "mosaic", "icon", "Justinian's Code", "Eastern Orthodox", "preservation of knowledge"],
+      "sample_assessment": "The Hagia Sophia is an example of Byzantine achievement in: A) Military strategy B) Architecture C) Agriculture D) Navigation"
     },
     {
       "code": "SS.912.W.2.7",
       "benchmark": "Describe the causes and effects of the Crusades on Western Europe and the Middle East.",
-      "topics": ["Crusades", "Medieval Europe", "Middle East"]
+      "topics": ["Crusades", "Medieval Europe", "Middle East"],
+      "dok": 2,
+      "item_specs": "Students analyze the motivations, events, and consequences of the Crusades.",
+      "essential_questions": [
+        "Why did Europeans launch the Crusades?",
+        "What were the lasting effects of the Crusades?"
+      ],
+      "learning_targets": [
+        "I can explain the causes of the Crusades.",
+        "I can describe the major Crusades and their outcomes.",
+        "I can analyze the effects on Europe and the Middle East."
+      ],
+      "vocabulary": ["Crusades", "Holy Land", "Pope Urban II", "Jerusalem", "cultural exchange", "trade routes", "religious conflict"],
+      "sample_assessment": "Which was a LONG-TERM effect of the Crusades? A) Muslim control of Europe B) Increased trade between Europe and Asia C) The end of feudalism D) The fall of the Byzantine Empire"
     },
     {
       "code": "SS.912.W.2.10",
       "benchmark": "Describe the development of feudalism and manorialism and their impact on medieval Europe.",
-      "topics": ["Feudalism", "Manorialism", "Medieval Society"]
+      "topics": ["Feudalism", "Manorialism", "Medieval Society"],
+      "dok": 2,
+      "item_specs": "Students describe the structure and function of medieval European society.",
+      "essential_questions": [
+        "How did feudalism organize medieval society?",
+        "What was daily life like under manorialism?"
+      ],
+      "learning_targets": [
+        "I can explain the feudal hierarchy.",
+        "I can describe the manorial system and self-sufficiency.",
+        "I can analyze the rights and obligations of different social classes."
+      ],
+      "vocabulary": ["feudalism", "manorialism", "lord", "vassal", "serf", "fief", "manor", "hierarchy"],
+      "sample_assessment": "In the feudal system, a vassal received land in exchange for: A) Money B) Military service and loyalty C) Religious devotion D) Agricultural products"
     },
     {
       "code": "SS.912.W.3.1",
       "benchmark": "Discuss significant people and beliefs associated with Islam.",
-      "topics": ["Islam", "Muhammad", "Religious Beliefs"]
+      "topics": ["Islam", "Muhammad", "Religious Beliefs"],
+      "dok": 2,
+      "item_specs": "Students identify key figures and core beliefs of Islam.",
+      "essential_questions": [
+        "What are the core beliefs of Islam?",
+        "How did Islam spread throughout the world?"
+      ],
+      "learning_targets": [
+        "I can explain the Five Pillars of Islam.",
+        "I can describe the role of Muhammad as prophet.",
+        "I can identify the significance of the Quran."
+      ],
+      "vocabulary": ["Islam", "Muhammad", "Quran", "Five Pillars", "mosque", "Mecca", "Allah", "Muslim"],
+      "sample_assessment": "The Five Pillars of Islam include all of the following EXCEPT: A) Prayer five times daily B) Fasting during Ramadan C) Pilgrimage to Mecca D) Belief in reincarnation"
     },
     {
       "code": "SS.912.W.3.6",
       "benchmark": "Describe the interaction among Muslim, Christian, and Jewish societies in Medieval Spain.",
-      "topics": ["Medieval Spain", "Religious Interaction", "Al-Andalus"]
+      "topics": ["Medieval Spain", "Religious Interaction", "Al-Andalus"],
+      "dok": 2,
+      "item_specs": "Students describe coexistence and conflict among religious groups in medieval Spain.",
+      "essential_questions": [
+        "How did different religious groups interact in medieval Spain?",
+        "What was the significance of Al-Andalus?"
+      ],
+      "learning_targets": [
+        "I can describe the concept of convivencia.",
+        "I can explain cultural exchange in Al-Andalus.",
+        "I can analyze both cooperation and conflict among religious groups."
+      ],
+      "vocabulary": ["Al-Andalus", "convivencia", "Reconquista", "tolerance", "Cordoba", "cultural exchange", "Moorish"],
+      "sample_assessment": "The term 'convivencia' refers to: A) Religious warfare B) Coexistence of Muslims, Christians, and Jews C) The Reconquista D) Forced conversion"
     },
     {
       "code": "SS.912.W.4.1",
       "benchmark": "Identify the economic and political causes for the rise of the Italian city-states during the Renaissance.",
-      "topics": ["Renaissance", "Italian City-States", "Trade"]
+      "topics": ["Renaissance", "Italian City-States", "Trade"],
+      "dok": 2,
+      "item_specs": "Students explain factors that led to the emergence of Italian city-states.",
+      "essential_questions": [
+        "Why did the Renaissance begin in Italy?",
+        "How did trade contribute to the rise of city-states?"
+      ],
+      "learning_targets": [
+        "I can explain Italy's geographic advantages for trade.",
+        "I can describe the political structure of city-states.",
+        "I can connect wealth from trade to cultural achievements."
+      ],
+      "vocabulary": ["city-state", "Renaissance", "Florence", "Venice", "merchant class", "patron", "banking", "Medici"],
+      "sample_assessment": "Italian city-states like Florence became wealthy primarily through: A) Agriculture B) Trade and banking C) Conquest D) Mining"
     },
     {
       "code": "SS.912.W.4.3",
       "benchmark": "Identify the major artistic, literary, and technological contributions of individuals during the Renaissance.",
-      "topics": ["Renaissance Art", "Literature", "Da Vinci", "Michelangelo"]
+      "topics": ["Renaissance Art", "Literature", "Da Vinci", "Michelangelo"],
+      "dok": 2,
+      "item_specs": "Students identify Renaissance figures and their contributions.",
+      "essential_questions": [
+        "What made Renaissance art different from medieval art?",
+        "Who were the major figures of the Renaissance?"
+      ],
+      "learning_targets": [
+        "I can identify major Renaissance artists and their works.",
+        "I can explain Renaissance innovations in art and literature.",
+        "I can describe how humanism influenced Renaissance culture."
+      ],
+      "vocabulary": ["Renaissance", "humanism", "Leonardo da Vinci", "Michelangelo", "perspective", "Gutenberg", "printing press"],
+      "sample_assessment": "The painting of the Sistine Chapel ceiling was created by: A) Leonardo da Vinci B) Michelangelo C) Raphael D) Donatello"
     },
     {
       "code": "SS.912.W.4.6",
       "benchmark": "Describe the causes and effects of the Protestant Reformation.",
-      "topics": ["Protestant Reformation", "Martin Luther", "Religious Change"]
+      "topics": ["Protestant Reformation", "Martin Luther", "Religious Change"],
+      "dok": 2,
+      "item_specs": "Students analyze the causes and consequences of the Reformation.",
+      "essential_questions": [
+        "What caused the Protestant Reformation?",
+        "How did the Reformation change Europe?"
+      ],
+      "learning_targets": [
+        "I can explain Martin Luther's criticisms of the Catholic Church.",
+        "I can describe the spread of Protestant ideas.",
+        "I can analyze the political and social effects of the Reformation."
+      ],
+      "vocabulary": ["Protestant Reformation", "Martin Luther", "95 Theses", "indulgences", "salvation", "denomination", "Protestant"],
+      "sample_assessment": "Martin Luther's 95 Theses primarily criticized the Catholic Church's: A) Architecture B) Sale of indulgences C) Use of Latin D) Pope's clothing"
     },
     {
       "code": "SS.912.W.4.9",
       "benchmark": "Analyze the Roman Catholic Church's response to the Protestant Reformation.",
-      "topics": ["Counter-Reformation", "Catholic Church", "Council of Trent"]
+      "topics": ["Counter-Reformation", "Catholic Church", "Council of Trent"],
+      "dok": 3,
+      "item_specs": "Students analyze Catholic reforms and responses to Protestantism.",
+      "essential_questions": [
+        "How did the Catholic Church respond to the Reformation?",
+        "What was the Counter-Reformation?"
+      ],
+      "learning_targets": [
+        "I can explain the reforms of the Council of Trent.",
+        "I can describe the role of the Jesuits.",
+        "I can analyze the Catholic Church's efforts to stop Protestant spread."
+      ],
+      "vocabulary": ["Counter-Reformation", "Council of Trent", "Jesuits", "Inquisition", "reform", "Catholic Church"],
+      "sample_assessment": "The Council of Trent was significant because it: A) Created new Protestant churches B) Reformed Catholic practices and reaffirmed doctrine C) Ended the Reformation D) United Protestants and Catholics"
     },
     {
       "code": "SS.912.W.4.11",
       "benchmark": "Summarize the causes that led to the Age of Exploration.",
-      "topics": ["Age of Exploration", "Navigation", "Trade Routes"]
+      "topics": ["Age of Exploration", "Navigation", "Trade Routes"],
+      "dok": 2,
+      "item_specs": "Students explain motivations and enabling factors for European exploration.",
+      "essential_questions": [
+        "Why did Europeans begin exploring in the 15th century?",
+        "What technological advances made exploration possible?"
+      ],
+      "learning_targets": [
+        "I can explain the economic motivations for exploration.",
+        "I can describe technological advances that enabled exploration.",
+        "I can identify the role of religion in motivating exploration."
+      ],
+      "vocabulary": ["Age of Exploration", "spice trade", "caravel", "compass", "astrolabe", "God, Gold, and Glory"],
+      "sample_assessment": "Which technological advance was MOST important for long ocean voyages? A) The printing press B) The compass C) Gunpowder D) The waterwheel"
     },
     {
       "code": "SS.912.W.4.13",
       "benchmark": "Examine the various economic and political systems of Portugal, Spain, the Netherlands, France, and England in the Americas.",
-      "topics": ["Colonization", "European Powers", "Americas"]
+      "topics": ["Colonization", "European Powers", "Americas"],
+      "dok": 3,
+      "item_specs": "Students compare colonial systems established by different European powers.",
+      "essential_questions": [
+        "How did European colonial systems differ?",
+        "What motivated each nation's approach to colonization?"
+      ],
+      "learning_targets": [
+        "I can compare Spanish and Portuguese colonial systems.",
+        "I can explain the economic goals of different colonial powers.",
+        "I can analyze the impact of colonization on indigenous peoples."
+      ],
+      "vocabulary": ["encomienda", "mercantilism", "colony", "plantation", "triangular trade", "Columbian Exchange"],
+      "sample_assessment": "The Spanish encomienda system was primarily designed to: A) Educate indigenous peoples B) Extract labor and tribute from indigenous peoples C) Create democratic governments D) Promote religious freedom"
     },
     {
       "code": "SS.912.W.5.1",
       "benchmark": "Compare the causes and effects of the development of constitutional monarchy in England with those of the development of absolute monarchy in France, Spain, and Russia.",
-      "topics": ["Absolute Monarchy", "Constitutional Monarchy", "Government"]
+      "topics": ["Absolute Monarchy", "Constitutional Monarchy", "Government"],
+      "dok": 3,
+      "item_specs": "Students compare different forms of monarchy and their development.",
+      "essential_questions": [
+        "Why did England develop differently from continental monarchies?",
+        "What are the key differences between absolute and constitutional monarchy?"
+      ],
+      "learning_targets": [
+        "I can explain the concept of absolute monarchy.",
+        "I can describe England's path to constitutional monarchy.",
+        "I can compare the powers of monarchs in different systems."
+      ],
+      "vocabulary": ["absolute monarchy", "constitutional monarchy", "divine right", "Parliament", "Louis XIV", "Glorious Revolution"],
+      "sample_assessment": "The Glorious Revolution of 1688 resulted in England becoming a: A) Republic B) Absolute monarchy C) Constitutional monarchy D) Theocracy"
     },
     {
       "code": "SS.912.W.5.4",
       "benchmark": "Evaluate the impact of Enlightenment ideals on the development of economic, political, and religious structures in Western civilization.",
-      "topics": ["Enlightenment", "Philosophy", "Political Theory"]
+      "topics": ["Enlightenment", "Philosophy", "Political Theory"],
+      "dok": 3,
+      "item_specs": "Students evaluate how Enlightenment ideas influenced institutions and revolutions.",
+      "essential_questions": [
+        "How did Enlightenment ideas challenge traditional authority?",
+        "What was the impact of Enlightenment thinking on government?"
+      ],
+      "learning_targets": [
+        "I can identify key Enlightenment thinkers and their ideas.",
+        "I can explain how Enlightenment ideas influenced revolutions.",
+        "I can analyze the impact on religious and political structures."
+      ],
+      "vocabulary": ["Enlightenment", "reason", "natural rights", "social contract", "Locke", "Montesquieu", "Voltaire", "Rousseau"],
+      "sample_assessment": "John Locke's idea of natural rights directly influenced: A) The feudal system B) The Declaration of Independence C) The Crusades D) The Roman Empire"
     },
     {
       "code": "SS.912.W.6.1",
       "benchmark": "Describe the causes and effects of the Scientific Revolution.",
-      "topics": ["Scientific Revolution", "Scientific Method", "Discovery"]
+      "topics": ["Scientific Revolution", "Scientific Method", "Discovery"],
+      "dok": 2,
+      "item_specs": "Students explain the development and impact of modern science.",
+      "essential_questions": [
+        "What caused the Scientific Revolution?",
+        "How did the Scientific Revolution change how people understood the world?"
+      ],
+      "learning_targets": [
+        "I can explain the development of the scientific method.",
+        "I can identify key figures of the Scientific Revolution.",
+        "I can describe how science challenged traditional beliefs."
+      ],
+      "vocabulary": ["Scientific Revolution", "scientific method", "Copernicus", "Galileo", "Newton", "heliocentric", "empiricism"],
+      "sample_assessment": "Galileo's support for the heliocentric theory led to conflict with: A) The monarchy B) The Catholic Church C) Other scientists D) The military"
     },
     {
       "code": "SS.912.W.6.3",
       "benchmark": "Compare the causes and effects of the French Revolution.",
-      "topics": ["French Revolution", "Revolution", "Social Change"]
+      "topics": ["French Revolution", "Revolution", "Social Change"],
+      "dok": 3,
+      "item_specs": "Students analyze causes, events, and consequences of the French Revolution.",
+      "essential_questions": [
+        "What caused the French Revolution?",
+        "How did the French Revolution change France and Europe?"
+      ],
+      "learning_targets": [
+        "I can explain the social and economic causes of the French Revolution.",
+        "I can describe key events of the Revolution.",
+        "I can analyze the impact of the Revolution on Europe."
+      ],
+      "vocabulary": ["French Revolution", "Estates-General", "Bastille", "Reign of Terror", "Napoleon", "Declaration of the Rights of Man"],
+      "sample_assessment": "The storming of the Bastille on July 14, 1789 symbolized: A) The end of the Revolution B) The beginning of popular revolution C) Napoleon's rise to power D) The restoration of the monarchy"
     },
     {
       "code": "SS.912.W.6.6",
       "benchmark": "Analyze the causes and effects of the Industrial Revolution.",
-      "topics": ["Industrial Revolution", "Industrialization", "Technology"]
+      "topics": ["Industrial Revolution", "Industrialization", "Technology"],
+      "dok": 3,
+      "item_specs": "Students analyze the transformation from agricultural to industrial society.",
+      "essential_questions": [
+        "Why did the Industrial Revolution begin in Britain?",
+        "How did industrialization change society?"
+      ],
+      "learning_targets": [
+        "I can explain why the Industrial Revolution started in Britain.",
+        "I can describe technological innovations of the period.",
+        "I can analyze the social and economic effects of industrialization."
+      ],
+      "vocabulary": ["Industrial Revolution", "factory system", "urbanization", "steam engine", "textile industry", "working class", "capitalism"],
+      "sample_assessment": "The Industrial Revolution began in Britain partly because Britain had: A) The largest population B) Abundant natural resources like coal and iron C) The most democratic government D) The best climate for farming"
     }
   ]
 }

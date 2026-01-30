@@ -1,0 +1,151 @@
+{
+  "state": "FL",
+  "subject": "Geography",
+  "grade": "6-8",
+  "standards": [
+    {
+      "code": "SS.6.G.1.1",
+      "benchmark": "Use latitude and longitude coordinates to understand the relationship between people and places on the Earth.",
+      "topics": ["Coordinates", "Maps", "Location"],
+      "dok": 2,
+      "item_specs": "Students use coordinate systems to locate places and describe spatial relationships.",
+      "essential_questions": [
+        "How do we describe the location of places on Earth?",
+        "Why is the grid system important for navigation?"
+      ],
+      "learning_targets": [
+        "I can use latitude and longitude to find locations.",
+        "I can explain the purpose of the coordinate system.",
+        "I can interpret maps using grid coordinates."
+      ],
+      "vocabulary": ["latitude", "longitude", "coordinates", "equator", "prime meridian", "hemisphere", "degrees"],
+      "sample_assessment": "The line of latitude at 0° is called the: A) Prime Meridian B) Equator C) Tropic of Cancer D) International Date Line"
+    },
+    {
+      "code": "SS.6.G.1.4",
+      "benchmark": "Utilize tools geographers use to study the world.",
+      "topics": ["Geographic Tools", "Maps", "Technology"],
+      "dok": 2,
+      "item_specs": "Students identify and use various geographic tools including maps, globes, and GIS.",
+      "essential_questions": [
+        "What tools do geographers use to study Earth?",
+        "How has technology changed geographic study?"
+      ],
+      "learning_targets": [
+        "I can identify different types of maps and their purposes.",
+        "I can use map scales and legends.",
+        "I can explain how GIS technology helps geographers."
+      ],
+      "vocabulary": ["map", "globe", "scale", "legend", "compass rose", "GIS", "satellite imagery", "cartographer"],
+      "sample_assessment": "A thematic map would BEST be used to show: A) Physical features B) Political boundaries C) Population density patterns D) Street directions"
+    },
+    {
+      "code": "SS.6.G.2.1",
+      "benchmark": "Explain how major physical characteristics, natural resources, climate, and absolute and relative locations have influenced settlement, interactions, and the economies of ancient civilizations.",
+      "topics": ["Physical Geography", "Human Settlement", "Resources"],
+      "dok": 3,
+      "item_specs": "Students analyze relationships between physical geography and human development.",
+      "essential_questions": [
+        "How does geography influence where people live?",
+        "What role do natural resources play in economic development?"
+      ],
+      "learning_targets": [
+        "I can explain how landforms affect human settlement.",
+        "I can analyze how climate influences human activity.",
+        "I can describe the relationship between resources and economy."
+      ],
+      "vocabulary": ["physical characteristics", "natural resources", "climate", "settlement", "economy", "landform", "vegetation"],
+      "sample_assessment": "Ancient civilizations developed near rivers primarily because rivers provided: A) Defense from enemies B) Water for farming and transportation C) Gold deposits D) Building stone"
+    },
+    {
+      "code": "SS.6.G.2.4",
+      "benchmark": "Explain how the geographical factors influenced the economic development, political relationships, and policies of ancient civilizations.",
+      "topics": ["Economic Geography", "Political Geography", "Ancient World"],
+      "dok": 3,
+      "item_specs": "Students analyze how geography shaped economic and political development.",
+      "essential_questions": [
+        "How did geography determine trade routes?",
+        "Why did some civilizations become powerful while others did not?"
+      ],
+      "learning_targets": [
+        "I can explain how geography influenced trade.",
+        "I can analyze how geographic barriers affected political relationships.",
+        "I can describe how resources led to conflict or cooperation."
+      ],
+      "vocabulary": ["trade routes", "geographic barriers", "strategic location", "isolation", "interaction", "cultural diffusion"],
+      "sample_assessment": "The Silk Road developed because: A) China was isolated from other civilizations B) There was demand for goods between East and West C) All civilizations spoke the same language D) The journey was short and easy"
+    },
+    {
+      "code": "SS.6.G.3.1",
+      "benchmark": "Explain how the physical landscape has affected the development of agriculture and industry in the ancient world.",
+      "topics": ["Agriculture", "Industry", "Landscape"],
+      "dok": 2,
+      "item_specs": "Students explain connections between physical features and economic activities.",
+      "essential_questions": [
+        "How did landscape determine what crops could be grown?",
+        "Why did industries develop in certain locations?"
+      ],
+      "learning_targets": [
+        "I can explain how terrain affects agriculture.",
+        "I can describe how access to resources influences industry.",
+        "I can analyze the relationship between geography and technology."
+      ],
+      "vocabulary": ["agriculture", "industry", "terrain", "fertile", "irrigation", "mining", "manufacturing"],
+      "sample_assessment": "The Nile River's annual flooding was important to Egyptian agriculture because it: A) Destroyed crops B) Deposited fertile soil C) Prevented farming D) Created deserts"
+    },
+    {
+      "code": "SS.6.G.4.1",
+      "benchmark": "Explain how family, ethnic, national, and professional identity have led to the development and maintenance of cultural traditions and norms.",
+      "topics": ["Cultural Geography", "Identity", "Traditions"],
+      "dok": 2,
+      "item_specs": "Students explain how identity shapes cultural practices.",
+      "essential_questions": [
+        "How does identity influence culture?",
+        "Why do cultural traditions persist over time?"
+      ],
+      "learning_targets": [
+        "I can explain how family shapes cultural identity.",
+        "I can describe how ethnic traditions are maintained.",
+        "I can analyze how geography influences cultural development."
+      ],
+      "vocabulary": ["culture", "tradition", "identity", "ethnic group", "customs", "heritage", "norms"],
+      "sample_assessment": "Cultural traditions are MOST often passed down through: A) Written laws B) Family and community C) Government mandates D) Economic systems"
+    },
+    {
+      "code": "SS.6.G.5.1",
+      "benchmark": "Identify the methods used to compensate for the scarcity of resources in the ancient world.",
+      "topics": ["Resources", "Scarcity", "Adaptation"],
+      "dok": 2,
+      "item_specs": "Students identify how ancient peoples addressed resource limitations.",
+      "essential_questions": [
+        "How did ancient peoples deal with scarce resources?",
+        "What innovations resulted from scarcity?"
+      ],
+      "learning_targets": [
+        "I can identify resources that were scarce in ancient times.",
+        "I can explain how trade addressed scarcity.",
+        "I can describe technological innovations that compensated for scarcity."
+      ],
+      "vocabulary": ["scarcity", "trade", "barter", "innovation", "adaptation", "specialization", "interdependence"],
+      "sample_assessment": "Ancient Mesopotamians compensated for lack of building stone by: A) Not building permanent structures B) Using mud bricks C) Importing stone from far away D) Building only in caves"
+    },
+    {
+      "code": "SS.6.G.6.1",
+      "benchmark": "Describe the Six Essential Elements of Geography.",
+      "topics": ["Geographic Elements", "Spatial Thinking", "Human Geography"],
+      "dok": 1,
+      "item_specs": "Students identify and describe the six essential elements of geography.",
+      "essential_questions": [
+        "What are the essential elements of geographic study?",
+        "How do geographers organize their knowledge?"
+      ],
+      "learning_targets": [
+        "I can list the Six Essential Elements of Geography.",
+        "I can explain what each element studies.",
+        "I can give examples of each element."
+      ],
+      "vocabulary": ["location", "place", "human-environment interaction", "movement", "region", "spatial perspective"],
+      "sample_assessment": "Which Essential Element of Geography deals with how humans modify and adapt to their environment? A) Location B) Place C) Human-Environment Interaction D) Movement"
+    }
+  ]
+}

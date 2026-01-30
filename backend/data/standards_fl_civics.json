@@ -6,82 +6,290 @@
     {
       "code": "SS.7.C.1.1",
       "benchmark": "Recognize how Enlightenment ideas including Montesquieu's view of separation of power and John Locke's theories related to natural law and how John Locke's social contract influenced the Founding Fathers.",
-      "topics": ["Enlightenment", "Natural Law", "Social Contract", "Separation of Powers"]
+      "topics": ["Enlightenment", "Natural Law", "Social Contract", "Separation of Powers"],
+      "dok": 2,
+      "item_specs": "Students may be asked to identify Enlightenment thinkers and match them to their ideas. Items may include excerpts from primary sources.",
+      "essential_questions": [
+        "How did Enlightenment ideas shape American democracy?",
+        "Why did the Founders believe government should be limited?"
+      ],
+      "learning_targets": [
+        "I can identify key Enlightenment thinkers and their ideas.",
+        "I can explain how social contract theory influenced the Declaration of Independence.",
+        "I can describe Montesquieu's influence on the structure of U.S. government."
+      ],
+      "vocabulary": ["Enlightenment", "natural rights", "social contract", "separation of powers", "John Locke", "Montesquieu", "consent of the governed"],
+      "sample_assessment": "Which Enlightenment thinker's ideas are MOST reflected in the structure of the three branches of government? A) John Locke B) Montesquieu C) Rousseau D) Voltaire"
     },
     {
       "code": "SS.7.C.1.2",
       "benchmark": "Trace the impact that the Magna Carta, English Bill of Rights, Mayflower Compact, and Thomas Paine's Common Sense had on colonists' views of government.",
-      "topics": ["Founding Documents", "Colonial Government", "Limited Government"]
+      "topics": ["Founding Documents", "Colonial Government", "Limited Government"],
+      "dok": 2,
+      "item_specs": "Students identify influences of historical documents on American government. May include document excerpts or timelines.",
+      "essential_questions": [
+        "How did earlier documents influence American ideas about rights and government?",
+        "What traditions did colonists bring from England?"
+      ],
+      "learning_targets": [
+        "I can explain how the Magna Carta established the idea of limited government.",
+        "I can describe how the Mayflower Compact was an early example of self-government.",
+        "I can analyze how Common Sense influenced colonial support for independence."
+      ],
+      "vocabulary": ["Magna Carta", "English Bill of Rights", "Mayflower Compact", "Common Sense", "self-government", "limited government", "due process"],
+      "sample_assessment": "The idea that government power should be limited and that rulers must follow the law originated with which document? A) Declaration of Independence B) Magna Carta C) U.S. Constitution D) Common Sense"
     },
     {
       "code": "SS.7.C.1.3",
       "benchmark": "Describe how English policies and responses to colonial concerns led to the writing of the Declaration of Independence.",
-      "topics": ["Colonial Grievances", "Declaration of Independence", "Revolution"]
+      "topics": ["Colonial Grievances", "Declaration of Independence", "Revolution"],
+      "dok": 2,
+      "item_specs": "Students connect British actions to colonial responses. Items may include cause-effect relationships.",
+      "essential_questions": [
+        "What pushed the colonists from protest to revolution?",
+        "How did British policies unite the colonies?"
+      ],
+      "learning_targets": [
+        "I can identify key British policies that angered colonists.",
+        "I can explain the colonial response to taxation without representation.",
+        "I can describe events leading to the Declaration of Independence."
+      ],
+      "vocabulary": ["Stamp Act", "Intolerable Acts", "taxation without representation", "boycott", "Continental Congress", "grievances"],
+      "sample_assessment": "Which colonial grievance is BEST represented by the phrase 'no taxation without representation'? A) Quartering of soldiers B) Lack of colonial voice in Parliament C) Restriction of westward expansion D) Closing of Boston Harbor"
     },
     {
       "code": "SS.7.C.1.4",
       "benchmark": "Analyze the ideas (natural rights, role of the government) and complaints set forth in the Declaration of Independence.",
-      "topics": ["Natural Rights", "Declaration of Independence", "Grievances"]
+      "topics": ["Natural Rights", "Declaration of Independence", "Grievances"],
+      "dok": 3,
+      "item_specs": "Students analyze excerpts from the Declaration. Higher-order items require interpretation of Enlightenment principles.",
+      "essential_questions": [
+        "What makes a government legitimate according to the Declaration?",
+        "When do people have the right to change their government?"
+      ],
+      "learning_targets": [
+        "I can identify the natural rights listed in the Declaration.",
+        "I can explain the purpose of government according to the Declaration.",
+        "I can analyze specific grievances against King George III."
+      ],
+      "vocabulary": ["unalienable rights", "life, liberty, pursuit of happiness", "consent of the governed", "grievances", "tyranny"],
+      "sample_assessment": "According to the Declaration of Independence, what is the PRIMARY purpose of government? A) To collect taxes B) To protect natural rights C) To maintain order D) To expand territory"
     },
     {
       "code": "SS.7.C.1.5",
       "benchmark": "Identify how the weaknesses of the Articles of Confederation led to the writing of the Constitution.",
-      "topics": ["Articles of Confederation", "Constitution", "Federalism"]
+      "topics": ["Articles of Confederation", "Constitution", "Federalism"],
+      "dok": 2,
+      "item_specs": "Students identify weaknesses and connect them to Constitutional solutions. May use comparison charts.",
+      "essential_questions": [
+        "Why did the Articles of Confederation fail?",
+        "What problems did the Constitution solve?"
+      ],
+      "learning_targets": [
+        "I can list major weaknesses of the Articles of Confederation.",
+        "I can explain why Shays' Rebellion showed the need for stronger government.",
+        "I can compare the Articles to the Constitution."
+      ],
+      "vocabulary": ["Articles of Confederation", "Shays' Rebellion", "Constitutional Convention", "federalism", "weak central government"],
+      "sample_assessment": "Which was a major weakness of the Articles of Confederation? A) Too much power given to the President B) No power to tax or regulate trade C) Too many representatives in Congress D) Strict requirements for citizenship"
     },
     {
       "code": "SS.7.C.1.6",
       "benchmark": "Interpret the intentions of the Preamble of the Constitution.",
-      "topics": ["Preamble", "Constitution", "Goals of Government"]
+      "topics": ["Preamble", "Constitution", "Goals of Government"],
+      "dok": 2,
+      "item_specs": "Students interpret phrases from the Preamble and connect them to government functions.",
+      "essential_questions": [
+        "What goals did the Founders set for the new government?",
+        "How does the Preamble reflect the purpose of the Constitution?"
+      ],
+      "learning_targets": [
+        "I can identify the six goals stated in the Preamble.",
+        "I can explain what 'We the People' means for popular sovereignty.",
+        "I can connect Preamble phrases to specific government actions."
+      ],
+      "vocabulary": ["Preamble", "popular sovereignty", "domestic tranquility", "general welfare", "common defense", "posterity"],
+      "sample_assessment": "Which phrase from the Preamble reflects the goal of maintaining peace within the country? A) 'provide for the common defense' B) 'establish justice' C) 'insure domestic tranquility' D) 'promote the general welfare'"
     },
     {
       "code": "SS.7.C.1.7",
       "benchmark": "Describe how the Constitution limits the powers of government through separation of powers and checks and balances.",
-      "topics": ["Separation of Powers", "Checks and Balances", "Limited Government"]
+      "topics": ["Separation of Powers", "Checks and Balances", "Limited Government"],
+      "dok": 2,
+      "item_specs": "Students identify examples of checks and balances. May include scenarios requiring application.",
+      "essential_questions": [
+        "How does the Constitution prevent any one branch from becoming too powerful?",
+        "Why did the Founders divide government power?"
+      ],
+      "learning_targets": [
+        "I can identify the three branches and their main powers.",
+        "I can give examples of checks and balances.",
+        "I can explain why separation of powers protects liberty."
+      ],
+      "vocabulary": ["separation of powers", "checks and balances", "veto", "override", "judicial review", "impeachment", "confirmation"],
+      "sample_assessment": "The President vetoes a bill passed by Congress. Congress then votes to override the veto. This is an example of: A) Federalism B) Checks and balances C) Judicial review D) Popular sovereignty"
     },
     {
       "code": "SS.7.C.1.8",
       "benchmark": "Explain the viewpoints of the Federalists and the Anti-Federalists regarding the ratification of the Constitution and inclusion of a bill of rights.",
-      "topics": ["Federalists", "Anti-Federalists", "Ratification", "Bill of Rights"]
+      "topics": ["Federalists", "Anti-Federalists", "Ratification", "Bill of Rights"],
+      "dok": 2,
+      "item_specs": "Students compare viewpoints. May include excerpts from Federalist Papers or Anti-Federalist writings.",
+      "essential_questions": [
+        "What were the main arguments for and against the Constitution?",
+        "Why was the Bill of Rights added?"
+      ],
+      "learning_targets": [
+        "I can explain the Federalist position on the Constitution.",
+        "I can explain Anti-Federalist concerns about the Constitution.",
+        "I can describe the compromise that led to the Bill of Rights."
+      ],
+      "vocabulary": ["Federalists", "Anti-Federalists", "ratification", "Federalist Papers", "Bill of Rights", "tyranny"],
+      "sample_assessment": "Anti-Federalists opposed ratification of the Constitution primarily because they believed it: A) Made the states too powerful B) Did not protect individual rights C) Created too many branches D) Was too similar to the Articles"
     },
     {
       "code": "SS.7.C.1.9",
       "benchmark": "Define the rule of law and recognize its influence on the development of the American legal, political, and governmental systems.",
-      "topics": ["Rule of Law", "Fairness", "Accountability"]
+      "topics": ["Rule of Law", "Fairness", "Accountability"],
+      "dok": 2,
+      "item_specs": "Students identify examples of rule of law in action. May include scenarios.",
+      "essential_questions": [
+        "Why is it important that everyone, including leaders, must follow the law?",
+        "How does rule of law protect citizens?"
+      ],
+      "learning_targets": [
+        "I can define rule of law.",
+        "I can explain how rule of law limits government power.",
+        "I can identify examples of rule of law in American government."
+      ],
+      "vocabulary": ["rule of law", "due process", "equal protection", "accountability", "limited government"],
+      "sample_assessment": "Which scenario BEST demonstrates the principle of rule of law? A) A popular president ignores a court ruling B) A judge rules against a powerful corporation C) Citizens vote for their favorite candidate D) Congress passes a law supported by most people"
     },
     {
       "code": "SS.7.C.2.1",
       "benchmark": "Define the term 'citizen,' and identify legal means of becoming a United States citizen.",
-      "topics": ["Citizenship", "Naturalization", "Rights and Responsibilities"]
+      "topics": ["Citizenship", "Naturalization", "Rights and Responsibilities"],
+      "dok": 1,
+      "item_specs": "Students identify paths to citizenship and requirements for naturalization.",
+      "essential_questions": [
+        "What does it mean to be an American citizen?",
+        "How can someone become a U.S. citizen?"
+      ],
+      "learning_targets": [
+        "I can define citizenship.",
+        "I can explain birthright citizenship.",
+        "I can describe the naturalization process."
+      ],
+      "vocabulary": ["citizen", "naturalization", "birthright citizenship", "14th Amendment", "resident", "immigrant"],
+      "sample_assessment": "Which is a requirement for becoming a naturalized U.S. citizen? A) Being born in the United States B) Having U.S. citizen parents C) Passing a citizenship test D) Serving in the military"
     },
     {
       "code": "SS.7.C.2.2",
       "benchmark": "Evaluate the obligations citizens have to obey laws, pay taxes, defend the nation, and serve on juries.",
-      "topics": ["Obligations", "Citizenship", "Civic Duty"]
+      "topics": ["Obligations", "Citizenship", "Civic Duty"],
+      "dok": 2,
+      "item_specs": "Students distinguish between rights and responsibilities. May include scenarios about civic duties.",
+      "essential_questions": [
+        "What responsibilities come with citizenship?",
+        "Why are civic duties important for democracy?"
+      ],
+      "learning_targets": [
+        "I can list the obligations of citizens.",
+        "I can explain why jury duty is important.",
+        "I can distinguish between civic duties and civic responsibilities."
+      ],
+      "vocabulary": ["civic duty", "civic responsibility", "jury duty", "Selective Service", "taxation", "obligation"],
+      "sample_assessment": "Which civic duty is required by law for eligible citizens? A) Voting in elections B) Volunteering in the community C) Serving on a jury when called D) Running for political office"
     },
     {
       "code": "SS.7.C.2.4",
       "benchmark": "Evaluate rights contained in the Bill of Rights and other amendments to the Constitution.",
-      "topics": ["Bill of Rights", "Amendments", "Civil Liberties"]
+      "topics": ["Bill of Rights", "Amendments", "Civil Liberties"],
+      "dok": 3,
+      "item_specs": "Students apply amendments to scenarios. Higher-order items require evaluation of competing rights.",
+      "essential_questions": [
+        "How does the Bill of Rights protect individual freedoms?",
+        "What limits exist on constitutional rights?"
+      ],
+      "learning_targets": [
+        "I can identify rights protected by each amendment in the Bill of Rights.",
+        "I can apply constitutional rights to real-world scenarios.",
+        "I can explain how rights can be limited."
+      ],
+      "vocabulary": ["Bill of Rights", "First Amendment", "due process", "civil liberties", "civil rights", "search and seizure"],
+      "sample_assessment": "A student wears a political t-shirt to school and is told to change. Which amendment is MOST relevant to this situation? A) First Amendment B) Fourth Amendment C) Fifth Amendment D) Eighth Amendment"
     },
     {
       "code": "SS.7.C.2.8",
       "benchmark": "Identify America's current political parties, and illustrate their ideas about government.",
-      "topics": ["Political Parties", "Ideologies", "Two-Party System"]
+      "topics": ["Political Parties", "Ideologies", "Two-Party System"],
+      "dok": 2,
+      "item_specs": "Students identify party positions on issues. May include platforms or policy comparisons.",
+      "essential_questions": [
+        "What role do political parties play in American democracy?",
+        "How do the major parties differ on key issues?"
+      ],
+      "learning_targets": [
+        "I can identify the two major political parties.",
+        "I can describe general differences in party platforms.",
+        "I can explain the purpose of political parties in elections."
+      ],
+      "vocabulary": ["political party", "Democrat", "Republican", "platform", "ideology", "liberal", "conservative", "third party"],
+      "sample_assessment": "What is the PRIMARY purpose of political parties in the United States? A) To write laws B) To nominate candidates and win elections C) To interpret the Constitution D) To conduct foreign policy"
     },
     {
       "code": "SS.7.C.3.1",
       "benchmark": "Compare different forms of government (direct democracy, representative democracy, socialism, communism, monarchy, oligarchy, autocracy).",
-      "topics": ["Forms of Government", "Democracy", "Authoritarianism"]
+      "topics": ["Forms of Government", "Democracy", "Authoritarianism"],
+      "dok": 2,
+      "item_specs": "Students classify governments and compare characteristics. May include descriptions for matching.",
+      "essential_questions": [
+        "How do governments differ in how power is held and used?",
+        "What makes democracy different from other forms of government?"
+      ],
+      "learning_targets": [
+        "I can define different forms of government.",
+        "I can compare democratic and authoritarian governments.",
+        "I can identify the form of government used by different countries."
+      ],
+      "vocabulary": ["democracy", "republic", "monarchy", "oligarchy", "autocracy", "dictatorship", "communism", "totalitarian"],
+      "sample_assessment": "In which form of government do citizens have the LEAST voice in decision-making? A) Direct democracy B) Representative democracy C) Constitutional monarchy D) Autocracy"
     },
     {
       "code": "SS.7.C.3.3",
       "benchmark": "Illustrate the structure and function (three branches of government established in Articles I, II, and III with corresponding powers) of government in the United States as established in the Constitution.",
-      "topics": ["Three Branches", "Structure of Government", "Articles I-III"]
+      "topics": ["Three Branches", "Structure of Government", "Articles I-III"],
+      "dok": 2,
+      "item_specs": "Students identify branch responsibilities and match powers to branches. May include organizational charts.",
+      "essential_questions": [
+        "What are the roles of the three branches of government?",
+        "How is power distributed among the branches?"
+      ],
+      "learning_targets": [
+        "I can identify the three branches and their leaders.",
+        "I can list the main powers of each branch.",
+        "I can explain which Article establishes each branch."
+      ],
+      "vocabulary": ["legislative branch", "executive branch", "judicial branch", "Congress", "President", "Supreme Court", "Article I", "Article II", "Article III"],
+      "sample_assessment": "Which branch of government is established by Article I of the Constitution? A) Executive B) Judicial C) Legislative D) Electoral"
     },
     {
       "code": "SS.7.C.3.12",
       "benchmark": "Analyze the significance and outcomes of landmark Supreme Court cases including, but not limited to, Marbury v. Madison, Plessy v. Ferguson, Brown v. Board of Education, Gideon v. Wainwright, Miranda v. Arizona, in re Gault, Tinker v. Des Moines, Hazelwood v. Kuhlmeier, United States v. Nixon, and Bush v. Gore.",
-      "topics": ["Supreme Court", "Landmark Cases", "Judicial Review"]
+      "topics": ["Supreme Court", "Landmark Cases", "Judicial Review"],
+      "dok": 3,
+      "item_specs": "Students analyze case outcomes and their impact. May include excerpts from rulings or application scenarios.",
+      "essential_questions": [
+        "How has the Supreme Court shaped American rights and government?",
+        "What is the lasting impact of landmark decisions?"
+      ],
+      "learning_targets": [
+        "I can identify the key issue in each landmark case.",
+        "I can explain the Supreme Court's ruling and reasoning.",
+        "I can analyze how each case impacted American society."
+      ],
+      "vocabulary": ["judicial review", "precedent", "majority opinion", "dissent", "constitutional", "unconstitutional", "appeal"],
+      "sample_assessment": "Which Supreme Court case established the principle of judicial review? A) Brown v. Board of Education B) Marbury v. Madison C) Miranda v. Arizona D) Tinker v. Des Moines"
     }
   ]
 }

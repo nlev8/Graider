@@ -281,6 +281,105 @@ Create comprehensive lesson plans in seconds:
 
 ---
 
+# Roadmap: School & District Analytics
+
+## Data-Driven Insights at Every Level
+
+### Coming Soon: Multi-Level Analytics Dashboard
+
+Graider is building analytics capabilities that aggregate data while maintaining privacy:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       DISTRICT LEVEL                             │
+│   Compare schools • Track trends • Identify support needs        │
+│                              ↑                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                       SCHOOL LEVEL                               │
+│   Teacher performance • Subject insights • Student outcomes      │
+│                              ↑                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                      TEACHER LEVEL                               │
+│   Class analytics • Assignment results • Student progress        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Planned Features
+
+| Level | Insights | Use Case |
+|-------|----------|----------|
+| **Teacher** | Class averages, assignment performance, student trends | Daily instruction adjustments |
+| **School** | Cross-class comparison, subject benchmarks, teacher utilization | Principal oversight, resource allocation |
+| **District** | School comparison, district-wide trends, achievement gaps | Strategic planning, intervention targeting |
+
+---
+
+# Roadmap: Admin Panel
+
+## Centralized Management for Schools & Districts
+
+### Role-Based Administration
+
+```
+Super Admin (Graider)
+    └── District Admin
+            └── School Admin / Principal
+                    └── Teacher
+```
+
+### Admin Panel Features
+
+| Role | Capabilities |
+|------|--------------|
+| **District Admin** | Add/manage schools, assign principals, view all district analytics, export reports, manage teacher accounts |
+| **School Admin** | Add/manage teachers, view school analytics, configure school settings, sync oversight |
+| **Principal** | View teacher performance, school-wide trends, generate reports for stakeholders |
+
+### Dashboard Views
+
+| View | What It Shows |
+|------|---------------|
+| **District Overview** | All schools at a glance, comparison rankings, alerts for underperformance |
+| **School Drilldown** | Teacher activity, subject breakdown, grade distributions, sync status |
+| **Teacher Detail** | Individual grading history, student outcomes, feedback quality metrics |
+| **Trend Analysis** | Month-over-month, quarter-over-quarter performance tracking |
+
+### Management Tools
+
+- **User Management**: Add teachers via CSV import or SSO integration (Clever, ClassLink)
+- **School Configuration**: Set grading scales, rubric defaults, subject mappings
+- **Data Governance**: Control sync frequency, anonymization settings, retention policies
+- **Audit Logs**: Track who accessed what data and when (FERPA compliance)
+- **Report Generation**: Export PDF/Excel reports for board meetings, accreditation
+
+### Privacy-First Design
+
+| Feature | Approach |
+|---------|----------|
+| **Student Anonymization** | Only hashed IDs at aggregate levels - no PII leaves teacher's device |
+| **Opt-In Sync** | Teachers control when and what data syncs up |
+| **Role-Based Access** | Teachers see own data, principals see school, admins see district |
+| **Local-First Option** | Schools can run entirely local with no cloud dependency |
+
+### Why This Matters
+
+- **Principals**: "Which subjects need more support this quarter?"
+- **Curriculum Directors**: "How are our new standards being assessed?"
+- **Superintendents**: "How do schools compare on writing skills?"
+- **IT Admins**: "Is the platform being adopted? Who needs training?"
+
+### Implementation Approach
+
+- **Phase 1**: Local school analytics (current teacher data + opt-in sharing)
+- **Phase 2**: District aggregation with secure cloud backend
+- **Phase 3**: Admin panel with user management and reporting
+- **Phase 4**: Real-time dashboards with live updates
+- **Phase 5**: SSO integration and benchmark comparisons
+
+> *"Give administrators the insights and control they need without compromising the privacy teachers and students deserve."*
+
+---
+
 # Cost Analysis
 
 ## ROI That Makes Sense

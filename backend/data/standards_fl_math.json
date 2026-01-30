@@ -1,0 +1,151 @@
+{
+  "state": "FL",
+  "subject": "Math",
+  "grade": "6-8",
+  "standards": [
+    {
+      "code": "MA.6.NSO.1.1",
+      "benchmark": "Extend previous understanding of numbers to define rational numbers. Plot, order and compare rational numbers.",
+      "topics": ["Rational Numbers", "Number Line", "Comparison"],
+      "dok": 2,
+      "item_specs": "Students plot, order, and compare rational numbers including positive and negative fractions and decimals.",
+      "essential_questions": [
+        "What are rational numbers and how do we represent them?",
+        "How do we compare and order rational numbers?"
+      ],
+      "learning_targets": [
+        "I can define and identify rational numbers.",
+        "I can plot rational numbers on a number line.",
+        "I can compare and order rational numbers."
+      ],
+      "vocabulary": ["rational number", "integer", "positive", "negative", "absolute value", "number line", "compare", "order"],
+      "sample_assessment": "Which list shows the numbers in order from least to greatest? A) -3, -1, 0, 2 B) 2, 0, -1, -3 C) -1, -3, 0, 2 D) 0, -1, 2, -3"
+    },
+    {
+      "code": "MA.6.NSO.2.1",
+      "benchmark": "Add, subtract, multiply, and divide multi-digit numbers fluently, including multi-digit decimals.",
+      "topics": ["Operations", "Decimals", "Fluency"],
+      "dok": 1,
+      "item_specs": "Students perform operations with multi-digit whole numbers and decimals with fluency.",
+      "essential_questions": [
+        "How do we perform operations with multi-digit numbers?",
+        "Why is place value important in decimal operations?"
+      ],
+      "learning_targets": [
+        "I can add and subtract multi-digit decimals.",
+        "I can multiply multi-digit numbers and decimals.",
+        "I can divide multi-digit numbers and decimals."
+      ],
+      "vocabulary": ["operation", "sum", "difference", "product", "quotient", "decimal", "place value"],
+      "sample_assessment": "What is 12.5 × 3.4? A) 42.5 B) 425 C) 4.25 D) 15.9"
+    },
+    {
+      "code": "MA.6.AR.1.1",
+      "benchmark": "Given a mathematical or real-world context, translate written descriptions into algebraic expressions.",
+      "topics": ["Expressions", "Variables", "Translation"],
+      "dok": 2,
+      "item_specs": "Students translate verbal descriptions into algebraic expressions with variables.",
+      "essential_questions": [
+        "How do we represent unknown quantities in math?",
+        "How do we translate words into algebraic expressions?"
+      ],
+      "learning_targets": [
+        "I can identify key words that indicate operations.",
+        "I can write algebraic expressions from verbal descriptions.",
+        "I can explain what variables represent in context."
+      ],
+      "vocabulary": ["expression", "variable", "coefficient", "constant", "term", "translate"],
+      "sample_assessment": "'Five more than a number' can be written as: A) 5n B) n - 5 C) n + 5 D) 5 - n"
+    },
+    {
+      "code": "MA.6.AR.2.1",
+      "benchmark": "Given a mathematical or real-world context, write and solve one-step equations involving any of the four operations with positive rational numbers.",
+      "topics": ["Equations", "Solving", "Real-World"],
+      "dok": 2,
+      "item_specs": "Students write and solve one-step equations in mathematical and real-world contexts.",
+      "essential_questions": [
+        "How do we solve equations?",
+        "How do equations help us solve real-world problems?"
+      ],
+      "learning_targets": [
+        "I can write equations from real-world situations.",
+        "I can solve one-step equations using inverse operations.",
+        "I can check my solutions for reasonableness."
+      ],
+      "vocabulary": ["equation", "solve", "inverse operation", "solution", "variable", "isolate"],
+      "sample_assessment": "If x + 7 = 15, what is the value of x? A) 22 B) 8 C) 7 D) 105"
+    },
+    {
+      "code": "MA.6.GR.1.1",
+      "benchmark": "Extend previous understanding of the coordinate plane to plot rational number ordered pairs in all four quadrants.",
+      "topics": ["Coordinate Plane", "Quadrants", "Plotting"],
+      "dok": 2,
+      "item_specs": "Students plot points with positive and negative coordinates in all four quadrants.",
+      "essential_questions": [
+        "How do we locate points in the coordinate plane?",
+        "What do the signs of coordinates tell us about location?"
+      ],
+      "learning_targets": [
+        "I can identify the four quadrants of the coordinate plane.",
+        "I can plot ordered pairs with positive and negative values.",
+        "I can identify coordinates of plotted points."
+      ],
+      "vocabulary": ["coordinate plane", "ordered pair", "x-axis", "y-axis", "quadrant", "origin", "coordinates"],
+      "sample_assessment": "The point (-3, 4) is located in which quadrant? A) Quadrant I B) Quadrant II C) Quadrant III D) Quadrant IV"
+    },
+    {
+      "code": "MA.6.GR.2.1",
+      "benchmark": "Derive a formula for the area of a right triangle using a rectangle.",
+      "topics": ["Area", "Triangles", "Formulas"],
+      "dok": 2,
+      "item_specs": "Students derive and apply the area formula for triangles.",
+      "essential_questions": [
+        "How is the area of a triangle related to the area of a rectangle?",
+        "Why is the area of a triangle half the area of a rectangle?"
+      ],
+      "learning_targets": [
+        "I can explain the relationship between triangle and rectangle area.",
+        "I can derive the formula for triangle area.",
+        "I can calculate the area of triangles."
+      ],
+      "vocabulary": ["area", "base", "height", "formula", "right triangle", "rectangle", "square units"],
+      "sample_assessment": "A right triangle has a base of 6 units and a height of 8 units. What is its area? A) 48 square units B) 24 square units C) 14 square units D) 28 square units"
+    },
+    {
+      "code": "MA.6.DP.1.1",
+      "benchmark": "Recognize and formulate a statistical question that would generate numerical data.",
+      "topics": ["Statistics", "Data Collection", "Questions"],
+      "dok": 2,
+      "item_specs": "Students identify and write statistical questions that yield variability in data.",
+      "essential_questions": [
+        "What makes a question a statistical question?",
+        "Why do statistical questions have variable answers?"
+      ],
+      "learning_targets": [
+        "I can identify statistical questions.",
+        "I can write statistical questions for investigations.",
+        "I can explain why statistical questions have variable answers."
+      ],
+      "vocabulary": ["statistical question", "data", "variability", "numerical data", "categorical data"],
+      "sample_assessment": "Which is a statistical question? A) What is your name? B) How old is the teacher? C) How many hours do students sleep per night? D) What is 5 + 3?"
+    },
+    {
+      "code": "MA.6.DP.1.4",
+      "benchmark": "Given a box plot within a mathematical or real-world context, determine the minimum, maximum, median, first quartile, third quartile, and range.",
+      "topics": ["Box Plots", "Five-Number Summary", "Data Analysis"],
+      "dok": 2,
+      "item_specs": "Students interpret box plots and identify statistical measures.",
+      "essential_questions": [
+        "What information does a box plot show?",
+        "How do we use box plots to analyze data?"
+      ],
+      "learning_targets": [
+        "I can identify the five-number summary from a box plot.",
+        "I can calculate range from a box plot.",
+        "I can interpret what box plots tell us about data distribution."
+      ],
+      "vocabulary": ["box plot", "minimum", "maximum", "median", "quartile", "range", "interquartile range"],
+      "sample_assessment": "In a box plot, the median is shown by: A) The left whisker B) The right whisker C) The line inside the box D) The entire box"
+    }
+  ]
+}

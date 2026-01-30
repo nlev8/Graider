@@ -1,0 +1,151 @@
+{
+  "state": "FL",
+  "subject": "English/ELA",
+  "grade": "6-8",
+  "standards": [
+    {
+      "code": "ELA.6.R.1.1",
+      "benchmark": "Analyze how the interaction between characters, setting, and plot develops the conflict in a literary text.",
+      "topics": ["Literary Elements", "Character", "Conflict"],
+      "dok": 3,
+      "item_specs": "Students analyze how story elements work together to develop conflict.",
+      "essential_questions": [
+        "How do characters, setting, and plot interact to create conflict?",
+        "What types of conflict appear in literature?"
+      ],
+      "learning_targets": [
+        "I can identify how setting influences conflict.",
+        "I can analyze how characters' interactions create conflict.",
+        "I can explain how plot events develop conflict."
+      ],
+      "vocabulary": ["conflict", "setting", "character", "plot", "internal conflict", "external conflict", "resolution"],
+      "sample_assessment": "In a story where a character must survive in the wilderness, the PRIMARY conflict is: A) Character vs. Character B) Character vs. Nature C) Character vs. Self D) Character vs. Society"
+    },
+    {
+      "code": "ELA.6.R.1.2",
+      "benchmark": "Analyze the development of stated or implied theme(s) throughout a literary text.",
+      "topics": ["Theme", "Literary Analysis", "Inference"],
+      "dok": 3,
+      "item_specs": "Students analyze how theme develops through text evidence.",
+      "essential_questions": [
+        "How do authors develop theme in literature?",
+        "What is the difference between stated and implied theme?"
+      ],
+      "learning_targets": [
+        "I can identify stated themes in a text.",
+        "I can infer implied themes using text evidence.",
+        "I can trace how theme develops throughout a text."
+      ],
+      "vocabulary": ["theme", "stated theme", "implied theme", "universal theme", "motif", "message"],
+      "sample_assessment": "A story about a character who learns from mistakes and grows as a person MOST likely has the theme of: A) The importance of wealth B) Personal growth through adversity C) The dangers of technology D) Good always defeats evil"
+    },
+    {
+      "code": "ELA.6.R.2.1",
+      "benchmark": "Explain how individual text sections and/or features convey meaning in texts.",
+      "topics": ["Text Structure", "Text Features", "Informational Text"],
+      "dok": 2,
+      "item_specs": "Students explain how text structure and features contribute to meaning.",
+      "essential_questions": [
+        "How do text features help readers understand content?",
+        "Why do authors organize text in different ways?"
+      ],
+      "learning_targets": [
+        "I can identify text features and explain their purpose.",
+        "I can analyze how text sections contribute to meaning.",
+        "I can explain how structure supports the author's purpose."
+      ],
+      "vocabulary": ["text feature", "heading", "subheading", "caption", "diagram", "text structure", "chronological", "compare/contrast"],
+      "sample_assessment": "An author uses headings and subheadings MAINLY to: A) Make the text longer B) Organize information and guide readers C) Add visual interest D) Meet page requirements"
+    },
+    {
+      "code": "ELA.6.R.2.4",
+      "benchmark": "Track the development of an argument, analyzing the types of reasoning used.",
+      "topics": ["Argument", "Reasoning", "Rhetoric"],
+      "dok": 3,
+      "item_specs": "Students analyze how arguments are constructed and supported.",
+      "essential_questions": [
+        "How do authors build convincing arguments?",
+        "What types of reasoning strengthen an argument?"
+      ],
+      "learning_targets": [
+        "I can identify the claim in an argument.",
+        "I can analyze the evidence supporting an argument.",
+        "I can evaluate the reasoning used in an argument."
+      ],
+      "vocabulary": ["argument", "claim", "evidence", "reasoning", "logic", "rhetorical appeal", "counterargument"],
+      "sample_assessment": "An author supports a claim with statistics, expert opinions, and real-world examples. This is an example of: A) Emotional appeal B) Logical reasoning C) Personal opinion D) Circular reasoning"
+    },
+    {
+      "code": "ELA.6.R.3.1",
+      "benchmark": "Analyze how figurative language creates mood, contributes to meaning, and reveals character in text.",
+      "topics": ["Figurative Language", "Literary Devices", "Author's Craft"],
+      "dok": 3,
+      "item_specs": "Students analyze the effect of figurative language on meaning and mood.",
+      "essential_questions": [
+        "How does figurative language enhance writing?",
+        "What effect does figurative language have on the reader?"
+      ],
+      "learning_targets": [
+        "I can identify types of figurative language.",
+        "I can explain how figurative language creates mood.",
+        "I can analyze how figurative language reveals character."
+      ],
+      "vocabulary": ["figurative language", "simile", "metaphor", "personification", "hyperbole", "mood", "imagery"],
+      "sample_assessment": "'The wind howled angrily through the trees' is an example of: A) Simile B) Metaphor C) Personification D) Hyperbole"
+    },
+    {
+      "code": "ELA.6.W.1.1",
+      "benchmark": "Write argumentative texts to support claims using logical reasoning and relevant evidence.",
+      "topics": ["Argumentative Writing", "Claims", "Evidence"],
+      "dok": 3,
+      "item_specs": "Students write arguments with claims, evidence, and reasoning.",
+      "essential_questions": [
+        "How do writers construct effective arguments?",
+        "What makes evidence relevant and sufficient?"
+      ],
+      "learning_targets": [
+        "I can write a clear, arguable claim.",
+        "I can support my claim with relevant evidence.",
+        "I can use logical reasoning to connect evidence to my claim."
+      ],
+      "vocabulary": ["argumentative writing", "claim", "evidence", "reasoning", "counterclaim", "rebuttal", "credible sources"],
+      "sample_assessment": "Which is the BEST example of a clear, arguable claim? A) Dogs are animals B) Dogs make better pets than cats for active families C) I like dogs D) Dogs have four legs"
+    },
+    {
+      "code": "ELA.6.W.2.1",
+      "benchmark": "Write personal or fictional narratives using narrative techniques, precise words, and phrases.",
+      "topics": ["Narrative Writing", "Techniques", "Word Choice"],
+      "dok": 3,
+      "item_specs": "Students write narratives using literary techniques and precise language.",
+      "essential_questions": [
+        "What techniques make narratives engaging?",
+        "How does word choice affect narrative writing?"
+      ],
+      "learning_targets": [
+        "I can use narrative techniques like dialogue and pacing.",
+        "I can choose precise words to create effect.",
+        "I can develop plot, character, and setting in my writing."
+      ],
+      "vocabulary": ["narrative", "dialogue", "pacing", "sensory details", "precise language", "transitions", "point of view"],
+      "sample_assessment": "Adding dialogue to a narrative helps to: A) Make it longer B) Develop characters and advance the plot C) Avoid description D) Meet word count requirements"
+    },
+    {
+      "code": "ELA.6.C.1.3",
+      "benchmark": "Using knowledge of words and their meanings, identify words and phrases that rhyme.",
+      "topics": ["Vocabulary", "Word Study", "Phonics"],
+      "dok": 1,
+      "item_specs": "Students identify rhyming words and patterns.",
+      "essential_questions": [
+        "What makes words rhyme?",
+        "How do authors use rhyme effectively?"
+      ],
+      "learning_targets": [
+        "I can identify rhyming words.",
+        "I can explain rhyme schemes in poetry.",
+        "I can use rhyme effectively in my own writing."
+      ],
+      "vocabulary": ["rhyme", "rhyme scheme", "end rhyme", "internal rhyme", "slant rhyme", "couplet"],
+      "sample_assessment": "Which pair of words rhyme? A) cat/car B) light/night C) run/ran D) book/look"
+    }
+  ]
+}

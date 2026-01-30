@@ -1,0 +1,151 @@
+{
+  "state": "FL",
+  "subject": "Social Studies",
+  "grade": "6-8",
+  "standards": [
+    {
+      "code": "SS.6.G.1.1",
+      "benchmark": "Use latitude and longitude coordinates to understand the relationship between people and places on the Earth.",
+      "topics": ["Geography", "Maps", "Coordinates"],
+      "dok": 2,
+      "item_specs": "Students use coordinate systems to locate places and understand spatial relationships.",
+      "essential_questions": [
+        "How do we describe locations on Earth?",
+        "Why is understanding location important?"
+      ],
+      "learning_targets": [
+        "I can use latitude and longitude to locate places.",
+        "I can explain the relationship between location and human activity.",
+        "I can read and interpret maps using coordinates."
+      ],
+      "vocabulary": ["latitude", "longitude", "coordinates", "equator", "prime meridian", "hemisphere", "grid system"],
+      "sample_assessment": "A location at 30°N, 90°W is in which hemisphere? A) Northern and Western B) Southern and Eastern C) Northern and Eastern D) Southern and Western"
+    },
+    {
+      "code": "SS.6.G.2.1",
+      "benchmark": "Explain how major physical characteristics, natural resources, climate, and absolute and relative locations have influenced settlement, interactions, and the economies of ancient civilizations of the world.",
+      "topics": ["Physical Geography", "Settlement", "Resources"],
+      "dok": 3,
+      "item_specs": "Students analyze how geography influenced ancient civilizations.",
+      "essential_questions": [
+        "How does geography influence where people settle?",
+        "What role do natural resources play in civilization development?"
+      ],
+      "learning_targets": [
+        "I can explain how geography influenced ancient settlements.",
+        "I can analyze the relationship between resources and economic development.",
+        "I can describe how climate affects human activity."
+      ],
+      "vocabulary": ["physical geography", "natural resources", "climate", "settlement patterns", "relative location", "absolute location"],
+      "sample_assessment": "Ancient civilizations often developed near rivers because rivers provided: A) Protection from invaders B) Water for irrigation and transportation C) Gold and silver D) Building materials"
+    },
+    {
+      "code": "SS.6.E.1.1",
+      "benchmark": "Identify the factors that influence the development of different economic systems throughout the world.",
+      "topics": ["Economics", "Economic Systems", "Resources"],
+      "dok": 2,
+      "item_specs": "Students identify factors that shape economic systems.",
+      "essential_questions": [
+        "What factors determine how an economy develops?",
+        "How do different economic systems allocate resources?"
+      ],
+      "learning_targets": [
+        "I can identify different types of economic systems.",
+        "I can explain factors that influence economic development.",
+        "I can compare how different systems allocate resources."
+      ],
+      "vocabulary": ["economic system", "traditional economy", "market economy", "command economy", "mixed economy", "resources", "scarcity"],
+      "sample_assessment": "In a command economy, economic decisions are made primarily by: A) Individual consumers B) Private businesses C) The government D) Traditional customs"
+    },
+    {
+      "code": "SS.6.E.2.1",
+      "benchmark": "Evaluate how civilizations through clans, tribes, and city-states evolved into larger civilizations through various forms of government.",
+      "topics": ["Government", "Political Development", "Civilization"],
+      "dok": 3,
+      "item_specs": "Students analyze the evolution of governmental structures.",
+      "essential_questions": [
+        "How did early governments form?",
+        "Why do societies need government?"
+      ],
+      "learning_targets": [
+        "I can trace the development of government from tribes to civilizations.",
+        "I can explain why governments form.",
+        "I can compare different forms of early government."
+      ],
+      "vocabulary": ["clan", "tribe", "city-state", "civilization", "government", "monarchy", "democracy", "empire"],
+      "sample_assessment": "City-states like Athens and Sparta are examples of: A) Large empires B) Independent political units C) Tribes D) Clans"
+    },
+    {
+      "code": "SS.6.W.1.3",
+      "benchmark": "Interpret primary and secondary sources.",
+      "topics": ["Historical Sources", "Analysis", "Evidence"],
+      "dok": 2,
+      "item_specs": "Students distinguish between and analyze primary and secondary sources.",
+      "essential_questions": [
+        "What is the difference between primary and secondary sources?",
+        "How do historians use sources to understand the past?"
+      ],
+      "learning_targets": [
+        "I can identify primary and secondary sources.",
+        "I can analyze sources for reliability and bias.",
+        "I can use sources to support historical arguments."
+      ],
+      "vocabulary": ["primary source", "secondary source", "artifact", "document", "evidence", "interpretation", "bias"],
+      "sample_assessment": "An ancient Roman coin found by archaeologists is an example of: A) A secondary source B) A primary source C) A biased source D) A modern reproduction"
+    },
+    {
+      "code": "SS.6.W.2.4",
+      "benchmark": "Compare the economic, political, social, and religious institutions of ancient river civilizations.",
+      "topics": ["River Civilizations", "Comparison", "Ancient History"],
+      "dok": 3,
+      "item_specs": "Students compare institutions across Mesopotamia, Egypt, India, and China.",
+      "essential_questions": [
+        "What did ancient river civilizations have in common?",
+        "How did geography shape each civilization differently?"
+      ],
+      "learning_targets": [
+        "I can compare the governments of ancient river civilizations.",
+        "I can explain how religion influenced ancient societies.",
+        "I can analyze economic systems of early civilizations."
+      ],
+      "vocabulary": ["Mesopotamia", "Egypt", "Indus Valley", "Huang He", "pharaoh", "ziggurat", "irrigation", "polytheism"],
+      "sample_assessment": "Which feature was common to ALL ancient river valley civilizations? A) Democracy B) Monotheism C) Writing systems D) Iron tools"
+    },
+    {
+      "code": "SS.6.W.3.5",
+      "benchmark": "Summarize the important achievements and contributions of ancient Greek civilization.",
+      "topics": ["Ancient Greece", "Achievements", "Legacy"],
+      "dok": 2,
+      "item_specs": "Students identify Greek contributions to Western civilization.",
+      "essential_questions": [
+        "What did ancient Greece contribute to the modern world?",
+        "How do Greek ideas influence us today?"
+      ],
+      "learning_targets": [
+        "I can identify major Greek achievements in government, philosophy, and arts.",
+        "I can explain the concept of democracy as developed in Athens.",
+        "I can describe Greek contributions to science and mathematics."
+      ],
+      "vocabulary": ["democracy", "philosophy", "Socrates", "Plato", "Aristotle", "Olympics", "architecture", "drama"],
+      "sample_assessment": "The concept of citizens participating directly in government decisions comes from: A) Ancient Rome B) Ancient Egypt C) Ancient Athens D) Ancient Persia"
+    },
+    {
+      "code": "SS.6.W.3.13",
+      "benchmark": "Identify the causes and effects of the fall of the Roman Empire.",
+      "topics": ["Roman Empire", "Fall of Rome", "Cause and Effect"],
+      "dok": 2,
+      "item_specs": "Students analyze multiple factors contributing to Rome's decline.",
+      "essential_questions": [
+        "Why did the Roman Empire fall?",
+        "What were the consequences of Rome's collapse?"
+      ],
+      "learning_targets": [
+        "I can identify political causes of Rome's fall.",
+        "I can explain economic factors that weakened the empire.",
+        "I can describe the effects of Rome's fall on Europe."
+      ],
+      "vocabulary": ["decline", "fall of Rome", "barbarian", "inflation", "corruption", "division", "476 CE"],
+      "sample_assessment": "Which was NOT a cause of the fall of the Roman Empire? A) Barbarian invasions B) Economic problems C) The rise of Christianity D) Weak leadership"
+    }
+  ]
+}

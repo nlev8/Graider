@@ -102,10 +102,12 @@ const markerLibrary = {
 };
 
 // StandardCard component for Planner
-function StandardCard({ standard, isSelected, onToggle }) {
+function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) {
+  const dokColors = { 1: "#4ade80", 2: "#60a5fa", 3: "#f59e0b", 4: "#ef4444" };
+  const dokLabels = { 1: "Recall", 2: "Skill/Concept", 3: "Strategic Thinking", 4: "Extended Thinking" };
+
   return (
     <div
-      onClick={onToggle}
       style={{
         background: isSelected
           ? "rgba(99,102,241,0.2)"
@@ -115,58 +117,175 @@ function StandardCard({ standard, isSelected, onToggle }) {
           : "1px solid var(--glass-border)",
         borderRadius: "12px",
         padding: "15px",
-        cursor: "pointer",
         transition: "all 0.2s",
         marginBottom: "10px",
       }}
     >
       <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: "8px",
-        }}
+        onClick={onToggle}
+        style={{ cursor: "pointer" }}
       >
-        <span
+        <div
           style={{
-            fontWeight: 700,
-            color: isSelected ? "var(--accent-light)" : "var(--text-primary)",
-            fontSize: "0.9rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: "8px",
           }}
         >
-          {standard.code}
-        </span>
-        {isSelected && (
-          <Icon name="CheckCircle" size={18} style={{ color: "var(--accent-primary)" }} />
-        )}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span
+              style={{
+                fontWeight: 700,
+                color: isSelected ? "var(--accent-light)" : "var(--text-primary)",
+                fontSize: "0.9rem",
+              }}
+            >
+              {standard.code}
+            </span>
+            {standard.dok && (
+              <span
+                style={{
+                  fontSize: "0.7rem",
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  background: dokColors[standard.dok] + "33",
+                  color: dokColors[standard.dok],
+                  fontWeight: 600,
+                }}
+                title={`Depth of Knowledge: ${dokLabels[standard.dok]}`}
+              >
+                DOK {standard.dok}
+              </span>
+            )}
+          </div>
+          {isSelected && (
+            <Icon name="CheckCircle" size={18} style={{ color: "var(--accent-primary)" }} />
+          )}
+        </div>
+        <p
+          style={{
+            fontSize: "0.9rem",
+            color: "var(--text-secondary)",
+            lineHeight: "1.5",
+            margin: "0 0 10px 0",
+          }}
+        >
+          {standard.benchmark}
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+          {(standard.topics || []).map((topic) => (
+            <span
+              key={topic}
+              style={{
+                fontSize: "0.75rem",
+                padding: "3px 8px",
+                borderRadius: "4px",
+                background: "var(--glass-hover)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {topic}
+            </span>
+          ))}
+        </div>
       </div>
-      <p
-        style={{
-          fontSize: "0.9rem",
-          color: "var(--text-secondary)",
-          lineHeight: "1.5",
-          margin: "0 0 10px 0",
-        }}
-      >
-        {standard.benchmark}
-      </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-        {(standard.topics || []).map((topic) => (
-          <span
-            key={topic}
-            style={{
-              fontSize: "0.75rem",
-              padding: "3px 8px",
-              borderRadius: "4px",
-              background: "var(--glass-hover)",
-              color: "var(--text-secondary)",
-            }}
-          >
-            {topic}
-          </span>
-        ))}
-      </div>
+
+      {/* Expand button */}
+      {(standard.learning_targets || standard.vocabulary || standard.essential_questions) && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onExpand && onExpand(); }}
+          style={{
+            marginTop: "10px",
+            padding: "4px 10px",
+            fontSize: "0.75rem",
+            background: "transparent",
+            border: "1px solid var(--glass-border)",
+            borderRadius: "6px",
+            color: "var(--text-secondary)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+        >
+          <Icon name={isExpanded ? "ChevronUp" : "ChevronDown"} size={14} />
+          {isExpanded ? "Hide Details" : "Show Details"}
+        </button>
+      )}
+
+      {/* Expanded Details */}
+      {isExpanded && (
+        <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid var(--glass-border)" }}>
+          {/* Essential Questions */}
+          {standard.essential_questions && standard.essential_questions.length > 0 && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#8b5cf6", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Icon name="HelpCircle" size={14} /> Essential Questions
+              </div>
+              {standard.essential_questions.map((q, i) => (
+                <p key={i} style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "4px 0", paddingLeft: "20px" }}>
+                  • {q}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Learning Targets */}
+          {standard.learning_targets && standard.learning_targets.length > 0 && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#10b981", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Icon name="Target" size={14} /> Learning Targets
+              </div>
+              {standard.learning_targets.map((t, i) => (
+                <p key={i} style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "4px 0", paddingLeft: "20px" }}>
+                  • {t}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Vocabulary */}
+          {standard.vocabulary && standard.vocabulary.length > 0 && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f59e0b", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Icon name="BookOpen" size={14} /> Key Vocabulary
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "20px" }}>
+                {standard.vocabulary.map((v, i) => (
+                  <span key={i} style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "12px", background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>
+                    {v}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Item Specifications */}
+          {standard.item_specs && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#6366f1", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Icon name="ClipboardList" size={14} /> Item Specifications
+              </div>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "0", paddingLeft: "20px" }}>
+                {standard.item_specs}
+              </p>
+            </div>
+          )}
+
+          {/* Sample Assessment */}
+          {standard.sample_assessment && (
+            <div>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#ec4899", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Icon name="FileQuestion" size={14} /> Sample Assessment Item
+              </div>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "0", paddingLeft: "20px", fontStyle: "italic", background: "var(--glass-hover)", padding: "10px", borderRadius: "8px" }}>
+                {standard.sample_assessment}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -385,8 +504,13 @@ function App() {
   // Planner state
   const [standards, setStandards] = useState([]);
   const [selectedStandards, setSelectedStandards] = useState([]);
+  const [expandedStandards, setExpandedStandards] = useState([]);
   const [lessonPlan, setLessonPlan] = useState(null);
+  const [lessonVariations, setLessonVariations] = useState([]);
+  const [brainstormIdeas, setBrainstormIdeas] = useState([]);
+  const [selectedIdea, setSelectedIdea] = useState(null);
   const [plannerLoading, setPlannerLoading] = useState(false);
+  const [brainstormLoading, setBrainstormLoading] = useState(false);
   const [unitConfig, setUnitConfig] = useState({
     title: "",
     duration: 1,
@@ -840,14 +964,6 @@ function App() {
         (first && lowerFilename.startsWith(`${first} `))
       );
     });
-  };
-
-  // Get filtered files based on period selection
-  const getFilteredFiles = () => {
-    if (!selectedPeriod || periodStudents.length === 0) {
-      return availableFiles;
-    }
-    return availableFiles.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
   };
 
   // Check if a student name matches any student in the period roster
@@ -1431,23 +1547,61 @@ ${signature}`;
     );
   };
 
-  const generateLessonPlan = async () => {
+  // Brainstorm lesson ideas
+  const brainstormIdeasHandler = async () => {
     if (selectedStandards.length === 0) {
       addToast("Please select at least one standard", "warning");
       return;
     }
-    if (!unitConfig.title) {
-      addToast("Please enter a title", "warning");
+    setBrainstormLoading(true);
+    setBrainstormIdeas([]);
+    setSelectedIdea(null);
+    try {
+      const data = await api.brainstormLessonIdeas({
+        standards: selectedStandards,
+        config: { state: config.state || 'FL', grade: config.grade_level, subject: config.subject },
+      });
+      if (data.error) addToast("Note: Using sample ideas - " + data.error, "info");
+      setBrainstormIdeas(data.ideas || []);
+    } catch (e) {
+      addToast("Error brainstorming: " + e.message, "error");
+    } finally {
+      setBrainstormLoading(false);
+    }
+  };
+
+  // Generate lesson plan (optionally from selected idea, optionally with variations)
+  const generateLessonPlan = async (generateVariations = false) => {
+    if (selectedStandards.length === 0) {
+      addToast("Please select at least one standard", "warning");
+      return;
+    }
+    if (!unitConfig.title && !selectedIdea) {
+      addToast("Please enter a title or select an idea", "warning");
       return;
     }
     setPlannerLoading(true);
+    setLessonVariations([]);
     try {
       const data = await api.generateLessonPlan({
         standards: selectedStandards,
-        config: { state: 'FL', grade: config.grade_level, subject: config.subject, ...unitConfig },
+        config: {
+          state: config.state || 'FL',
+          grade: config.grade_level,
+          subject: config.subject,
+          ...unitConfig,
+          title: unitConfig.title || (selectedIdea ? selectedIdea.title : 'Untitled'),
+        },
+        selectedIdea: selectedIdea,
+        generateVariations: generateVariations,
       });
       if (data.error) addToast("Error: " + data.error, "error");
-      else setLessonPlan(data.plan || data);
+      else if (data.variations) {
+        setLessonVariations(data.variations);
+        addToast(`Generated ${data.variations.length} lesson plan variations!`, "success");
+      } else {
+        setLessonPlan(data.plan || data);
+      }
     } catch (e) {
       addToast("Error generating plan: " + e.message, "error");
     } finally {
@@ -4271,13 +4425,15 @@ ${signature}`;
                                   </td>
                                   <td
                                     style={{
-                                      maxWidth: "150px",
+                                      maxWidth: "300px",
                                       overflow: "hidden",
                                       textOverflow: "ellipsis",
                                       whiteSpace: "nowrap",
+                                      cursor: "help",
                                     }}
+                                    title={r.filename || r.assignment}
                                   >
-                                    {r.assignment}
+                                    {r.filename || r.assignment}
                                   </td>
                                   <td
                                     style={{
@@ -4676,109 +4832,6 @@ ${signature}`;
                       </button>
                     </div>
                   </div>
-
-                  {/* File Selection */}
-                  {availableFiles.length > 0 && (
-                    <div
-                      style={{
-                        padding: "15px",
-                        background: "var(--glass-bg)",
-                        borderRadius: "12px",
-                        border: "1px solid var(--glass-border)",
-                      }}
-                    >
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                        <label className="label" style={{ marginBottom: 0 }}>
-                          Select Files to Grade ({selectedFiles.length} of {getFilteredFiles().length} shown)
-                        </label>
-                        <div style={{ display: "flex", gap: "8px" }}>
-                          <button
-                            onClick={() => setSelectedFiles(getFilteredFiles().map(f => f.name))}
-                            className="btn btn-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
-                          >
-                            Select All
-                          </button>
-                          <button
-                            onClick={() => setSelectedFiles(getFilteredFiles().filter(f => !f.graded).map(f => f.name))}
-                            className="btn btn-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
-                          >
-                            Ungraded Only
-                          </button>
-                          <button
-                            onClick={() => setSelectedFiles([])}
-                            className="btn btn-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          maxHeight: "200px",
-                          overflowY: "auto",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "4px",
-                        }}
-                      >
-                        {getFilteredFiles().length === 0 ? (
-                          <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px", fontSize: "0.85rem" }}>
-                            No files match the selected period filter
-                          </p>
-                        ) : (
-                          getFilteredFiles().map((file) => (
-                            <label
-                              key={file.name}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                padding: "8px 12px",
-                                background: selectedFiles.includes(file.name)
-                                  ? "rgba(99, 102, 241, 0.1)"
-                                  : "transparent",
-                                borderRadius: "8px",
-                                cursor: "pointer",
-                                transition: "all 0.15s",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedFiles.includes(file.name)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedFiles([...selectedFiles, file.name]);
-                                  } else {
-                                    setSelectedFiles(selectedFiles.filter(f => f !== file.name));
-                                  }
-                                }}
-                                style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                              />
-                              <span style={{ flex: 1, fontSize: "0.85rem" }}>{file.name}</span>
-                              {file.graded && (
-                                <span
-                                  style={{
-                                    padding: "2px 8px",
-                                    borderRadius: "4px",
-                                    background: "rgba(74, 222, 128, 0.2)",
-                                    color: "#4ade80",
-                                    fontSize: "0.7rem",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Graded
-                                </span>
-                              )}
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Teacher & School Info */}
                   <div
@@ -8056,59 +8109,70 @@ ${signature}`;
                         </p>
                       )}
 
-                      <ResponsiveContainer width="100%" height={250}>
-                        <LineChart
-                          data={(() => {
-                            const filtered = selectedStudent
-                              ? (filteredAnalytics.student_progress || []).filter(
-                                  (s) => s.name === selectedStudent,
-                                )
-                              : filteredAnalytics.student_progress || [];
-                            const allGrades = filtered.flatMap((s) =>
-                              (s.grades || []).map((g) => ({
-                                ...g,
-                                student: s.name.split(" ")[0],
-                              })),
-                            );
-                            return allGrades.sort((a, b) =>
-                              (a.date || "").localeCompare(b.date || ""),
-                            );
-                          })()}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="var(--glass-border)"
-                          />
-                          <XAxis
-                            dataKey="assignment"
-                            tick={{
-                              fill: "var(--text-secondary)",
-                              fontSize: 10,
-                            }}
-                            angle={-20}
-                            textAnchor="end"
-                            height={60}
-                          />
-                          <YAxis
-                            domain={[0, 100]}
-                            tick={{ fill: "var(--text-secondary)" }}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              background: "var(--modal-content-bg)",
-                              border: "1px solid var(--glass-border)",
-                              borderRadius: "8px",
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="score"
-                            stroke="#6366f1"
-                            strokeWidth={3}
-                            dot={{ fill: "#6366f1", r: 5 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      {(() => {
+                        const filtered = selectedStudent
+                          ? (filteredAnalytics.student_progress || []).filter(
+                              (s) => s.name === selectedStudent,
+                            )
+                          : filteredAnalytics.student_progress || [];
+                        const allGrades = filtered.flatMap((s) =>
+                          (s.grades || []).map((g) => ({
+                            ...g,
+                            student: s.name.split(" ")[0],
+                          })),
+                        );
+                        const chartData = allGrades.sort((a, b) =>
+                          (a.date || "").localeCompare(b.date || ""),
+                        );
+                        const chartWidth = Math.max(800, chartData.length * 80);
+
+                        return (
+                          <div style={{ overflowX: "auto", overflowY: "hidden" }}>
+                            <div style={{ width: chartWidth, height: 300 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 15, bottom: 80, left: 10, right: 30 }}>
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    stroke="var(--glass-border)"
+                                  />
+                                  <XAxis
+                                    dataKey="assignment"
+                                    tick={{
+                                      fill: "var(--text-secondary)",
+                                      fontSize: 10,
+                                    }}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={100}
+                                    interval={0}
+                                    tickFormatter={(value) => value && value.length > 25 ? value.substring(0, 25) + "..." : value}
+                                  />
+                                  <YAxis
+                                    domain={[0, 100]}
+                                    tick={{ fill: "var(--text-secondary)" }}
+                                  />
+                                  <Tooltip
+                                    contentStyle={{
+                                      background: "var(--modal-content-bg)",
+                                      border: "1px solid var(--glass-border)",
+                                      borderRadius: "8px",
+                                    }}
+                                    formatter={(value, name) => [value + "%", "Score"]}
+                                    labelFormatter={(label) => label}
+                                  />
+                                  <Line
+                                    type="monotone"
+                                    dataKey="score"
+                                    stroke="#6366f1"
+                                    strokeWidth={3}
+                                    dot={{ fill: "#6366f1", r: 5 }}
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Needs Attention + Top Performers */}
@@ -8852,38 +8916,201 @@ ${signature}`;
                             style={{ minHeight: "80px" }}
                           />
                         </div>
+                        {/* Brainstorm Button */}
                         <button
-                          onClick={generateLessonPlan}
-                          disabled={
-                            plannerLoading || selectedStandards.length === 0
-                          }
+                          onClick={brainstormIdeasHandler}
+                          disabled={brainstormLoading || selectedStandards.length === 0}
+                          className="btn btn-secondary"
+                          style={{
+                            width: "100%",
+                            justifyContent: "center",
+                            marginBottom: "10px",
+                            opacity: brainstormLoading || selectedStandards.length === 0 ? 0.5 : 1,
+                          }}
+                        >
+                          {brainstormLoading ? (
+                            <Icon name="Loader2" size={18} style={{ animation: "spin 1s linear infinite" }} />
+                          ) : (
+                            <Icon name="Lightbulb" size={18} />
+                          )}
+                          {brainstormLoading ? "Brainstorming..." : "Brainstorm Ideas"}
+                        </button>
+
+                        {/* Generate Plan Button */}
+                        <button
+                          onClick={() => generateLessonPlan(false)}
+                          disabled={plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea)}
                           className="btn btn-primary"
                           style={{
                             width: "100%",
                             justifyContent: "center",
-                            opacity:
-                              plannerLoading || selectedStandards.length === 0
-                                ? 0.5
-                                : 1,
+                            marginBottom: "10px",
+                            opacity: plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea) ? 0.5 : 1,
                           }}
                         >
                           {plannerLoading ? (
-                            <Icon
-                              name="Loader2"
-                              size={18}
-                              style={{ animation: "spin 1s linear infinite" }}
-                            />
+                            <Icon name="Loader2" size={18} style={{ animation: "spin 1s linear infinite" }} />
                           ) : (
                             <Icon name="Sparkles" size={18} />
                           )}
-                          {plannerLoading ? "Generating..." : "Generate Plan"}
+                          {plannerLoading ? "Generating..." : selectedIdea ? "Generate from Idea" : "Generate Plan"}
+                        </button>
+
+                        {/* Generate Variations Button */}
+                        <button
+                          onClick={() => generateLessonPlan(true)}
+                          disabled={plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea)}
+                          className="btn btn-secondary"
+                          style={{
+                            width: "100%",
+                            justifyContent: "center",
+                            opacity: plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea) ? 0.5 : 1,
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          <Icon name="Layers" size={16} />
+                          Generate 3 Variations
                         </button>
                       </div>
                     </div>
+
+                    {/* Brainstormed Ideas Section */}
+                    {brainstormIdeas.length > 0 && !lessonPlan && lessonVariations.length === 0 && (
+                      <div className="glass-card" style={{ padding: "20px", marginTop: "20px" }}>
+                        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
+                          <Icon name="Lightbulb" size={20} style={{ color: "#f59e0b" }} /> Lesson Plan Ideas
+                        </h3>
+                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
+                          Select an idea to develop into a full lesson plan, or use it as inspiration.
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                          {brainstormIdeas.map((idea) => (
+                            <div
+                              key={idea.id}
+                              onClick={() => {
+                                setSelectedIdea(selectedIdea?.id === idea.id ? null : idea);
+                                if (selectedIdea?.id !== idea.id) {
+                                  setUnitConfig(prev => ({ ...prev, title: idea.title }));
+                                }
+                              }}
+                              style={{
+                                padding: "15px",
+                                borderRadius: "10px",
+                                background: selectedIdea?.id === idea.id ? "rgba(99,102,241,0.2)" : "var(--input-bg)",
+                                border: selectedIdea?.id === idea.id ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                                cursor: "pointer",
+                                transition: "all 0.2s",
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                                <h4 style={{ fontWeight: 600, fontSize: "1rem", margin: 0 }}>{idea.title}</h4>
+                                <span style={{
+                                  padding: "3px 10px",
+                                  borderRadius: "12px",
+                                  fontSize: "0.7rem",
+                                  fontWeight: 600,
+                                  background: idea.approach === "Activity-Based" ? "rgba(16,185,129,0.2)" :
+                                    idea.approach === "Discussion" ? "rgba(99,102,241,0.2)" :
+                                    idea.approach === "Project" ? "rgba(245,158,11,0.2)" :
+                                    idea.approach === "Simulation" ? "rgba(236,72,153,0.2)" :
+                                    "rgba(107,114,128,0.2)",
+                                  color: idea.approach === "Activity-Based" ? "#10b981" :
+                                    idea.approach === "Discussion" ? "#6366f1" :
+                                    idea.approach === "Project" ? "#f59e0b" :
+                                    idea.approach === "Simulation" ? "#ec4899" :
+                                    "#6b7280",
+                                }}>
+                                  {idea.approach}
+                                </span>
+                              </div>
+                              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>{idea.brief}</p>
+                              <div style={{ display: "flex", gap: "15px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                <span><strong>Hook:</strong> {idea.hook}</span>
+                              </div>
+                              <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                <span><strong>Activity:</strong> {idea.key_activity}</span>
+                              </div>
+                              {selectedIdea?.id === idea.id && (
+                                <div style={{ marginTop: "10px", padding: "8px", background: "rgba(99,102,241,0.1)", borderRadius: "6px", fontSize: "0.8rem", color: "var(--accent-light)" }}>
+                                  <Icon name="CheckCircle" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                                  Selected - Click "Generate from Idea" to create a full lesson plan
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Main Content */}
                   <div>
+                    {/* Lesson Variations Display */}
+                    {lessonVariations.length > 0 && !lessonPlan && (
+                      <div className="glass-card" style={{ padding: "30px", maxHeight: "80vh", overflowY: "auto" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px", paddingBottom: "15px", borderBottom: "1px solid var(--glass-border)" }}>
+                          <div>
+                            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "5px" }}>
+                              <Icon name="Layers" size={24} style={{ marginRight: "10px", verticalAlign: "middle", color: "var(--accent-primary)" }} />
+                              Lesson Plan Variations
+                            </h2>
+                            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                              Compare {lessonVariations.length} different approaches to teaching this content
+                            </p>
+                          </div>
+                          <button onClick={() => setLessonVariations([])} className="btn btn-secondary">
+                            <Icon name="X" size={16} /> Close
+                          </button>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                          {lessonVariations.map((variation, idx) => (
+                            <div key={idx} style={{ padding: "20px", background: "var(--input-bg)", borderRadius: "12px", border: "1px solid var(--glass-border)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "15px" }}>
+                                <div>
+                                  <span style={{
+                                    display: "inline-block",
+                                    padding: "4px 12px",
+                                    borderRadius: "15px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: 600,
+                                    marginBottom: "8px",
+                                    background: idx === 0 ? "rgba(16,185,129,0.2)" : idx === 1 ? "rgba(99,102,241,0.2)" : "rgba(245,158,11,0.2)",
+                                    color: idx === 0 ? "#10b981" : idx === 1 ? "#6366f1" : "#f59e0b",
+                                  }}>
+                                    {variation.approach || `Variation ${idx + 1}`}
+                                  </span>
+                                  <h3 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "8px 0" }}>{variation.title}</h3>
+                                  <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5 }}>{variation.overview}</p>
+                                </div>
+                                <button
+                                  onClick={() => { setLessonPlan(variation); setLessonVariations([]); }}
+                                  className="btn btn-primary"
+                                  style={{ flexShrink: 0 }}
+                                >
+                                  <Icon name="Check" size={16} /> Use This Plan
+                                </button>
+                              </div>
+                              {variation.essential_questions && (
+                                <div style={{ marginTop: "10px" }}>
+                                  <strong style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>Essential Questions:</strong>
+                                  <ul style={{ margin: "5px 0 0 20px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                                    {variation.essential_questions.slice(0, 2).map((q, i) => <li key={i}>{q}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {variation.days && (
+                                <div style={{ marginTop: "10px", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                                  <Icon name="Calendar" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                                  {variation.days.length} day{variation.days.length !== 1 ? 's' : ''} planned
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Single Lesson Plan Display */}
                     {lessonPlan ? (
                       <div
                         className="glass-card"
@@ -8931,7 +9158,7 @@ ${signature}`;
                               <Icon name="Download" size={16} /> Export
                             </button>
                             <button
-                              onClick={() => setLessonPlan(null)}
+                              onClick={() => { setLessonPlan(null); setSelectedIdea(null); setBrainstormIdeas([]); }}
                               className="btn btn-secondary"
                             >
                               Close
@@ -9201,6 +9428,12 @@ ${signature}`;
                                   std.code,
                                 )}
                                 onToggle={() => toggleStandard(std.code)}
+                                isExpanded={expandedStandards.includes(std.code)}
+                                onExpand={() => setExpandedStandards(prev =>
+                                  prev.includes(std.code)
+                                    ? prev.filter(c => c !== std.code)
+                                    : [...prev, std.code]
+                                )}
                               />
                             ))
                           ) : (

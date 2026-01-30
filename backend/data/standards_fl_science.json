@@ -1,0 +1,151 @@
+{
+  "state": "FL",
+  "subject": "Science",
+  "grade": "6-8",
+  "standards": [
+    {
+      "code": "SC.6.N.1.1",
+      "benchmark": "Define a problem from the sixth grade curriculum, use appropriate reference materials to support scientific understanding, plan and carry out scientific investigation, and use appropriate tools.",
+      "topics": ["Scientific Method", "Investigation", "Tools"],
+      "dok": 3,
+      "item_specs": "Students plan and conduct investigations using the scientific method.",
+      "essential_questions": [
+        "How do scientists investigate questions?",
+        "What steps are involved in scientific investigation?"
+      ],
+      "learning_targets": [
+        "I can identify a testable question.",
+        "I can plan and conduct a scientific investigation.",
+        "I can select and use appropriate scientific tools."
+      ],
+      "vocabulary": ["hypothesis", "variable", "control", "experiment", "data", "conclusion", "scientific method"],
+      "sample_assessment": "In an experiment, the factor that is deliberately changed is called the: A) Control variable B) Independent variable C) Dependent variable D) Constant"
+    },
+    {
+      "code": "SC.6.N.2.2",
+      "benchmark": "Explain that scientific knowledge is durable because it is open to change as new evidence or interpretations are encountered.",
+      "topics": ["Nature of Science", "Scientific Knowledge", "Evidence"],
+      "dok": 2,
+      "item_specs": "Students explain how scientific knowledge changes with new evidence.",
+      "essential_questions": [
+        "Why does scientific knowledge change over time?",
+        "What makes science self-correcting?"
+      ],
+      "learning_targets": [
+        "I can explain why scientific knowledge is durable yet changeable.",
+        "I can give examples of how science has changed with new evidence.",
+        "I can describe the role of evidence in science."
+      ],
+      "vocabulary": ["evidence", "interpretation", "theory", "scientific knowledge", "peer review", "replication"],
+      "sample_assessment": "Scientific theories can change when: A) Scientists decide to change them B) New evidence contradicts them C) They become too old D) People stop believing them"
+    },
+    {
+      "code": "SC.6.E.6.1",
+      "benchmark": "Describe and give examples of ways in which Earth's surface is built up and torn down by physical and chemical weathering, erosion, and deposition.",
+      "topics": ["Earth Science", "Weathering", "Erosion"],
+      "dok": 2,
+      "item_specs": "Students describe processes that shape Earth's surface.",
+      "essential_questions": [
+        "How is Earth's surface changed over time?",
+        "What causes weathering and erosion?"
+      ],
+      "learning_targets": [
+        "I can distinguish between weathering and erosion.",
+        "I can give examples of physical and chemical weathering.",
+        "I can explain how deposition builds up landforms."
+      ],
+      "vocabulary": ["weathering", "erosion", "deposition", "physical weathering", "chemical weathering", "sediment"],
+      "sample_assessment": "Which is an example of chemical weathering? A) Ice breaking apart rocks B) Acid rain dissolving limestone C) Wind blowing sand D) Tree roots cracking sidewalks"
+    },
+    {
+      "code": "SC.6.E.7.4",
+      "benchmark": "Differentiate and show interactions among the geosphere, hydrosphere, cryosphere, atmosphere, and biosphere.",
+      "topics": ["Earth Systems", "Interactions", "Spheres"],
+      "dok": 2,
+      "item_specs": "Students identify Earth's spheres and explain their interactions.",
+      "essential_questions": [
+        "What are Earth's major systems?",
+        "How do Earth's systems interact with each other?"
+      ],
+      "learning_targets": [
+        "I can identify and describe Earth's five spheres.",
+        "I can explain interactions between Earth's systems.",
+        "I can give examples of how changes in one sphere affect others."
+      ],
+      "vocabulary": ["geosphere", "hydrosphere", "cryosphere", "atmosphere", "biosphere", "system", "interaction"],
+      "sample_assessment": "A volcanic eruption releases gases into the air. This is an interaction between: A) Geosphere and atmosphere B) Hydrosphere and biosphere C) Cryosphere and geosphere D) Atmosphere and biosphere"
+    },
+    {
+      "code": "SC.6.L.14.1",
+      "benchmark": "Describe and identify patterns in the hierarchical organization of organisms from atoms to molecules and cells to tissues to organs to organ systems to organisms.",
+      "topics": ["Life Science", "Organization", "Cells"],
+      "dok": 2,
+      "item_specs": "Students describe levels of biological organization.",
+      "essential_questions": [
+        "How are living things organized?",
+        "What is the relationship between cells, tissues, organs, and systems?"
+      ],
+      "learning_targets": [
+        "I can list levels of organization from atoms to organisms.",
+        "I can explain how each level relates to the next.",
+        "I can give examples at each level of organization."
+      ],
+      "vocabulary": ["cell", "tissue", "organ", "organ system", "organism", "molecule", "hierarchy"],
+      "sample_assessment": "Which correctly shows levels of organization from simplest to most complex? A) Organ, tissue, cell, organism B) Cell, tissue, organ, organ system C) Tissue, cell, organ system, organ D) Organism, organ, tissue, cell"
+    },
+    {
+      "code": "SC.6.L.15.1",
+      "benchmark": "Analyze and describe how and why organisms are classified according to shared characteristics with emphasis on the Linnaean system.",
+      "topics": ["Classification", "Taxonomy", "Linnaean System"],
+      "dok": 2,
+      "item_specs": "Students explain how organisms are classified using shared characteristics.",
+      "essential_questions": [
+        "Why do scientists classify organisms?",
+        "How does the Linnaean system organize living things?"
+      ],
+      "learning_targets": [
+        "I can explain why classification is useful.",
+        "I can list the levels of the Linnaean classification system.",
+        "I can classify organisms based on shared characteristics."
+      ],
+      "vocabulary": ["classification", "taxonomy", "kingdom", "phylum", "class", "order", "family", "genus", "species"],
+      "sample_assessment": "In the Linnaean system, which level contains the most organisms? A) Species B) Genus C) Family D) Kingdom"
+    },
+    {
+      "code": "SC.6.P.11.1",
+      "benchmark": "Explore the Law of Conservation of Energy by differentiating between potential and kinetic energy. Identify situations where kinetic energy is transformed into potential energy and vice versa.",
+      "topics": ["Energy", "Kinetic", "Potential"],
+      "dok": 2,
+      "item_specs": "Students differentiate between kinetic and potential energy and identify energy transformations.",
+      "essential_questions": [
+        "What is the difference between kinetic and potential energy?",
+        "How does energy change form?"
+      ],
+      "learning_targets": [
+        "I can define kinetic and potential energy.",
+        "I can identify examples of each type of energy.",
+        "I can describe energy transformations."
+      ],
+      "vocabulary": ["energy", "kinetic energy", "potential energy", "conservation of energy", "transformation", "motion"],
+      "sample_assessment": "A roller coaster car at the top of a hill has MOSTLY: A) Kinetic energy B) Potential energy C) Sound energy D) No energy"
+    },
+    {
+      "code": "SC.6.P.13.1",
+      "benchmark": "Investigate and describe types of forces including contact forces and forces acting at a distance, such as electrical, magnetic, and gravitational.",
+      "topics": ["Forces", "Contact Forces", "Action at a Distance"],
+      "dok": 2,
+      "item_specs": "Students identify and describe different types of forces.",
+      "essential_questions": [
+        "What are the different types of forces?",
+        "How do forces act on objects?"
+      ],
+      "learning_targets": [
+        "I can identify contact and non-contact forces.",
+        "I can describe how gravitational force works.",
+        "I can explain how magnetic and electrical forces work."
+      ],
+      "vocabulary": ["force", "contact force", "non-contact force", "gravity", "magnetism", "friction", "electrical force"],
+      "sample_assessment": "Which is an example of a non-contact force? A) Pushing a cart B) Gravity pulling objects toward Earth C) Friction between tires and road D) Kicking a ball"
+    }
+  ]
+}

@@ -181,6 +181,13 @@ export async function getStandards(config) {
   })
 }
 
+export async function brainstormLessonIdeas(data) {
+  return fetchApi('/api/brainstorm-lesson-ideas', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function generateLessonPlan(data) {
   return fetchApi('/api/generate-lesson-plan', {
     method: 'POST',
@@ -382,6 +389,7 @@ export default {
   exportDistrictReport,
   retranslateFeedback,
   getStandards,
+  brainstormLessonIdeas,
   generateLessonPlan,
   exportLessonPlan,
   sendEmails,

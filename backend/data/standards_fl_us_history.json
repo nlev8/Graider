@@ -6,82 +6,290 @@
     {
       "code": "SS.8.A.1.1",
       "benchmark": "Provide supporting details for an answer from text, interview for oral history, check validity of information from research/text, and identify strong vs. weak arguments.",
-      "topics": ["Research Skills", "Primary Sources", "Analysis"]
+      "topics": ["Research Skills", "Primary Sources", "Analysis"],
+      "dok": 3,
+      "item_specs": "Students analyze sources for validity and distinguish between strong and weak arguments. Items may include excerpts requiring evaluation.",
+      "essential_questions": [
+        "How do historians determine if a source is reliable?",
+        "What makes an argument strong or weak?"
+      ],
+      "learning_targets": [
+        "I can identify supporting details in a historical text.",
+        "I can evaluate the validity of historical sources.",
+        "I can distinguish between strong and weak arguments."
+      ],
+      "vocabulary": ["primary source", "secondary source", "validity", "bias", "oral history", "evidence", "argument"],
+      "sample_assessment": "A historian finds two accounts of the same battle. What should they do FIRST to determine which is more reliable? A) Choose the longer account B) Compare the accounts to other sources C) Use the newer account D) Ask a teacher"
     },
     {
       "code": "SS.8.A.1.2",
       "benchmark": "Analyze charts, graphs, maps, photographs, and timelines; analyze political cartoons; determine cause and effect.",
-      "topics": ["Data Analysis", "Maps", "Political Cartoons", "Cause and Effect"]
+      "topics": ["Data Analysis", "Maps", "Political Cartoons", "Cause and Effect"],
+      "dok": 2,
+      "item_specs": "Students interpret visual sources and identify cause-effect relationships. Items include charts, graphs, maps, and political cartoons.",
+      "essential_questions": [
+        "How do visual sources help us understand history?",
+        "What can political cartoons tell us about historical events?"
+      ],
+      "learning_targets": [
+        "I can analyze information from charts, graphs, and maps.",
+        "I can interpret the meaning of political cartoons.",
+        "I can identify cause and effect relationships in history."
+      ],
+      "vocabulary": ["political cartoon", "symbolism", "cause", "effect", "timeline", "data", "interpretation"],
+      "sample_assessment": "What is the MAIN purpose of a political cartoon? A) To entertain readers B) To express an opinion about current events C) To report factual news D) To advertise products"
     },
     {
       "code": "SS.8.A.1.3",
       "benchmark": "Analyze timelines, charts, graphs, and photographs to determine cause and effect.",
-      "topics": ["Data Analysis", "Timelines", "Cause and Effect"]
+      "topics": ["Data Analysis", "Timelines", "Cause and Effect"],
+      "dok": 2,
+      "item_specs": "Students use visual data to establish causal relationships between historical events.",
+      "essential_questions": [
+        "How do timelines help us understand the sequence of events?",
+        "How can we use data to identify patterns in history?"
+      ],
+      "learning_targets": [
+        "I can read and interpret historical timelines.",
+        "I can use charts and graphs to draw conclusions.",
+        "I can explain how one event led to another."
+      ],
+      "vocabulary": ["chronological", "sequence", "correlation", "trend", "data analysis"],
+      "sample_assessment": "A timeline shows the Stamp Act in 1765 and the Boston Tea Party in 1773. This timeline helps historians understand: A) How long the Revolutionary War lasted B) The sequence of events leading to revolution C) Who won the war D) Where battles took place"
     },
     {
       "code": "SS.8.A.2.1",
       "benchmark": "Compare the relationships among the British, French, Spanish, and Dutch in their struggle for colonization of North America.",
-      "topics": ["Colonization", "European Powers", "North America"]
+      "topics": ["Colonization", "European Powers", "North America"],
+      "dok": 2,
+      "item_specs": "Students compare colonial strategies and conflicts between European powers in North America.",
+      "essential_questions": [
+        "Why did European nations compete for control of North America?",
+        "How did different European powers approach colonization?"
+      ],
+      "learning_targets": [
+        "I can identify the goals of British, French, Spanish, and Dutch colonization.",
+        "I can compare colonial relationships with Native Americans.",
+        "I can explain conflicts between European powers in North America."
+      ],
+      "vocabulary": ["colonization", "New France", "New Spain", "New Netherland", "fur trade", "missions", "rivalry"],
+      "sample_assessment": "Which European power focused PRIMARILY on the fur trade and allied closely with Native Americans? A) Spain B) England C) France D) Netherlands"
     },
     {
       "code": "SS.8.A.2.2",
       "benchmark": "Compare the characteristics of the New England, Middle, and Southern colonies.",
-      "topics": ["Colonial Regions", "Economy", "Geography"]
+      "topics": ["Colonial Regions", "Economy", "Geography"],
+      "dok": 2,
+      "item_specs": "Students compare economic, social, and geographic characteristics of colonial regions.",
+      "essential_questions": [
+        "How did geography shape the development of colonial regions?",
+        "Why did the colonies develop different economies?"
+      ],
+      "learning_targets": [
+        "I can describe the economy of each colonial region.",
+        "I can explain how geography influenced colonial development.",
+        "I can compare social structures across colonial regions."
+      ],
+      "vocabulary": ["New England colonies", "Middle colonies", "Southern colonies", "cash crops", "subsistence farming", "plantation"],
+      "sample_assessment": "Which colonial region was MOST dependent on plantation agriculture and enslaved labor? A) New England B) Middle Colonies C) Southern Colonies D) All regions equally"
     },
     {
       "code": "SS.8.A.2.4",
       "benchmark": "Identify the impact of key colonial figures on the economic, political, and social development of the colonies.",
-      "topics": ["Colonial Figures", "Leadership"]
+      "topics": ["Colonial Figures", "Leadership"],
+      "dok": 2,
+      "item_specs": "Students connect colonial leaders to their contributions and impacts.",
+      "essential_questions": [
+        "How did individual leaders shape colonial America?",
+        "What qualities made colonial leaders effective?"
+      ],
+      "learning_targets": [
+        "I can identify key colonial figures and their contributions.",
+        "I can explain how colonial leaders influenced development.",
+        "I can connect leaders to specific colonies and movements."
+      ],
+      "vocabulary": ["William Penn", "Roger Williams", "John Winthrop", "Anne Hutchinson", "proprietor", "dissent"],
+      "sample_assessment": "William Penn founded Pennsylvania based on principles of: A) Strict religious rules B) Religious tolerance and peace C) Plantation agriculture D) Military strength"
     },
     {
       "code": "SS.8.A.3.1",
       "benchmark": "Explain the consequences of the French and Indian War in British policies for the American colonies from 1763 - 1774.",
-      "topics": ["French and Indian War", "British Policy", "Taxation"]
+      "topics": ["French and Indian War", "British Policy", "Taxation"],
+      "dok": 2,
+      "item_specs": "Students explain how the French and Indian War led to new British policies and colonial tensions.",
+      "essential_questions": [
+        "How did the French and Indian War change Britain's relationship with the colonies?",
+        "Why did Britain impose new taxes after 1763?"
+      ],
+      "learning_targets": [
+        "I can explain the outcome of the French and Indian War.",
+        "I can describe British policies after 1763.",
+        "I can connect war debt to new colonial taxes."
+      ],
+      "vocabulary": ["French and Indian War", "Proclamation of 1763", "Stamp Act", "war debt", "Parliament", "colonial policy"],
+      "sample_assessment": "Why did Britain begin taxing the colonies more heavily after 1763? A) To punish colonists for rebellion B) To pay war debts from the French and Indian War C) To fund new explorations D) To build more ships"
     },
     {
       "code": "SS.8.A.3.2",
       "benchmark": "Explain American colonial reaction to British policy from 1763 - 1774.",
-      "topics": ["Protest", "Revolutionary Spirit", "Sons of Liberty"]
+      "topics": ["Protest", "Revolutionary Spirit", "Sons of Liberty"],
+      "dok": 2,
+      "item_specs": "Students explain colonial responses to British policies including protests and boycotts.",
+      "essential_questions": [
+        "How did colonists resist British policies?",
+        "What methods of protest did colonists use?"
+      ],
+      "learning_targets": [
+        "I can describe colonial protests against British policies.",
+        "I can explain the significance of 'no taxation without representation.'",
+        "I can identify key protest events and groups."
+      ],
+      "vocabulary": ["boycott", "Sons of Liberty", "Daughters of Liberty", "tarring and feathering", "non-importation", "protest"],
+      "sample_assessment": "The colonial slogan 'No taxation without representation' expressed anger about: A) High prices for British goods B) Being taxed without a voice in Parliament C) The quartering of soldiers D) Religious restrictions"
     },
     {
       "code": "SS.8.A.3.6",
       "benchmark": "Examine the causes, course, and consequences of the American Revolution.",
-      "topics": ["American Revolution", "War of Independence"]
+      "topics": ["American Revolution", "War of Independence"],
+      "dok": 3,
+      "item_specs": "Students analyze multiple factors leading to, during, and resulting from the American Revolution.",
+      "essential_questions": [
+        "What caused the American colonies to declare independence?",
+        "How did the Revolution change American society?"
+      ],
+      "learning_targets": [
+        "I can explain the causes of the American Revolution.",
+        "I can describe key events and turning points of the war.",
+        "I can analyze the consequences of American independence."
+      ],
+      "vocabulary": ["Declaration of Independence", "Continental Army", "Loyalist", "Patriot", "Treaty of Paris", "independence"],
+      "sample_assessment": "Which was a LONG-TERM cause of the American Revolution? A) The Boston Massacre B) Growing colonial desire for self-government C) The Battle of Lexington D) The Tea Act"
     },
     {
       "code": "SS.8.A.3.10",
       "benchmark": "Examine the course and consequences of the Constitutional Convention (New Jersey Plan, Virginia Plan, Great Compromise, 3/5 Compromise).",
-      "topics": ["Constitution", "Compromises", "Founding Fathers"]
+      "topics": ["Constitution", "Compromises", "Founding Fathers"],
+      "dok": 3,
+      "item_specs": "Students analyze debates and compromises at the Constitutional Convention.",
+      "essential_questions": [
+        "Why was compromise necessary to create the Constitution?",
+        "How did the Great Compromise address state representation?"
+      ],
+      "learning_targets": [
+        "I can explain the Virginia Plan and New Jersey Plan.",
+        "I can describe the Great Compromise and its effects.",
+        "I can analyze the 3/5 Compromise and its implications."
+      ],
+      "vocabulary": ["Constitutional Convention", "Virginia Plan", "New Jersey Plan", "Great Compromise", "3/5 Compromise", "bicameral"],
+      "sample_assessment": "The Great Compromise resolved a dispute about: A) Slavery B) Representation in Congress C) Presidential power D) State borders"
     },
     {
       "code": "SS.8.A.4.1",
       "benchmark": "Examine the causes, course, and consequences of United States westward expansion and its growing diplomatic assertiveness.",
-      "topics": ["Westward Expansion", "Manifest Destiny", "Louisiana Purchase"]
+      "topics": ["Westward Expansion", "Manifest Destiny", "Louisiana Purchase"],
+      "dok": 3,
+      "item_specs": "Students analyze factors driving westward expansion and its consequences.",
+      "essential_questions": [
+        "What drove Americans to move westward?",
+        "How did westward expansion affect different groups?"
+      ],
+      "learning_targets": [
+        "I can explain the concept of Manifest Destiny.",
+        "I can describe the Louisiana Purchase and its significance.",
+        "I can analyze the impact of expansion on Native Americans."
+      ],
+      "vocabulary": ["Manifest Destiny", "Louisiana Purchase", "Lewis and Clark", "frontier", "expansion", "territory"],
+      "sample_assessment": "The belief that Americans had a God-given right to expand across North America was called: A) Popular sovereignty B) Manifest Destiny C) States' rights D) Federalism"
     },
     {
       "code": "SS.8.A.4.2",
       "benchmark": "Describe the debate surrounding the spread of slavery into western territories and Florida.",
-      "topics": ["Slavery", "Sectionalism", "Expansion"]
+      "topics": ["Slavery", "Sectionalism", "Expansion"],
+      "dok": 2,
+      "item_specs": "Students describe sectional tensions over slavery in new territories.",
+      "essential_questions": [
+        "Why was the spread of slavery such a divisive issue?",
+        "How did compromises try to address slavery in new territories?"
+      ],
+      "learning_targets": [
+        "I can explain the Missouri Compromise.",
+        "I can describe sectional tensions over slavery.",
+        "I can analyze the Compromise of 1850."
+      ],
+      "vocabulary": ["Missouri Compromise", "Compromise of 1850", "free state", "slave state", "sectionalism", "popular sovereignty"],
+      "sample_assessment": "The Missouri Compromise tried to maintain balance between: A) Large and small states B) Free and slave states C) North and South economies D) Federal and state power"
     },
     {
       "code": "SS.8.A.4.6",
       "benchmark": "Identify significant individuals and groups who helped to define American culture and beliefs.",
-      "topics": ["Reform Movements", "Culture", "Social Change"]
+      "topics": ["Reform Movements", "Culture", "Social Change"],
+      "dok": 2,
+      "item_specs": "Students identify reformers and their contributions to American society.",
+      "essential_questions": [
+        "How did reform movements try to improve American society?",
+        "Who were the key figures in antebellum reform?"
+      ],
+      "learning_targets": [
+        "I can identify key reform movements of the 1800s.",
+        "I can explain the goals of abolitionists and suffragists.",
+        "I can connect reformers to their causes."
+      ],
+      "vocabulary": ["abolitionist", "suffrage", "temperance", "reform", "Frederick Douglass", "Elizabeth Cady Stanton", "Seneca Falls"],
+      "sample_assessment": "Frederick Douglass was MOST associated with which reform movement? A) Temperance B) Abolition C) Education D) Prison reform"
     },
     {
       "code": "SS.8.A.5.1",
       "benchmark": "Explain the causes, course, and consequence of the Civil War (sectionalism, slavery, states' rights, family/gender roles).",
-      "topics": ["Civil War", "Causes of War", "Sectional Crisis"]
+      "topics": ["Civil War", "Causes of War", "Sectional Crisis"],
+      "dok": 3,
+      "item_specs": "Students analyze multiple causes and effects of the Civil War.",
+      "essential_questions": [
+        "What were the main causes of the Civil War?",
+        "How did the Civil War change American society?"
+      ],
+      "learning_targets": [
+        "I can explain the causes of the Civil War.",
+        "I can describe the debate over slavery and states' rights.",
+        "I can analyze how sectionalism led to war."
+      ],
+      "vocabulary": ["Civil War", "sectionalism", "states' rights", "secession", "Confederacy", "Union", "Fort Sumter"],
+      "sample_assessment": "Which was the MOST significant cause of the Civil War? A) Tariff disputes B) Slavery and its expansion C) Foreign interference D) Religious differences"
     },
     {
       "code": "SS.8.A.5.3",
       "benchmark": "Explain major domestic and international economic, military, political, and socio-cultural events of Abraham Lincoln's presidency.",
-      "topics": ["Lincoln", "Civil War Leadership", "Emancipation"]
+      "topics": ["Lincoln", "Civil War Leadership", "Emancipation"],
+      "dok": 2,
+      "item_specs": "Students explain Lincoln's key decisions and their impacts.",
+      "essential_questions": [
+        "How did Lincoln's leadership shape the Civil War?",
+        "What was the significance of the Emancipation Proclamation?"
+      ],
+      "learning_targets": [
+        "I can explain Lincoln's goals during the Civil War.",
+        "I can describe the purpose and impact of the Emancipation Proclamation.",
+        "I can analyze Lincoln's leadership decisions."
+      ],
+      "vocabulary": ["Abraham Lincoln", "Emancipation Proclamation", "Gettysburg Address", "preserve the Union", "commander-in-chief"],
+      "sample_assessment": "The Emancipation Proclamation freed enslaved people in: A) All states B) Only border states C) Confederate states in rebellion D) Only Union states"
     },
     {
       "code": "SS.8.A.5.6",
       "benchmark": "Explain the causes, course, and consequences of the 13th, 14th, and 15th amendments and the rise of Jim Crow laws.",
-      "topics": ["Reconstruction", "Amendments", "Civil Rights", "Jim Crow"]
+      "topics": ["Reconstruction", "Amendments", "Civil Rights", "Jim Crow"],
+      "dok": 3,
+      "item_specs": "Students analyze Reconstruction amendments and the rise of segregation.",
+      "essential_questions": [
+        "How did the Reconstruction amendments try to protect rights?",
+        "Why did Jim Crow laws develop despite these amendments?"
+      ],
+      "learning_targets": [
+        "I can explain the purpose of each Reconstruction amendment.",
+        "I can describe the end of Reconstruction.",
+        "I can analyze how Jim Crow laws restricted African American rights."
+      ],
+      "vocabulary": ["13th Amendment", "14th Amendment", "15th Amendment", "Reconstruction", "Jim Crow", "segregation", "Black Codes"],
+      "sample_assessment": "Which amendment granted citizenship to all persons born in the United States? A) 13th Amendment B) 14th Amendment C) 15th Amendment D) 19th Amendment"
     }
   ]
 }
