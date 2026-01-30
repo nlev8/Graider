@@ -32,16 +32,29 @@ def save_assignment_config():
 
 @assignment_bp.route('/api/list-assignments')
 def list_assignments():
-    """List saved assignment configurations."""
+    """List saved assignment configurations with aliases."""
     if not os.path.exists(ASSIGNMENTS_DIR):
-        return jsonify({"assignments": []})
+        return jsonify({"assignments": [], "assignmentData": {}})
 
     assignments = []
+    assignment_data = {}  # Map of name -> {aliases: [...]}
+
     for f in os.listdir(ASSIGNMENTS_DIR):
         if f.endswith('.json'):
-            assignments.append(f.replace('.json', ''))
+            name = f.replace('.json', '')
+            assignments.append(name)
+            # Load assignment to get aliases
+            try:
+                with open(os.path.join(ASSIGNMENTS_DIR, f), 'r') as af:
+                    data = json.load(af)
+                    assignment_data[name] = {
+                        "aliases": data.get("aliases", []),
+                        "title": data.get("title", name)
+                    }
+            except:
+                assignment_data[name] = {"aliases": [], "title": name}
 
-    return jsonify({"assignments": sorted(assignments)})
+    return jsonify({"assignments": sorted(assignments), "assignmentData": assignment_data})
 
 
 @assignment_bp.route('/api/load-assignment')

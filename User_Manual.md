@@ -510,6 +510,26 @@ Mark **question prompts** or **section headers**, NOT student answers:
 - Student's actual answer text
 - Random sentences
 
+### Assignment Aliases (Renamed Assignments)
+
+When you rename an assignment in the Builder, Graider automatically tracks the previous name(s) as **aliases**. This ensures student submissions still match even after renaming.
+
+**Example:**
+1. You create an assignment called "Chapter 5 Quiz"
+2. Students upload files like "John Smith Chapter 5 Quiz.docx"
+3. Later, you rename the assignment to "Ch5 Quiz"
+4. Student files with "Chapter 5 Quiz" in the name still match!
+
+**How It Works:**
+- When you change an assignment title, the old name is saved as an alias
+- The Missing Assignments feature checks both current name AND all aliases
+- Aliases are stored with the assignment config
+- Multiple aliases are supported (if you rename multiple times)
+
+**Viewing Aliases:**
+- Aliases are stored in the assignment JSON config
+- They're automatically used for matching - no action required
+
 ### Persistence
 
 All saved assignment configs are stored in `~/.graider_assignments/` and persist across restarts.
@@ -532,6 +552,38 @@ Filter analytics by:
 - This week
 - This month
 - Custom date range
+
+### Missing Assignments
+
+Track which students haven't uploaded their assignments:
+
+1. Go to the **Analytics** tab
+2. Find the **Missing Assignments** section
+3. Use the filters to narrow down:
+   - **Period**: Filter by class period or view all
+   - **Student**: Type a name or select from autocomplete
+   - **Assignment**: Check a specific assignment or all
+
+**Summary Stats:**
+- Total missing assignments
+- Total uploaded
+- Number of students
+- Number of assignments being tracked
+
+**Per-Period Breakdown:**
+- Shows each period with completion status
+- Lists students with missing work
+- Shows which specific assignments are missing for each student
+
+**Per-Student View:**
+- Select a student to see their individual status
+- Shows all assignments they're missing
+- Shows assignments they've uploaded
+
+**How Matching Works:**
+- Compares files in your Assignments Folder against period rosters
+- Matches by student name and assignment name in filename
+- Supports renamed assignments (see Assignment Aliases below)
 
 ### Student Performance
 
@@ -962,6 +1014,8 @@ Each student's file contains:
 
 ### New Features
 
+- **Missing Assignments Tracker**: See which students haven't uploaded their work in Analytics
+- **Assignment Aliases**: Renamed assignments still match old student submissions
 - **Student Progress Tracking**: Personalized feedback based on historical performance
 - **Skill Pattern Detection**: Tracks skills beyond rubric categories (reading comprehension, critical thinking, etc.)
 - **Baseline Deviation Detection**: Flags submissions that deviate significantly from student's typical work
@@ -989,4 +1043,4 @@ Each student's file contains:
 
 ---
 
-*Last updated: January 28, 2026*
+*Last updated: January 29, 2026*

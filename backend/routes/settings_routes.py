@@ -44,6 +44,90 @@ ALLOWED_CSV_EXTENSIONS = {'csv', 'xlsx', 'xls'}
 ALLOWED_DOC_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt', 'md'}
 
 
+def parse_student_name(name):
+    """Parse various student name formats and return (first, last)."""
+    if not name:
+        return '', ''
+
+    name = name.strip()
+
+    # Format: "Last; First Middle" (semicolon separator)
+    if ';' in name:
+        parts = name.split(';', 1)
+        last = parts[0].strip()
+        first_middle = parts[1].strip() if len(parts) > 1 else ''
+        first = first_middle.split()[0] if first_middle else ''
+        return first, last
+
+    # Format: "Last, First Middle" (comma separator)
+    if ',' in name:
+        parts = name.split(',', 1)
+        last = parts[0].strip()
+        first_middle = parts[1].strip() if len(parts) > 1 else ''
+        first = first_middle.split()[0] if first_middle else ''
+        return first, last
+
+    # Format: "First Last" or "First Middle Last" (space separated)
+    parts = name.split()
+    if len(parts) >= 2:
+        first = parts[0]
+        last = parts[-1]
+        return first, last
+    elif len(parts) == 1:
+        return parts[0], ''
+
+    return '', ''
+
+
+def get_students_from_period_file(filepath):
+    """Extract student list from a period CSV/Excel file."""
+    import pandas as pd
+
+    students = []
+    try:
+        if filepath.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(filepath)
+            name_cols = [c for c in df.columns if any(x in c.lower() for x in ['name', 'student', 'first', 'last'])]
+            if name_cols:
+                first_col = next((c for c in name_cols if 'first' in c.lower()), None)
+                last_col = next((c for c in name_cols if 'last' in c.lower()), None)
+                if first_col and last_col:
+                    for _, row in df.iterrows():
+                        first = str(row[first_col]).strip() if pd.notna(row[first_col]) else ''
+                        last = str(row[last_col]).strip() if pd.notna(row[last_col]) else ''
+                        if first or last:
+                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
+                else:
+                    name_col = name_cols[0]
+                    for _, row in df.iterrows():
+                        name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
+                        if name:
+                            first, last = parse_student_name(name)
+                            students.append({"first": first, "last": last, "full": name})
+        else:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                first_col = next((h for h in reader.fieldnames if 'first' in h.lower()), None)
+                last_col = next((h for h in reader.fieldnames if 'last' in h.lower()), None)
+                name_col = next((h for h in reader.fieldnames if any(x in h.lower() for x in ['name', 'student'])), None)
+
+                for row in reader:
+                    if first_col and last_col:
+                        first = row.get(first_col, '').strip()
+                        last = row.get(last_col, '').strip()
+                        if first or last:
+                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
+                    elif name_col:
+                        name = row.get(name_col, '').strip()
+                        if name:
+                            first, last = parse_student_name(name)
+                            students.append({"first": first, "last": last, "full": name})
+    except Exception:
+        pass
+
+    return students
+
+
 @settings_bp.route('/api/save-rubric', methods=['POST'])
 def save_rubric():
     """Save rubric configuration to JSON file."""
@@ -273,13 +357,19 @@ def upload_period():
 
 @settings_bp.route('/api/list-periods')
 def list_periods():
-    """List all uploaded period files."""
+    """List all uploaded period files with their students."""
     periods = []
     for f in os.listdir(PERIODS_DIR):
         if f.endswith('.meta.json'):
             try:
                 with open(os.path.join(PERIODS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
+                    # Load students for this period
+                    period_file = os.path.join(PERIODS_DIR, metadata.get('filename', ''))
+                    if os.path.exists(period_file):
+                        metadata['students'] = get_students_from_period_file(period_file)
+                    else:
+                        metadata['students'] = []
                     periods.append(metadata)
             except:
                 pass
@@ -311,43 +401,6 @@ def delete_period():
 @settings_bp.route('/api/get-period-students', methods=['POST'])
 def get_period_students():
     """Get student names from a period CSV file."""
-    import csv
-    import pandas as pd
-
-    def parse_student_name(name):
-        """Parse various student name formats and return (first, last)."""
-        if not name:
-            return '', ''
-
-        name = name.strip()
-
-        # Format: "Last; First Middle" (semicolon separator)
-        if ';' in name:
-            parts = name.split(';', 1)
-            last = parts[0].strip()
-            first_middle = parts[1].strip() if len(parts) > 1 else ''
-            first = first_middle.split()[0] if first_middle else ''
-            return first, last
-
-        # Format: "Last, First Middle" (comma separator)
-        if ',' in name:
-            parts = name.split(',', 1)
-            last = parts[0].strip()
-            first_middle = parts[1].strip() if len(parts) > 1 else ''
-            first = first_middle.split()[0] if first_middle else ''
-            return first, last
-
-        # Format: "First Last" or "First Middle Last" (space separated)
-        parts = name.split()
-        if len(parts) >= 2:
-            first = parts[0]
-            last = parts[-1]
-            return first, last
-        elif len(parts) == 1:
-            return parts[0], ''
-
-        return '', ''
-
     data = request.json
     filename = data.get('filename')
 
@@ -359,51 +412,8 @@ def get_period_students():
     if not os.path.exists(filepath):
         return jsonify({"error": "Period file not found"}), 404
 
-    students = []
     try:
-        # Try pandas first for Excel files
-        if filepath.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(filepath)
-            # Look for name columns
-            name_cols = [c for c in df.columns if any(x in c.lower() for x in ['name', 'student', 'first', 'last'])]
-            if name_cols:
-                # Try to find first and last name columns
-                first_col = next((c for c in name_cols if 'first' in c.lower()), None)
-                last_col = next((c for c in name_cols if 'last' in c.lower()), None)
-                if first_col and last_col:
-                    for _, row in df.iterrows():
-                        first = str(row[first_col]).strip() if pd.notna(row[first_col]) else ''
-                        last = str(row[last_col]).strip() if pd.notna(row[last_col]) else ''
-                        if first or last:
-                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
-                else:
-                    # Use the first name-like column as full name
-                    name_col = name_cols[0]
-                    for _, row in df.iterrows():
-                        name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
-                        if name:
-                            first, last = parse_student_name(name)
-                            students.append({"first": first, "last": last, "full": name})
-        else:
-            # CSV file
-            with open(filepath, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                first_col = next((h for h in reader.fieldnames if 'first' in h.lower()), None)
-                last_col = next((h for h in reader.fieldnames if 'last' in h.lower()), None)
-                name_col = next((h for h in reader.fieldnames if any(x in h.lower() for x in ['name', 'student'])), None)
-
-                for row in reader:
-                    if first_col and last_col:
-                        first = row.get(first_col, '').strip()
-                        last = row.get(last_col, '').strip()
-                        if first or last:
-                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
-                    elif name_col:
-                        name = row.get(name_col, '').strip()
-                        if name:
-                            first, last = parse_student_name(name)
-                            students.append({"first": first, "last": last, "full": name})
-
+        students = get_students_from_period_file(filepath)
         return jsonify({"students": students, "count": len(students)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

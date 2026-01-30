@@ -293,8 +293,13 @@ function App() {
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
-  const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed"
+  const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
   const [resultsSort, setResultsSort] = useState({ field: "time", direction: "desc" }); // field: time, name, assignment, score, grade
+  const [missingAssignmentFilter, setMissingAssignmentFilter] = useState(""); // Assignment to check for missing submissions
+  const [missingPeriodFilter, setMissingPeriodFilter] = useState(""); // Period to filter missing report
+  const [missingStudentFilter, setMissingStudentFilter] = useState(""); // Student to check for missing assignments
+  const [missingUploadedFiles, setMissingUploadedFiles] = useState([]); // Files in folder for missing check
+  const [missingFilesLoading, setMissingFilesLoading] = useState(false);
   const [skipVerified, setSkipVerified] = useState(false); // Skip verified grades on regrade
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
@@ -330,8 +335,10 @@ function App() {
     customMarkers: [],
     gradingNotes: "",
     responseSections: [],
+    aliases: [], // Previous names for matching renamed assignments
   });
   const [savedAssignments, setSavedAssignments] = useState([]);
+  const [savedAssignmentData, setSavedAssignmentData] = useState({}); // Map of name -> {aliases: [], title: ""}
   const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [gradeAssignment, setGradeAssignment] = useState({
@@ -480,6 +487,7 @@ function App() {
       .listAssignments()
       .then((data) => {
         if (data.assignments) setSavedAssignments(data.assignments);
+        if (data.assignmentData) setSavedAssignmentData(data.assignmentData);
       })
       .catch(console.error);
 
@@ -550,11 +558,23 @@ function App() {
 
     const saveTimeout = setTimeout(async () => {
       try {
-        const dataToSave = { ...assignment, importedDoc };
+        let dataToSave = { ...assignment, importedDoc };
+
+        // If title changed from a previously loaded assignment, add old name to aliases
+        if (loadedAssignmentName && loadedAssignmentName !== assignment.title) {
+          const currentAliases = assignment.aliases || [];
+          if (!currentAliases.includes(loadedAssignmentName)) {
+            dataToSave.aliases = [...currentAliases, loadedAssignmentName];
+            // Also update local state with new alias
+            setAssignment(prev => ({ ...prev, aliases: dataToSave.aliases }));
+          }
+        }
+
         await api.saveAssignmentConfig(dataToSave);
         // Refresh saved assignments list
         const list = await api.listAssignments();
         if (list.assignments) setSavedAssignments(list.assignments);
+        if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
         // Update loaded assignment name to reflect current title
         setLoadedAssignmentName(assignment.title);
       } catch (error) {
@@ -663,6 +683,20 @@ function App() {
       })
       .catch(() => setAnalyticsClassStudents([]));
   }, [analyticsClassPeriod]);
+
+  // Load uploaded files for missing assignments in analytics
+  useEffect(() => {
+    if (activeTab !== "analytics" || !config.assignments_folder) {
+      return;
+    }
+    setMissingFilesLoading(true);
+    api.listFiles(config.assignments_folder)
+      .then((data) => {
+        setMissingUploadedFiles(data.files || []);
+      })
+      .catch(() => setMissingUploadedFiles([]))
+      .finally(() => setMissingFilesLoading(false));
+  }, [activeTab, config.assignments_folder]);
 
   // Load standards when settings config changes
   useEffect(() => {
@@ -824,6 +858,15 @@ function App() {
     });
   };
 
+  // Sort periods numerically by extracting number from period_name (e.g., "Period 1" → 1)
+  const sortedPeriods = useMemo(() => {
+    return [...periods].sort((a, b) => {
+      const numA = parseInt((a.period_name || "").match(/\d+/)?.[0] || "999", 10);
+      const numB = parseInt((b.period_name || "").match(/\d+/)?.[0] || "999", 10);
+      return numA - numB;
+    });
+  }, [periods]);
+
   // Compute filtered analytics based on class period selection (memoized)
   const filteredAnalytics = useMemo(() => {
     if (!analytics || !analyticsClassPeriod || analyticsClassStudents.length === 0) {
@@ -896,6 +939,7 @@ function App() {
           // Refresh saved assignments list
           const list = await api.listAssignments();
           if (list.assignments) setSavedAssignments(list.assignments);
+          if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
         } catch (saveError) {
           console.error("Failed to auto-save assignment config:", saveError);
         }
@@ -1305,6 +1349,7 @@ ${signature}`;
       setLoadedAssignmentName(assignment.title);
       const list = await api.listAssignments();
       if (list.assignments) setSavedAssignments(list.assignments);
+      if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
     } catch (e) {
       addToast("Error saving: " + e.message, "error");
     }
@@ -1323,6 +1368,7 @@ ${signature}`;
           customMarkers: data.assignment.customMarkers || [],
           gradingNotes: data.assignment.gradingNotes || "",
           responseSections: data.assignment.responseSections || [],
+          aliases: data.assignment.aliases || [],
         });
         setLoadedAssignmentName(name);
         if (data.assignment.importedDoc) {
@@ -2273,6 +2319,7 @@ ${signature}`;
                       // Refresh saved assignments list
                       const list = await api.listAssignments();
                       if (list.assignments) setSavedAssignments(list.assignments);
+                      if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
                     } catch (error) {
                       console.error("Failed to save assignment:", error);
                     }
@@ -3024,7 +3071,7 @@ ${signature}`;
                         style={{ cursor: "pointer" }}
                       >
                         <option value="">All Periods (No Filter)</option>
-                        {periods.map((p) => (
+                        {sortedPeriods.map((p) => (
                           <option key={p.filename} value={p.filename}>
                             {p.period_name} ({p.row_count} students)
                           </option>
@@ -3032,7 +3079,7 @@ ${signature}`;
                       </select>
                       {selectedPeriod && periodStudents.length > 0 && (
                         <p style={{ fontSize: "0.75rem", color: "var(--accent-primary)", marginTop: "8px", fontWeight: 500 }}>
-                          ✓ Filtering to {periodStudents.length} students in {periods.find(p => p.filename === selectedPeriod)?.period_name}
+                          ✓ Filtering to {periodStudents.length} students in {sortedPeriods.find(p => p.filename === selectedPeriod)?.period_name}
                         </p>
                       )}
                     </div>
@@ -3690,9 +3737,13 @@ ${signature}`;
                       Grading Results ({
                         resultsFilter === "all"
                           ? status.results.length
-                          : status.results.filter(r =>
-                              resultsFilter === "handwritten" ? r.is_handwritten : !r.is_handwritten
-                            ).length
+                          : status.results.filter(r => {
+                              if (resultsFilter === "handwritten") return r.is_handwritten;
+                              if (resultsFilter === "typed") return !r.is_handwritten;
+                              if (resultsFilter === "verified") return r.marker_status === "verified";
+                              if (resultsFilter === "unverified") return r.marker_status !== "verified";
+                              return true;
+                            }).length
                       }{resultsFilter !== "all" && ` of ${status.results.length}`})
                     </h2>
                     {status.results.length > 0 && (
@@ -5412,7 +5463,7 @@ ${signature}`;
                       </p>
                     )}
 
-                    {periods.length > 0 && (
+                    {sortedPeriods.length > 0 && (
                       <div
                         style={{
                           display: "flex",
@@ -5420,7 +5471,7 @@ ${signature}`;
                           gap: "10px",
                         }}
                       >
-                        {periods.map((period) => (
+                        {sortedPeriods.map((period) => (
                           <div
                             key={period.filename}
                             style={{
@@ -7329,8 +7380,8 @@ ${signature}`;
                           gap: "15px",
                         }}
                       >
-                        {/* Class Period Filter */}
-                        {periods.length > 0 && (
+                        {/* Period Filter */}
+                        {sortedPeriods.length > 0 && (
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <label
                               style={{
@@ -7338,7 +7389,7 @@ ${signature}`;
                                 color: "var(--text-secondary)",
                               }}
                             >
-                              Class:
+                              Period:
                             </label>
                             <select
                               value={analyticsClassPeriod}
@@ -7346,8 +7397,8 @@ ${signature}`;
                               className="input"
                               style={{ width: "auto" }}
                             >
-                              <option value="">All Classes</option>
-                              {periods.map((p) => (
+                              <option value="">All Periods</option>
+                              {sortedPeriods.map((p) => (
                                 <option key={p.filename} value={p.filename}>
                                   {p.period_name}
                                 </option>
@@ -8170,6 +8221,287 @@ ${signature}`;
                           ))}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Missing Assignments Section */}
+                    <div className="glass-card" style={{ padding: "25px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+                        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
+                          <Icon name="UserX" size={20} />
+                          Missing Assignments
+                        </h3>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (!config.assignments_folder) {
+                              addToast("Set assignments folder in Settings first", "error");
+                              return;
+                            }
+                            setMissingFilesLoading(true);
+                            api.listFiles(config.assignments_folder)
+                              .then(data => setMissingUploadedFiles(data.files || []))
+                              .catch(() => setMissingUploadedFiles([]))
+                              .finally(() => setMissingFilesLoading(false));
+                          }}
+                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                        >
+                          <Icon name="RefreshCw" size={14} />
+                          Refresh
+                        </button>
+                      </div>
+
+                      {/* Filters */}
+                      <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "20px" }}>
+                        <div style={{ flex: "1", minWidth: "180px" }}>
+                          <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Period</label>
+                          <select
+                            className="input"
+                            value={missingPeriodFilter}
+                            onChange={(e) => { setMissingPeriodFilter(e.target.value); setMissingStudentFilter(""); }}
+                            style={{ width: "100%" }}
+                          >
+                            <option value="">All Periods</option>
+                            {sortedPeriods.map(p => <option key={p.filename} value={p.filename}>{p.period_name}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex: "1", minWidth: "180px" }}>
+                          <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Student</label>
+                          <input
+                            type="text"
+                            className="input"
+                            list="missing-student-suggestions"
+                            placeholder="Type or select student..."
+                            value={missingStudentFilter}
+                            onChange={(e) => setMissingStudentFilter(e.target.value)}
+                            style={{ width: "100%" }}
+                          />
+                          <datalist id="missing-student-suggestions">
+                            {(missingPeriodFilter
+                              ? (sortedPeriods.find(p => p.filename === missingPeriodFilter)?.students || [])
+                              : sortedPeriods.flatMap(p => p.students || [])
+                            ).map((s, i) => {
+                              const name = s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim();
+                              return <option key={i} value={name} />;
+                            })}
+                          </datalist>
+                        </div>
+                        <div style={{ flex: "1", minWidth: "180px" }}>
+                          <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Assignment</label>
+                          <select
+                            className="input"
+                            value={missingAssignmentFilter}
+                            onChange={(e) => setMissingAssignmentFilter(e.target.value)}
+                            style={{ width: "100%" }}
+                          >
+                            <option value="">All Assignments</option>
+                            {savedAssignments.map(name => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Missing Report */}
+                      {periods.length === 0 ? (
+                        <div style={{ color: "#888", textAlign: "center", padding: "20px" }}>
+                          <Icon name="AlertCircle" size={24} style={{ marginBottom: "10px", opacity: 0.5 }} />
+                          <div>Upload period rosters in Settings to track missing assignments</div>
+                        </div>
+                      ) : missingFilesLoading ? (
+                        <div style={{ color: "#888", textAlign: "center", padding: "20px" }}>Loading files...</div>
+                      ) : (
+                        (() => {
+                          // Get assignments to check
+                          const assignmentsToCheck = missingAssignmentFilter
+                            ? [missingAssignmentFilter]
+                            : savedAssignments;
+
+                          // Get periods to check
+                          const periodsToCheck = missingPeriodFilter
+                            ? sortedPeriods.filter(p => p.filename === missingPeriodFilter)
+                            : sortedPeriods;
+
+                          // Build set of uploaded file names (normalized)
+                          const uploadedNames = new Set(
+                            missingUploadedFiles.map(f => (f.name || f).toLowerCase().replace(/[_\-\.]/g, ' ').trim())
+                          );
+
+                          // Check if student has uploaded for an assignment (including aliases)
+                          const hasUploaded = (studentName, assignmentName) => {
+                            const sName = studentName.toLowerCase();
+                            // Get all names to check (current name + aliases)
+                            const assignmentData = savedAssignmentData[assignmentName] || {};
+                            const namesToCheck = [
+                              assignmentName.toLowerCase(),
+                              ...(assignmentData.aliases || []).map(a => a.toLowerCase())
+                            ];
+
+                            return [...uploadedNames].some(fileName => {
+                              const fLower = fileName.toLowerCase();
+                              const nameParts = sName.split(' ');
+                              const hasStudentName = nameParts.every(part => fLower.includes(part)) ||
+                                fLower.includes(sName.replace(' ', ''));
+                              // Check if file matches any of the assignment names (current or aliases)
+                              const hasAssignment = namesToCheck.some(aName =>
+                                fLower.includes(aName.replace(/[_\-]/g, ' '))
+                              );
+                              return hasStudentName && hasAssignment;
+                            });
+                          };
+
+                          // If filtering by student
+                          if (missingStudentFilter) {
+                            const studentLower = missingStudentFilter.toLowerCase();
+                            let studentInfo = null;
+                            let studentPeriod = null;
+
+                            for (const period of periodsToCheck) {
+                              const found = (period.students || []).find(s => {
+                                const fullName = (s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim()).toLowerCase();
+                                return fullName.includes(studentLower) || studentLower.includes(fullName);
+                              });
+                              if (found) {
+                                studentInfo = found;
+                                studentPeriod = period.period_name;
+                                break;
+                              }
+                            }
+
+                            const displayName = studentInfo
+                              ? (studentInfo.full || studentInfo.name || ((studentInfo.first || "") + " " + (studentInfo.last || "")).trim())
+                              : missingStudentFilter;
+
+                            const missing = assignmentsToCheck.filter(a => !hasUploaded(displayName, a));
+                            const submitted = assignmentsToCheck.filter(a => hasUploaded(displayName, a));
+
+                            return (
+                              <div>
+                                <div style={{ padding: "15px", background: "rgba(0,0,0,0.2)", borderRadius: "8px", marginBottom: "15px" }}>
+                                  <div style={{ fontWeight: 600, marginBottom: "8px" }}>
+                                    {displayName} {studentPeriod && <span style={{ color: "#888", fontWeight: 400 }}>({studentPeriod})</span>}
+                                  </div>
+                                  <div style={{ display: "flex", gap: "20px", fontSize: "0.9rem" }}>
+                                    <span><span style={{ color: "#f59e0b", fontWeight: 600 }}>{missing.length}</span> missing</span>
+                                    <span><span style={{ color: "#10b981", fontWeight: 600 }}>{submitted.length}</span> uploaded</span>
+                                    <span><span style={{ color: "#6366f1", fontWeight: 600 }}>{assignmentsToCheck.length}</span> total</span>
+                                  </div>
+                                </div>
+                                {missing.length > 0 ? (
+                                  <div>
+                                    <div style={{ fontSize: "0.85rem", color: "#888", marginBottom: "10px" }}>Missing:</div>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                      {missing.map(a => (
+                                        <span key={a} style={{ padding: "6px 12px", background: "rgba(251,191,36,0.2)", borderRadius: "6px", fontSize: "0.85rem", color: "#fbbf24" }}>
+                                          {a}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div style={{ color: "#10b981", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <Icon name="CheckCircle" size={18} />
+                                    All assignments uploaded!
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Default: show by period
+                          let totalMissing = 0;
+                          let totalStudents = 0;
+                          const periodReports = [];
+
+                          periodsToCheck.forEach(period => {
+                            const students = period.students || [];
+                            totalStudents += students.length;
+                            const studentsWithMissing = [];
+
+                            students.forEach(student => {
+                              const name = student.full || student.name || ((student.first || "") + " " + (student.last || "")).trim();
+                              const missing = assignmentsToCheck.filter(a => !hasUploaded(name, a));
+                              if (missing.length > 0) {
+                                studentsWithMissing.push({ name, missing });
+                                totalMissing += missing.length;
+                              }
+                            });
+
+                            periodReports.push({
+                              period: period.period_name,
+                              total: students.length,
+                              studentsWithMissing,
+                              allComplete: studentsWithMissing.length === 0,
+                            });
+                          });
+
+                          const totalSlots = totalStudents * assignmentsToCheck.length;
+                          const totalUploaded = totalSlots - totalMissing;
+
+                          return (
+                            <div>
+                              {/* Summary Stats */}
+                              <div style={{ display: "flex", gap: "20px", marginBottom: "20px", padding: "15px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#f59e0b" }}>{totalMissing}</div>
+                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Missing</div>
+                                </div>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#10b981" }}>{totalUploaded}</div>
+                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Uploaded</div>
+                                </div>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#6366f1" }}>{totalStudents}</div>
+                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Students</div>
+                                </div>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#8b5cf6" }}>{assignmentsToCheck.length}</div>
+                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Assignments</div>
+                                </div>
+                              </div>
+
+                              {/* Per Period Breakdown */}
+                              <div style={{ display: "grid", gap: "12px" }}>
+                                {periodReports.map(report => (
+                                  <div
+                                    key={report.period}
+                                    style={{
+                                      padding: "12px 15px",
+                                      background: "rgba(0,0,0,0.15)",
+                                      borderRadius: "8px",
+                                      border: report.allComplete ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(251,191,36,0.3)",
+                                    }}
+                                  >
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: report.studentsWithMissing.length > 0 ? "10px" : 0 }}>
+                                      <span style={{ fontWeight: 600 }}>{report.period}</span>
+                                      <span style={{ fontSize: "0.85rem" }}>
+                                        {report.allComplete ? (
+                                          <span style={{ color: "#10b981" }}>✓ All complete</span>
+                                        ) : (
+                                          <span style={{ color: "#f59e0b" }}>{report.studentsWithMissing.length} students missing work</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    {report.studentsWithMissing.length > 0 && (
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        {report.studentsWithMissing.map((s, idx) => (
+                                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                                            <span style={{ minWidth: "140px", fontWeight: 500, fontSize: "0.9rem" }}>{s.name}</span>
+                                            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                                              {s.missing.map(a => (
+                                                <span key={a} style={{ padding: "2px 8px", background: "rgba(251,191,36,0.2)", borderRadius: "4px", fontSize: "0.75rem", color: "#fbbf24" }}>
+                                                  {a}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
 
                     {/* All Students Table */}
