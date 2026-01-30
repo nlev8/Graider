@@ -3443,8 +3443,7 @@ ${signature}`;
                             Skip Verified Grades (Regrade Only Unverified)
                           </span>
                           <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
-                            {status.results.filter(r => r.marker_status === "unverified").length} unverified assignments will be regraded.
-                            {status.results.filter(r => r.marker_status === "verified").length} verified grades will be kept.
+                            {status.results.filter(r => r.marker_status === "unverified").length} unverified assignments will be regraded. {status.results.filter(r => r.marker_status === "verified").length} verified grades will be kept.
                           </p>
                         </div>
                       </label>
