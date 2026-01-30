@@ -281,102 +281,131 @@ Create comprehensive lesson plans in seconds:
 
 ---
 
-# Roadmap: School & District Analytics
+# Product Roadmap
 
-## Data-Driven Insights at Every Level
+## Phased Development & Deployment Strategy
 
-### Coming Soon: Multi-Level Analytics Dashboard
+### Current: Version 1.0 (Local-First)
 
-Graider is building analytics capabilities that aggregate data while maintaining privacy:
+**Status: Live**
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       DISTRICT LEVEL                             │
-│   Compare schools • Track trends • Identify support needs        │
-│                              ↑                                   │
-├─────────────────────────────────────────────────────────────────┤
-│                       SCHOOL LEVEL                               │
-│   Teacher performance • Subject insights • Student outcomes      │
-│                              ↑                                   │
-├─────────────────────────────────────────────────────────────────┤
-│                      TEACHER LEVEL                               │
-│   Class analytics • Assignment results • Student progress        │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Feature | Status |
+|---------|--------|
+| AI Grading (GPT-4) | ✅ Complete |
+| Email Feedback | ✅ Complete |
+| Assignment Builder | ✅ Complete |
+| Lesson Planner | ✅ Complete |
+| Student Progress Tracking | ✅ Complete |
+| IEP/504 Accommodations | ✅ Complete |
+| Bilingual Feedback (ELL) | ✅ Complete |
+| Academic Integrity Detection | ✅ Complete |
+| Auto-Grade Mode | ✅ Complete |
 
-### Planned Features
-
-| Level | Insights | Use Case |
-|-------|----------|----------|
-| **Teacher** | Class averages, assignment performance, student trends | Daily instruction adjustments |
-| **School** | Cross-class comparison, subject benchmarks, teacher utilization | Principal oversight, resource allocation |
-| **District** | School comparison, district-wide trends, achievement gaps | Strategic planning, intervention targeting |
+**Deployment:** Local installation on teacher's computer
+**Best For:** Individual teachers, pilot programs, privacy-focused schools
 
 ---
 
-# Roadmap: Admin Panel
+### Phase 2: School Edition (Q2 2025)
 
-## Centralized Management for Schools & Districts
+**Focus: Single-school deployment with principal oversight**
 
-### Role-Based Administration
+| Feature | Description |
+|---------|-------------|
+| **Cloud Dashboard** | Optional web access for teachers |
+| **School Analytics** | Principal view of teacher usage, grade distributions |
+| **Shared Resources** | School-wide rubric library, assignment templates |
+| **Bulk User Management** | Add teachers via CSV import |
+| **DPA Compliance** | Standard Data Processing Agreement |
+
+**Deployment:** Cloud-hosted with local fallback option
+**Best For:** Schools ready for pilot-to-purchase
+
+---
+
+### Phase 3: District Edition (Q4 2025)
+
+**Focus: Multi-school management and district analytics**
+
+| Feature | Description |
+|---------|-------------|
+| **District Admin Panel** | Manage schools, principals, teachers from one dashboard |
+| **Cross-School Analytics** | Compare performance across schools, identify gaps |
+| **SSO Integration** | Clever, ClassLink, Google Workspace |
+| **Role-Based Access** | District Admin → Principal → Teacher hierarchy |
+| **Audit Logging** | Full FERPA compliance trail |
 
 ```
-Super Admin (Graider)
-    └── District Admin
-            └── School Admin / Principal
-                    └── Teacher
+District Dashboard
+├── School A: 45 teachers, 12,000 assignments graded
+├── School B: 32 teachers, 8,500 assignments graded
+└── School C: 28 teachers, 7,200 assignments graded
+    └── Drill down → Teacher → Class → Student
 ```
 
-### Admin Panel Features
+**Deployment:** Multi-tenant cloud with enterprise security
+**Best For:** Districts wanting centralized management
 
-| Role | Capabilities |
-|------|--------------|
-| **District Admin** | Add/manage schools, assign principals, view all district analytics, export reports, manage teacher accounts |
-| **School Admin** | Add/manage teachers, view school analytics, configure school settings, sync oversight |
-| **Principal** | View teacher performance, school-wide trends, generate reports for stakeholders |
+---
 
-### Dashboard Views
+### Phase 4: Enterprise Edition (2026)
 
-| View | What It Shows |
-|------|---------------|
-| **District Overview** | All schools at a glance, comparison rankings, alerts for underperformance |
-| **School Drilldown** | Teacher activity, subject breakdown, grade distributions, sync status |
-| **Teacher Detail** | Individual grading history, student outcomes, feedback quality metrics |
-| **Trend Analysis** | Month-over-month, quarter-over-quarter performance tracking |
+**Focus: Full LMS/SIS integration and automation**
 
-### Management Tools
+| Feature | Description |
+|---------|-------------|
+| **LMS Integration** | Canvas, Schoology, Google Classroom grade passback |
+| **SIS Sync** | PowerSchool, Infinite Campus roster sync |
+| **API Access** | Custom integrations for district systems |
+| **Advanced Analytics** | Standards mastery tracking, intervention alerts |
+| **White-Label Option** | District-branded deployment |
 
-- **User Management**: Add teachers via CSV import or SSO integration (Clever, ClassLink)
-- **School Configuration**: Set grading scales, rubric defaults, subject mappings
-- **Data Governance**: Control sync frequency, anonymization settings, retention policies
-- **Audit Logs**: Track who accessed what data and when (FERPA compliance)
-- **Report Generation**: Export PDF/Excel reports for board meetings, accreditation
+**Deployment:** Enterprise cloud or on-premise option
+**Best For:** Large districts with existing EdTech infrastructure
 
-### Privacy-First Design
+---
 
-| Feature | Approach |
-|---------|----------|
-| **Student Anonymization** | Only hashed IDs at aggregate levels - no PII leaves teacher's device |
-| **Opt-In Sync** | Teachers control when and what data syncs up |
-| **Role-Based Access** | Teachers see own data, principals see school, admins see district |
-| **Local-First Option** | Schools can run entirely local with no cloud dependency |
+## Deployment Architecture
 
-### Why This Matters
+### Local-First (Current)
 
-- **Principals**: "Which subjects need more support this quarter?"
-- **Curriculum Directors**: "How are our new standards being assessed?"
-- **Superintendents**: "How do schools compare on writing skills?"
-- **IT Admins**: "Is the platform being adopted? Who needs training?"
+```
+Teacher's Computer
+├── Graider Application
+├── Local Storage (grades, feedback)
+└── OpenAI API (content only, no PII)
+```
 
-### Implementation Approach
+### Cloud Option (Phase 2+)
 
-- **Phase 1**: Local school analytics (current teacher data + opt-in sharing)
-- **Phase 2**: District aggregation with secure cloud backend
-- **Phase 3**: Admin panel with user management and reporting
-- **Phase 4**: Real-time dashboards with live updates
-- **Phase 5**: SSO integration and benchmark comparisons
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Graider Cloud Platform                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Admin Dashboard  │  Analytics Engine  │  Resource Library       │
+├─────────────────────────────────────────────────────────────────┤
+│                    Secure Data Layer (US-only)                   │
+│         No PII stored • Encrypted at rest • SOC 2 compliant     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+   School A              School B              School C
+   Teachers              Teachers              Teachers
+```
 
-> *"Give administrators the insights and control they need without compromising the privacy teachers and students deserve."*
+---
+
+## Why This Approach?
+
+| Phase | Adoption Strategy | Key Benefit |
+|-------|-------------------|-------------|
+| **1. Local** | Grassroots — teachers try it risk-free | No IT approval needed, FERPA simple |
+| **2. School** | Bottom-up — school buys after pilot | Principal sees value, easy procurement |
+| **3. District** | Top-down — district standardizes | Central management, compliance, scale |
+| **4. Enterprise** | Integration — embedded in workflow | Seamless experience, maximum adoption |
+
+> *"Start local to build trust, scale to cloud when schools are ready."*
 
 ---
 

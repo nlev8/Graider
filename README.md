@@ -151,14 +151,114 @@ reportlab>=4.0.0
 
 ## 📋 Roadmap
 
-- [x] AI Grading
-- [x] Email Integration
+### Completed
+- [x] AI Grading with GPT-4
+- [x] Email Integration (Gmail SMTP)
 - [x] Document Import & Marking
-- [x] Auto-Grade Mode
-- [ ] Lesson Planner with State Standards
-- [ ] Rubric-based Grading
-- [ ] Progress Tracking by Standard
-- [ ] Multi-class Support
+- [x] Auto-Grade Mode (folder watching)
+- [x] Lesson Planner with State Standards
+- [x] Student Progress Tracking
+- [x] IEP/504 Accommodations Support
+- [x] Bilingual Feedback (ELL Support)
+- [x] Academic Integrity Detection
+
+### In Progress
+- [ ] Rubric Builder UI
+- [ ] Multi-class/Period Management
+- [ ] Enhanced Analytics Dashboard
+
+### Planned
+- [ ] Cloud Deployment Option
+- [ ] District Admin Panel
+- [ ] SSO Integration (Clever, ClassLink)
+- [ ] LMS Integration (Canvas, Schoology)
+
+---
+
+## 🚀 Deployment Plan
+
+### Current: Local-First (v1.0)
+
+Graider runs entirely on the teacher's machine — no cloud required.
+
+```
+Teacher's Computer
+├── Graider App (Python/Flask)
+├── Student Files (local folder)
+├── Grades & Feedback (local storage)
+└── API calls to OpenAI (content only, no PII)
+```
+
+**Best for:** Individual teachers, pilot programs, privacy-sensitive schools
+
+### Phase 2: Cloud Option (v2.0)
+
+Optional cloud deployment for schools wanting central management.
+
+```
+┌─────────────────────────────────────────┐
+│           Cloud Dashboard               │
+│  • Admin panel for principals           │
+│  • Usage analytics                       │
+│  • Shared rubrics & templates           │
+└─────────────────────────────────────────┘
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+   School A                School B
+   Teachers                Teachers
+```
+
+**Requirements:**
+- Data Processing Agreement (DPA) with district
+- SOC 2 Type I certification
+- US-only hosting (AWS/GCP)
+
+**Best for:** Schools/districts wanting visibility and central management
+
+### Phase 3: Enterprise (v3.0)
+
+Full district-scale deployment with SSO and integrations.
+
+```
+District Infrastructure
+├── SSO (Clever, ClassLink, Google)
+├── LMS Integration (Canvas, Schoology)
+├── SIS Sync (PowerSchool, Infinite Campus)
+├── District Analytics Dashboard
+└── Multi-tenant Architecture
+```
+
+**Features:**
+- Single sign-on for all teachers
+- Automatic roster sync from SIS
+- Grade passback to LMS
+- District-wide reporting
+
+**Best for:** Large districts with existing EdTech infrastructure
+
+---
+
+## 🏢 For Schools & Districts
+
+### Pilot Program
+
+1. **Start small** — 5-10 teachers for one semester
+2. **Measure** — Track time savings, feedback quality
+3. **Expand** — Roll out to department or school
+4. **Scale** — District-wide deployment
+
+### IT Requirements
+
+| Deployment | Requirements |
+|------------|--------------|
+| **Local** | Python 3.9+, internet for API calls |
+| **Cloud** | Modern browser, DPA signed |
+| **Enterprise** | SSO provider, DPA, security review |
+
+### Contact
+
+For pilot programs or district pricing: [Contact Info]
 
 ---
 
