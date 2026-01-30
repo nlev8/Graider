@@ -336,6 +336,7 @@ function App() {
     gradingNotes: "",
     responseSections: [],
     aliases: [], // Previous names for matching renamed assignments
+    completionOnly: false, // If true, track submission but don't AI grade
   });
   const [savedAssignments, setSavedAssignments] = useState([]);
   const [savedAssignmentData, setSavedAssignmentData] = useState({}); // Map of name -> {aliases: [], title: ""}
@@ -3179,7 +3180,7 @@ ${signature}`;
                       >
                         <option value="">Select Assignment...</option>
                         {savedAssignments.map((name) => (
-                          <option key={name} value={name}>{name}</option>
+                          <option key={name} value={name}>{name}{savedAssignmentData[name]?.completionOnly ? " (Completion)" : ""}</option>
                         ))}
                       </select>
                       {gradeFilterAssignment && (
@@ -6669,14 +6670,20 @@ ${signature}`;
                                   alignItems: "center",
                                   gap: "8px",
                                   fontSize: "0.9rem",
+                                  flex: 1,
                                 }}
                               >
                                 <Icon
-                                  name="FileText"
+                                  name={savedAssignmentData[name]?.completionOnly ? "CheckCircle" : "FileText"}
                                   size={14}
-                                  style={{ color: "#a5b4fc" }}
+                                  style={{ color: savedAssignmentData[name]?.completionOnly ? "#22c55e" : "#a5b4fc" }}
                                 />
                                 {name}
+                                {savedAssignmentData[name]?.completionOnly && (
+                                  <span style={{ fontSize: "0.7rem", background: "rgba(34, 197, 94, 0.2)", color: "#22c55e", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px" }}>
+                                    Completion
+                                  </span>
+                                )}
                               </div>
                               <button
                                 onClick={(e) => {
@@ -6787,8 +6794,45 @@ ${signature}`;
                             totalPoints: parseInt(e.target.value) || 100,
                           })
                         }
+                        disabled={assignment.completionOnly}
+                        style={assignment.completionOnly ? { opacity: 0.5 } : {}}
                       />
                     </div>
+                  </div>
+
+                  {/* Completion Only Toggle */}
+                  <div
+                    style={{
+                      marginBottom: "20px",
+                      padding: "15px",
+                      background: assignment.completionOnly ? "rgba(34, 197, 94, 0.1)" : "rgba(100, 116, 139, 0.1)",
+                      borderRadius: "10px",
+                      border: assignment.completionOnly ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid rgba(100, 116, 139, 0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Icon name={assignment.completionOnly ? "CheckCircle" : "FileCheck"} size={20} style={{ color: assignment.completionOnly ? "#22c55e" : "#64748b" }} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                          {assignment.completionOnly ? "Completion Only" : "AI Grading Enabled"}
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                          {assignment.completionOnly
+                            ? "Tracks submission status only - no AI grading"
+                            : "AI will grade submissions based on rubric"}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      className={assignment.completionOnly ? "btn btn-secondary" : "btn btn-primary"}
+                      onClick={() => setAssignment({ ...assignment, completionOnly: !assignment.completionOnly })}
+                      style={{ minWidth: "140px" }}
+                    >
+                      {assignment.completionOnly ? "Enable Grading" : "Completion Only"}
+                    </button>
                   </div>
 
                   {/* Import Document */}
@@ -8295,7 +8339,7 @@ ${signature}`;
                             style={{ width: "100%" }}
                           >
                             <option value="">All Assignments</option>
-                            {savedAssignments.map(name => <option key={name} value={name}>{name}</option>)}
+                            {savedAssignments.map(name => <option key={name} value={name}>{name}{savedAssignmentData[name]?.completionOnly ? " (Completion)" : ""}</option>)}
                           </select>
                         </div>
                       </div>

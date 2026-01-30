@@ -337,11 +337,54 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 file_notes = matched_config.get('gradingNotes', '')
                 file_sections = matched_config.get('responseSections', [])
                 matched_title = matched_config.get('title', 'Unknown')
+                is_completion_only = matched_config.get('completionOnly', False)
                 grading_state["log"].append(f"  Matched config: {matched_title}")
             else:
                 file_markers = fallback_markers
                 file_notes = fallback_notes
                 file_sections = fallback_sections
+                is_completion_only = False
+
+            # Handle completion-only assignments (track submission without AI grading)
+            if is_completion_only:
+                grading_state["log"].append(f"  Completion only - recording submission")
+                # Use assignment title from matched config
+                assignment_title = matched_title if matched_config else ASSIGNMENT_NAME
+                # Record as submitted with full points
+                grading_state["results"].append({
+                    "student_name": student_info['student_name'],
+                    "student_id": student_info['student_id'],
+                    "email": student_info.get('email', ''),
+                    "filename": filepath.name,
+                    "filepath": str(filepath),
+                    "assignment": assignment_title,
+                    "score": 100,
+                    "letter_grade": "SUBMITTED",
+                    "feedback": "Completion-only assignment - submitted successfully.",
+                    "student_content": "",
+                    "full_content": "",
+                    "breakdown": {},
+                    "student_responses": [],
+                    "unanswered_questions": [],
+                    "authenticity_flag": "clean",
+                    "authenticity_reason": "",
+                    "baseline_deviation": {"flag": "normal", "reasons": [], "details": {}},
+                    "skills_demonstrated": {},
+                    "marker_status": "completion_only",
+                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+                # Add to grades for CSV export
+                all_grades.append({
+                    **student_info,
+                    "score": 100,
+                    "letter_grade": "SUBMITTED",
+                    "feedback": "Completion-only assignment - submitted successfully.",
+                    "filename": filepath.name,
+                    "assignment": assignment_title,
+                    "grading_period": grading_period,
+                    "has_markers": False
+                })
+                continue  # Skip to next file
 
             # Build combined AI notes for this file
             file_ai_notes = ''

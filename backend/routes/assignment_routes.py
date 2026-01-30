@@ -43,16 +43,17 @@ def list_assignments():
         if f.endswith('.json'):
             name = f.replace('.json', '')
             assignments.append(name)
-            # Load assignment to get aliases
+            # Load assignment to get aliases and completion status
             try:
                 with open(os.path.join(ASSIGNMENTS_DIR, f), 'r') as af:
                     data = json.load(af)
                     assignment_data[name] = {
                         "aliases": data.get("aliases", []),
-                        "title": data.get("title", name)
+                        "title": data.get("title", name),
+                        "completionOnly": data.get("completionOnly", False)
                     }
             except:
-                assignment_data[name] = {"aliases": [], "title": name}
+                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False}
 
     return jsonify({"assignments": sorted(assignments), "assignmentData": assignment_data})
 
