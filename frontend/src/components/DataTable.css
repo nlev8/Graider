@@ -1,0 +1,135 @@
+.data-table-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.data-table-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+}
+
+.table-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.table-controls button {
+  padding: 6px 12px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.table-controls button:hover {
+  background: #059669;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #e2e8f0;
+  background: white;
+}
+
+.data-table th,
+.data-table td {
+  border: 1px solid #e2e8f0;
+  padding: 4px;
+  text-align: center;
+}
+
+.data-table th {
+  background: #f1f5f9;
+}
+
+.header-row th {
+  position: relative;
+  min-width: 100px;
+}
+
+.header-input {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.unit-input {
+  width: 100%;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.cell-input {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  text-align: center;
+  font-size: 14px;
+}
+
+.cell-input:focus,
+.header-input:focus,
+.unit-input:focus {
+  outline: 2px solid #3b82f6;
+  background: #eff6ff;
+}
+
+.action-col {
+  width: 30px;
+  background: transparent !important;
+  border: none !important;
+}
+
+.remove-col-btn,
+.remove-row-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: #fee2e2;
+  color: #ef4444;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.remove-col-btn:hover,
+.remove-row-btn:hover {
+  background: #fecaca;
+}
+
+.remove-col-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+}
+
+.units-row th {
+  background: #f8fafc;
+  font-weight: normal;
+  font-size: 12px;
+  color: #64748b;
+}

@@ -1,12 +1,16 @@
 {
   "state": "FL",
   "subject": "Science",
-  "grade": "6-8",
+  "grade": "6-12",
   "standards": [
     {
       "code": "SC.6.N.1.1",
       "benchmark": "Define a problem from the sixth grade curriculum, use appropriate reference materials to support scientific understanding, plan and carry out scientific investigation, and use appropriate tools.",
-      "topics": ["Scientific Method", "Investigation", "Tools"],
+      "topics": [
+        "Scientific Method",
+        "Investigation",
+        "Tools"
+      ],
       "dok": 3,
       "item_specs": "Students plan and conduct investigations using the scientific method.",
       "essential_questions": [
@@ -18,13 +22,25 @@
         "I can plan and conduct a scientific investigation.",
         "I can select and use appropriate scientific tools."
       ],
-      "vocabulary": ["hypothesis", "variable", "control", "experiment", "data", "conclusion", "scientific method"],
+      "vocabulary": [
+        "hypothesis",
+        "variable",
+        "control",
+        "experiment",
+        "data",
+        "conclusion",
+        "scientific method"
+      ],
       "sample_assessment": "In an experiment, the factor that is deliberately changed is called the: A) Control variable B) Independent variable C) Dependent variable D) Constant"
     },
     {
       "code": "SC.6.N.2.2",
       "benchmark": "Explain that scientific knowledge is durable because it is open to change as new evidence or interpretations are encountered.",
-      "topics": ["Nature of Science", "Scientific Knowledge", "Evidence"],
+      "topics": [
+        "Nature of Science",
+        "Scientific Knowledge",
+        "Evidence"
+      ],
       "dok": 2,
       "item_specs": "Students explain how scientific knowledge changes with new evidence.",
       "essential_questions": [
@@ -36,13 +52,24 @@
         "I can give examples of how science has changed with new evidence.",
         "I can describe the role of evidence in science."
       ],
-      "vocabulary": ["evidence", "interpretation", "theory", "scientific knowledge", "peer review", "replication"],
+      "vocabulary": [
+        "evidence",
+        "interpretation",
+        "theory",
+        "scientific knowledge",
+        "peer review",
+        "replication"
+      ],
       "sample_assessment": "Scientific theories can change when: A) Scientists decide to change them B) New evidence contradicts them C) They become too old D) People stop believing them"
     },
     {
       "code": "SC.6.E.6.1",
       "benchmark": "Describe and give examples of ways in which Earth's surface is built up and torn down by physical and chemical weathering, erosion, and deposition.",
-      "topics": ["Earth Science", "Weathering", "Erosion"],
+      "topics": [
+        "Earth Science",
+        "Weathering",
+        "Erosion"
+      ],
       "dok": 2,
       "item_specs": "Students describe processes that shape Earth's surface.",
       "essential_questions": [
@@ -54,13 +81,24 @@
         "I can give examples of physical and chemical weathering.",
         "I can explain how deposition builds up landforms."
       ],
-      "vocabulary": ["weathering", "erosion", "deposition", "physical weathering", "chemical weathering", "sediment"],
+      "vocabulary": [
+        "weathering",
+        "erosion",
+        "deposition",
+        "physical weathering",
+        "chemical weathering",
+        "sediment"
+      ],
       "sample_assessment": "Which is an example of chemical weathering? A) Ice breaking apart rocks B) Acid rain dissolving limestone C) Wind blowing sand D) Tree roots cracking sidewalks"
     },
     {
       "code": "SC.6.E.7.4",
       "benchmark": "Differentiate and show interactions among the geosphere, hydrosphere, cryosphere, atmosphere, and biosphere.",
-      "topics": ["Earth Systems", "Interactions", "Spheres"],
+      "topics": [
+        "Earth Systems",
+        "Interactions",
+        "Spheres"
+      ],
       "dok": 2,
       "item_specs": "Students identify Earth's spheres and explain their interactions.",
       "essential_questions": [
@@ -72,13 +110,25 @@
         "I can explain interactions between Earth's systems.",
         "I can give examples of how changes in one sphere affect others."
       ],
-      "vocabulary": ["geosphere", "hydrosphere", "cryosphere", "atmosphere", "biosphere", "system", "interaction"],
+      "vocabulary": [
+        "geosphere",
+        "hydrosphere",
+        "cryosphere",
+        "atmosphere",
+        "biosphere",
+        "system",
+        "interaction"
+      ],
       "sample_assessment": "A volcanic eruption releases gases into the air. This is an interaction between: A) Geosphere and atmosphere B) Hydrosphere and biosphere C) Cryosphere and geosphere D) Atmosphere and biosphere"
     },
     {
       "code": "SC.6.L.14.1",
       "benchmark": "Describe and identify patterns in the hierarchical organization of organisms from atoms to molecules and cells to tissues to organs to organ systems to organisms.",
-      "topics": ["Life Science", "Organization", "Cells"],
+      "topics": [
+        "Life Science",
+        "Organization",
+        "Cells"
+      ],
       "dok": 2,
       "item_specs": "Students describe levels of biological organization.",
       "essential_questions": [
@@ -90,13 +140,25 @@
         "I can explain how each level relates to the next.",
         "I can give examples at each level of organization."
       ],
-      "vocabulary": ["cell", "tissue", "organ", "organ system", "organism", "molecule", "hierarchy"],
+      "vocabulary": [
+        "cell",
+        "tissue",
+        "organ",
+        "organ system",
+        "organism",
+        "molecule",
+        "hierarchy"
+      ],
       "sample_assessment": "Which correctly shows levels of organization from simplest to most complex? A) Organ, tissue, cell, organism B) Cell, tissue, organ, organ system C) Tissue, cell, organ system, organ D) Organism, organ, tissue, cell"
     },
     {
       "code": "SC.6.L.15.1",
       "benchmark": "Analyze and describe how and why organisms are classified according to shared characteristics with emphasis on the Linnaean system.",
-      "topics": ["Classification", "Taxonomy", "Linnaean System"],
+      "topics": [
+        "Classification",
+        "Taxonomy",
+        "Linnaean System"
+      ],
       "dok": 2,
       "item_specs": "Students explain how organisms are classified using shared characteristics.",
       "essential_questions": [
@@ -108,13 +170,27 @@
         "I can list the levels of the Linnaean classification system.",
         "I can classify organisms based on shared characteristics."
       ],
-      "vocabulary": ["classification", "taxonomy", "kingdom", "phylum", "class", "order", "family", "genus", "species"],
+      "vocabulary": [
+        "classification",
+        "taxonomy",
+        "kingdom",
+        "phylum",
+        "class",
+        "order",
+        "family",
+        "genus",
+        "species"
+      ],
       "sample_assessment": "In the Linnaean system, which level contains the most organisms? A) Species B) Genus C) Family D) Kingdom"
     },
     {
       "code": "SC.6.P.11.1",
       "benchmark": "Explore the Law of Conservation of Energy by differentiating between potential and kinetic energy. Identify situations where kinetic energy is transformed into potential energy and vice versa.",
-      "topics": ["Energy", "Kinetic", "Potential"],
+      "topics": [
+        "Energy",
+        "Kinetic",
+        "Potential"
+      ],
       "dok": 2,
       "item_specs": "Students differentiate between kinetic and potential energy and identify energy transformations.",
       "essential_questions": [
@@ -126,13 +202,24 @@
         "I can identify examples of each type of energy.",
         "I can describe energy transformations."
       ],
-      "vocabulary": ["energy", "kinetic energy", "potential energy", "conservation of energy", "transformation", "motion"],
+      "vocabulary": [
+        "energy",
+        "kinetic energy",
+        "potential energy",
+        "conservation of energy",
+        "transformation",
+        "motion"
+      ],
       "sample_assessment": "A roller coaster car at the top of a hill has MOSTLY: A) Kinetic energy B) Potential energy C) Sound energy D) No energy"
     },
     {
       "code": "SC.6.P.13.1",
       "benchmark": "Investigate and describe types of forces including contact forces and forces acting at a distance, such as electrical, magnetic, and gravitational.",
-      "topics": ["Forces", "Contact Forces", "Action at a Distance"],
+      "topics": [
+        "Forces",
+        "Contact Forces",
+        "Action at a Distance"
+      ],
       "dok": 2,
       "item_specs": "Students identify and describe different types of forces.",
       "essential_questions": [
@@ -144,8 +231,1052 @@
         "I can describe how gravitational force works.",
         "I can explain how magnetic and electrical forces work."
       ],
-      "vocabulary": ["force", "contact force", "non-contact force", "gravity", "magnetism", "friction", "electrical force"],
+      "vocabulary": [
+        "force",
+        "contact force",
+        "non-contact force",
+        "gravity",
+        "magnetism",
+        "friction",
+        "electrical force"
+      ],
       "sample_assessment": "Which is an example of a non-contact force? A) Pushing a cart B) Gravity pulling objects toward Earth C) Friction between tires and road D) Kicking a ball"
+    },
+    {
+      "code": "SC.7.NSO.1.1",
+      "benchmark": "Explain how scientific knowledge can change with new evidence and provide examples from the scientific community.",
+      "topics": [
+        "Nature of Science",
+        "Scientific Knowledge",
+        "Evidence"
+      ],
+      "dok": 3,
+      "item_specs": "Students explore how scientific knowledge evolves over time with new discoveries.",
+      "essential_questions": [
+        "How does new evidence affect scientific theories?",
+        "Can scientific knowledge change? Why or why not?"
+      ],
+      "learning_targets": [
+        "I can describe examples of how scientific knowledge has changed.",
+        "I can explain the role of evidence in the scientific community.",
+        "I can discuss why scientific knowledge is tentative."
+      ],
+      "vocabulary": [
+        "theory",
+        "evidence",
+        "hypothesis",
+        "scientific method",
+        "revision",
+        "peer review"
+      ],
+      "sample_assessment": "Which of the following best describes the nature of scientific knowledge? A) It is always true and never changes B) It is based on opinions C) It can change with new evidence D) It is based on guesses"
+    },
+    {
+      "code": "SC.7.PH.2.1",
+      "benchmark": "Distinguish between physical and chemical changes with specific examples.",
+      "topics": [
+        "Physical Change",
+        "Chemical Change",
+        "Matter"
+      ],
+      "dok": 2,
+      "item_specs": "Students identify and categorize changes in matter as physical or chemical.",
+      "essential_questions": [
+        "What is the difference between a physical and chemical change?",
+        "How can you identify if a chemical change has occurred?"
+      ],
+      "learning_targets": [
+        "I can identify examples of physical changes.",
+        "I can identify examples of chemical changes.",
+        "I can explain the differences between physical and chemical changes."
+      ],
+      "vocabulary": [
+        "physical change",
+        "chemical change",
+        "reaction",
+        "matter",
+        "property",
+        "reversible"
+      ],
+      "sample_assessment": "Which of the following is an example of a chemical change? A) Melting ice B) Shredding paper C) Rusting iron D) Dissolving sugar in water"
+    },
+    {
+      "code": "SC.7.LS.3.1",
+      "benchmark": "Compare and contrast the characteristics of living and non-living things.",
+      "topics": [
+        "Living Organisms",
+        "Non-Living Things",
+        "Characteristics of Life"
+      ],
+      "dok": 2,
+      "item_specs": "Students identify and describe key characteristics of living and non-living things.",
+      "essential_questions": [
+        "What characteristics define living organisms?",
+        "How do living things differ from non-living things?"
+      ],
+      "learning_targets": [
+        "I can list the characteristics of living things.",
+        "I can differentiate between living and non-living things.",
+        "I can provide examples of living and non-living things."
+      ],
+      "vocabulary": [
+        "organism",
+        "cell",
+        "growth",
+        "reproduction",
+        "metabolism",
+        "homeostasis"
+      ],
+      "sample_assessment": "Which characteristic is NOT shared by all living things? A) Growth B) Metabolism C) Ability to move D) Reproduction"
+    },
+    {
+      "code": "SC.7.EC.4.1",
+      "benchmark": "Explain the flow of energy through ecosystems, focusing on the roles of producers, consumers, and decomposers.",
+      "topics": [
+        "Ecosystems",
+        "Energy Flow",
+        "Food Webs"
+      ],
+      "dok": 3,
+      "item_specs": "Students trace and explain the flow of energy within an ecosystem.",
+      "essential_questions": [
+        "How does energy flow through an ecosystem?",
+        "What roles do producers, consumers, and decomposers play in an ecosystem?"
+      ],
+      "learning_targets": [
+        "I can describe the roles of producers, consumers, and decomposers.",
+        "I can trace the flow of energy through a food web.",
+        "I can explain how energy is transferred between organisms."
+      ],
+      "vocabulary": [
+        "ecosystem",
+        "producer",
+        "consumer",
+        "decomposer",
+        "energy flow",
+        "food web"
+      ],
+      "sample_assessment": "What is the primary source of energy for most ecosystems? A) The Sun B) Water C) Soil D) Air"
+    },
+    {
+      "code": "SC.7.GE.5.1",
+      "benchmark": "Investigate how genetic traits are passed from parents to offspring and explore patterns of inheritance.",
+      "topics": [
+        "Genetics",
+        "Inheritance",
+        "Traits"
+      ],
+      "dok": 3,
+      "item_specs": "Students explore Mendelian genetics and patterns of inheritance.",
+      "essential_questions": [
+        "How are genetic traits passed from parents to offspring?",
+        "What patterns of inheritance exist in genetics?"
+      ],
+      "learning_targets": [
+        "I can describe how traits are inherited.",
+        "I can use Punnett squares to predict genetic outcomes.",
+        "I can distinguish between dominant and recessive traits."
+      ],
+      "vocabulary": [
+        "gene",
+        "allele",
+        "dominant",
+        "recessive",
+        "inheritance",
+        "Punnett square"
+      ],
+      "sample_assessment": "In pea plants, tall (T) is dominant and short (t) is recessive. What is the probability of offspring being tall if both parents are heterozygous (Tt)? A) 25% B) 50% C) 75% D) 100%"
+    },
+    {
+      "code": "SC.7.ES.6.1",
+      "benchmark": "Describe how the Earth's atmosphere, hydrosphere, lithosphere, and biosphere interact.",
+      "topics": [
+        "Earth Systems",
+        "Atmosphere",
+        "Hydrosphere",
+        "Lithosphere",
+        "Biosphere"
+      ],
+      "dok": 3,
+      "item_specs": "Students describe interactions among Earth's spheres.",
+      "essential_questions": [
+        "How do Earth's systems interact with each other?",
+        "What impact do these interactions have on Earth's environment?"
+      ],
+      "learning_targets": [
+        "I can identify Earth's four main spheres.",
+        "I can explain how Earth's spheres interact.",
+        "I can give examples of interactions between Earth's systems."
+      ],
+      "vocabulary": [
+        "atmosphere",
+        "hydrosphere",
+        "lithosphere",
+        "biosphere",
+        "interaction",
+        "system"
+      ],
+      "sample_assessment": "Which of the following is an example of an interaction between the lithosphere and biosphere? A) Rainfall forming rivers B) Plants growing in soil C) Wind causing erosion D) Ice melting into water"
+    },
+    {
+      "code": "SC.8.NSO.1.1",
+      "benchmark": "Understand the nature of scientific study and the role of experimentation and evidence.",
+      "topics": [
+        "Nature of Science",
+        "Experimentation",
+        "Evidence"
+      ],
+      "dok": 3,
+      "item_specs": "Students will explore how scientific knowledge is constructed and how experimentation provides evidence.",
+      "essential_questions": [
+        "What characterizes scientific knowledge?",
+        "How does evidence shape scientific understanding?"
+      ],
+      "learning_targets": [
+        "I can describe how scientific knowledge is developed.",
+        "I can explain the role of evidence in science.",
+        "I can evaluate an experiment's approach to gathering evidence."
+      ],
+      "vocabulary": [
+        "hypothesis",
+        "theory",
+        "evidence",
+        "experiment",
+        "observation",
+        "scientific method"
+      ],
+      "sample_assessment": "Which of the following best demonstrates the use of empirical evidence in scientific investigation? A) Personal opinions B) Experimental data C) Anecdotal information D) Hypothetical scenarios"
+    },
+    {
+      "code": "SC.8.PH.1.2",
+      "benchmark": "Analyze and interpret data on the properties of elements and compounds.",
+      "topics": [
+        "Properties of Matter",
+        "Elements",
+        "Compounds"
+      ],
+      "dok": 2,
+      "item_specs": "Students will analyze data to distinguish between elements and compounds based on their properties.",
+      "essential_questions": [
+        "What properties differentiate elements from compounds?",
+        "How can properties of matter be analyzed?"
+      ],
+      "learning_targets": [
+        "I can distinguish between an element and a compound based on their properties.",
+        "I can interpret data related to the properties of substances.",
+        "I can use data to conclude about the composition of matter."
+      ],
+      "vocabulary": [
+        "element",
+        "compound",
+        "mixture",
+        "atomic structure",
+        "chemical properties",
+        "physical properties"
+      ],
+      "sample_assessment": "Which of the following is a property of compounds but not elements? A) Composed of one kind of atom B) Fixed ratio of elements C) Homogeneous at microscopic level D) Included in the periodic table"
+    },
+    {
+      "code": "SC.8.EG.1.3",
+      "benchmark": "Explain the interactions between Earth's spheres and how these interactions affect weather and climate.",
+      "topics": [
+        "Earth's Spheres",
+        "Weather",
+        "Climate"
+      ],
+      "dok": 3,
+      "item_specs": "Students explain how interactions between the geosphere, biosphere, hydrosphere, and atmosphere influence Earth's climate system.",
+      "essential_questions": [
+        "How do Earth's spheres interact to influence weather?",
+        "In what ways do these interactions affect climate patterns?"
+      ],
+      "learning_targets": [
+        "I can identify the four main spheres of Earth.",
+        "I can explain how interactions among Earth's spheres affect climate.",
+        "I can describe examples of how sphere interactions lead to weather changes."
+      ],
+      "vocabulary": [
+        "geosphere",
+        "biosphere",
+        "hydrosphere",
+        "atmosphere",
+        "weather",
+        "climate"
+      ],
+      "sample_assessment": "Which sphere interaction primarily contributes to the formation of weather patterns? A) Geosphere-Biosphere B) Hydrosphere-Atmosphere C) Biosphere-Atmosphere D) Geosphere-Hydrosphere"
+    },
+    {
+      "code": "SC.8.LS.1.4",
+      "benchmark": "Model and explain the basic principles of genetics and inheritance.",
+      "topics": [
+        "Genetics",
+        "Inheritance",
+        "DNA"
+      ],
+      "dok": 3,
+      "item_specs": "Students model genetic processes and explain inheritance patterns and DNA function.",
+      "essential_questions": [
+        "What are the fundamental principles of genetics?",
+        "How do organisms inherit traits from their parents?"
+      ],
+      "learning_targets": [
+        "I can describe the basic structure of DNA.",
+        "I can model how genetic inheritance occurs.",
+        "I can explain dominant and recessive traits."
+      ],
+      "vocabulary": [
+        "DNA",
+        "gene",
+        "chromosome",
+        "dominant",
+        "recessive",
+        "allele",
+        "inheritance"
+      ],
+      "sample_assessment": "Which pattern of inheritance involves both alleles being equally expressed in the phenotype? A) Dominance B) Codominance C) Recessiveness D) Incomplete dominance"
+    },
+    {
+      "code": "SC.8.ESU.1.5",
+      "benchmark": "Assess the impacts of human activities on Earth's surface and resources.",
+      "topics": [
+        "Human Impact",
+        "Earth's Surface",
+        "Resource Management"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate how human activities modify land use, resource availability, and the environment.",
+      "essential_questions": [
+        "How do human activities impact Earth's surface?",
+        "What are the consequences of resource exploitation?"
+      ],
+      "learning_targets": [
+        "I can identify human activities that affect Earth's surface.",
+        "I can explain how resource use impacts the environment.",
+        "I can assess the balance between human needs and environmental health."
+      ],
+      "vocabulary": [
+        "deforestation",
+        "urbanization",
+        "pollution",
+        "sustainable resources",
+        "conservation",
+        "ecosystem"
+      ],
+      "sample_assessment": "Which human activity is most directly linked to soil erosion? A) Afforestation B) Urban development C) Conservation practices D) Wildlife conservation"
+    },
+    {
+      "code": "SC.8.ITR.1.6",
+      "benchmark": "Evaluate how the movement of Earth's crustal plates impacts geological phenomena.",
+      "topics": [
+        "Plate Tectonics",
+        "Geological Phenomena"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate the movement of tectonic plates and its effects on earthquakes, volcanoes, and mountain formation.",
+      "essential_questions": [
+        "What causes Earth's crustal plates to move?",
+        "How does plate movement affect geological phenomena?"
+      ],
+      "learning_targets": [
+        "I can explain the theory of plate tectonics.",
+        "I can evaluate the impact of plate movement on geological events.",
+        "I can analyze the relationship between plate boundaries and natural disasters."
+      ],
+      "vocabulary": [
+        "plate tectonics",
+        "earthquake",
+        "volcano",
+        "subduction",
+        "divergent boundary",
+        "convergent boundary"
+      ],
+      "sample_assessment": "Which type of boundary is commonly associated with the formation of new crust? A) Convergent boundary B) Transform boundary C) Divergent boundary D) Subduction zone"
+    },
+    {
+      "code": "SC.9.P.1.1",
+      "benchmark": "Analyze scientific data to compare different energy transformations and the efficiency of these processes.",
+      "topics": [
+        "Energy Transformations",
+        "Efficiency"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate sets of data to determine which energy transformation is most efficient.",
+      "essential_questions": [
+        "How can we compare the efficiency of different energy transformations?",
+        "Why is it important to study energy efficiency?"
+      ],
+      "learning_targets": [
+        "I can analyze data on energy transformations.",
+        "I can evaluate the efficiency of energy processes."
+      ],
+      "vocabulary": [
+        "energy transformation",
+        "efficiency",
+        "kinetic energy",
+        "potential energy",
+        "thermodynamics"
+      ],
+      "sample_assessment": "Which energy transformation typically has the highest efficiency in a closed system? A) Chemical to thermal B) Chemical to mechanical C) Mechanical to electrical D) Electrical to light"
+    },
+    {
+      "code": "SC.9.L.2.1",
+      "benchmark": "Evaluate the impact of environmental changes on ecosystems and the organisms that inhabit them.",
+      "topics": [
+        "Ecological Impact",
+        "Ecosystems"
+      ],
+      "dok": 3,
+      "item_specs": "Students assess how changes in the environment affect the stability of ecosystems.",
+      "essential_questions": [
+        "What factors can disrupt ecosystems?",
+        "How do organisms adapt to environmental changes?"
+      ],
+      "learning_targets": [
+        "I can evaluate how ecosystems react to changes.",
+        "I can describe organism adaptability to changes."
+      ],
+      "vocabulary": [
+        "ecosystem",
+        "biodiversity",
+        "habitat",
+        "adaptation",
+        "population dynamics"
+      ],
+      "sample_assessment": "What is a likely consequence of a significant increase in average global temperatures on ecosystems? A) Decreased biodiversity B) Increased stability C) Enhanced growth rates D) Reduced carbon emissions"
+    },
+    {
+      "code": "SC.9.C.3.1",
+      "benchmark": "Understand and apply the principles of atomic structure to predict the behavior of elements and compounds.",
+      "topics": [
+        "Atomic Structure",
+        "Element Behavior"
+      ],
+      "dok": 2,
+      "item_specs": "Students apply knowledge of atomic structure to predict element and compound interactions.",
+      "essential_questions": [
+        "How does atomic structure determine element properties?",
+        "What interactions govern the behavior of compounds?"
+      ],
+      "learning_targets": [
+        "I can describe atomic structures and predict element interactions.",
+        "I can understand how atomic configuration impacts chemical properties."
+      ],
+      "vocabulary": [
+        "atom",
+        "electron configuration",
+        "periodic table",
+        "valence electrons",
+        "ionic bond"
+      ],
+      "sample_assessment": "Which of the following is affected most by an atom's electron configuration? A) Mass number B) Atomic number C) Reactivity D) Neutron number"
+    },
+    {
+      "code": "SC.9.E.4.1",
+      "benchmark": "Explain the processes of weathering, erosion, and deposition and their impacts on Earth's surface features.",
+      "topics": [
+        "Weathering",
+        "Erosion",
+        "Deposition"
+      ],
+      "dok": 2,
+      "item_specs": "Students explain how surface processes shape the Earth's landscape.",
+      "essential_questions": [
+        "What role do weathering, erosion, and deposition play in shaping landforms?",
+        "How do these processes contribute to Earth's surface changes?"
+      ],
+      "learning_targets": [
+        "I can explain the processes of weathering, erosion, and deposition.",
+        "I can connect surface changes to these geological processes."
+      ],
+      "vocabulary": [
+        "weathering",
+        "erosion",
+        "deposition",
+        "sediment",
+        "landform"
+      ],
+      "sample_assessment": "Which process involves the breaking down of rocks without moving the materials? A) Erosion B) Deposition C) Weathering D) Sublimation"
+    },
+    {
+      "code": "SC.9.B.5.1",
+      "benchmark": "Investigate the wave nature of light and the electromagnetic spectrum, explaining its applications and implications.",
+      "topics": [
+        "Electromagnetic Spectrum",
+        "Light Waves"
+      ],
+      "dok": 3,
+      "item_specs": "Students explore properties of light and its applications in technology.",
+      "essential_questions": [
+        "How do different wavelengths of light affect various technologies?",
+        "Why is understanding the electromagnetic spectrum important?"
+      ],
+      "learning_targets": [
+        "I can explain the properties of light as a wave.",
+        "I can analyze how we use different parts of the electromagnetic spectrum."
+      ],
+      "vocabulary": [
+        "wave",
+        "frequency",
+        "wavelength",
+        "electromagnetic spectrum",
+        "refraction"
+      ],
+      "sample_assessment": "Which part of the electromagnetic spectrum has the highest energy? A) Radio waves B) Visible light C) Ultraviolet light D) Gamma rays"
+    },
+    {
+      "code": "SC.9.H.6.1",
+      "benchmark": "Examine the impact of human activities on Earth's climate systems and evaluate strategies to mitigate adverse effects.",
+      "topics": [
+        "Climate Change",
+        "Human Impact"
+      ],
+      "dok": 4,
+      "item_specs": "Students analyze data on climate change and propose solutions to mitigate impacts.",
+      "essential_questions": [
+        "In what ways do human activities contribute to climate change?",
+        "What strategies can mitigate negative impacts on the climate?"
+      ],
+      "learning_targets": [
+        "I can analyze human impacts on climate systems.",
+        "I can evaluate strategies to mitigate climate change."
+      ],
+      "vocabulary": [
+        "greenhouse gases",
+        "carbon footprint",
+        "deforestation",
+        "renewable energy",
+        "sustainability"
+      ],
+      "sample_assessment": "What strategy is most effective in reducing carbon emissions on a global scale? A) Industrial expansion B) Fossil fuel reliance C) Renewable energy implementation D) Deforestation"
+    },
+    {
+      "code": "SC.10.P.1.1",
+      "benchmark": "Describe and apply the law of conservation of energy in various physical and chemical processes.",
+      "topics": [
+        "Conservation of Energy",
+        "Physical Processes",
+        "Chemical Processes"
+      ],
+      "dok": 3,
+      "item_specs": "Explain how energy is conserved in different scenarios, including physical and chemical changes.",
+      "essential_questions": [
+        "How is energy conserved during physical and chemical processes?",
+        "What are examples of energy transformation in everyday life?"
+      ],
+      "learning_targets": [
+        "I can describe the law of conservation of energy.",
+        "I can provide examples of energy transformation.",
+        "I can analyze energy conservation in physical and chemical processes."
+      ],
+      "vocabulary": [
+        "energy",
+        "conservation",
+        "physical process",
+        "chemical process",
+        "transformation"
+      ],
+      "sample_assessment": "In a closed system, when a ball is thrown into the air, the energy transformation involved is: A) Kinetic to potential B) Potential to kinetic C) Thermal to chemical D) Chemical to thermal"
+    },
+    {
+      "code": "SC.10.L.2.1",
+      "benchmark": "Analyze the flow of energy and cycling of matter through ecosystems.",
+      "topics": [
+        "Ecosystems",
+        "Energy Flow",
+        "Matter Cycling"
+      ],
+      "dok": 4,
+      "item_specs": "Discuss and model energy flow and matter cycling using food webs and nutrient cycles.",
+      "essential_questions": [
+        "How do energy and matter move through ecosystems?",
+        "What are the impacts of disruptions in these cycles?"
+      ],
+      "learning_targets": [
+        "I can explain how energy flows through an ecosystem.",
+        "I can illustrate the cycling of matter using a food web.",
+        "I can evaluate the impact of changes in an ecosystem."
+      ],
+      "vocabulary": [
+        "ecosystem",
+        "energy flow",
+        "matter cycling",
+        "food web",
+        "nutrient cycle"
+      ],
+      "sample_assessment": "Which of the following best represents how energy flows in an ecosystem? A) Producer -> Consumer -> Decomposer B) Consumer -> Producer -> Decomposer C) Decomposer -> Producer -> Consumer D) None of the above"
+    },
+    {
+      "code": "SC.10.E.3.1",
+      "benchmark": "Explain the effects of Earth's systems on climate and weather patterns.",
+      "topics": [
+        "Earth Systems",
+        "Climate",
+        "Weather Patterns"
+      ],
+      "dok": 3,
+      "item_specs": "Analyze data related to Earth's systems and their influence on climate and weather.",
+      "essential_questions": [
+        "What factors influence Earth's climate and weather?",
+        "How do Earth's systems interact to produce weather patterns?"
+      ],
+      "learning_targets": [
+        "I can identify Earth's systems that affect climate and weather.",
+        "I can describe interactions between Earth's systems.",
+        "I can predict changes in weather patterns based on Earth system data."
+      ],
+      "vocabulary": [
+        "climate",
+        "weather",
+        "Earth systems",
+        "atmosphere",
+        "hydrosphere",
+        "geosphere",
+        "biosphere"
+      ],
+      "sample_assessment": "Which Earth system component most directly affects weather patterns? A) Biosphere B) Hydrosphere C) Asthenosphere D) Lithosphere"
+    },
+    {
+      "code": "SC.10.B.4.1",
+      "benchmark": "Understand atomic models and the scale and properties of structures found in matter.",
+      "topics": [
+        "Atomic Models",
+        "Matter",
+        "Structures"
+      ],
+      "dok": 3,
+      "item_specs": "Compare and explain different atomic models and the structure of matter.",
+      "essential_questions": [
+        "What are the different atomic models?",
+        "How does the structure of matter change at different scales?"
+      ],
+      "learning_targets": [
+        "I can compare historical and modern atomic models.",
+        "I can describe the structure of atoms and molecules.",
+        "I can explain properties of matter based on atomic structure."
+      ],
+      "vocabulary": [
+        "atom",
+        "molecule",
+        "atomic model",
+        "electron",
+        "proton",
+        "neutron",
+        "nucleus"
+      ],
+      "sample_assessment": "Which atomic model first suggested that atoms have electrons within a positively charged 'soup'? A) Rutherford model B) Bohr model C) Thomson model D) Quantum model"
+    },
+    {
+      "code": "SC.10.C.5.1",
+      "benchmark": "Illustrate and examine the relationship between force and motion.",
+      "topics": [
+        "Force",
+        "Motion",
+        "Newton's Laws"
+      ],
+      "dok": 3,
+      "item_specs": "Demonstrate and analyze forces affecting motion in various scenarios.",
+      "essential_questions": [
+        "How do forces affect the motion of objects?",
+        "What are Newton's laws of motion?"
+      ],
+      "learning_targets": [
+        "I can describe the relationship between force and motion.",
+        "I can apply Newton's laws of motion to real-world examples.",
+        "I can predict motion outcomes based on forces applied."
+      ],
+      "vocabulary": [
+        "force",
+        "motion",
+        "Newton's laws",
+        "inertia",
+        "acceleration",
+        "friction",
+        "gravity"
+      ],
+      "sample_assessment": "Which of Newton's laws explains why a passenger moves forward in a vehicle when it stops suddenly? A) First Law B) Second Law C) Third Law D) Law of Inertia"
+    },
+    {
+      "code": "SC.10.G.6.1",
+      "benchmark": "Explore the principles of genetics and inheritance in living organisms.",
+      "topics": [
+        "Genetics",
+        "Inheritance",
+        "DNA"
+      ],
+      "dok": 3,
+      "item_specs": "Analyze genetic information and patterns of inheritance in living organisms.",
+      "essential_questions": [
+        "How is genetic information passed from generation to generation?",
+        "What is the role of DNA in inheritance?"
+      ],
+      "learning_targets": [
+        "I can explain how traits are inherited through genetic material.",
+        "I can analyze patterns of inheritance using Punnett squares.",
+        "I can describe the structure and function of DNA."
+      ],
+      "vocabulary": [
+        "genetics",
+        "inheritance",
+        "DNA",
+        "gene",
+        "allele",
+        "Punnett square",
+        "genotype",
+        "phenotype"
+      ],
+      "sample_assessment": "In a monohybrid cross, what is the expected phenotypic ratio for a dominant and recessive trait? A) 1:1 B) 3:1 C) 1:3 D) 2:1"
+    },
+    {
+      "code": "SC.11.P.1.1",
+      "benchmark": "Analyze the impact of energy transfer in physical phenomena.",
+      "topics": [
+        "Energy Transfer",
+        "Thermodynamics",
+        "Conservation of Energy"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze different scenarios where energy is transferred and transformed.",
+      "essential_questions": [
+        "How does energy transfer impact system behavior?",
+        "What are the laws governing energy transfer?"
+      ],
+      "learning_targets": [
+        "I can describe the laws of thermodynamics.",
+        "I can explain how energy is transferred between objects.",
+        "I can predict the outcome of energy transformations."
+      ],
+      "vocabulary": [
+        "entropy",
+        "heat",
+        "work",
+        "thermodynamics",
+        "conduction",
+        "convection",
+        "radiation"
+      ],
+      "sample_assessment": "Which law of thermodynamics explains why energy cannot be created or destroyed? A) Zeroth Law B) First Law C) Second Law D) Third Law"
+    },
+    {
+      "code": "SC.11.B.2.1",
+      "benchmark": "Evaluate the role of nucleic acids in genetics and metabolism.",
+      "topics": [
+        "DNA",
+        "RNA",
+        "Protein Synthesis"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate the function of DNA and RNA in cellular activities.",
+      "essential_questions": [
+        "How do nucleic acids regulate genetic information?",
+        "What is the role of RNA in protein synthesis?"
+      ],
+      "learning_targets": [
+        "I can explain the structure and function of DNA and RNA.",
+        "I can describe the process of transcription and translation.",
+        "I can evaluate how genetic information is expressed in traits."
+      ],
+      "vocabulary": [
+        "gene",
+        "transcription",
+        "translation",
+        "mRNA",
+        "tRNA",
+        "codon",
+        "genome"
+      ],
+      "sample_assessment": "What carries genetic code from the nucleus to ribosomes? A) DNA B) mRNA C) tRNA D) rRNA"
+    },
+    {
+      "code": "SC.11.L.3.1",
+      "benchmark": "Investigate the interactions between natural systems and human impact.",
+      "topics": [
+        "Ecosystems",
+        "Human Impact",
+        "Sustainability"
+      ],
+      "dok": 4,
+      "item_specs": "Students assess the impact of human activities on various ecosystems.",
+      "essential_questions": [
+        "How do human activities alter ecosystems?",
+        "What strategies can reduce human impact on natural systems?"
+      ],
+      "learning_targets": [
+        "I can describe the components of ecosystems.",
+        "I can analyze the impact of human activity on ecological balance.",
+        "I can propose solutions to mitigate negative human impact."
+      ],
+      "vocabulary": [
+        "biodiversity",
+        "deforestation",
+        "pollution",
+        "sustainability",
+        "conservation",
+        "habitat"
+      ],
+      "sample_assessment": "Which term refers to the variety of species in a given area? A) Sustainability B) Biodiversity C) Ecosystem D) Succession"
+    },
+    {
+      "code": "SC.11.C.4.1",
+      "benchmark": "Explore chemical reactions, rates, and equilibrium.",
+      "topics": [
+        "Chemical Reactions",
+        "Reaction Rates",
+        "Equilibrium"
+      ],
+      "dok": 3,
+      "item_specs": "Students explore factors affecting the rates of chemical reactions and the concept of equilibrium.",
+      "essential_questions": [
+        "What factors influence the rate of chemical reactions?",
+        "How is chemical equilibrium achieved and maintained?"
+      ],
+      "learning_targets": [
+        "I can identify the components of a chemical equation.",
+        "I can explain how temperature and concentration affect reaction rates.",
+        "I can describe the conditions for establishing equilibrium."
+      ],
+      "vocabulary": [
+        "reactants",
+        "products",
+        "catalyst",
+        "activation energy",
+        "equilibrium",
+        "Le Chatelier's principle"
+      ],
+      "sample_assessment": "Increasing the concentration of reactants typically has what effect on a chemical reaction? A) Decreases rate B) Increases rate C) Reverses the reaction D) No effect"
+    },
+    {
+      "code": "SC.11.E.5.1",
+      "benchmark": "Examine the processes that shape Earth's surface over geologic time.",
+      "topics": [
+        "Plate Tectonics",
+        "Erosion",
+        "Geologic Time"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine the natural processes shaping Earth's surface and their impact over geologic time.",
+      "essential_questions": [
+        "What natural processes alter Earth's surface?",
+        "How do these processes affect Earth's features over time?"
+      ],
+      "learning_targets": [
+        "I can explain the theory of plate tectonics.",
+        "I can describe the process of erosion and its effects.",
+        "I can analyze how Earth's surface has changed over geologic time."
+      ],
+      "vocabulary": [
+        "tectonic plates",
+        "erosion",
+        "sedimentation",
+        "fossil record",
+        "geologic time scale",
+        "continental drift"
+      ],
+      "sample_assessment": "What process involves the movement of Earth\u2019s lithospheric plates? A) Erosion B) Weathering C) Sedimentation D) Plate tectonics"
+    },
+    {
+      "code": "SC.11.A.6.1",
+      "benchmark": "Analyze the properties and functions of organic molecules in living organisms.",
+      "topics": [
+        "Organic Chemistry",
+        "Biomolecules",
+        "Enzymes"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze the properties and roles of organic molecules such as carbohydrates, proteins, lipids, and nucleic acids in cells.",
+      "essential_questions": [
+        "What are the structures and roles of key biomolecules?",
+        "How do enzymes facilitate biological reactions?"
+      ],
+      "learning_targets": [
+        "I can identify the major types of organic molecules in cells.",
+        "I can describe the structure and function of proteins, lipids, carbohydrates, and nucleic acids.",
+        "I can explain the role of enzymes in biochemical reactions."
+      ],
+      "vocabulary": [
+        "enzyme",
+        "substrate",
+        "catalyst",
+        "carbohydrate",
+        "lipid",
+        "protein",
+        "nucleic acid"
+      ],
+      "sample_assessment": "What macromolecule serves as the primary source of energy for cellular processes? A) Protein B) Nucleic acid C) Carbohydrate D) Lipid"
+    },
+    {
+      "code": "SC.12.BIO.1.1",
+      "benchmark": "Analyze the relationships among organisms, populations, communities, ecosystems, and biomes.",
+      "topics": [
+        "Ecology",
+        "Ecosystems",
+        "Biomes"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze ecosystem dynamics, relationships between organisms, and environmental impact.",
+      "essential_questions": [
+        "How do organisms interact with each other and their environment?",
+        "What are the factors that influence ecosystem stability?"
+      ],
+      "learning_targets": [
+        "I can describe interactions within ecosystems.",
+        "I can analyze the impact of human activity on ecosystems.",
+        "I can explain the flow of energy through ecosystems."
+      ],
+      "vocabulary": [
+        "ecosystem",
+        "biotic",
+        "abiotic",
+        "biodiversity",
+        "trophic levels",
+        "niche",
+        "succession"
+      ],
+      "sample_assessment": "Which of the following is an abiotic factor affecting ecosystems? A) Predator-prey interactions B) Temperature C) Parasitism D) Species diversity"
+    },
+    {
+      "code": "SC.12.CHEM.2.1",
+      "benchmark": "Apply the principles of thermodynamics to predict the energy changes in chemical reactions.",
+      "topics": [
+        "Thermodynamics",
+        "Chemical Reactions",
+        "Energy"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate energy changes in reactions and predict temperature shifts and reaction outcomes.",
+      "essential_questions": [
+        "How do energy changes influence chemical reactions?",
+        "What is the role of the laws of thermodynamics in chemical processes?"
+      ],
+      "learning_targets": [
+        "I can explain the laws of thermodynamics.",
+        "I can determine energy changes in chemical reactions.",
+        "I can predict reaction behavior based on energy considerations."
+      ],
+      "vocabulary": [
+        "enthalpy",
+        "entropy",
+        "exothermic",
+        "endothermic",
+        "Gibbs free energy",
+        "spontaneity"
+      ],
+      "sample_assessment": "When a reaction releases energy, it is considered: A) Endothermic B) Exothermic C) Isothermic D) Thermoneutral"
+    },
+    {
+      "code": "SC.12.PHY.3.1",
+      "benchmark": "Explore wave properties and how they apply to sound and light.",
+      "topics": [
+        "Wave Theory",
+        "Sound Waves",
+        "Light Waves"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine wave behaviors and properties in various contexts.",
+      "essential_questions": [
+        "What distinguishes sound waves from light waves?",
+        "How do wave properties influence communication technologies?"
+      ],
+      "learning_targets": [
+        "I can define wavelength, frequency, and amplitude.",
+        "I can describe the differences between sound and light waves.",
+        "I can analyze wave phenomena such as interference and diffraction."
+      ],
+      "vocabulary": [
+        "frequency",
+        "wavelength",
+        "amplitude",
+        "interference",
+        "diffraction",
+        "speed of light"
+      ],
+      "sample_assessment": "The bending of light as it passes from one medium to another is known as: A) Reflection B) Diffraction C) Refraction D) Interference"
+    },
+    {
+      "code": "SC.12.ASTRO.4.1",
+      "benchmark": "Investigate the formation and evolution of the universe, stars, and planetary systems.",
+      "topics": [
+        "Cosmology",
+        "Stellar Evolution",
+        "Planetary Systems"
+      ],
+      "dok": 4,
+      "item_specs": "Students explore astronomical concepts and analyze cosmic phenomena.",
+      "essential_questions": [
+        "How do stars and planetary systems form and evolve?",
+        "What theories explain the origin and development of the universe?"
+      ],
+      "learning_targets": [
+        "I can describe the lifecycle of stars.",
+        "I can explain theories of the universe's formation.",
+        "I can analyze data from astronomical observations."
+      ],
+      "vocabulary": [
+        "big bang theory",
+        "nebula",
+        "supernova",
+        "black hole",
+        "galaxy",
+        "redshift"
+      ],
+      "sample_assessment": "What phenomenon is primarily responsible for the redshift observed in distant galaxies? A) Doppler effect B) Gravitational lensing C) Galactic rotation D) Cosmic microwave background"
+    },
+    {
+      "code": "SC.12.ENV.5.1",
+      "benchmark": "Assess the impact of human activity on climate change and environmental sustainability.",
+      "topics": [
+        "Climate Change",
+        "Sustainability",
+        "Human Impact"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate human contributions to climate change and explore solutions for sustainability.",
+      "essential_questions": [
+        "How are human activities influencing climate change?",
+        "What strategies can mitigate environmental damage and promote sustainability?"
+      ],
+      "learning_targets": [
+        "I can identify human activities that contribute to climate change.",
+        "I can analyze the effects of climate change on ecosystems.",
+        "I can propose sustainable solutions to reduce environmental impact."
+      ],
+      "vocabulary": [
+        "carbon footprint",
+        "greenhouse gases",
+        "renewable resources",
+        "deforestation",
+        "global warming",
+        "carbon sequestration"
+      ],
+      "sample_assessment": "Which of the following is an example of a non-renewable resource? A) Solar energy B) Wind power C) Natural gas D) Geothermal energy"
+    },
+    {
+      "code": "SC.12.GEN.6.1",
+      "benchmark": "Explore advancements in genetic engineering and their implications in medicine and agriculture.",
+      "topics": [
+        "Genetic Engineering",
+        "Biotechnology",
+        "Ethics"
+      ],
+      "dok": 4,
+      "item_specs": "Students investigate genetic engineering technologies and their societal and ethical impacts.",
+      "essential_questions": [
+        "What are the potential benefits and risks of genetic engineering?",
+        "How does biotechnology impact medicine and agriculture?"
+      ],
+      "learning_targets": [
+        "I can describe the principles of genetic engineering.",
+        "I can evaluate the ethical implications of genetic technologies.",
+        "I can understand the applications of genetic engineering in various industries."
+      ],
+      "vocabulary": [
+        "CRISPR",
+        "genome",
+        "transgenic",
+        "genetic modification",
+        "bioethics",
+        "gene therapy"
+      ],
+      "sample_assessment": "Which technique allows for precise editing of an organism's genome? A) Cloning B) Fermentation C) CRISPR-Cas9 D) Selective breeding"
     }
   ]
 }

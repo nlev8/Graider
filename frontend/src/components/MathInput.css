@@ -1,0 +1,125 @@
+.math-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.math-input-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.math-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbar-toggle {
+  padding: 6px 12px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  width: fit-content;
+  transition: background 0.2s;
+}
+
+.toolbar-toggle:hover {
+  background: #2563eb;
+}
+
+.toolbar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.symbol-row, .template-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.row-label {
+  font-size: 12px;
+  color: #64748b;
+  min-width: 70px;
+}
+
+.symbol-btn, .template-btn {
+  padding: 4px 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.symbol-btn:hover, .template-btn:hover {
+  background: #e2e8f0;
+}
+
+.latex-input {
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.latex-input:focus {
+  outline: 2px solid #3b82f6;
+  border-color: transparent;
+}
+
+.math-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  min-height: 40px;
+}
+
+.preview-label {
+  font-size: 12px;
+  color: #64748b;
+  min-width: 60px;
+}
+
+.preview-content {
+  flex: 1;
+  font-size: 18px;
+}
+
+.preview-placeholder {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.preview-error {
+  color: #ef4444;
+  font-size: 12px;
+}

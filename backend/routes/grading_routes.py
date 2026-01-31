@@ -168,3 +168,292 @@ def delete_result():
 # remain in app.py for Phase 1 due to their complexity and tight
 # coupling with global state. They will be extracted in Phase 3
 # when we implement proper state management.
+
+
+# =============================================================================
+# STEM SUBJECT GRADING ENDPOINTS
+# =============================================================================
+
+@grading_bp.route('/api/grade-math', methods=['POST'])
+def grade_math():
+    """
+    Grade a math question using SymPy for equivalence checking.
+
+    Request body:
+    {
+        "question": {
+            "correctAnswer": "\\frac{1}{2}",
+            "acceptEquivalent": true,
+            "showWork": false,
+            "points": 1
+        },
+        "studentAnswer": "0.5"
+    }
+    """
+    try:
+        from backend.services.stem_grading import grade_math_question
+    except ImportError:
+        return jsonify({"error": "STEM grading service not available"}), 500
+
+    data = request.json
+    question = data.get('question', {})
+    student_answer = data.get('studentAnswer', '')
+
+    result = grade_math_question(question, student_answer)
+    return jsonify(result)
+
+
+@grading_bp.route('/api/grade-data-table', methods=['POST'])
+def grade_data_table():
+    """
+    Grade a science data table with tolerance for numerical values.
+
+    Request body:
+    {
+        "expectedTable": {
+            "headers": ["Time (s)", "Temperature (°C)"],
+            "units": ["s", "°C"],
+            "data": [["0", "20"], ["30", "25"], ["60", "28"]]
+        },
+        "studentTable": {
+            "headers": ["Time (s)", "Temperature (°C)"],
+            "units": ["s", "°C"],
+            "data": [["0", "20"], ["30", "24.5"], ["60", "29"]]
+        },
+        "tolerancePercent": 5
+    }
+    """
+    try:
+        from backend.services.stem_grading import grade_data_table as grade_table
+    except ImportError:
+        return jsonify({"error": "STEM grading service not available"}), 500
+
+    data = request.json
+    expected_table = data.get('expectedTable', {})
+    student_table = data.get('studentTable', {})
+    tolerance = data.get('tolerancePercent', 5.0)
+
+    result = grade_table(expected_table, student_table, tolerance)
+    return jsonify(result)
+
+
+@grading_bp.route('/api/grade-coordinates', methods=['POST'])
+def grade_coordinates():
+    """
+    Grade a geography coordinate question with distance tolerance.
+
+    Request body:
+    {
+        "expected": {"latitude": 40.7128, "longitude": -74.0060},
+        "student": {"latitude": 40.72, "longitude": -74.01},
+        "toleranceKm": 50
+    }
+    """
+    try:
+        from backend.services.stem_grading import grade_coordinate_question
+    except ImportError:
+        return jsonify({"error": "STEM grading service not available"}), 500
+
+    data = request.json
+    expected = data.get('expected', {})
+    student = data.get('student', {})
+    tolerance_km = data.get('toleranceKm', 50)
+
+    result = grade_coordinate_question(expected, student, tolerance_km)
+    return jsonify(result)
+
+
+@grading_bp.route('/api/grade-place-name', methods=['POST'])
+def grade_place_name():
+    """
+    Grade a geography place name question accepting alternatives.
+
+    Request body:
+    {
+        "expectedNames": ["United Kingdom", "UK", "Britain", "Great Britain"],
+        "studentAnswer": "UK"
+    }
+    """
+    try:
+        from backend.services.stem_grading import grade_place_name as grade_name
+    except ImportError:
+        return jsonify({"error": "STEM grading service not available"}), 500
+
+    data = request.json
+    expected_names = data.get('expectedNames', [])
+    student_answer = data.get('studentAnswer', '')
+
+    result = grade_name(expected_names, student_answer)
+    return jsonify(result)
+
+
+@grading_bp.route('/api/check-math-equivalence', methods=['POST'])
+def check_math_equivalence():
+    """
+    Check if two math expressions are equivalent (utility endpoint).
+
+    Request body:
+    {
+        "expression1": "\\frac{1}{2}",
+        "expression2": "0.5"
+    }
+    """
+    try:
+        from backend.services.stem_grading import check_math_equivalence as check_equiv
+    except ImportError:
+        return jsonify({"error": "STEM grading service not available"}), 500
+
+    data = request.json
+    expr1 = data.get('expression1', '')
+    expr2 = data.get('expression2', '')
+
+    result = check_equiv(expr1, expr2)
+    return jsonify(result)
+
+
+@grading_bp.route('/api/export-focus-csv', methods=['POST'])
+def export_focus_csv():
+    """
+    Export grades as CSV for Focus SIS import.
+    Uses Claude AI to match student names to IDs from roster data.
+
+    Format: Student_ID,Score
+    """
+    import json
+    import anthropic
+
+    data = request.json
+    results = data.get('results', [])
+    assignment = data.get('assignment', 'Assignment')
+    period = data.get('period', 'all')
+
+    if not results:
+        return jsonify({"error": "No results to export"})
+
+    # Load API key
+    api_key = None
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.startswith('ANTHROPIC_API_KEY='):
+                api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
+                break
+
+    # Load roster data to get student IDs
+    rosters_dir = Path.home() / '.graider_data' / 'rosters'
+    periods_dir = Path.home() / '.graider_data' / 'periods'
+
+    roster_students = []
+    # Load from rosters
+    if rosters_dir.exists():
+        for f in rosters_dir.glob('*.csv'):
+            try:
+                with open(f, 'r') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        # Try common column names for ID and name
+                        student_id = row.get('Student_ID') or row.get('student_id') or row.get('ID') or row.get('id') or ''
+                        name = row.get('Student_Name') or row.get('student_name') or row.get('Name') or row.get('name') or ''
+                        first = row.get('First_Name') or row.get('first_name') or row.get('First') or ''
+                        last = row.get('Last_Name') or row.get('last_name') or row.get('Last') or ''
+                        if first and last:
+                            name = f"{first} {last}"
+                        if student_id and name:
+                            roster_students.append({'id': student_id, 'name': name})
+            except:
+                pass
+
+    # Load from periods
+    if periods_dir.exists():
+        for f in periods_dir.glob('*.csv'):
+            try:
+                with open(f, 'r') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        student_id = row.get('Student_ID') or row.get('student_id') or row.get('ID') or row.get('id') or ''
+                        name = row.get('Student_Name') or row.get('student_name') or row.get('Name') or row.get('name') or ''
+                        first = row.get('First_Name') or row.get('first_name') or row.get('First') or ''
+                        last = row.get('Last_Name') or row.get('last_name') or row.get('Last') or ''
+                        if first and last:
+                            name = f"{first} {last}"
+                        if student_id and name:
+                            roster_students.append({'id': student_id, 'name': name})
+            except:
+                pass
+
+    # Build list of students to match
+    students_to_match = []
+    for r in results:
+        student_name = r.get('student_name', '')
+        student_id = r.get('student_id', '')
+        score = r.get('score', 0)
+        if student_id:
+            students_to_match.append({'name': student_name, 'id': student_id, 'score': score})
+        else:
+            students_to_match.append({'name': student_name, 'id': None, 'score': score})
+
+    # Use Claude to match names to IDs if we have roster data and missing IDs
+    needs_matching = [s for s in students_to_match if not s['id']]
+
+    if needs_matching and roster_students and api_key:
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+
+            prompt = f"""Match these student names from grading results to their Student IDs from the roster.
+
+ROSTER (Student_ID, Name):
+{chr(10).join(f"{s['id']}, {s['name']}" for s in roster_students[:100])}
+
+STUDENTS TO MATCH:
+{chr(10).join(s['name'] for s in needs_matching)}
+
+Return ONLY a JSON object mapping each student name to their ID. If no match found, use "UNMATCHED".
+Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMATCHED"}}"""
+
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            # Parse response
+            response_text = message.content[0].text
+            # Extract JSON from response
+            import re
+            json_match = re.search(r'\{[^{}]+\}', response_text, re.DOTALL)
+            if json_match:
+                matches = json.loads(json_match.group())
+                # Apply matches
+                for s in students_to_match:
+                    if not s['id'] and s['name'] in matches:
+                        matched_id = matches[s['name']]
+                        if matched_id != 'UNMATCHED':
+                            s['id'] = matched_id
+        except Exception as e:
+            print(f"Claude matching error: {e}")
+            # Continue without matching
+
+    # Generate CSV
+    csv_lines = ['Student_ID,Score']
+    matched_count = 0
+    for s in students_to_match:
+        if s['id'] and s['id'] != 'UNMATCHED':
+            csv_lines.append(f"{s['id']},{s['score']}")
+            matched_count += 1
+        else:
+            # Include with name as fallback
+            csv_lines.append(f"# {s['name']},{s['score']}")
+
+    csv_content = '\n'.join(csv_lines)
+
+    # Generate filename
+    safe_assignment = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assignment).strip().replace(' ', '_')
+    filename = f"focus_{safe_assignment}_{period}.csv"
+
+    return jsonify({
+        "csv": csv_content,
+        "filename": filename,
+        "count": matched_count,
+        "total": len(students_to_match),
+        "unmatched": len(students_to_match) - matched_count
+    })

@@ -1,0 +1,323 @@
+{
+  "math": {
+    "activity_types": [
+      {
+        "id": "problem_solving",
+        "name": "Problem-Solving Workshop",
+        "description": "Students work through progressively challenging problems",
+        "structure": [
+          "Warm-up problem (5 min)",
+          "Guided practice with teacher (10 min)",
+          "Partner work on similar problems (15 min)",
+          "Challenge problem for early finishers",
+          "Class discussion of strategies (5 min)"
+        ],
+        "materials": ["Whiteboards", "Markers", "Problem sets", "Calculator (if appropriate)"]
+      },
+      {
+        "id": "manipulatives",
+        "name": "Hands-On Manipulatives",
+        "description": "Concrete objects to explore abstract concepts",
+        "structure": [
+          "Introduction of concept (5 min)",
+          "Distribute manipulatives and explore (10 min)",
+          "Guided activity with manipulatives (15 min)",
+          "Connect to abstract representation (10 min)",
+          "Practice without manipulatives (10 min)"
+        ],
+        "materials": ["Algebra tiles", "Fraction bars", "Base-ten blocks", "Geometric solids"]
+      },
+      {
+        "id": "real_world",
+        "name": "Real-World Application",
+        "description": "Connect math concepts to authentic situations",
+        "structure": [
+          "Present real-world scenario (5 min)",
+          "Identify mathematical elements (5 min)",
+          "Model solution process (10 min)",
+          "Students solve similar scenario (15 min)",
+          "Present and compare approaches (10 min)"
+        ],
+        "materials": ["Scenario cards", "Data sets", "Calculators", "Graph paper"]
+      },
+      {
+        "id": "math_talk",
+        "name": "Number Talk / Math Talk",
+        "description": "Discussion-based mental math strategies",
+        "structure": [
+          "Present problem (no paper/pencil)",
+          "Think time (1-2 min)",
+          "Students share strategies verbally",
+          "Record strategies on board",
+          "Compare efficiency of methods"
+        ],
+        "materials": ["Whiteboard/projector", "Number talk prompt"]
+      },
+      {
+        "id": "station_rotation",
+        "name": "Math Stations",
+        "description": "Rotate through different skill-building activities",
+        "structure": [
+          "Introduction and expectations (5 min)",
+          "Station 1: Teacher-led small group (12 min)",
+          "Station 2: Technology/online practice (12 min)",
+          "Station 3: Collaborative problem-solving (12 min)",
+          "Wrap-up and reflection (4 min)"
+        ],
+        "materials": ["Station materials", "Devices", "Task cards", "Manipulatives"]
+      }
+    ],
+    "differentiation_strategies": {
+      "struggling": [
+        "Provide manipulatives for concrete representation",
+        "Use graphic organizers for problem-solving steps",
+        "Reduce number of problems, increase depth",
+        "Pair with supportive partner",
+        "Allow calculator for computation when focusing on concepts",
+        "Provide worked examples to reference"
+      ],
+      "advanced": [
+        "Extend with multi-step problems",
+        "Ask students to create their own problems",
+        "Explore multiple solution methods",
+        "Connect to higher-level concepts",
+        "Lead peer tutoring sessions",
+        "Investigate real-world applications"
+      ]
+    }
+  },
+
+  "science": {
+    "activity_types": [
+      {
+        "id": "lab_investigation",
+        "name": "Laboratory Investigation",
+        "description": "Hands-on experiment following scientific method",
+        "structure": [
+          "Pre-lab discussion and safety (10 min)",
+          "Review procedure and hypothesis (5 min)",
+          "Conduct experiment (20-30 min)",
+          "Record observations and data",
+          "Clean up and post-lab discussion (10 min)"
+        ],
+        "materials": ["Lab materials (specify)", "Lab notebooks", "Safety equipment", "Data tables"]
+      },
+      {
+        "id": "inquiry_based",
+        "name": "Inquiry-Based Learning",
+        "description": "Student-driven investigation",
+        "structure": [
+          "Present phenomenon or problem (5 min)",
+          "Students generate questions (5 min)",
+          "Design investigation (10 min)",
+          "Conduct investigation (20 min)",
+          "Share findings and discuss (10 min)"
+        ],
+        "materials": ["Open-ended materials", "Research resources", "Documentation tools"]
+      },
+      {
+        "id": "model_building",
+        "name": "Scientific Modeling",
+        "description": "Create and revise models to explain phenomena",
+        "structure": [
+          "Observe phenomenon (5 min)",
+          "Create initial model (10 min)",
+          "Share and critique models (10 min)",
+          "Gather new information (10 min)",
+          "Revise models (10 min)"
+        ],
+        "materials": ["Modeling materials", "Anchor phenomenon", "Information sources"]
+      },
+      {
+        "id": "data_analysis",
+        "name": "Data Analysis Activity",
+        "description": "Work with real scientific data sets",
+        "structure": [
+          "Introduce data context (5 min)",
+          "Explore data set (10 min)",
+          "Identify patterns and trends (10 min)",
+          "Draw evidence-based conclusions (10 min)",
+          "Present findings (10 min)"
+        ],
+        "materials": ["Data sets", "Graph paper or software", "Calculators", "Analysis guides"]
+      },
+      {
+        "id": "cer_writing",
+        "name": "Claim-Evidence-Reasoning",
+        "description": "Scientific argumentation and writing",
+        "structure": [
+          "Review CER framework (5 min)",
+          "Present question or claim (5 min)",
+          "Gather evidence from sources (15 min)",
+          "Write CER paragraph (15 min)",
+          "Peer review and revise (10 min)"
+        ],
+        "materials": ["CER template", "Evidence sources", "Rubric"]
+      }
+    ],
+    "differentiation_strategies": {
+      "struggling": [
+        "Provide structured data tables",
+        "Use sentence stems for claims and evidence",
+        "Pre-label diagrams for completion",
+        "Reduce variables in experiments",
+        "Partner with peer mentor",
+        "Provide word banks for scientific vocabulary"
+      ],
+      "advanced": [
+        "Design own investigation",
+        "Analyze additional variables",
+        "Research real-world applications",
+        "Present findings to class",
+        "Mentor struggling peers",
+        "Connect to current scientific research"
+      ]
+    }
+  },
+
+  "geography": {
+    "activity_types": [
+      {
+        "id": "map_skills",
+        "name": "Map Skills Workshop",
+        "description": "Practice reading and creating maps",
+        "structure": [
+          "Review map elements (5 min)",
+          "Guided practice with sample map (10 min)",
+          "Partner map reading challenge (15 min)",
+          "Create or modify a map (15 min)",
+          "Share and discuss (5 min)"
+        ],
+        "materials": ["Various maps (physical, political, thematic)", "Blank maps", "Colored pencils", "Atlas"]
+      },
+      {
+        "id": "geo_inquiry",
+        "name": "Geographic Inquiry",
+        "description": "Investigate geographic questions",
+        "structure": [
+          "Present geographic question (5 min)",
+          "Examine multiple sources (15 min)",
+          "Analyze spatial patterns (10 min)",
+          "Form conclusions (10 min)",
+          "Discuss implications (10 min)"
+        ],
+        "materials": ["Maps", "Data sources", "Geographic images", "Analysis frameworks"]
+      },
+      {
+        "id": "virtual_field_trip",
+        "name": "Virtual Field Trip",
+        "description": "Explore locations using digital tools",
+        "structure": [
+          "Introduction to location (5 min)",
+          "Guided exploration (15 min)",
+          "Scavenger hunt or observation task (15 min)",
+          "Compare to local geography (10 min)",
+          "Reflection and discussion (5 min)"
+        ],
+        "materials": ["Google Earth/Maps", "Virtual tour links", "Observation worksheet", "Devices"]
+      },
+      {
+        "id": "case_study",
+        "name": "Geographic Case Study",
+        "description": "Deep dive into specific location or issue",
+        "structure": [
+          "Introduce case (5 min)",
+          "Provide background materials (10 min)",
+          "Group analysis (15 min)",
+          "Present findings (10 min)",
+          "Connect to broader themes (10 min)"
+        ],
+        "materials": ["Case study materials", "Maps of region", "Supplementary data", "Presentation tools"]
+      },
+      {
+        "id": "human_environment",
+        "name": "Human-Environment Interaction",
+        "description": "Explore how humans affect and are affected by geography",
+        "structure": [
+          "Present scenario or image (5 min)",
+          "Identify human and environmental factors (10 min)",
+          "Analyze interactions (15 min)",
+          "Predict outcomes or solutions (10 min)",
+          "Class discussion (10 min)"
+        ],
+        "materials": ["Before/after images", "Case studies", "Data on environmental change"]
+      }
+    ],
+    "differentiation_strategies": {
+      "struggling": [
+        "Provide labeled maps for reference",
+        "Use graphic organizers for note-taking",
+        "Pre-select key information sources",
+        "Pair with geography mentor",
+        "Allow verbal responses to map questions",
+        "Provide sentence starters for analysis"
+      ],
+      "advanced": [
+        "Analyze multiple map projections",
+        "Create thematic maps from raw data",
+        "Research current geographic issues",
+        "Compare regions independently",
+        "Lead class discussions",
+        "Propose solutions to geographic challenges"
+      ]
+    }
+  },
+
+  "social_studies": {
+    "activity_types": [
+      {
+        "id": "primary_source",
+        "name": "Primary Source Analysis",
+        "description": "Examine historical documents and artifacts",
+        "structure": [
+          "Introduction to source (5 min)",
+          "Silent reading/observation (5 min)",
+          "Guided analysis questions (15 min)",
+          "Partner discussion (10 min)",
+          "Class synthesis (10 min)"
+        ],
+        "materials": ["Primary sources", "Analysis worksheets", "Context materials"]
+      },
+      {
+        "id": "debate",
+        "name": "Structured Academic Debate",
+        "description": "Argue multiple perspectives on historical/civic issues",
+        "structure": [
+          "Present topic and sides (5 min)",
+          "Research and prepare arguments (15 min)",
+          "Opening statements (5 min)",
+          "Rebuttals and discussion (15 min)",
+          "Reflection and synthesis (5 min)"
+        ],
+        "materials": ["Research materials", "Debate structure guide", "Timer"]
+      },
+      {
+        "id": "simulation",
+        "name": "Historical Simulation",
+        "description": "Role-play historical events or processes",
+        "structure": [
+          "Context and role assignment (10 min)",
+          "Simulation activity (25 min)",
+          "Debrief and discuss (10 min)"
+        ],
+        "materials": ["Role cards", "Simulation materials", "Background readings"]
+      }
+    ],
+    "differentiation_strategies": {
+      "struggling": [
+        "Provide annotated primary sources",
+        "Use graphic organizers for cause/effect",
+        "Partner with peer mentor",
+        "Allow verbal responses",
+        "Provide vocabulary support"
+      ],
+      "advanced": [
+        "Analyze multiple perspectives",
+        "Research additional sources",
+        "Lead discussion groups",
+        "Create original analysis",
+        "Connect to current events"
+      ]
+    }
+  }
+}

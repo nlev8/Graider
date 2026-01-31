@@ -464,6 +464,51 @@ export async function getAccommodationStats() {
   return fetchApi('/api/accommodation-stats')
 }
 
+// ============ Student Portal ============
+
+export async function publishAssessmentToPortal(assessment, settings = {}) {
+  return fetchApi('/api/publish-assessment', {
+    method: 'POST',
+    body: JSON.stringify({ assessment, settings }),
+  })
+}
+
+export async function getPublishedAssessments() {
+  return fetchApi('/api/teacher/assessments')
+}
+
+export async function getAssessmentResults(joinCode) {
+  return fetchApi(`/api/teacher/assessment/${joinCode}/results`)
+}
+
+export async function toggleAssessmentStatus(joinCode) {
+  return fetchApi(`/api/teacher/assessment/${joinCode}/toggle`, {
+    method: 'POST',
+  })
+}
+
+export async function deletePublishedAssessment(joinCode) {
+  return fetchApi(`/api/teacher/assessment/${joinCode}`, {
+    method: 'DELETE',
+  })
+}
+
+// Student-facing endpoints
+export async function getStudentAssessment(joinCode) {
+  return fetchApi(`/api/student/join/${joinCode}`)
+}
+
+export async function submitStudentAssessment(joinCode, studentName, answers, timeTakenSeconds) {
+  return fetchApi(`/api/student/submit/${joinCode}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      student_name: studentName,
+      answers,
+      time_taken_seconds: timeTakenSeconds,
+    }),
+  })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -520,4 +565,12 @@ export default {
   exportAccommodations,
   clearAllAccommodations,
   getAccommodationStats,
+  // Student Portal
+  publishAssessmentToPortal,
+  getPublishedAssessments,
+  getAssessmentResults,
+  toggleAssessmentStatus,
+  deletePublishedAssessment,
+  getStudentAssessment,
+  submitStudentAssessment,
 }

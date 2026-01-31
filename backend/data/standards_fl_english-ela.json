@@ -1,12 +1,16 @@
 {
   "state": "FL",
   "subject": "English/ELA",
-  "grade": "6-8",
+  "grade": "6-12",
   "standards": [
     {
       "code": "ELA.6.R.1.1",
       "benchmark": "Analyze how the interaction between characters, setting, and plot develops the conflict in a literary text.",
-      "topics": ["Literary Elements", "Character", "Conflict"],
+      "topics": [
+        "Literary Elements",
+        "Character",
+        "Conflict"
+      ],
       "dok": 3,
       "item_specs": "Students analyze how story elements work together to develop conflict.",
       "essential_questions": [
@@ -18,13 +22,25 @@
         "I can analyze how characters' interactions create conflict.",
         "I can explain how plot events develop conflict."
       ],
-      "vocabulary": ["conflict", "setting", "character", "plot", "internal conflict", "external conflict", "resolution"],
+      "vocabulary": [
+        "conflict",
+        "setting",
+        "character",
+        "plot",
+        "internal conflict",
+        "external conflict",
+        "resolution"
+      ],
       "sample_assessment": "In a story where a character must survive in the wilderness, the PRIMARY conflict is: A) Character vs. Character B) Character vs. Nature C) Character vs. Self D) Character vs. Society"
     },
     {
       "code": "ELA.6.R.1.2",
       "benchmark": "Analyze the development of stated or implied theme(s) throughout a literary text.",
-      "topics": ["Theme", "Literary Analysis", "Inference"],
+      "topics": [
+        "Theme",
+        "Literary Analysis",
+        "Inference"
+      ],
       "dok": 3,
       "item_specs": "Students analyze how theme develops through text evidence.",
       "essential_questions": [
@@ -36,13 +52,24 @@
         "I can infer implied themes using text evidence.",
         "I can trace how theme develops throughout a text."
       ],
-      "vocabulary": ["theme", "stated theme", "implied theme", "universal theme", "motif", "message"],
+      "vocabulary": [
+        "theme",
+        "stated theme",
+        "implied theme",
+        "universal theme",
+        "motif",
+        "message"
+      ],
       "sample_assessment": "A story about a character who learns from mistakes and grows as a person MOST likely has the theme of: A) The importance of wealth B) Personal growth through adversity C) The dangers of technology D) Good always defeats evil"
     },
     {
       "code": "ELA.6.R.2.1",
       "benchmark": "Explain how individual text sections and/or features convey meaning in texts.",
-      "topics": ["Text Structure", "Text Features", "Informational Text"],
+      "topics": [
+        "Text Structure",
+        "Text Features",
+        "Informational Text"
+      ],
       "dok": 2,
       "item_specs": "Students explain how text structure and features contribute to meaning.",
       "essential_questions": [
@@ -54,13 +81,26 @@
         "I can analyze how text sections contribute to meaning.",
         "I can explain how structure supports the author's purpose."
       ],
-      "vocabulary": ["text feature", "heading", "subheading", "caption", "diagram", "text structure", "chronological", "compare/contrast"],
+      "vocabulary": [
+        "text feature",
+        "heading",
+        "subheading",
+        "caption",
+        "diagram",
+        "text structure",
+        "chronological",
+        "compare/contrast"
+      ],
       "sample_assessment": "An author uses headings and subheadings MAINLY to: A) Make the text longer B) Organize information and guide readers C) Add visual interest D) Meet page requirements"
     },
     {
       "code": "ELA.6.R.2.4",
       "benchmark": "Track the development of an argument, analyzing the types of reasoning used.",
-      "topics": ["Argument", "Reasoning", "Rhetoric"],
+      "topics": [
+        "Argument",
+        "Reasoning",
+        "Rhetoric"
+      ],
       "dok": 3,
       "item_specs": "Students analyze how arguments are constructed and supported.",
       "essential_questions": [
@@ -72,13 +112,25 @@
         "I can analyze the evidence supporting an argument.",
         "I can evaluate the reasoning used in an argument."
       ],
-      "vocabulary": ["argument", "claim", "evidence", "reasoning", "logic", "rhetorical appeal", "counterargument"],
+      "vocabulary": [
+        "argument",
+        "claim",
+        "evidence",
+        "reasoning",
+        "logic",
+        "rhetorical appeal",
+        "counterargument"
+      ],
       "sample_assessment": "An author supports a claim with statistics, expert opinions, and real-world examples. This is an example of: A) Emotional appeal B) Logical reasoning C) Personal opinion D) Circular reasoning"
     },
     {
       "code": "ELA.6.R.3.1",
       "benchmark": "Analyze how figurative language creates mood, contributes to meaning, and reveals character in text.",
-      "topics": ["Figurative Language", "Literary Devices", "Author's Craft"],
+      "topics": [
+        "Figurative Language",
+        "Literary Devices",
+        "Author's Craft"
+      ],
       "dok": 3,
       "item_specs": "Students analyze the effect of figurative language on meaning and mood.",
       "essential_questions": [
@@ -90,13 +142,25 @@
         "I can explain how figurative language creates mood.",
         "I can analyze how figurative language reveals character."
       ],
-      "vocabulary": ["figurative language", "simile", "metaphor", "personification", "hyperbole", "mood", "imagery"],
+      "vocabulary": [
+        "figurative language",
+        "simile",
+        "metaphor",
+        "personification",
+        "hyperbole",
+        "mood",
+        "imagery"
+      ],
       "sample_assessment": "'The wind howled angrily through the trees' is an example of: A) Simile B) Metaphor C) Personification D) Hyperbole"
     },
     {
       "code": "ELA.6.W.1.1",
       "benchmark": "Write argumentative texts to support claims using logical reasoning and relevant evidence.",
-      "topics": ["Argumentative Writing", "Claims", "Evidence"],
+      "topics": [
+        "Argumentative Writing",
+        "Claims",
+        "Evidence"
+      ],
       "dok": 3,
       "item_specs": "Students write arguments with claims, evidence, and reasoning.",
       "essential_questions": [
@@ -108,13 +172,25 @@
         "I can support my claim with relevant evidence.",
         "I can use logical reasoning to connect evidence to my claim."
       ],
-      "vocabulary": ["argumentative writing", "claim", "evidence", "reasoning", "counterclaim", "rebuttal", "credible sources"],
+      "vocabulary": [
+        "argumentative writing",
+        "claim",
+        "evidence",
+        "reasoning",
+        "counterclaim",
+        "rebuttal",
+        "credible sources"
+      ],
       "sample_assessment": "Which is the BEST example of a clear, arguable claim? A) Dogs are animals B) Dogs make better pets than cats for active families C) I like dogs D) Dogs have four legs"
     },
     {
       "code": "ELA.6.W.2.1",
       "benchmark": "Write personal or fictional narratives using narrative techniques, precise words, and phrases.",
-      "topics": ["Narrative Writing", "Techniques", "Word Choice"],
+      "topics": [
+        "Narrative Writing",
+        "Techniques",
+        "Word Choice"
+      ],
       "dok": 3,
       "item_specs": "Students write narratives using literary techniques and precise language.",
       "essential_questions": [
@@ -126,13 +202,25 @@
         "I can choose precise words to create effect.",
         "I can develop plot, character, and setting in my writing."
       ],
-      "vocabulary": ["narrative", "dialogue", "pacing", "sensory details", "precise language", "transitions", "point of view"],
+      "vocabulary": [
+        "narrative",
+        "dialogue",
+        "pacing",
+        "sensory details",
+        "precise language",
+        "transitions",
+        "point of view"
+      ],
       "sample_assessment": "Adding dialogue to a narrative helps to: A) Make it longer B) Develop characters and advance the plot C) Avoid description D) Meet word count requirements"
     },
     {
       "code": "ELA.6.C.1.3",
       "benchmark": "Using knowledge of words and their meanings, identify words and phrases that rhyme.",
-      "topics": ["Vocabulary", "Word Study", "Phonics"],
+      "topics": [
+        "Vocabulary",
+        "Word Study",
+        "Phonics"
+      ],
       "dok": 1,
       "item_specs": "Students identify rhyming words and patterns.",
       "essential_questions": [
@@ -144,8 +232,1056 @@
         "I can explain rhyme schemes in poetry.",
         "I can use rhyme effectively in my own writing."
       ],
-      "vocabulary": ["rhyme", "rhyme scheme", "end rhyme", "internal rhyme", "slant rhyme", "couplet"],
+      "vocabulary": [
+        "rhyme",
+        "rhyme scheme",
+        "end rhyme",
+        "internal rhyme",
+        "slant rhyme",
+        "couplet"
+      ],
       "sample_assessment": "Which pair of words rhyme? A) cat/car B) light/night C) run/ran D) book/look"
+    },
+    {
+      "code": "ELA.7.R.1.1",
+      "benchmark": "Analyze how specific word choices and figurative language contribute to meaning and tone in a literary text.",
+      "topics": [
+        "Word Choice",
+        "Figurative Language",
+        "Tone"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze the impact of language choices on the meaning and emotion conveyed by the text.",
+      "essential_questions": [
+        "How do word choices affect the tone of a text?",
+        "What role does figurative language play in conveying meaning?"
+      ],
+      "learning_targets": [
+        "I can identify examples of figurative language in a text.",
+        "I can explain how an author's word choice contributes to the tone of a text.",
+        "I can analyze how specific language choices affect meaning."
+      ],
+      "vocabulary": [
+        "tone",
+        "figurative language",
+        "metaphor",
+        "simile",
+        "alliteration",
+        "connotation",
+        "denotation"
+      ],
+      "sample_assessment": "In the phrase 'the sun smiled down on them,' what is the effect of the figurative language? A) It creates a bright, cheerful tone. B) It suggests the sun is angry. C) It implies the day is cold. D) It creates a sense of fear."
+    },
+    {
+      "code": "ELA.7.R.2.1",
+      "benchmark": "Determine the theme or central idea of a text and analyze its development over the course of the text.",
+      "topics": [
+        "Theme",
+        "Central Idea",
+        "Textual Analysis"
+      ],
+      "dok": 3,
+      "item_specs": "Students identify and trace the development of a theme or central idea in a text.",
+      "essential_questions": [
+        "How can a theme be identified and supported throughout a text?",
+        "What is the difference between theme and central idea?"
+      ],
+      "learning_targets": [
+        "I can identify the central idea of a text.",
+        "I can trace how the theme is developed through character actions and plot events.",
+        "I can support my analysis with evidence from the text."
+      ],
+      "vocabulary": [
+        "theme",
+        "central idea",
+        "supporting details",
+        "textual evidence",
+        "summary"
+      ],
+      "sample_assessment": "What is the theme of the story? A) Friendship always wins B) The value of hard work C) Overcoming adversity D) Fear of the unknown"
+    },
+    {
+      "code": "ELA.7.R.3.1",
+      "benchmark": "Analyze how an author develops and contrasts the points of view of different characters or narrators in a text.",
+      "topics": [
+        "Point of View",
+        "Character Perspective",
+        "Narrative Techniques"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how different points of view impact the reader's understanding of the story.",
+      "essential_questions": [
+        "How does the author develop different characters' points of view?",
+        "What is the effect of contrasting perspectives in a narrative?"
+      ],
+      "learning_targets": [
+        "I can identify the point of view of different characters.",
+        "I can analyze how different perspectives shape the story.",
+        "I can explain the author's purpose in contrasting characters' points of view."
+      ],
+      "vocabulary": [
+        "point of view",
+        "narrator",
+        "perspective",
+        "contrast",
+        "first-person",
+        "third-person"
+      ],
+      "sample_assessment": "Which of the following best contrasts the points of view of two characters in the story? A) They both agree on the outcome. B) One is optimistic while the other is pessimistic. C) They both have the same favorite hobby. D) One character doesn't speak."
+    },
+    {
+      "code": "ELA.7.W.1.1",
+      "benchmark": "Write arguments to support claims with clear reasons and relevant evidence.",
+      "topics": [
+        "Argumentative Writing",
+        "Claims",
+        "Evidence"
+      ],
+      "dok": 3,
+      "item_specs": "Students construct well-reasoned arguments supported by evidence.",
+      "essential_questions": [
+        "What makes an argument effective?",
+        "How can evidence support a claim?"
+      ],
+      "learning_targets": [
+        "I can develop a clear claim with strong reasons.",
+        "I can find and incorporate relevant evidence into my argument.",
+        "I can organize information to strengthen my argument."
+      ],
+      "vocabulary": [
+        "argument",
+        "claim",
+        "evidence",
+        "support",
+        "persuasion",
+        "counterargument"
+      ],
+      "sample_assessment": "Which of the following is the best reason to support the claim that students should have longer recess periods? A) It makes school more fun. B) Longer recess improves focus and academic performance. C) Recess is a tradition. D) Everyone loves the playground."
+    },
+    {
+      "code": "ELA.7.W.2.1",
+      "benchmark": "Write informative/explanatory texts to examine a topic and convey ideas, concepts, and information through the selection, organization, and analysis of relevant content.",
+      "topics": [
+        "Informative Writing",
+        "Explanatory Text",
+        "Organization"
+      ],
+      "dok": 3,
+      "item_specs": "Students write clear informative texts that effectively organize and present information.",
+      "essential_questions": [
+        "How do writers effectively organize information for clarity?",
+        "What makes information convincing and understandable?"
+      ],
+      "learning_targets": [
+        "I can select a topic and gather relevant information about it.",
+        "I can organize information logically using subheadings and visuals.",
+        "I can analyze and explain information clearly through writing."
+      ],
+      "vocabulary": [
+        "explanatory",
+        "informative",
+        "thesis",
+        "organization",
+        "coherence",
+        "structure"
+      ],
+      "sample_assessment": "When writing an informative text about the importance of renewable energy, which of the following sources would NOT be relevant? A) A scientific study about solar power B) An opinion blog about video games C) A report on government renewable energy policies D) Statistics on wind energy usage"
+    },
+    {
+      "code": "ELA.7.SL.1.1",
+      "benchmark": "Engage effectively in a range of collaborative discussions (one-on-one, in groups, teacher-led) with diverse partners, building on others\u2019 ideas and expressing their own clearly.",
+      "topics": [
+        "Collaborative Discussions",
+        "Communication",
+        "Active Listening"
+      ],
+      "dok": 2,
+      "item_specs": "Students participate in discussions, building on ideas and articulating their own points clearly.",
+      "essential_questions": [
+        "How can we have productive discussions in a group?",
+        "What strategies help in expressing ideas clearly during discussions?"
+      ],
+      "learning_targets": [
+        "I can listen actively and contribute to discussions.",
+        "I can express my ideas clearly and persuasively.",
+        "I can build on the ideas of others during conversation."
+      ],
+      "vocabulary": [
+        "discussion",
+        "communication",
+        "active listening",
+        "collaboration",
+        "perspective",
+        "engagement"
+      ],
+      "sample_assessment": "During a group discussion on climate change, what is the best way to build on a peer's idea? A) Completely change the topic B) Disregard the previous point C) Add more evidence to support it D) Ignore other participants"
+    },
+    {
+      "code": "ELA.8.R.1.1",
+      "benchmark": "Analyze the impact of specific word choices on meaning and tone in a literary text.",
+      "topics": [
+        "Word Choice",
+        "Tone",
+        "Meaning"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how the author's choice of words affects the meaning and tone of a text.",
+      "essential_questions": [
+        "How does word choice affect the tone of a piece of literature?",
+        "What role does diction play in conveying meaning?"
+      ],
+      "learning_targets": [
+        "I can identify specific words that create a particular tone.",
+        "I can analyze how word choice develops meaning in a text.",
+        "I can explain how tone is shaped by diction."
+      ],
+      "vocabulary": [
+        "diction",
+        "tone",
+        "connotation",
+        "denotation",
+        "nuance",
+        "imagery"
+      ],
+      "sample_assessment": "What is the effect of the author's choice of words in developing the gloomy tone of the passage?"
+    },
+    {
+      "code": "ELA.8.R.2.1",
+      "benchmark": "Compare and contrast the structure of two or more texts and analyze how the differing structure of each text contributes to its meaning and style.",
+      "topics": [
+        "Text Structure",
+        "Comparison",
+        "Meaning"
+      ],
+      "dok": 4,
+      "item_specs": "Students compare and contrast text structures and analyze their impact on meaning and style.",
+      "essential_questions": [
+        "How does the structure of a text affect its meaning and style?",
+        "What are the differences in structure between texts and how do they contribute to their unique qualities?"
+      ],
+      "learning_targets": [
+        "I can identify different text structures.",
+        "I can compare how different structures affect meaning and style.",
+        "I can contrast the use of structure in multiple texts."
+      ],
+      "vocabulary": [
+        "text structure",
+        "compare",
+        "contrast",
+        "style",
+        "chronological",
+        "cause and effect",
+        "problem and solution"
+      ],
+      "sample_assessment": "How does the structure of the argument differ between the two articles, and what impact does this have on their effectiveness?"
+    },
+    {
+      "code": "ELA.8.R.3.1",
+      "benchmark": "Evaluate the argument and specific claims in a text, assessing whether the reasoning is sound and the evidence is relevant and sufficient.",
+      "topics": [
+        "Argumentation",
+        "Claims",
+        "Evidence"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate arguments and the quality of reasoning and evidence.",
+      "essential_questions": [
+        "How can you determine if an argument is sound?",
+        "What makes evidence relevant and sufficient?"
+      ],
+      "learning_targets": [
+        "I can identify claims in an argument.",
+        "I can assess the validity of reasoning.",
+        "I can evaluate the relevance and sufficiency of evidence."
+      ],
+      "vocabulary": [
+        "argument",
+        "claim",
+        "reasoning",
+        "evidence",
+        "credibility",
+        "fallacy"
+      ],
+      "sample_assessment": "Which claim is most effectively supported by evidence in the text?"
+    },
+    {
+      "code": "ELA.8.W.1.1",
+      "benchmark": "Write arguments to support claims with clear reasons and relevant evidence.",
+      "topics": [
+        "Writing",
+        "Argument",
+        "Evidence"
+      ],
+      "dok": 4,
+      "item_specs": "Students write arguments that clearly support claims with logical reasoning and relevant evidence.",
+      "essential_questions": [
+        "How can you effectively support a claim in writing?",
+        "What constitutes strong reasoning and evidence in an argument?"
+      ],
+      "learning_targets": [
+        "I can formulate clear claims.",
+        "I can support claims with logical reasons.",
+        "I can use relevant evidence to back up claims."
+      ],
+      "vocabulary": [
+        "argument",
+        "claim",
+        "reason",
+        "evidence",
+        "counterclaim",
+        "persuasion"
+      ],
+      "sample_assessment": "Write a persuasive essay in which you support a claim with sound reasoning and substantial evidence."
+    },
+    {
+      "code": "ELA.8.C.1.1",
+      "benchmark": "Present claims and findings, emphasizing salient points in a focused, organized manner with relevant evidence, valid reasoning, and well-chosen details.",
+      "topics": [
+        "Presentation",
+        "Organization",
+        "Details"
+      ],
+      "dok": 3,
+      "item_specs": "Students present organized and focused arguments and findings with supporting details.",
+      "essential_questions": [
+        "How do you effectively organize a presentation?",
+        "What role do details and evidence play in a presentation?"
+      ],
+      "learning_targets": [
+        "I can organize information clearly for presentation.",
+        "I can emphasize key points effectively.",
+        "I can include relevant evidence in my presentations."
+      ],
+      "vocabulary": [
+        "presentation",
+        "organization",
+        "clarity",
+        "emphasis",
+        "evidence",
+        "details"
+      ],
+      "sample_assessment": "Prepare a multimedia presentation where you present a claim and support it with findings and evidence from research."
+    },
+    {
+      "code": "ELA.8.L.3.1",
+      "benchmark": "Determine or clarify the meaning of unknown and multiple-meaning words or phrases based on grade 8 reading and content, choosing flexibly from a range of strategies.",
+      "topics": [
+        "Vocabulary",
+        "Context Clues",
+        "Word Meaning"
+      ],
+      "dok": 2,
+      "item_specs": "Students determine meanings of unknown words using various strategies.",
+      "essential_questions": [
+        "What strategies can help you determine the meaning of an unknown word?",
+        "How does context influence the understanding of a word's meaning?"
+      ],
+      "learning_targets": [
+        "I can use context clues to understand new vocabulary.",
+        "I can analyze word parts to determine meaning.",
+        "I can use reference materials to find word meanings."
+      ],
+      "vocabulary": [
+        "context clues",
+        "prefix",
+        "suffix",
+        "root word",
+        "dictionary",
+        "thesaurus"
+      ],
+      "sample_assessment": "Using the sentence, infer the meaning of the underlined word: The student's derogatory remarks about others were deemed unacceptable."
+    },
+    {
+      "code": "ELA.9.R.1.1",
+      "benchmark": "Analyze the impact of the author's choices regarding how to develop and relate elements of a story or drama.",
+      "topics": [
+        "Literary Elements",
+        "Author's Choices",
+        "Story Development"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine the effectiveness of the author's choices in relation to story elements.",
+      "essential_questions": [
+        "How do an author\u2019s choices influence the development of a story?",
+        "What impact do setting and character decisions have on the plot and theme?"
+      ],
+      "learning_targets": [
+        "I can identify key authorial choices in a story or drama.",
+        "I can analyze how these choices affect the development of plot and character.",
+        "I can evaluate the effectiveness of these choices in conveying themes."
+      ],
+      "vocabulary": [
+        "narrative",
+        "drama",
+        "theme",
+        "character",
+        "plot",
+        "setting"
+      ],
+      "sample_assessment": "How does the author\u2019s choice of setting affect the development of the plot and characters in the story?"
+    },
+    {
+      "code": "ELA.9.R.1.2",
+      "benchmark": "Determine a theme or central idea of a text and analyze in detail its development over the course of the text.",
+      "topics": [
+        "Theme",
+        "Central Idea",
+        "Text Analysis"
+      ],
+      "dok": 3,
+      "item_specs": "Students determine theme or central idea and analyze its development throughout the text.",
+      "essential_questions": [
+        "How does a theme develop throughout a text?",
+        "What evidence from the text supports the theme?"
+      ],
+      "learning_targets": [
+        "I can determine the theme of a text.",
+        "I can provide evidence from the text to support the theme.",
+        "I can analyze how the theme evolves throughout the story."
+      ],
+      "vocabulary": [
+        "theme",
+        "central idea",
+        "development",
+        "textual evidence",
+        "analysis"
+      ],
+      "sample_assessment": "Identify a theme in the text and provide three examples of how it is developed through the dialogue, plot, and setting."
+    },
+    {
+      "code": "ELA.9.R.1.3",
+      "benchmark": "Analyze how complex characters develop and interact with other characters, and advance the plot or develop the theme.",
+      "topics": [
+        "Character Development",
+        "Plot Advancement",
+        "Theme Development"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze characters' development and their interactions with plot and theme.",
+      "essential_questions": [
+        "How do complex characters affect the progression of the story?",
+        "In what ways do character interactions support theme development?"
+      ],
+      "learning_targets": [
+        "I can analyze how a character evolves throughout a story.",
+        "I can explain how character interactions advance the plot.",
+        "I can discuss how characters influence the theme development."
+      ],
+      "vocabulary": [
+        "character development",
+        "interaction",
+        "protagonist",
+        "antagonist",
+        "dynamic character",
+        "static character"
+      ],
+      "sample_assessment": "Explain how the relationship between the protagonist and antagonist advances the plot and highlights the story's theme."
+    },
+    {
+      "code": "ELA.9.R.2.1",
+      "benchmark": "Cite strong and thorough textual evidence to support analysis of what the text says explicitly and inferences drawn from the text.",
+      "topics": [
+        "Textual Evidence",
+        "Explicit Analysis",
+        "Inferences"
+      ],
+      "dok": 2,
+      "item_specs": "Students use evidence to support explicit analysis and inferences.",
+      "essential_questions": [
+        "How can textual evidence support explicit statements and inferences?",
+        "What is the difference between explicit text and inferences?"
+      ],
+      "learning_targets": [
+        "I can identify explicit information in a text.",
+        "I can make inferences based on text details.",
+        "I can support my analysis with strong textual evidence."
+      ],
+      "vocabulary": [
+        "textual evidence",
+        "explicit",
+        "inference",
+        "analysis",
+        "support"
+      ],
+      "sample_assessment": "Using evidence from the text, explain the implicit motivations of a character and how they drive their actions."
+    },
+    {
+      "code": "ELA.9.R.2.2",
+      "benchmark": "Analyze how an author's use of language and rhetorical devices contributes to a text's meaning and tone.",
+      "topics": [
+        "Rhetorical Devices",
+        "Language Use",
+        "Tone"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze language and rhetoric to understand text meaning and tone.",
+      "essential_questions": [
+        "How do rhetorical devices enhance the meaning of the text?",
+        "In what ways does an author's language affect the tone?"
+      ],
+      "learning_targets": [
+        "I can identify various rhetorical devices in a text.",
+        "I can analyze how these devices contribute to the text's meaning.",
+        "I can explain how language choices establish tone."
+      ],
+      "vocabulary": [
+        "rhetorical devices",
+        "metaphor",
+        "simile",
+        "alliteration",
+        "tone",
+        "syntax"
+      ],
+      "sample_assessment": "Analyze how the use of metaphors and similes in the passage contribute to the overall tone and message of the text."
+    },
+    {
+      "code": "ELA.9.R.2.3",
+      "benchmark": "Evaluate how an author's point of view or purpose shapes the content and style of a text.",
+      "topics": [
+        "Point of View",
+        "Author's Purpose",
+        "Content and Style"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate the influence of the author's perspective on the text.",
+      "essential_questions": [
+        "How does the author's point of view influence the content?",
+        "In what ways does the author's purpose affect the style of writing?"
+      ],
+      "learning_targets": [
+        "I can identify the author's point of view.",
+        "I can determine the purpose behind the text.",
+        "I can evaluate how the author's perspective shapes content and style."
+      ],
+      "vocabulary": [
+        "point of view",
+        "perspective",
+        "purpose",
+        "style",
+        "content",
+        "bias"
+      ],
+      "sample_assessment": "Discuss how the author's purpose is revealed through their choice of language and use of persuasive strategies in the text."
+    },
+    {
+      "code": "ELA.10.R.1.1",
+      "benchmark": "Evaluate the impact of an author's choices regarding how to structure a text, order events, and manipulate time to create effects such as suspense or tension.",
+      "topics": [
+        "Text Structure",
+        "Suspense",
+        "Tension"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate how the organization of a text influences its impact on the reader.",
+      "essential_questions": [
+        "How does text structure contribute to the overall meaning and impact of a story?",
+        "In what ways does the manipulation of time affect a narrative?"
+      ],
+      "learning_targets": [
+        "I can analyze how the structure of a text influences meaning.",
+        "I can evaluate the effects of time manipulation in a narrative.",
+        "I can explain how authors create suspense and tension."
+      ],
+      "vocabulary": [
+        "structure",
+        "suspense",
+        "pacing",
+        "foreshadowing",
+        "flashback",
+        "chronology"
+      ],
+      "sample_assessment": "Choose a novel you have read and evaluate how the author's use of flashbacks affects the story's tension."
+    },
+    {
+      "code": "ELA.10.R.2.2",
+      "benchmark": "Analyze the development and interaction of central ideas or themes across multiple texts.",
+      "topics": [
+        "Themes",
+        "Central Ideas",
+        "Textual Analysis"
+      ],
+      "dok": 4,
+      "item_specs": "Students analyze connections between themes and ideas in different texts.",
+      "essential_questions": [
+        "How do central ideas evolve throughout a text?",
+        "What are the similarities and differences between themes across texts?"
+      ],
+      "learning_targets": [
+        "I can identify multiple themes within a text.",
+        "I can analyze how themes develop across different works.",
+        "I can compare and contrast themes between texts."
+      ],
+      "vocabulary": [
+        "theme",
+        "central idea",
+        "motif",
+        "textual evidence",
+        "synthesis"
+      ],
+      "sample_assessment": "Compare the theme of identity in two novels, explaining how each author develops this theme in their work."
+    },
+    {
+      "code": "ELA.10.W.1.1",
+      "benchmark": "Write arguments to support claims in an analysis of substantive topics or texts using valid reasoning and relevant and sufficient evidence.",
+      "topics": [
+        "Argument Writing",
+        "Evidence",
+        "Reasoning"
+      ],
+      "dok": 4,
+      "item_specs": "Students construct arguments with clear claims supported by evidence and reasoning.",
+      "essential_questions": [
+        "How do you structure an effective argument?",
+        "What constitutes sufficient and relevant evidence?"
+      ],
+      "learning_targets": [
+        "I can identify credible sources to support my claims.",
+        "I can structure an argument logically with clear reasoning.",
+        "I can use textual evidence effectively to support my analysis."
+      ],
+      "vocabulary": [
+        "argument",
+        "claim",
+        "evidence",
+        "counterclaim",
+        "reasoning",
+        "thesis"
+      ],
+      "sample_assessment": "Write an argumentative essay on a controversial issue using at least three different sources to support your claims."
+    },
+    {
+      "code": "ELA.10.R.3.3",
+      "benchmark": "Analyze how authors use rhetorical devices to advance their point of view or purpose.",
+      "topics": [
+        "Rhetorical Devices",
+        "Point of View",
+        "Author's Purpose"
+      ],
+      "dok": 4,
+      "item_specs": "Students analyze the use of rhetorical devices in texts to understand how they enhance arguments or narrative.",
+      "essential_questions": [
+        "What role do rhetorical devices play in shaping an author's message?",
+        "How can rhetorical analysis deepen understanding of a text's purpose?"
+      ],
+      "learning_targets": [
+        "I can identify rhetorical devices in texts.",
+        "I can analyze how an author\u2019s use of rhetoric achieves their purpose.",
+        "I can evaluate the effectiveness of an author\u2019s rhetoric."
+      ],
+      "vocabulary": [
+        "rhetoric",
+        "ethos",
+        "pathos",
+        "logos",
+        "diction",
+        "tone"
+      ],
+      "sample_assessment": "Analyze a political speech for rhetorical devices, describing how they contribute to the speaker's persuasive technique."
+    },
+    {
+      "code": "ELA.10.W.2.4",
+      "benchmark": "Conduct short as well as more sustained research projects based on focused questions, demonstrating understanding of the subject under investigation.",
+      "topics": [
+        "Research",
+        "Inquiry",
+        "Sustained Inquiry"
+      ],
+      "dok": 3,
+      "item_specs": "Students conduct research projects to investigate and answer questions with depth and complexity.",
+      "essential_questions": [
+        "How can research be effectively planned and organized?",
+        "What strategies ensure the accuracy and reliability of research findings?"
+      ],
+      "learning_targets": [
+        "I can develop a clear and focused research question.",
+        "I can evaluate sources for reliability and relevance.",
+        "I can synthesize information from multiple sources."
+      ],
+      "vocabulary": [
+        "research",
+        "inquiry",
+        "source evaluation",
+        "synthesis",
+        "citation",
+        "plagiarism"
+      ],
+      "sample_assessment": "Create a research report on a historical event, focusing on how it is interpreted differently in various sources."
+    },
+    {
+      "code": "ELA.10.SL.1.1",
+      "benchmark": "Initiate and participate effectively in a range of collaborative discussions (one-on-one, in groups, and teacher-led) with diverse partners on grade 10 topics, texts, and issues, building on others' ideas and expressing their own clearly and persuasively.",
+      "topics": [
+        "Collaborative Discussions",
+        "Communication",
+        "Persuasion"
+      ],
+      "dok": 3,
+      "item_specs": "Students engage in discussions that require clear communication and the building of ideas with peers.",
+      "essential_questions": [
+        "What makes a discussion effective?",
+        "How can one articulate ideas clearly in a collaborative setting?"
+      ],
+      "learning_targets": [
+        "I can engage in discussions, building on others' ideas.",
+        "I can express my ideas clearly and persuasively.",
+        "I can use active listening strategies to enhance understanding."
+      ],
+      "vocabulary": [
+        "collaboration",
+        "dialogue",
+        "persuasion",
+        "listening",
+        "feedback",
+        "articulation"
+      ],
+      "sample_assessment": "Participate in a group discussion on a current event where the goal is to reach a consensus on a particular course of action."
+    },
+    {
+      "code": "ELA.11.R.2.1",
+      "benchmark": "Evaluate the effect of figures of speech on the meaning and tone of a text.",
+      "topics": [
+        "Figurative Language",
+        "Tone",
+        "Meaning"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate how figures of speech contribute to the overall tone and meaning of a text.",
+      "essential_questions": [
+        "How do figures of speech enhance the meaning of a text?",
+        "In what ways do figures of speech contribute to the tone?"
+      ],
+      "learning_targets": [
+        "I can identify figures of speech in a text.",
+        "I can analyze how figures of speech affect tone.",
+        "I can evaluate how figures of speech contribute to meaning."
+      ],
+      "vocabulary": [
+        "metaphor",
+        "simile",
+        "personification",
+        "hyperbole",
+        "oxymoron",
+        "tone"
+      ],
+      "sample_assessment": "In the poem 'The Road Not Taken,' the use of metaphor contributes to the poem's tone by: A) Enhancing the speaker's sense of regret B) Introducing a humorous element C) Simplifying the speaker's journey D) Creating a sense of nostalgia"
+    },
+    {
+      "code": "ELA.11.R.3.2",
+      "benchmark": "Analyze how an author's choices regarding structure and order of events create effects such as mystery, tension, or surprise.",
+      "topics": [
+        "Plot Structure",
+        "Narrative Techniques",
+        "Effect"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze the impact of narrative structure on the reader's experience.",
+      "essential_questions": [
+        "How does the structure of a story affect its impact on the reader?",
+        "In what ways can an author use structure to create tension?"
+      ],
+      "learning_targets": [
+        "I can identify an author's structural choices.",
+        "I can analyze how structure contributes to narrative effects.",
+        "I can evaluate the role of event order in creating suspense."
+      ],
+      "vocabulary": [
+        "narrative structure",
+        "climax",
+        "foreshadowing",
+        "flashback",
+        "suspense",
+        "chronology"
+      ],
+      "sample_assessment": "Which structural element primarily contributes to the surprise ending of the story? A) Exposition B) Rising Action C) Climax D) Resolution"
+    },
+    {
+      "code": "ELA.11.R.4.1",
+      "benchmark": "Analyze how an author\u2019s perspective or intent influences the content and style of a text.",
+      "topics": [
+        "Author's Perspective",
+        "Author's Intent",
+        "Content Analysis"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how the author's point of view or intention shapes the text's content and style.",
+      "essential_questions": [
+        "How does an author's perspective shape their writing?",
+        "In what ways can intent influence style and content?"
+      ],
+      "learning_targets": [
+        "I can identify the author's perspective in a text.",
+        "I can analyze how intent influences textual content.",
+        "I can evaluate the impact of perspective on style."
+      ],
+      "vocabulary": [
+        "perspective",
+        "intent",
+        "bias",
+        "style",
+        "content",
+        "tone"
+      ],
+      "sample_assessment": "In a letter advocating for environmental conservation, the author's intent is most clearly influenced by: A) Economic interests B) Personal experiences C) Historical events D) Political affiliations"
+    },
+    {
+      "code": "ELA.11.W.1.3",
+      "benchmark": "Write arguments to support claims in an analysis of substantive topics or texts, using valid reasoning and relevant and sufficient evidence.",
+      "topics": [
+        "Argumentative Writing",
+        "Claims",
+        "Evidence"
+      ],
+      "dok": 3,
+      "item_specs": "Students write argumentative essays with clear claims supported by evidence.",
+      "essential_questions": [
+        "What makes an argument effective?",
+        "How does evidence contribute to the strength of an argument?"
+      ],
+      "learning_targets": [
+        "I can formulate a clear claim for my argument.",
+        "I can support my claims with relevant evidence.",
+        "I can use logical reasoning to develop my argument."
+      ],
+      "vocabulary": [
+        "claim",
+        "evidence",
+        "reasoning",
+        "counterargument",
+        "rebuttal",
+        "warrant"
+      ],
+      "sample_assessment": "In an argument supporting renewable energy, which type of evidence would be most persuasive? A) Personal anecdotes B) Statistical data C) Historical examples D) Analogies"
+    },
+    {
+      "code": "ELA.11.W.2.1",
+      "benchmark": "Write informative and explanatory texts to examine and convey complex ideas clearly and accurately through effective selection, organization, and analysis of content.",
+      "topics": [
+        "Informative Writing",
+        "Organization",
+        "Analysis"
+      ],
+      "dok": 3,
+      "item_specs": "Students write informative essays that clearly convey complex ideas with structured organization.",
+      "essential_questions": [
+        "How can organization contribute to the clarity of an informative text?",
+        "What strategies can be used to effectively convey complex ideas?"
+      ],
+      "learning_targets": [
+        "I can organize information logically in my writing.",
+        "I can analyze complex ideas for clear explanation.",
+        "I can convey information effectively through writing."
+      ],
+      "vocabulary": [
+        "informative",
+        "explanatory",
+        "organization",
+        "analysis",
+        "clarity",
+        "coherence"
+      ],
+      "sample_assessment": "When writing an informative essay on climate change, which organizational pattern would be most effective? A) Cause and effect B) Chronological order C) Problem and solution D) Process analysis"
+    },
+    {
+      "code": "ELA.11.SL.1.1",
+      "benchmark": "Initiate and participate effectively in group discussions, building on others' ideas and expressing their own clearly and persuasively.",
+      "topics": [
+        "Discussion",
+        "Collaboration",
+        "Effective Communication"
+      ],
+      "dok": 3,
+      "item_specs": "Students engage in collaborative discussions, constructively contributing and building on others' ideas.",
+      "essential_questions": [
+        "What strategies improve participation in discussions?",
+        "How can one effectively build on others' ideas during a discussion?"
+      ],
+      "learning_targets": [
+        "I can contribute relevant ideas in discussions.",
+        "I can build upon others' ideas effectively.",
+        "I can express my ideas clearly and persuasively."
+      ],
+      "vocabulary": [
+        "discussion",
+        "collaboration",
+        "persuasion",
+        "communication",
+        "active listening",
+        "feedback"
+      ],
+      "sample_assessment": "During a group discussion on renewable resources, which approach would best build on a peer's idea about solar energy? A) Contradict B) Elaborate C) Dismiss D) Ignore"
+    },
+    {
+      "code": "ELA.12.R.1.1",
+      "benchmark": "Evaluate how authors use narrative structure and literary techniques to convey thematic elements.",
+      "topics": [
+        "Narrative Structure",
+        "Literary Techniques",
+        "Theme"
+      ],
+      "dok": 4,
+      "item_specs": "Students critically evaluate textual structures and techniques to understand thematic development.",
+      "essential_questions": [
+        "How do different narrative structures affect the development of theme?",
+        "What literary techniques enhance thematic elements?"
+      ],
+      "learning_targets": [
+        "I can evaluate how an author's choice of structure impacts the theme.",
+        "I can identify literary techniques that develop theme.",
+        "I can analyze the relationship between structure and theme."
+      ],
+      "vocabulary": [
+        "theme",
+        "narrative structure",
+        "literary techniques",
+        "foreshadowing",
+        "flashback",
+        "pacing"
+      ],
+      "sample_assessment": "In a novel with a non-linear structure, the theme is primarily developed through: A) Dialogue B) Flashbacks C) Descriptions D) Direct narration"
+    },
+    {
+      "code": "ELA.12.R.2.1",
+      "benchmark": "Analyze the impact of an author\u2019s choices regarding how to develop and relate elements of a story or drama.",
+      "topics": [
+        "Author's Choices",
+        "Story Elements",
+        "Drama"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how authors develop story elements and relate them to one another.",
+      "essential_questions": [
+        "How do an author's choices influence the development of the story's events?",
+        "In what ways are story elements interconnected?"
+      ],
+      "learning_targets": [
+        "I can analyze how authors develop characters.",
+        "I can evaluate the impact of setting on story development.",
+        "I can examine how plot structure relates to character development."
+      ],
+      "vocabulary": [
+        "character development",
+        "setting",
+        "plot structure",
+        "narrative voice",
+        "point of view"
+      ],
+      "sample_assessment": "In a story where the setting significantly changes, which element is LEAST likely to change? A) Characters' motives B) Conflict C) Narrative perspective D) Thematic focus"
+    },
+    {
+      "code": "ELA.12.C.1.1",
+      "benchmark": "Write arguments to support claims in an analysis of substantive topics or texts, using valid reasoning and relevant and sufficient evidence.",
+      "topics": [
+        "Argument Writing",
+        "Claims",
+        "Evidence"
+      ],
+      "dok": 4,
+      "item_specs": "Students construct well-reasoned arguments supported by robust evidence.",
+      "essential_questions": [
+        "How can I effectively support claims in argumentative writing?",
+        "What constitutes valid reasoning and relevant evidence?"
+      ],
+      "learning_targets": [
+        "I can construct a clear and logical argument.",
+        "I can support my claims with relevant evidence.",
+        "I can evaluate the effectiveness of my argument's reasoning."
+      ],
+      "vocabulary": [
+        "argument",
+        "claim",
+        "evidence",
+        "reasoning",
+        "counterargument",
+        "persuasive techniques"
+      ],
+      "sample_assessment": "Which of the following BEST supports a claim of climate change contribution? A) A personal anecdote B) Scientific data C) An opinion piece D) A fictional narrative"
+    },
+    {
+      "code": "ELA.12.R.3.1",
+      "benchmark": "Analyze how complex characters develop over the course of a text, interact with other characters, and advance the plot or develop the theme.",
+      "topics": [
+        "Complex Characters",
+        "Character Interaction",
+        "Theme Development"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine the evolution of complex characters and their relevance to plot and theme.",
+      "essential_questions": [
+        "How do characters interact to develop a theme?",
+        "In what ways do complex characters advance the plot?"
+      ],
+      "learning_targets": [
+        "I can analyze the development of complex characters.",
+        "I can examine the relationship between character interactions and theme.",
+        "I can articulate how character actions propel the plot."
+      ],
+      "vocabulary": [
+        "complex character",
+        "character arc",
+        "interactions",
+        "theme",
+        "development",
+        "motivation"
+      ],
+      "sample_assessment": "A protagonist's change of heart towards an antagonist primarily serves to: A) Introduce new conflict B) Develop a subplot C) Advance the theme D) Complicate the narrative structure"
+    },
+    {
+      "code": "ELA.12.L.1.1",
+      "benchmark": "Demonstrate understanding of figurative language, word relationships, and nuances in word meanings.",
+      "topics": [
+        "Figurative Language",
+        "Word Relationships",
+        "Nuances in Meaning"
+      ],
+      "dok": 3,
+      "item_specs": "Students demonstrate comprehension of figures of speech, synonyms, antonyms, and subtle differences in meaning.",
+      "essential_questions": [
+        "How does figurative language enhance text comprehension?",
+        "What is the impact of word choice on meaning?"
+      ],
+      "learning_targets": [
+        "I can interpret figurative language within a text.",
+        "I can analyze synonyms and antonyms to infer word meaning.",
+        "I can explore subtle differences in word meanings."
+      ],
+      "vocabulary": [
+        "figurative language",
+        "simile",
+        "metaphor",
+        "nuance",
+        "synonym",
+        "antonym"
+      ],
+      "sample_assessment": "The metaphor 'a heart of gold' primarily suggests: A) Financial wealth B) Generosity C) Longevity D) Unpredictability"
+    },
+    {
+      "code": "ELA.12.M.1.1",
+      "benchmark": "Integrate multiple sources of information presented in diverse formats and media to address a question or solve a problem.",
+      "topics": [
+        "Information Synthesis",
+        "Diverse Formats",
+        "Problem Solving"
+      ],
+      "dok": 4,
+      "item_specs": "Students synthesize information from various formats to address questions or problems effectively.",
+      "essential_questions": [
+        "How can diverse formats of information be integrated effectively?",
+        "What are the strategies for solving problems using multiple sources?"
+      ],
+      "learning_targets": [
+        "I can integrate information from different media formats.",
+        "I can evaluate the credibility of multiple sources.",
+        "I can synthesize information to solve complex problems."
+      ],
+      "vocabulary": [
+        "synthesize",
+        "media",
+        "integrate",
+        "problem-solving",
+        "source credibility",
+        "diverse formats"
+      ],
+      "sample_assessment": "When addressing an environmental issue, the BEST approach is to: A) Use a single reputable source B) Review scientific studies C) Watch a documentary D) Consult multiple diverse sources"
     }
   ]
 }

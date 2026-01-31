@@ -664,3 +664,104 @@ def accommodation_stats():
     """Get statistics about accommodation usage."""
     stats = get_accommodation_stats()
     return jsonify(stats)
+
+
+# ============ API Keys Management ============
+
+API_KEYS_FILE = os.path.join(GRAIDER_DATA_DIR, ".api_keys.json")
+
+
+def load_api_keys():
+    """Load API keys from secure storage."""
+    if os.path.exists(API_KEYS_FILE):
+        try:
+            with open(API_KEYS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+
+def save_api_keys_to_file(keys):
+    """Save API keys to secure storage."""
+    # Set restrictive permissions on the file
+    with open(API_KEYS_FILE, 'w') as f:
+        json.dump(keys, f)
+    os.chmod(API_KEYS_FILE, 0o600)  # Owner read/write only
+
+
+@settings_bp.route('/api/save-api-keys', methods=['POST'])
+def save_api_keys():
+    """Save API keys securely."""
+    data = request.json
+    openai_key = data.get('openai_key')
+    anthropic_key = data.get('anthropic_key')
+
+    # Load existing keys
+    keys = load_api_keys()
+
+    # Update keys if provided
+    if openai_key:
+        keys['openai'] = openai_key
+    if anthropic_key:
+        keys['anthropic'] = anthropic_key
+
+    # Save to file
+    save_api_keys_to_file(keys)
+
+    # Also update .env file for immediate use
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    env_lines = []
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            env_lines = f.readlines()
+
+    # Update or add keys in .env
+    openai_found = False
+    anthropic_found = False
+    new_lines = []
+    for line in env_lines:
+        if line.startswith('OPENAI_API_KEY=') and openai_key:
+            new_lines.append(f'OPENAI_API_KEY={openai_key}\n')
+            openai_found = True
+        elif line.startswith('ANTHROPIC_API_KEY=') and anthropic_key:
+            new_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
+            anthropic_found = True
+        else:
+            new_lines.append(line)
+
+    if openai_key and not openai_found:
+        new_lines.append(f'OPENAI_API_KEY={openai_key}\n')
+    if anthropic_key and not anthropic_found:
+        new_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
+
+    with open(env_path, 'w') as f:
+        f.writelines(new_lines)
+
+    return jsonify({
+        "status": "success",
+        "openai_configured": bool(keys.get('openai')),
+        "anthropic_configured": bool(keys.get('anthropic'))
+    })
+
+
+@settings_bp.route('/api/check-api-keys')
+def check_api_keys():
+    """Check which API keys are configured (without exposing the keys)."""
+    keys = load_api_keys()
+
+    # Also check .env file
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    openai_in_env = False
+    anthropic_in_env = False
+
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            content = f.read()
+            openai_in_env = 'OPENAI_API_KEY=' in content and 'your-key-here' not in content
+            anthropic_in_env = 'ANTHROPIC_API_KEY=' in content
+
+    return jsonify({
+        "openai_configured": bool(keys.get('openai')) or openai_in_env,
+        "anthropic_configured": bool(keys.get('anthropic')) or anthropic_in_env
+    })

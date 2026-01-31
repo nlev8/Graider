@@ -4,6 +4,7 @@
 flask>=2.0.0
 flask-cors>=3.0.0
 openai>=1.0.0
+anthropic>=0.18.0
 python-docx>=0.8.11
 openpyxl>=3.0.0
 python-dotenv>=0.19.0
@@ -14,3 +15,17 @@ webdriver-manager>=4.0.0
 reportlab>=4.0.0
 pymupdf>=1.23.0
 mammoth>=1.6.0
+
+# STEM Subject Support
+sympy>=1.12
+antlr4-python3-runtime==4.11.*
+
+# Graphing & Visualization (for math/science assignments)
+matplotlib>=3.7.0
+numpy>=1.24.0
+
+# Email Service
+resend>=0.7.0
+
+# Database (Student Portal)
+supabase>=2.0.0

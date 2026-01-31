@@ -1,12 +1,16 @@
 {
   "state": "FL",
   "subject": "Social Studies",
-  "grade": "6-8",
+  "grade": "6-12",
   "standards": [
     {
       "code": "SS.6.G.1.1",
       "benchmark": "Use latitude and longitude coordinates to understand the relationship between people and places on the Earth.",
-      "topics": ["Geography", "Maps", "Coordinates"],
+      "topics": [
+        "Geography",
+        "Maps",
+        "Coordinates"
+      ],
       "dok": 2,
       "item_specs": "Students use coordinate systems to locate places and understand spatial relationships.",
       "essential_questions": [
@@ -18,13 +22,25 @@
         "I can explain the relationship between location and human activity.",
         "I can read and interpret maps using coordinates."
       ],
-      "vocabulary": ["latitude", "longitude", "coordinates", "equator", "prime meridian", "hemisphere", "grid system"],
-      "sample_assessment": "A location at 30°N, 90°W is in which hemisphere? A) Northern and Western B) Southern and Eastern C) Northern and Eastern D) Southern and Western"
+      "vocabulary": [
+        "latitude",
+        "longitude",
+        "coordinates",
+        "equator",
+        "prime meridian",
+        "hemisphere",
+        "grid system"
+      ],
+      "sample_assessment": "A location at 30\u00b0N, 90\u00b0W is in which hemisphere? A) Northern and Western B) Southern and Eastern C) Northern and Eastern D) Southern and Western"
     },
     {
       "code": "SS.6.G.2.1",
       "benchmark": "Explain how major physical characteristics, natural resources, climate, and absolute and relative locations have influenced settlement, interactions, and the economies of ancient civilizations of the world.",
-      "topics": ["Physical Geography", "Settlement", "Resources"],
+      "topics": [
+        "Physical Geography",
+        "Settlement",
+        "Resources"
+      ],
       "dok": 3,
       "item_specs": "Students analyze how geography influenced ancient civilizations.",
       "essential_questions": [
@@ -36,13 +52,24 @@
         "I can analyze the relationship between resources and economic development.",
         "I can describe how climate affects human activity."
       ],
-      "vocabulary": ["physical geography", "natural resources", "climate", "settlement patterns", "relative location", "absolute location"],
+      "vocabulary": [
+        "physical geography",
+        "natural resources",
+        "climate",
+        "settlement patterns",
+        "relative location",
+        "absolute location"
+      ],
       "sample_assessment": "Ancient civilizations often developed near rivers because rivers provided: A) Protection from invaders B) Water for irrigation and transportation C) Gold and silver D) Building materials"
     },
     {
       "code": "SS.6.E.1.1",
       "benchmark": "Identify the factors that influence the development of different economic systems throughout the world.",
-      "topics": ["Economics", "Economic Systems", "Resources"],
+      "topics": [
+        "Economics",
+        "Economic Systems",
+        "Resources"
+      ],
       "dok": 2,
       "item_specs": "Students identify factors that shape economic systems.",
       "essential_questions": [
@@ -54,13 +81,25 @@
         "I can explain factors that influence economic development.",
         "I can compare how different systems allocate resources."
       ],
-      "vocabulary": ["economic system", "traditional economy", "market economy", "command economy", "mixed economy", "resources", "scarcity"],
+      "vocabulary": [
+        "economic system",
+        "traditional economy",
+        "market economy",
+        "command economy",
+        "mixed economy",
+        "resources",
+        "scarcity"
+      ],
       "sample_assessment": "In a command economy, economic decisions are made primarily by: A) Individual consumers B) Private businesses C) The government D) Traditional customs"
     },
     {
       "code": "SS.6.E.2.1",
       "benchmark": "Evaluate how civilizations through clans, tribes, and city-states evolved into larger civilizations through various forms of government.",
-      "topics": ["Government", "Political Development", "Civilization"],
+      "topics": [
+        "Government",
+        "Political Development",
+        "Civilization"
+      ],
       "dok": 3,
       "item_specs": "Students analyze the evolution of governmental structures.",
       "essential_questions": [
@@ -72,13 +111,26 @@
         "I can explain why governments form.",
         "I can compare different forms of early government."
       ],
-      "vocabulary": ["clan", "tribe", "city-state", "civilization", "government", "monarchy", "democracy", "empire"],
+      "vocabulary": [
+        "clan",
+        "tribe",
+        "city-state",
+        "civilization",
+        "government",
+        "monarchy",
+        "democracy",
+        "empire"
+      ],
       "sample_assessment": "City-states like Athens and Sparta are examples of: A) Large empires B) Independent political units C) Tribes D) Clans"
     },
     {
       "code": "SS.6.W.1.3",
       "benchmark": "Interpret primary and secondary sources.",
-      "topics": ["Historical Sources", "Analysis", "Evidence"],
+      "topics": [
+        "Historical Sources",
+        "Analysis",
+        "Evidence"
+      ],
       "dok": 2,
       "item_specs": "Students distinguish between and analyze primary and secondary sources.",
       "essential_questions": [
@@ -90,13 +142,25 @@
         "I can analyze sources for reliability and bias.",
         "I can use sources to support historical arguments."
       ],
-      "vocabulary": ["primary source", "secondary source", "artifact", "document", "evidence", "interpretation", "bias"],
+      "vocabulary": [
+        "primary source",
+        "secondary source",
+        "artifact",
+        "document",
+        "evidence",
+        "interpretation",
+        "bias"
+      ],
       "sample_assessment": "An ancient Roman coin found by archaeologists is an example of: A) A secondary source B) A primary source C) A biased source D) A modern reproduction"
     },
     {
       "code": "SS.6.W.2.4",
       "benchmark": "Compare the economic, political, social, and religious institutions of ancient river civilizations.",
-      "topics": ["River Civilizations", "Comparison", "Ancient History"],
+      "topics": [
+        "River Civilizations",
+        "Comparison",
+        "Ancient History"
+      ],
       "dok": 3,
       "item_specs": "Students compare institutions across Mesopotamia, Egypt, India, and China.",
       "essential_questions": [
@@ -108,13 +172,26 @@
         "I can explain how religion influenced ancient societies.",
         "I can analyze economic systems of early civilizations."
       ],
-      "vocabulary": ["Mesopotamia", "Egypt", "Indus Valley", "Huang He", "pharaoh", "ziggurat", "irrigation", "polytheism"],
+      "vocabulary": [
+        "Mesopotamia",
+        "Egypt",
+        "Indus Valley",
+        "Huang He",
+        "pharaoh",
+        "ziggurat",
+        "irrigation",
+        "polytheism"
+      ],
       "sample_assessment": "Which feature was common to ALL ancient river valley civilizations? A) Democracy B) Monotheism C) Writing systems D) Iron tools"
     },
     {
       "code": "SS.6.W.3.5",
       "benchmark": "Summarize the important achievements and contributions of ancient Greek civilization.",
-      "topics": ["Ancient Greece", "Achievements", "Legacy"],
+      "topics": [
+        "Ancient Greece",
+        "Achievements",
+        "Legacy"
+      ],
       "dok": 2,
       "item_specs": "Students identify Greek contributions to Western civilization.",
       "essential_questions": [
@@ -126,13 +203,26 @@
         "I can explain the concept of democracy as developed in Athens.",
         "I can describe Greek contributions to science and mathematics."
       ],
-      "vocabulary": ["democracy", "philosophy", "Socrates", "Plato", "Aristotle", "Olympics", "architecture", "drama"],
+      "vocabulary": [
+        "democracy",
+        "philosophy",
+        "Socrates",
+        "Plato",
+        "Aristotle",
+        "Olympics",
+        "architecture",
+        "drama"
+      ],
       "sample_assessment": "The concept of citizens participating directly in government decisions comes from: A) Ancient Rome B) Ancient Egypt C) Ancient Athens D) Ancient Persia"
     },
     {
       "code": "SS.6.W.3.13",
       "benchmark": "Identify the causes and effects of the fall of the Roman Empire.",
-      "topics": ["Roman Empire", "Fall of Rome", "Cause and Effect"],
+      "topics": [
+        "Roman Empire",
+        "Fall of Rome",
+        "Cause and Effect"
+      ],
       "dok": 2,
       "item_specs": "Students analyze multiple factors contributing to Rome's decline.",
       "essential_questions": [
@@ -144,8 +234,1066 @@
         "I can explain economic factors that weakened the empire.",
         "I can describe the effects of Rome's fall on Europe."
       ],
-      "vocabulary": ["decline", "fall of Rome", "barbarian", "inflation", "corruption", "division", "476 CE"],
+      "vocabulary": [
+        "decline",
+        "fall of Rome",
+        "barbarian",
+        "inflation",
+        "corruption",
+        "division",
+        "476 CE"
+      ],
       "sample_assessment": "Which was NOT a cause of the fall of the Roman Empire? A) Barbarian invasions B) Economic problems C) The rise of Christianity D) Weak leadership"
+    },
+    {
+      "code": "SS.7.G.2.1",
+      "benchmark": "Analyze how geographic location affects economic development and trade.",
+      "topics": [
+        "Geography",
+        "Economy",
+        "Trade"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how geography impacts economic opportunities and trade routes.",
+      "essential_questions": [
+        "How does geography influence economic development?",
+        "In what ways does location impact trade?"
+      ],
+      "learning_targets": [
+        "I can explain how geographic features impact local economies.",
+        "I can analyze the effects of location on trade routes.",
+        "I can evaluate the relationship between natural resources and economic growth."
+      ],
+      "vocabulary": [
+        "geographic location",
+        "economic development",
+        "trade routes",
+        "natural resources",
+        "infrastructure"
+      ],
+      "sample_assessment": "How did the geography of ancient Egypt influence its economic development? A) It limited trade. B) It provided a fertile land for agriculture. C) It isolated the civilization. D) It discouraged settlement."
+    },
+    {
+      "code": "SS.7.C.3.1",
+      "benchmark": "Evaluate the role of civic participation in society and government.",
+      "topics": [
+        "Civics",
+        "Government",
+        "Citizenship"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate how participation in civic life affects public policy and governance.",
+      "essential_questions": [
+        "Why is civic participation important in a democratic society?",
+        "How can citizens influence government decisions?"
+      ],
+      "learning_targets": [
+        "I can explain the responsibilities of citizenship.",
+        "I can analyze the impact of civic involvement on public policy.",
+        "I can evaluate different forms of civic participation."
+      ],
+      "vocabulary": [
+        "civic participation",
+        "democracy",
+        "citizenship",
+        "public policy",
+        "government"
+      ],
+      "sample_assessment": "Which of the following is a way citizens can participate in government? A) Becoming informed about public issues. B) Ignoring election campaigns. C) Refusing to vote. D) Avoiding community service."
+    },
+    {
+      "code": "SS.7.G.4.1",
+      "benchmark": "Assess the impact of human-environment interaction on community sustainability.",
+      "topics": [
+        "Geography",
+        "Environment",
+        "Sustainability"
+      ],
+      "dok": 3,
+      "item_specs": "Students assess human activities and their implications for sustainable development.",
+      "essential_questions": [
+        "How do human actions affect the environment?",
+        "What practices promote sustainable living?"
+      ],
+      "learning_targets": [
+        "I can describe examples of human-environment interaction.",
+        "I can assess the impact of these interactions on sustainability.",
+        "I can propose solutions to promote sustainable development."
+      ],
+      "vocabulary": [
+        "sustainability",
+        "environment",
+        "human-environment interaction",
+        "conservation",
+        "ecosystem"
+      ],
+      "sample_assessment": "What impact does deforestation have on local communities? A) It increases biodiversity. B) It enhances local economies. C) It leads to habitat destruction. D) It improves air quality."
+    },
+    {
+      "code": "SS.7.E.1.1",
+      "benchmark": "Understand the roles and responsibilities of different economic systems in society.",
+      "topics": [
+        "Economics",
+        "Systems",
+        "Society"
+      ],
+      "dok": 2,
+      "item_specs": "Students compare characteristics of different economic systems and their societal roles.",
+      "essential_questions": [
+        "How do economic systems influence society?",
+        "What are the roles and responsibilities in different economic systems?"
+      ],
+      "learning_targets": [
+        "I can identify different types of economic systems.",
+        "I can explain how each system impacts society.",
+        "I can analyze the benefits and challenges of various economic systems."
+      ],
+      "vocabulary": [
+        "economic systems",
+        "market economy",
+        "command economy",
+        "mixed economy",
+        "capitalism",
+        "socialism"
+      ],
+      "sample_assessment": "In a command economy, who typically makes decisions about what to produce? A) Consumers B) Business owners C) Government D) Independent agencies"
+    },
+    {
+      "code": "SS.7.H.1.1",
+      "benchmark": "Analyze the causes and effects of significant historical events.",
+      "topics": [
+        "History",
+        "Events",
+        "Impact"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze key historical events and their causes and effects on society.",
+      "essential_questions": [
+        "What are the causes of significant historical events?",
+        "How do historical events shape societies?"
+      ],
+      "learning_targets": [
+        "I can identify major historical events and their causes.",
+        "I can evaluate the effects of these events on societies.",
+        "I can analyze how history influences the present."
+      ],
+      "vocabulary": [
+        "historical events",
+        "causes",
+        "effects",
+        "revolution",
+        "conflict",
+        "resolution"
+      ],
+      "sample_assessment": "Which event led to significant economic changes in France during the late 18th century? A) Industrial Revolution B) French Revolution C) American Revolution D) World War I"
+    },
+    {
+      "code": "SS.7.W.1.1",
+      "benchmark": "Examine the interaction between world cultures over time and its impact.",
+      "topics": [
+        "World History",
+        "Culture",
+        "Interaction"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine historical interactions and their influence on cultural development.",
+      "essential_questions": [
+        "How do cultures interact and influence each other over time?",
+        "What are the impacts of cultural exchange?"
+      ],
+      "learning_targets": [
+        "I can identify examples of cultural interaction.",
+        "I can analyze how cultures have influenced one another.",
+        "I can assess the impacts of cultural exchange on societies."
+      ],
+      "vocabulary": [
+        "cultural exchange",
+        "interaction",
+        "globalization",
+        "cultural diffusion",
+        "tradition",
+        "influence"
+      ],
+      "sample_assessment": "What is one impact of the Silk Road on cultural development? A) Decreased trade between Asia and Europe B) Isolation of civilizations C) Spread of religions and ideas D) Elimination of cultural diversity"
+    },
+    {
+      "code": "SS.8.C.1.1",
+      "benchmark": "Analyze the origins and purposes of government, law, and the American political system.",
+      "topics": [
+        "Civics",
+        "Government",
+        "Political Systems"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how historical documents and philosophical ideas shaped American government and laws.",
+      "essential_questions": [
+        "What are the key purposes of government and law?",
+        "How have historical events influenced the American political system?"
+      ],
+      "learning_targets": [
+        "I can identify key historical documents that influenced the American political system.",
+        "I can explain the role and purpose of government in society.",
+        "I can analyze the impact of philosophical ideas on American laws."
+      ],
+      "vocabulary": [
+        "government",
+        "constitution",
+        "democracy",
+        "republic",
+        "law",
+        "philosophy",
+        "political system"
+      ],
+      "sample_assessment": "Which document precedes the U.S. Constitution and emphasizes natural rights? A) Magna Carta B) Declaration of Independence C) Articles of Confederation D) Bill of Rights"
+    },
+    {
+      "code": "SS.8.E.2.1",
+      "benchmark": "Examine the impact of economic concepts such as supply and demand on historical and contemporary societies.",
+      "topics": [
+        "Economics",
+        "Supply and Demand",
+        "Society"
+      ],
+      "dok": 2,
+      "item_specs": "Students assess how supply and demand have influenced historical events and societal developments.",
+      "essential_questions": [
+        "How do supply and demand affect economies?",
+        "In what ways have economic principles shaped historical events?"
+      ],
+      "learning_targets": [
+        "I can explain the basic principles of supply and demand.",
+        "I can evaluate the impact of supply and demand on historical events.",
+        "I can discuss contemporary examples of supply and demand."
+      ],
+      "vocabulary": [
+        "economics",
+        "supply",
+        "demand",
+        "market",
+        "price",
+        "economic system",
+        "scarcity"
+      ],
+      "sample_assessment": "What happens to prices when demand increases and supply remains unchanged? A) Prices increase B) Prices decrease C) Prices remain stable D) Supply increases"
+    },
+    {
+      "code": "SS.8.G.3.1",
+      "benchmark": "Interpret the impact of geographic factors on historical events and movements.",
+      "topics": [
+        "Geography",
+        "Historical Events",
+        "Movements"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze the influence of geography on historical developments and cultural movements.",
+      "essential_questions": [
+        "How does geography shape historical events?",
+        "In what ways does the environment impact human movement?"
+      ],
+      "learning_targets": [
+        "I can explain how geographic features have influenced historical events.",
+        "I can analyze the relationship between geography and human migration.",
+        "I can interpret maps to understand historical movements."
+      ],
+      "vocabulary": [
+        "geography",
+        "environment",
+        "migration",
+        "topography",
+        "climate",
+        "natural resources"
+      ],
+      "sample_assessment": "Which geographic feature significantly hindered westward expansion in the United States? A) Appalachian Mountains B) Mississippi River C) Great Plains D) Rocky Mountains"
+    },
+    {
+      "code": "SS.8.H.2.1",
+      "benchmark": "Identify and explain significant cultural exchanges during historical periods.",
+      "topics": [
+        "History",
+        "Cultural Exchange",
+        "Society"
+      ],
+      "dok": 2,
+      "item_specs": "Students explore the causes and effects of cultural exchanges between different societies.",
+      "essential_questions": [
+        "What are some examples of cultural exchanges in history?",
+        "How do cultural exchanges impact societies?"
+      ],
+      "learning_targets": [
+        "I can identify major historical cultural exchanges.",
+        "I can explain the effects of these exchanges on different societies.",
+        "I can discuss how cultural exchanges influence modern interactions."
+      ],
+      "vocabulary": [
+        "culture",
+        "exchange",
+        "society",
+        "interaction",
+        "trade",
+        "influence"
+      ],
+      "sample_assessment": "The Silk Road is best known for facilitating cultural exchanges between: A) Africa and Australia B) Europe and Asia C) North and South America D) Europe and the Arctic"
+    },
+    {
+      "code": "SS.8.W.4.1",
+      "benchmark": "Describe key events and developments of the Industrial Revolution.",
+      "topics": [
+        "World History",
+        "Industrial Revolution",
+        "Technology"
+      ],
+      "dok": 2,
+      "item_specs": "Students examine technological advancements and their societal impacts during the Industrial Revolution.",
+      "essential_questions": [
+        "What were the major developments of the Industrial Revolution?",
+        "How did the Industrial Revolution change economies and societies?"
+      ],
+      "learning_targets": [
+        "I can outline the key technological advancements of the Industrial Revolution.",
+        "I can describe the social and economic impacts of the Industrial Revolution.",
+        "I can evaluate the legacy of the Industrial Revolution in modern society."
+      ],
+      "vocabulary": [
+        "industrialization",
+        "technology",
+        "revolution",
+        "innovation",
+        "urbanization",
+        "factories"
+      ],
+      "sample_assessment": "Which invention is linked most closely with the start of the Industrial Revolution? A) Printing Press B) Cotton Gin C) Steam Engine D) Telephone"
+    },
+    {
+      "code": "SS.8.NG.5.1",
+      "benchmark": "Examine and explain the role of non-governmental organizations in addressing global issues.",
+      "topics": [
+        "Non-Governmental Organizations",
+        "Global Issues",
+        "Civics"
+      ],
+      "dok": 3,
+      "item_specs": "Students investigate the influence and contributions of NGOs in solving worldwide problems.",
+      "essential_questions": [
+        "What functions do NGOs serve in the world today?",
+        "How do NGOs influence global policies and issues?"
+      ],
+      "learning_targets": [
+        "I can explain the role of non-governmental organizations in global governance.",
+        "I can analyze the influence of NGOs on international policies.",
+        "I can identify significant NGOs and their contributions to solving global issues."
+      ],
+      "vocabulary": [
+        "non-governmental organization",
+        "globalization",
+        "policy",
+        "advocacy",
+        "humanitarian",
+        "sustainability"
+      ],
+      "sample_assessment": "Which global issue is typically addressed by organizations like the Red Cross? A) Space Exploration B) Disaster Response C) Cultural Preservation D) Technological Development"
+    },
+    {
+      "code": "SS.9.C.1.1",
+      "benchmark": "Analyze the principles and ideals of American democracy found in the Declaration of Independence, the Constitution, and other foundational documents.",
+      "topics": [
+        "Civics",
+        "Foundational Documents",
+        "American Democracy"
+      ],
+      "dok": 3,
+      "item_specs": "Students demonstrate an understanding of the fundamental principles of American democracy and how they are applied in documents of national significance.",
+      "essential_questions": [
+        "What are the core principles of American democracy?",
+        "How are these principles reflected in the Declaration of Independence and the Constitution?"
+      ],
+      "learning_targets": [
+        "I can identify the key principles of the Declaration of Independence.",
+        "I can explain the structure and function of the Constitution.",
+        "I can analyze how foundational documents shape American political ideals."
+      ],
+      "vocabulary": [
+        "democracy",
+        "Constitution",
+        "Declaration of Independence",
+        "federalism",
+        "checks and balances",
+        "separation of powers",
+        "Bill of Rights"
+      ],
+      "sample_assessment": "Which document outlines the system of government for the United States? A) The Declaration of Independence B) The Articles of Confederation C) The Constitution D) The Bill of Rights"
+    },
+    {
+      "code": "SS.9.E.1.1",
+      "benchmark": "Understand the fundamental concepts of economics including scarcity, opportunity cost, and supply and demand in a mixed economy.",
+      "topics": [
+        "Economics",
+        "Scarcity",
+        "Supply and Demand"
+      ],
+      "dok": 2,
+      "item_specs": "Students explain basic economic concepts and how they apply to decision-making in individuals and society.",
+      "essential_questions": [
+        "What role does scarcity play in economic decision-making?",
+        "How do supply and demand affect prices in a market economy?"
+      ],
+      "learning_targets": [
+        "I can define and give examples of scarcity.",
+        "I can explain the concept of opportunity cost.",
+        "I can describe how supply and demand influence market conditions."
+      ],
+      "vocabulary": [
+        "scarcity",
+        "opportunity cost",
+        "supply",
+        "demand",
+        "market economy",
+        "consumer",
+        "producer"
+      ],
+      "sample_assessment": "Which of the following describes opportunity cost? A) The total financial cost of a choice B) The best alternative forgone C) The price paid for goods or services D) The availability of resources"
+    },
+    {
+      "code": "SS.9.G.1.1",
+      "benchmark": "Analyze the impact of geographic factors on historical events and contemporary issues.",
+      "topics": [
+        "Geography",
+        "Historical Events",
+        "Contemporary Issues"
+      ],
+      "dok": 3,
+      "item_specs": "Students investigate how geography has shaped historical events and influences current social, political, and economic issues.",
+      "essential_questions": [
+        "How does geography influence history?",
+        "What geographic factors impact current global issues?"
+      ],
+      "learning_targets": [
+        "I can identify how geographic features have influenced historical events.",
+        "I can explain how geography affects contemporary issues.",
+        "I can analyze the role of geography in shaping world events."
+      ],
+      "vocabulary": [
+        "geography",
+        "climate",
+        "topography",
+        "resource distribution",
+        "population distribution",
+        "migration",
+        "globalization"
+      ],
+      "sample_assessment": "How did geography influence the outcome of World War II? A) Limited resources for war economies B) Mountainous terrains impacting battle strategies C) Proximity of Axis powers D) Harsh climates limiting troop movements"
+    },
+    {
+      "code": "SS.9.H.1.1",
+      "benchmark": "Evaluate the impact of cultural movements on society throughout history.",
+      "topics": [
+        "History",
+        "Cultural Movements",
+        "Society"
+      ],
+      "dok": 4,
+      "item_specs": "Students appraise the impact and significance of cultural movements and their influence on societal changes.",
+      "essential_questions": [
+        "How do cultural movements reflect societal values?",
+        "In what ways have cultural movements influenced social change?"
+      ],
+      "learning_targets": [
+        "I can identify major cultural movements in history.",
+        "I can assess the impact of cultural movements on society.",
+        "I can evaluate the long-term effects of cultural movements."
+      ],
+      "vocabulary": [
+        "cultural movements",
+        "Renaissance",
+        "Enlightenment",
+        "Romanticism",
+        "Industrial Revolution",
+        "Civil Rights Movement",
+        "modernism"
+      ],
+      "sample_assessment": "Which cultural movement emphasized reason and individualism over tradition? A) The Renaissance B) The Enlightenment C) Romanticism D) Modernism"
+    },
+    {
+      "code": "SS.9.W.1.1",
+      "benchmark": "Interpret major political and economic systems and their influence on global relations.",
+      "topics": [
+        "World History",
+        "Political Systems",
+        "Economic Systems"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze different political and economic systems and assess their global impact and interrelations.",
+      "essential_questions": [
+        "What are the key differences between major political and economic systems?",
+        "How do these systems influence international relations?"
+      ],
+      "learning_targets": [
+        "I can compare different political systems such as democracy and totalitarianism.",
+        "I can describe economic systems such as capitalism and socialism.",
+        "I can analyze the influence of these systems on international relations."
+      ],
+      "vocabulary": [
+        "political system",
+        "democracy",
+        "totalitarianism",
+        "communism",
+        "capitalism",
+        "socialism",
+        "global relations"
+      ],
+      "sample_assessment": "Which economic system is characterized by private ownership and free markets? A) Communism B) Socialism C) Capitalism D) Feudalism"
+    },
+    {
+      "code": "SS.9.S.1.1",
+      "benchmark": "Examine the role of technology and innovation in shaping contemporary global society.",
+      "topics": [
+        "Sociology",
+        "Technology",
+        "Innovation"
+      ],
+      "dok": 3,
+      "item_specs": "Students assess how technological advancements and innovations have transformed societies globally.",
+      "essential_questions": [
+        "How has technology changed the way societies function?",
+        "What are the implications of technological advances on global relations?"
+      ],
+      "learning_targets": [
+        "I can identify major technological innovations of the 21st century.",
+        "I can analyze the impact of technology on social behaviors and structures.",
+        "I can evaluate the role of innovation in global economic and political change."
+      ],
+      "vocabulary": [
+        "technology",
+        "innovation",
+        "digital age",
+        "globalization",
+        "communications",
+        "automation",
+        "sustainability"
+      ],
+      "sample_assessment": "Which technological advancement has had the most significant impact on global communication? A) The printing press B) The internet C) Satellite technology D) The telegraph"
+    },
+    {
+      "code": "SS.10.H.1.1",
+      "benchmark": "Analyze the causes and effects of significant historical events on contemporary society.",
+      "topics": [
+        "History",
+        "Cause and Effect",
+        "Contemporary Society"
+      ],
+      "dok": 3,
+      "item_specs": "Students demonstrate understanding by identifying and analyzing connections between historical events and current issues.",
+      "essential_questions": [
+        "How do historical events shape current societies?",
+        "Why is it important to understand the causes and effects of past events?"
+      ],
+      "learning_targets": [
+        "I can identify key historical events and their causes.",
+        "I can analyze the effects of historical events on today's society.",
+        "I can connect past events with contemporary issues."
+      ],
+      "vocabulary": [
+        "historical analysis",
+        "causation",
+        "legacy",
+        "contemporary",
+        "impact",
+        "significance"
+      ],
+      "sample_assessment": "Which event directly led to the start of the Cold War? A) World War I B) World War II C) The Great Depression D) The Industrial Revolution"
+    },
+    {
+      "code": "SS.10.G.2.1",
+      "benchmark": "Evaluate how geography influences political, economic, and cultural development.",
+      "topics": [
+        "Geography",
+        "Political Development",
+        "Economic Development",
+        "Cultural Development"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how physical and human geography impact societal structures and processes.",
+      "essential_questions": [
+        "In what ways does geography impact cultural identity?",
+        "How do geographic features influence economic growth?"
+      ],
+      "learning_targets": [
+        "I can explain how geography impacts political boundaries.",
+        "I can assess the influence of geographic features on economic activities.",
+        "I can evaluate the relationship between geography and cultural practices."
+      ],
+      "vocabulary": [
+        "topography",
+        "climate",
+        "natural resources",
+        "demographics",
+        "cultural region",
+        "urbanization"
+      ],
+      "sample_assessment": "Which geographic feature most significantly affects the population distribution in Egypt? A) Sahara Desert B) Sinai Peninsula C) Nile River D) Mediterranean Sea"
+    },
+    {
+      "code": "SS.10.E.3.1",
+      "benchmark": "Analyze the impact of globalization on the economy and cultural exchanges.",
+      "topics": [
+        "Economics",
+        "Globalization",
+        "Cultural Exchange"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate the positive and negative effects of globalization on economic systems and cultural identities.",
+      "essential_questions": [
+        "What are the economic advantages and disadvantages of globalization?",
+        "How does globalization influence cultural diversity?"
+      ],
+      "learning_targets": [
+        "I can describe how globalization affects international trade.",
+        "I can analyze the impact of globalization on local economies.",
+        "I can evaluate the cultural exchanges resulting from globalization."
+      ],
+      "vocabulary": [
+        "globalization",
+        "trade",
+        "cultural exchange",
+        "economic integration",
+        "multinational corporations",
+        "supply chain"
+      ],
+      "sample_assessment": "Which is a primary benefit of globalization for consumers? A) Increased local employment B) Higher prices C) Greater product variety D) Cultural homogeneity"
+    },
+    {
+      "code": "SS.10.P.4.1",
+      "benchmark": "Examine the roles and responsibilities of citizens in a democratic society.",
+      "topics": [
+        "Civics",
+        "Democracy",
+        "Citizenship"
+      ],
+      "dok": 2,
+      "item_specs": "Students explore the relationship between individual rights and civic responsibilities, emphasizing active participation in democratic processes.",
+      "essential_questions": [
+        "What responsibilities do citizens have in a democracy?",
+        "Why is civic engagement important?"
+      ],
+      "learning_targets": [
+        "I can identify the rights and responsibilities of citizens in a democracy.",
+        "I can explain the importance of civic participation.",
+        "I can describe ways citizens can contribute to democratic processes."
+      ],
+      "vocabulary": [
+        "citizenship",
+        "civic duty",
+        "voting",
+        "democracy",
+        "participation",
+        "activism"
+      ],
+      "sample_assessment": "Which of the following is both a right and a responsibility of citizens in a democracy? A) Voting in elections B) Paying taxes C) Serving on a jury D) Obeying laws"
+    },
+    {
+      "code": "SS.10.G.5.1",
+      "benchmark": "Interpret maps and other geographic tools to analyze spatial patterns.",
+      "topics": [
+        "Geography",
+        "Mapping",
+        "Spatial Analysis"
+      ],
+      "dok": 2,
+      "item_specs": "Students use maps, graphs, and other tools to identify and analyze spatial relationships and patterns.",
+      "essential_questions": [
+        "How do geographic tools enhance our understanding of the world?",
+        "What can spatial patterns tell us about a region?"
+      ],
+      "learning_targets": [
+        "I can read and interpret various types of maps.",
+        "I can identify spatial patterns using geographic tools.",
+        "I can analyze data to understand geographic distributions."
+      ],
+      "vocabulary": [
+        "cartography",
+        "GIS",
+        "spatial pattern",
+        "topography",
+        "thematic map",
+        "remote sensing"
+      ],
+      "sample_assessment": "What type of map would best show population density in a region? A) Physical map B) Political map C) Climate map D) Thematic map"
+    },
+    {
+      "code": "SS.10.P.6.1",
+      "benchmark": "Discuss the influence of political ideologies on public policy and governance.",
+      "topics": [
+        "Political Science",
+        "Ideologies",
+        "Public Policy"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze how different political ideologies shape government policies and influence political decision-making.",
+      "essential_questions": [
+        "How do political ideologies impact policy decisions?",
+        "What role do ideologies play in governance?"
+      ],
+      "learning_targets": [
+        "I can describe various political ideologies and their principles.",
+        "I can analyze how ideologies influence public policy.",
+        "I can evaluate the effect of political beliefs on governance."
+      ],
+      "vocabulary": [
+        "ideology",
+        "liberalism",
+        "conservatism",
+        "socialism",
+        "policy",
+        "governance"
+      ],
+      "sample_assessment": "Which ideology is most likely to advocate for extensive government intervention in the economy? A) Conservatism B) Liberalism C) Libertarianism D) Socialism"
+    },
+    {
+      "code": "SS.11.C.1.1",
+      "benchmark": "Analyze the development and impact of major political systems in societies and their influence on international relations.",
+      "topics": [
+        "Political Systems",
+        "International Relations",
+        "Society"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine various political systems and analyze their impact on global interactions and policies.",
+      "essential_questions": [
+        "How do different political systems affect international relationships?",
+        "What are the long-term impacts of political ideologies on global politics?"
+      ],
+      "learning_targets": [
+        "I can compare and contrast major political systems around the world.",
+        "I can analyze how political systems influence international relations.",
+        "I can evaluate the effectiveness of different political ideologies on societal development."
+      ],
+      "vocabulary": [
+        "democracy",
+        "authoritarianism",
+        "communism",
+        "socialism",
+        "international diplomacy",
+        "geopolitics",
+        "sovereignty"
+      ],
+      "sample_assessment": "Which political system is characterized by the control of the state over all social, political, and economic aspects? A) Democracy B) Communism C) Monarchy D) Federalism"
+    },
+    {
+      "code": "SS.11.E.2.4",
+      "benchmark": "Examine economic theories and their impact on historical and contemporary societies.",
+      "topics": [
+        "Economic Theories",
+        "Historical Impact",
+        "Contemporary Society"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze different economic theories and evaluate their impacts on various historical and modern contexts.",
+      "essential_questions": [
+        "How do economic theories shape societies?",
+        "What are the effects of different economic systems on global development?"
+      ],
+      "learning_targets": [
+        "I can identify major economic theories and their founders.",
+        "I can analyze the influence of economic systems on historical events.",
+        "I can assess the impact of current economic theories on global issues."
+      ],
+      "vocabulary": [
+        "capitalism",
+        "mercantilism",
+        "Keynesian economics",
+        "monetarism",
+        "supply and demand",
+        "market economy",
+        "trade"
+      ],
+      "sample_assessment": "Which economic theory emphasizes government intervention and spending to stimulate the economy? A) Capitalism B) Classical Economics C) Keynesian Economics D) Monetarism"
+    },
+    {
+      "code": "SS.11.G.3.2",
+      "benchmark": "Evaluate the causes and consequences of environmental changes on human societies.",
+      "topics": [
+        "Environmental Changes",
+        "Human Societies",
+        "Sustainability"
+      ],
+      "dok": 3,
+      "item_specs": "Students explore environmental changes and their socio-economic impacts, assessing human responses and adaptations.",
+      "essential_questions": [
+        "How do environmental changes affect societies?",
+        "What are the human responses to environmental challenges?"
+      ],
+      "learning_targets": [
+        "I can analyze the causes of major environmental changes.",
+        "I can evaluate the impact of environmental changes on different societies.",
+        "I can discuss sustainable practices implemented by societies in response to environmental challenges."
+      ],
+      "vocabulary": [
+        "climate change",
+        "deforestation",
+        "ecosystem",
+        "sustainability",
+        "biodiversity",
+        "renewable resources",
+        "conservation"
+      ],
+      "sample_assessment": "Which of the following could be a direct consequence of deforestation? A) Increased biodiversity B) Global warming C) Ocean acidification D) Soil erosion"
+    },
+    {
+      "code": "SS.11.H.4.5",
+      "benchmark": "Interpret historical data and evidence to construct arguments regarding pivotal events in world history.",
+      "topics": [
+        "Historical Evidence",
+        "World History",
+        "Critical Thinking"
+      ],
+      "dok": 4,
+      "item_specs": "Students use historical evidence to craft persuasive arguments about significant historical events and their implications.",
+      "essential_questions": [
+        "How does historical evidence shape our understanding of pivotal events?",
+        "What role does interpretation play in historical analysis?"
+      ],
+      "learning_targets": [
+        "I can identify and evaluate historical evidence related to key events.",
+        "I can construct well-supported arguments about historical events.",
+        "I can critique different historical interpretations of the same event."
+      ],
+      "vocabulary": [
+        "primary sources",
+        "secondary sources",
+        "historical analysis",
+        "perspective",
+        "bias",
+        "causation",
+        "context"
+      ],
+      "sample_assessment": "Which type of evidence would be most reliable for understanding the causes of the French Revolution? A) Eyewitness accounts B) Propaganda posters C) Recent textbooks D) Personal letters of revolutionaries"
+    },
+    {
+      "code": "SS.11.C.5.3",
+      "benchmark": "Critique the role of media in shaping public opinion and policy in contemporary societies.",
+      "topics": [
+        "Media Influence",
+        "Public Opinion",
+        "Policy Making"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine media's influence on public perception and policy development, assessing credibility and impact.",
+      "essential_questions": [
+        "What is the role of media in shaping public opinion?",
+        "How does media influence policy decisions in modern societies?"
+      ],
+      "learning_targets": [
+        "I can analyze the impact of media on public opinion and policy.",
+        "I can evaluate the credibility of various media sources.",
+        "I can discuss strategies to critically engage with media content."
+      ],
+      "vocabulary": [
+        "media literacy",
+        "bias",
+        "propaganda",
+        "public opinion",
+        "agenda setting",
+        "mass communication",
+        "media ethics"
+      ],
+      "sample_assessment": "Which principle helps in critically evaluating media content for bias? A) Suspension of disbelief B) Media convergence C) Analytical thinking D) Passive consumption"
+    },
+    {
+      "code": "SS.11.W.2.1",
+      "benchmark": "Assess the influence of cultural movements on global interactions and exchanges.",
+      "topics": [
+        "Cultural Movements",
+        "Global Interactions",
+        "Cultural Exchange"
+      ],
+      "dok": 3,
+      "item_specs": "Students explore the impact of significant cultural movements on global cultural exchanges and interactions.",
+      "essential_questions": [
+        "How do cultural movements influence global interactions?",
+        "What are the effects of cultural exchange on international relationships?"
+      ],
+      "learning_targets": [
+        "I can describe major cultural movements and their origins.",
+        "I can assess the impact of cultural movements on global exchanges.",
+        "I can evaluate how cultural interactions influence societies globally."
+      ],
+      "vocabulary": [
+        "cultural diffusion",
+        "renaissance",
+        "enlightenment",
+        "globalization",
+        "multiculturalism",
+        "cultural appropriation",
+        "transnationalism"
+      ],
+      "sample_assessment": "Which cultural movement is known for its emphasis on reason and science, influencing global thought? A) Romanticism B) Renaissance C) Enlightenment D) Realism"
+    },
+    {
+      "code": "SS.12.H.1.1",
+      "benchmark": "Analyze major themes and characteristics of cultural movements and historical periods in world history.",
+      "topics": [
+        "Cultural Movements",
+        "World History",
+        "Historical Periods"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze and interpret the influence of major cultural movements on historical periods.",
+      "essential_questions": [
+        "How do cultural movements reflect the values of their time?",
+        "What impact do cultural movements have on societal evolution?"
+      ],
+      "learning_targets": [
+        "I can identify key characteristics of different cultural movements.",
+        "I can analyze the impact of cultural movements on world history.",
+        "I can compare and contrast different historical periods based on cultural characteristics."
+      ],
+      "vocabulary": [
+        "Renaissance",
+        "Enlightenment",
+        "Romanticism",
+        "Modernism",
+        "Postmodernism"
+      ],
+      "sample_assessment": "Which cultural movement emphasized individualism and emotion, influencing 19th-century art? A) Renaissance B) Enlightenment C) Romanticism D) Modernism"
+    },
+    {
+      "code": "SS.12.E.2.1",
+      "benchmark": "Evaluate the effects of globalization on national economies and cultures.",
+      "topics": [
+        "Globalization",
+        "Economics",
+        "Cultural Impact"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate and analyze the multifaceted impacts of globalization.",
+      "essential_questions": [
+        "What is globalization, and how does it affect different societies?",
+        "How do global economic trends influence local economies?"
+      ],
+      "learning_targets": [
+        "I can define globalization and describe its characteristics.",
+        "I can evaluate the positive and negative effects of globalization on various cultures.",
+        "I can assess the impact of globalization on national and global economies."
+      ],
+      "vocabulary": [
+        "globalization",
+        "trade",
+        "cultural homogenization",
+        "multinational corporations",
+        "economic interdependence"
+      ],
+      "sample_assessment": "How has globalization affected local cultures? A) It has completely erased local traditions. B) It has led to cultural homogenization. C) It has had no impact on local cultures. D) It has isolated them further."
+    },
+    {
+      "code": "SS.12.C.3.1",
+      "benchmark": "Assess the effectiveness of different types of government organizations worldwide.",
+      "topics": [
+        "Government",
+        "Political Systems",
+        "Effectiveness"
+      ],
+      "dok": 4,
+      "item_specs": "Students assess and compare the structure and effectiveness of various political systems globally.",
+      "essential_questions": [
+        "What factors contribute to the effectiveness of a government?",
+        "How do different government organizations handle challenges and issues?"
+      ],
+      "learning_targets": [
+        "I can identify and describe different types of global political systems.",
+        "I can compare the effectiveness of different governance models.",
+        "I can evaluate the strengths and weaknesses of various government organizations."
+      ],
+      "vocabulary": [
+        "democracy",
+        "autocracy",
+        "oligarchy",
+        "parliamentary system",
+        "federal system"
+      ],
+      "sample_assessment": "Which of the following government types typically allows for the separation of powers? A) Absolute monarchy B) Dictatorship C) Democracy D) Theocracy"
+    },
+    {
+      "code": "SS.12.P.4.1",
+      "benchmark": "Analyze the impact of international policies on global relations and conflicts.",
+      "topics": [
+        "International Policies",
+        "Global Relations",
+        "Conflicts"
+      ],
+      "dok": 4,
+      "item_specs": "Students analyze the role of international policies in shaping global interactions and resolving conflicts.",
+      "essential_questions": [
+        "How do international policies influence global peace and conflict?",
+        "What role do international organizations play in mediating global issues?"
+      ],
+      "learning_targets": [
+        "I can explain the role of international policies in global interactions.",
+        "I can analyze the impact of international policies on global conflicts.",
+        "I can investigate the efforts of international organizations in conflict resolution."
+      ],
+      "vocabulary": [
+        "diplomacy",
+        "sanctions",
+        "treaties",
+        "peacekeeping",
+        "sovereignty"
+      ],
+      "sample_assessment": "What is the primary role of the United Nations in international relations? A) To promote cultural exchange B) To enforce economic policies C) To maintain international peace and security D) To regulate global trade"
+    },
+    {
+      "code": "SS.12.G.2.1",
+      "benchmark": "Examine the influences of geography on political and economic decisions in different regions.",
+      "topics": [
+        "Geography",
+        "Politics",
+        "Economics"
+      ],
+      "dok": 3,
+      "item_specs": "Students examine geographical factors that influence political and economic strategies regionally.",
+      "essential_questions": [
+        "How does geography shape political boundaries?",
+        "In what ways does the physical environment impact economic activities?"
+      ],
+      "learning_targets": [
+        "I can identify geographical features that influence political decisions.",
+        "I can evaluate how geography affects regional economic development.",
+        "I can analyze case studies where geography has dictated policy decisions."
+      ],
+      "vocabulary": [
+        "topography",
+        "natural resources",
+        "urbanization",
+        "regionalism",
+        "geopolitics"
+      ],
+      "sample_assessment": "How have mountains affected political relations between countries historically? A) Encouraged cultural diffusion B) Served as natural barriers C) Made it easier to build alliances D) Standardized communication"
+    },
+    {
+      "code": "SS.12.S.5.1",
+      "benchmark": "Evaluate the impact of social movements on policy changes and societal norms.",
+      "topics": [
+        "Social Movements",
+        "Policy Change",
+        "Society"
+      ],
+      "dok": 4,
+      "item_specs": "Students evaluate the role of social movements in influencing policies and shifting societal norms.",
+      "essential_questions": [
+        "What are some examples of successful social movements?",
+        "How do social movements effect change in policies and societal norms?"
+      ],
+      "learning_targets": [
+        "I can describe the key aspects of notable social movements.",
+        "I can assess the influence of social movements on legislative changes.",
+        "I can evaluate how societal norms have been shaped by social activism."
+      ],
+      "vocabulary": [
+        "civil disobedience",
+        "activism",
+        "policy reform",
+        "social justice",
+        "advocacy"
+      ],
+      "sample_assessment": "Which social movement resulted in the legal recognition of same-sex marriage in many countries? A) Labor Movement B) Environmental Movement C) Civil Rights Movement D) LGBTQ+ Rights Movement"
     }
   ]
 }

@@ -20,6 +20,7 @@ import {
 } from "recharts";
 import Icon from "./components/Icon";
 import { AssignmentPlayer } from "./components";
+import StudentPortal from "./components/StudentPortal";
 import * as api from "./services/api";
 
 // Tab configuration
@@ -489,6 +490,11 @@ const getPlagFlagColor = (flag) => {
 };
 
 function App() {
+  // Check if this is the student portal route
+  if (window.location.pathname.startsWith("/join")) {
+    return <StudentPortal />;
+  }
+
   // Theme state with localStorage persistence
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("graider-theme");
@@ -961,6 +967,8 @@ function App() {
   const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
   const [gradingAssessment, setGradingAssessment] = useState(false);
   const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson" or "assessment"
+  const [publishingAssessment, setPublishingAssessment] = useState(false);
+  const [publishedAssessmentModal, setPublishedAssessmentModal] = useState({ show: false, joinCode: "", joinLink: "" });
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [showPlatformExport, setShowPlatformExport] = useState(false);
@@ -2282,6 +2290,37 @@ ${signature}`;
       }
     } catch (e) {
       addToast("Error exporting: " + e.message, "error");
+    }
+  };
+
+  // Publish assessment to student portal
+  const publishAssessmentHandler = async () => {
+    if (!generatedAssessment) {
+      addToast("No assessment to publish", "warning");
+      return;
+    }
+    setPublishingAssessment(true);
+    try {
+      const data = await api.publishAssessmentToPortal(generatedAssessment, {
+        teacher_name: config.teacher_name || "Teacher",
+        teacher_email: config.teacher_email,
+        show_correct_answers: true,
+        show_score_immediately: true,
+      });
+      if (data.error) {
+        addToast("Error publishing: " + data.error, "error");
+      } else if (data.success) {
+        setPublishedAssessmentModal({
+          show: true,
+          joinCode: data.join_code,
+          joinLink: data.join_link,
+        });
+        addToast("Assessment published to student portal!", "success");
+      }
+    } catch (e) {
+      addToast("Error publishing: " + e.message, "error");
+    } finally {
+      setPublishingAssessment(false);
     }
   };
 
@@ -14933,6 +14972,18 @@ ${signature}`;
                                     </div>
                                   )}
                                 </div>
+                                <button
+                                  onClick={publishAssessmentHandler}
+                                  disabled={publishingAssessment}
+                                  className="btn"
+                                  style={{
+                                    padding: "8px 16px",
+                                    background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+                                  }}
+                                >
+                                  <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
+                                  {publishingAssessment ? "Publishing..." : "Publish to Portal"}
+                                </button>
                               </div>
                             </div>
 
@@ -15740,6 +15791,142 @@ ${signature}`;
               }}
               results={interactiveResults}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Published Assessment Modal - Shows join code and link */}
+      {publishedAssessmentModal.show && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setPublishedAssessmentModal({ show: false, joinCode: "", joinLink: "" })}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--surface)",
+              borderRadius: "16px",
+              padding: "30px",
+              maxWidth: "500px",
+              width: "100%",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ marginBottom: "20px" }}>
+              <Icon name="CheckCircle" size={48} style={{ color: "#22c55e" }} />
+            </div>
+            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "10px" }}>
+              Assessment Published!
+            </h2>
+            <p style={{ color: "var(--text-secondary)", marginBottom: "25px" }}>
+              Students can now take this assessment using the code below.
+            </p>
+
+            {/* Join Code Display */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2))",
+                border: "2px solid var(--accent-primary)",
+                borderRadius: "12px",
+                padding: "20px",
+                marginBottom: "20px",
+              }}
+            >
+              <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                Join Code
+              </div>
+              <div
+                style={{
+                  fontSize: "2.5rem",
+                  fontWeight: 800,
+                  letterSpacing: "0.15em",
+                  fontFamily: "monospace",
+                  color: "var(--accent-primary)",
+                }}
+              >
+                {publishedAssessmentModal.joinCode}
+              </div>
+            </div>
+
+            {/* Link */}
+            <div style={{ marginBottom: "25px" }}>
+              <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                Or share this link:
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  background: "var(--glass-bg)",
+                  padding: "12px 15px",
+                  borderRadius: "8px",
+                }}
+              >
+                <input
+                  type="text"
+                  readOnly
+                  value={publishedAssessmentModal.joinLink}
+                  style={{
+                    flex: 1,
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-primary)",
+                    fontSize: "0.9rem",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(publishedAssessmentModal.joinLink);
+                    addToast("Link copied to clipboard!", "success");
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: "8px 12px" }}
+                >
+                  <Icon name="Copy" size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div
+              style={{
+                background: "rgba(34, 197, 94, 0.1)",
+                border: "1px solid rgba(34, 197, 94, 0.3)",
+                borderRadius: "8px",
+                padding: "15px",
+                marginBottom: "25px",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: "8px", color: "#22c55e" }}>
+                <Icon name="Info" size={16} style={{ marginRight: "8px" }} />
+                How students join:
+              </div>
+              <ol style={{ margin: 0, paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                <li>Go to <strong>graider.live/join</strong></li>
+                <li>Enter code: <strong>{publishedAssessmentModal.joinCode}</strong></li>
+                <li>Enter their name and start the assessment</li>
+              </ol>
+            </div>
+
+            <button
+              onClick={() => setPublishedAssessmentModal({ show: false, joinCode: "", joinLink: "" })}
+              className="btn btn-primary"
+              style={{ padding: "12px 30px" }}
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

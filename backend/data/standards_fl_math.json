@@ -1,12 +1,16 @@
 {
   "state": "FL",
   "subject": "Math",
-  "grade": "6-8",
+  "grade": "6-12",
   "standards": [
     {
       "code": "MA.6.NSO.1.1",
       "benchmark": "Extend previous understanding of numbers to define rational numbers. Plot, order and compare rational numbers.",
-      "topics": ["Rational Numbers", "Number Line", "Comparison"],
+      "topics": [
+        "Rational Numbers",
+        "Number Line",
+        "Comparison"
+      ],
       "dok": 2,
       "item_specs": "Students plot, order, and compare rational numbers including positive and negative fractions and decimals.",
       "essential_questions": [
@@ -18,13 +22,26 @@
         "I can plot rational numbers on a number line.",
         "I can compare and order rational numbers."
       ],
-      "vocabulary": ["rational number", "integer", "positive", "negative", "absolute value", "number line", "compare", "order"],
+      "vocabulary": [
+        "rational number",
+        "integer",
+        "positive",
+        "negative",
+        "absolute value",
+        "number line",
+        "compare",
+        "order"
+      ],
       "sample_assessment": "Which list shows the numbers in order from least to greatest? A) -3, -1, 0, 2 B) 2, 0, -1, -3 C) -1, -3, 0, 2 D) 0, -1, 2, -3"
     },
     {
       "code": "MA.6.NSO.2.1",
       "benchmark": "Add, subtract, multiply, and divide multi-digit numbers fluently, including multi-digit decimals.",
-      "topics": ["Operations", "Decimals", "Fluency"],
+      "topics": [
+        "Operations",
+        "Decimals",
+        "Fluency"
+      ],
       "dok": 1,
       "item_specs": "Students perform operations with multi-digit whole numbers and decimals with fluency.",
       "essential_questions": [
@@ -36,13 +53,25 @@
         "I can multiply multi-digit numbers and decimals.",
         "I can divide multi-digit numbers and decimals."
       ],
-      "vocabulary": ["operation", "sum", "difference", "product", "quotient", "decimal", "place value"],
-      "sample_assessment": "What is 12.5 × 3.4? A) 42.5 B) 425 C) 4.25 D) 15.9"
+      "vocabulary": [
+        "operation",
+        "sum",
+        "difference",
+        "product",
+        "quotient",
+        "decimal",
+        "place value"
+      ],
+      "sample_assessment": "What is 12.5 \u00d7 3.4? A) 42.5 B) 425 C) 4.25 D) 15.9"
     },
     {
       "code": "MA.6.AR.1.1",
       "benchmark": "Given a mathematical or real-world context, translate written descriptions into algebraic expressions.",
-      "topics": ["Expressions", "Variables", "Translation"],
+      "topics": [
+        "Expressions",
+        "Variables",
+        "Translation"
+      ],
       "dok": 2,
       "item_specs": "Students translate verbal descriptions into algebraic expressions with variables.",
       "essential_questions": [
@@ -54,13 +83,24 @@
         "I can write algebraic expressions from verbal descriptions.",
         "I can explain what variables represent in context."
       ],
-      "vocabulary": ["expression", "variable", "coefficient", "constant", "term", "translate"],
+      "vocabulary": [
+        "expression",
+        "variable",
+        "coefficient",
+        "constant",
+        "term",
+        "translate"
+      ],
       "sample_assessment": "'Five more than a number' can be written as: A) 5n B) n - 5 C) n + 5 D) 5 - n"
     },
     {
       "code": "MA.6.AR.2.1",
       "benchmark": "Given a mathematical or real-world context, write and solve one-step equations involving any of the four operations with positive rational numbers.",
-      "topics": ["Equations", "Solving", "Real-World"],
+      "topics": [
+        "Equations",
+        "Solving",
+        "Real-World"
+      ],
       "dok": 2,
       "item_specs": "Students write and solve one-step equations in mathematical and real-world contexts.",
       "essential_questions": [
@@ -72,13 +112,24 @@
         "I can solve one-step equations using inverse operations.",
         "I can check my solutions for reasonableness."
       ],
-      "vocabulary": ["equation", "solve", "inverse operation", "solution", "variable", "isolate"],
+      "vocabulary": [
+        "equation",
+        "solve",
+        "inverse operation",
+        "solution",
+        "variable",
+        "isolate"
+      ],
       "sample_assessment": "If x + 7 = 15, what is the value of x? A) 22 B) 8 C) 7 D) 105"
     },
     {
       "code": "MA.6.GR.1.1",
       "benchmark": "Extend previous understanding of the coordinate plane to plot rational number ordered pairs in all four quadrants.",
-      "topics": ["Coordinate Plane", "Quadrants", "Plotting"],
+      "topics": [
+        "Coordinate Plane",
+        "Quadrants",
+        "Plotting"
+      ],
       "dok": 2,
       "item_specs": "Students plot points with positive and negative coordinates in all four quadrants.",
       "essential_questions": [
@@ -90,13 +141,25 @@
         "I can plot ordered pairs with positive and negative values.",
         "I can identify coordinates of plotted points."
       ],
-      "vocabulary": ["coordinate plane", "ordered pair", "x-axis", "y-axis", "quadrant", "origin", "coordinates"],
+      "vocabulary": [
+        "coordinate plane",
+        "ordered pair",
+        "x-axis",
+        "y-axis",
+        "quadrant",
+        "origin",
+        "coordinates"
+      ],
       "sample_assessment": "The point (-3, 4) is located in which quadrant? A) Quadrant I B) Quadrant II C) Quadrant III D) Quadrant IV"
     },
     {
       "code": "MA.6.GR.2.1",
       "benchmark": "Derive a formula for the area of a right triangle using a rectangle.",
-      "topics": ["Area", "Triangles", "Formulas"],
+      "topics": [
+        "Area",
+        "Triangles",
+        "Formulas"
+      ],
       "dok": 2,
       "item_specs": "Students derive and apply the area formula for triangles.",
       "essential_questions": [
@@ -108,13 +171,25 @@
         "I can derive the formula for triangle area.",
         "I can calculate the area of triangles."
       ],
-      "vocabulary": ["area", "base", "height", "formula", "right triangle", "rectangle", "square units"],
+      "vocabulary": [
+        "area",
+        "base",
+        "height",
+        "formula",
+        "right triangle",
+        "rectangle",
+        "square units"
+      ],
       "sample_assessment": "A right triangle has a base of 6 units and a height of 8 units. What is its area? A) 48 square units B) 24 square units C) 14 square units D) 28 square units"
     },
     {
       "code": "MA.6.DP.1.1",
       "benchmark": "Recognize and formulate a statistical question that would generate numerical data.",
-      "topics": ["Statistics", "Data Collection", "Questions"],
+      "topics": [
+        "Statistics",
+        "Data Collection",
+        "Questions"
+      ],
       "dok": 2,
       "item_specs": "Students identify and write statistical questions that yield variability in data.",
       "essential_questions": [
@@ -126,13 +201,23 @@
         "I can write statistical questions for investigations.",
         "I can explain why statistical questions have variable answers."
       ],
-      "vocabulary": ["statistical question", "data", "variability", "numerical data", "categorical data"],
+      "vocabulary": [
+        "statistical question",
+        "data",
+        "variability",
+        "numerical data",
+        "categorical data"
+      ],
       "sample_assessment": "Which is a statistical question? A) What is your name? B) How old is the teacher? C) How many hours do students sleep per night? D) What is 5 + 3?"
     },
     {
       "code": "MA.6.DP.1.4",
       "benchmark": "Given a box plot within a mathematical or real-world context, determine the minimum, maximum, median, first quartile, third quartile, and range.",
-      "topics": ["Box Plots", "Five-Number Summary", "Data Analysis"],
+      "topics": [
+        "Box Plots",
+        "Five-Number Summary",
+        "Data Analysis"
+      ],
       "dok": 2,
       "item_specs": "Students interpret box plots and identify statistical measures.",
       "essential_questions": [
@@ -144,8 +229,1043 @@
         "I can calculate range from a box plot.",
         "I can interpret what box plots tell us about data distribution."
       ],
-      "vocabulary": ["box plot", "minimum", "maximum", "median", "quartile", "range", "interquartile range"],
+      "vocabulary": [
+        "box plot",
+        "minimum",
+        "maximum",
+        "median",
+        "quartile",
+        "range",
+        "interquartile range"
+      ],
       "sample_assessment": "In a box plot, the median is shown by: A) The left whisker B) The right whisker C) The line inside the box D) The entire box"
+    },
+    {
+      "code": "MA.7.NSO.1.1",
+      "benchmark": "Apply and extend previous understandings of operations with fractions to add, subtract, multiply and divide rational numbers.",
+      "topics": [
+        "Operations with Rational Numbers",
+        "Addition",
+        "Subtraction",
+        "Multiplication",
+        "Division"
+      ],
+      "dok": 2,
+      "item_specs": "Students solve real-world and mathematical problems involving the four operations with rational numbers.",
+      "essential_questions": [
+        "How do we perform operations with rational numbers?",
+        "In what ways can we use operations with rational numbers in real-world scenarios?"
+      ],
+      "learning_targets": [
+        "I can add, subtract, multiply, and divide rational numbers.",
+        "I can solve real-world problems involving operations with rational numbers."
+      ],
+      "vocabulary": [
+        "rational number",
+        "operation",
+        "addition",
+        "subtraction",
+        "multiplication",
+        "division"
+      ],
+      "sample_assessment": "Solve: (-2/3) + (4/5)"
+    },
+    {
+      "code": "MA.7.NSO.2.1",
+      "benchmark": "Understand that positive and negative numbers are used together to describe quantities having opposite directions or values.",
+      "topics": [
+        "Integers",
+        "Opposites",
+        "Real-World Contexts"
+      ],
+      "dok": 2,
+      "item_specs": "Students interpret and model integers within real-world contexts, such as gains/losses and elevations.",
+      "essential_questions": [
+        "How do negative and positive numbers represent real-world situations?",
+        "What is the significance of using integers in practical applications?"
+      ],
+      "learning_targets": [
+        "I can describe situations in which opposite quantities combine to make 0.",
+        "I can represent real-world situations using integers."
+      ],
+      "vocabulary": [
+        "integer",
+        "opposite",
+        "positive",
+        "negative",
+        "additive inverse"
+      ],
+      "sample_assessment": "Interpret the number -20 in this context: The location is 20 feet below sea level."
+    },
+    {
+      "code": "MA.7.EE.1.1",
+      "benchmark": "Use properties of operations to generate equivalent expressions.",
+      "topics": [
+        "Expressions",
+        "Equivalent Expressions",
+        "Properties of Operations"
+      ],
+      "dok": 2,
+      "item_specs": "Students apply properties of operations to expand and factor linear expressions with rational coefficients.",
+      "essential_questions": [
+        "How can expressions be manipulated using the properties of operations?",
+        "Why is it important to recognize equivalent expressions?"
+      ],
+      "learning_targets": [
+        "I can apply the distributive property to write equivalent expressions.",
+        "I can combine like terms to simplify expressions."
+      ],
+      "vocabulary": [
+        "expression",
+        "equivalent",
+        "distributive property",
+        "combine like terms"
+      ],
+      "sample_assessment": "Simplify the expression: 3(x + 2) + 4x"
+    },
+    {
+      "code": "MA.7.RP.1.1",
+      "benchmark": "Analyze proportional relationships and use them to solve real-world and mathematical problems.",
+      "topics": [
+        "Proportional Relationships",
+        "Rates",
+        "Unit Rates"
+      ],
+      "dok": 3,
+      "item_specs": "Students identify and compute unit rates associated with ratios of fractions and use proportional reasoning to solve problems.",
+      "essential_questions": [
+        "How do we recognize and represent proportional relationships?",
+        "What strategies can we use to solve problems involving proportional relationships?"
+      ],
+      "learning_targets": [
+        "I can identify proportional relationships in various contexts.",
+        "I can compute unit rates and use them to solve problems."
+      ],
+      "vocabulary": [
+        "proportional relationship",
+        "rate",
+        "unit rate",
+        "ratio"
+      ],
+      "sample_assessment": "If 7 apples cost $2.10, what is the cost per apple?"
+    },
+    {
+      "code": "MA.7.G.1.1",
+      "benchmark": "Solve problems involving scale drawings of geometric figures, including computing actual lengths and areas from a scale drawing and reproducing a scale drawing at a different scale.",
+      "topics": [
+        "Geometry",
+        "Scale Drawings",
+        "Length",
+        "Area"
+      ],
+      "dok": 3,
+      "item_specs": "Students calculate real-life dimensions and areas from scale drawings.",
+      "essential_questions": [
+        "How do we use scale drawings in real-world contexts?",
+        "What methods can we use to calculate dimensions from scale drawings?"
+      ],
+      "learning_targets": [
+        "I can interpret scale drawings of geometric figures.",
+        "I can compute actual dimensions from scale drawings."
+      ],
+      "vocabulary": [
+        "scale drawing",
+        "length",
+        "area",
+        "scale factor"
+      ],
+      "sample_assessment": "A scale drawing has a scale of 1 cm to 3 m. If the length in the drawing is 4 cm, what is the actual length?"
+    },
+    {
+      "code": "MA.7.SP.1.1",
+      "benchmark": "Use random sampling to draw inferences about a population.",
+      "topics": [
+        "Statistics",
+        "Random Sampling",
+        "Inferences"
+      ],
+      "dok": 3,
+      "item_specs": "Students use data from random samples to draw inferences about a population with an unknown characteristic of interest.",
+      "essential_questions": [
+        "Why is sampling important in drawing conclusions about populations?",
+        "How can we ensure that our sample is representative of the population?"
+      ],
+      "learning_targets": [
+        "I can explain how sample size affects the validity of inferences.",
+        "I can use data from a random sample to draw conclusions about a population."
+      ],
+      "vocabulary": [
+        "random sampling",
+        "population",
+        "inference",
+        "representative"
+      ],
+      "sample_assessment": "A class of 30 students is surveyed about their favorite subject. If 6 randomly chosen students prefer math, what can we infer about the entire class?"
+    },
+    {
+      "code": "MA.8.NSO.1.1",
+      "benchmark": "Understand and apply the properties of integer exponents to generate equivalent numerical expressions.",
+      "topics": [
+        "Integer Exponents",
+        "Properties of Exponents",
+        "Numerical Expressions"
+      ],
+      "dok": 2,
+      "item_specs": "Students apply properties of exponents to simplify and evaluate expressions with integer exponents.",
+      "essential_questions": [
+        "How can we use the properties of exponents to simplify expressions?",
+        "What does it mean for numbers to have integer exponents?"
+      ],
+      "learning_targets": [
+        "I can explain the properties of integer exponents.",
+        "I can simplify expressions using the properties of exponents.",
+        "I can evaluate numerical expressions with integer exponents."
+      ],
+      "vocabulary": [
+        "exponent",
+        "base",
+        "power",
+        "product of powers",
+        "quotient of powers",
+        "power of a power"
+      ],
+      "sample_assessment": "Simplify the expression: (3^2) \u00d7 (3^4)"
+    },
+    {
+      "code": "MA.8.NSO.1.2",
+      "benchmark": "Perform operations with numbers expressed in scientific notation, including problems where both decimal and scientific notation are used.",
+      "topics": [
+        "Scientific Notation",
+        "Decimal Notation",
+        "Operations"
+      ],
+      "dok": 2,
+      "item_specs": "Students perform addition, subtraction, multiplication, and division with numbers in scientific notation.",
+      "essential_questions": [
+        "How is scientific notation useful for representing very large or very small numbers?",
+        "How do we perform operations with numbers in scientific notation?"
+      ],
+      "learning_targets": [
+        "I can convert numbers between scientific and decimal notation.",
+        "I can add, subtract, multiply, and divide numbers in scientific notation."
+      ],
+      "vocabulary": [
+        "scientific notation",
+        "decimal notation",
+        "mantissa",
+        "exponent",
+        "standard form"
+      ],
+      "sample_assessment": "Express the product of 3.2 \u00d7 10^3 and 4.5 \u00d7 10^2 in scientific notation."
+    },
+    {
+      "code": "MA.8.G.1.3",
+      "benchmark": "Explore the concept of congruence and apply it to solve problems involving transformations such as translation, reflection, rotation, and dilation.",
+      "topics": [
+        "Congruence",
+        "Transformations",
+        "Geometric Figures"
+      ],
+      "dok": 3,
+      "item_specs": "Students identify and apply transformations to determine congruence of geometric figures.",
+      "essential_questions": [
+        "What are congruent figures, and how are they identified through transformations?",
+        "How do transformations affect the size and shape of figures?"
+      ],
+      "learning_targets": [
+        "I can recognize and define congruent figures.",
+        "I can use transformations to determine if figures are congruent.",
+        "I can describe the effect of transformations on figures."
+      ],
+      "vocabulary": [
+        "congruence",
+        "translation",
+        "reflection",
+        "rotation",
+        "dilation"
+      ],
+      "sample_assessment": "Determine if the two figures are congruent and explain the transformations used."
+    },
+    {
+      "code": "MA.8.F.2.1",
+      "benchmark": "Interpret and construct functions that model relationships between quantities, including linear relationships.",
+      "topics": [
+        "Functions",
+        "Linear Relationships",
+        "Modeling"
+      ],
+      "dok": 3,
+      "item_specs": "Students interpret graphs and equations representing functions and construct models of relationships.",
+      "essential_questions": [
+        "How do we model relationships between quantities with functions?",
+        "What distinguishes a linear function from other types of functions?"
+      ],
+      "learning_targets": [
+        "I can describe relationships between quantities using functions.",
+        "I can represent linear relationships with equations and graphs.",
+        "I can interpret the graph of a function."
+      ],
+      "vocabulary": [
+        "function",
+        "linear function",
+        "slope",
+        "intercept",
+        "graph"
+      ],
+      "sample_assessment": "Describe how the function y = 2x + 3 models the relationship between x and y."
+    },
+    {
+      "code": "MA.8.SP.1.2",
+      "benchmark": "Investigate patterns of association in bivariate data using scatter plots and informally fit a line.",
+      "topics": [
+        "Bivariate Data",
+        "Scatter Plots",
+        "Line of Best Fit"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze scatter plots to identify patterns and draw lines of best fit.",
+      "essential_questions": [
+        "How can we use scatter plots to analyze relationships in bivariate data?",
+        "What can patterns in data tell us about the relationships between variables?"
+      ],
+      "learning_targets": [
+        "I can create scatter plots for bivariate data.",
+        "I can identify patterns and trends in scatter plots.",
+        "I can informally fit a line to a scatter plot."
+      ],
+      "vocabulary": [
+        "bivariate data",
+        "scatter plot",
+        "correlation",
+        "trend",
+        "line of best fit"
+      ],
+      "sample_assessment": "Create a scatter plot for given data and suggest a line of best fit."
+    },
+    {
+      "code": "MA.8.G.2.2",
+      "benchmark": "Use the Pythagorean Theorem to determine unknown side lengths in right triangles in real-world and mathematical problems.",
+      "topics": [
+        "Pythagorean Theorem",
+        "Right Triangles",
+        "Problem Solving"
+      ],
+      "dok": 2,
+      "item_specs": "Students apply the Pythagorean Theorem to calculate the length of a side in a right triangle.",
+      "essential_questions": [
+        "How do we apply the Pythagorean Theorem to find unknown side lengths?",
+        "In what ways is the Pythagorean Theorem useful in solving real-world problems?"
+      ],
+      "learning_targets": [
+        "I can identify right triangles and their sides.",
+        "I can apply the Pythagorean Theorem to find unknown side lengths.",
+        "I can solve real-world problems using the Pythagorean Theorem."
+      ],
+      "vocabulary": [
+        "Pythagorean Theorem",
+        "hypotenuse",
+        "leg",
+        "right triangle",
+        "square root"
+      ],
+      "sample_assessment": "Using the Pythagorean Theorem, find the length of the hypotenuse in a right triangle with legs of 6 cm and 8 cm."
+    },
+    {
+      "code": "MA.9.AREI.1.1",
+      "benchmark": "Understand solving equations as a process of reasoning and explain the reasoning.",
+      "topics": [
+        "Equations",
+        "Reasoning",
+        "Solution Process"
+      ],
+      "dok": 3,
+      "item_specs": "Students justify each step in solving equations and construct logical arguments to verify solutions.",
+      "essential_questions": [
+        "What does it mean to solve an equation?",
+        "How can we justify each step in the process?"
+      ],
+      "learning_targets": [
+        "I can explain the process of solving equations.",
+        "I can justify each step in solving equations.",
+        "I can verify solutions to equations."
+      ],
+      "vocabulary": [
+        "equation",
+        "solution",
+        "justification",
+        "process",
+        "logical argument",
+        "verify"
+      ],
+      "sample_assessment": "Solve the equation 3(x - 2) = 12 and justify each step."
+    },
+    {
+      "code": "MA.9.FIF.1.1",
+      "benchmark": "Understand the concept of a function and use function notation.",
+      "topics": [
+        "Functions",
+        "Function Notation",
+        "Concept of Function"
+      ],
+      "dok": 2,
+      "item_specs": "Students identify and use function notation to describe the relationship between variables.",
+      "essential_questions": [
+        "What is a function?",
+        "How is function notation used to represent relationships?"
+      ],
+      "learning_targets": [
+        "I can define what a function is.",
+        "I can use function notation correctly.",
+        "I can interpret functions in terms of relationships."
+      ],
+      "vocabulary": [
+        "function",
+        "relation",
+        "domain",
+        "range",
+        "function notation"
+      ],
+      "sample_assessment": "Given f(x) = 2x + 3, find f(4)."
+    },
+    {
+      "code": "MA.9.SSE.1.1",
+      "benchmark": "Interpret expressions that represent a quantity in terms of its context.",
+      "topics": [
+        "Expressions",
+        "Context",
+        "Interpretation"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze expressions and equate their meaning to real-world contexts.",
+      "essential_questions": [
+        "How can expressions represent real-world quantities?",
+        "What is the importance of context when interpreting expressions?"
+      ],
+      "learning_targets": [
+        "I can interpret expressions that represent real-world phenomena.",
+        "I can relate mathematical expressions to their contexts.",
+        "I can analyze parts of an expression to understand its whole meaning."
+      ],
+      "vocabulary": [
+        "expression",
+        "context",
+        "interpret",
+        "quantity"
+      ],
+      "sample_assessment": "For P(t) = 2500(1.05)^t, interpret the expression in terms of a population that grows by 5% each year."
+    },
+    {
+      "code": "MA.9.CED.1.1",
+      "benchmark": "Create equations and inequalities in one variable and use them to solve problems.",
+      "topics": [
+        "Equations",
+        "Inequalities",
+        "Problem Solving"
+      ],
+      "dok": 2,
+      "item_specs": "Students generate equations and inequalities based on problem situations and find their solutions.",
+      "essential_questions": [
+        "How can equations model real-world problems?",
+        "What strategies can be used to solve equations and inequalities?"
+      ],
+      "learning_targets": [
+        "I can create linear equations and inequalities in one variable.",
+        "I can solve single-variable equations and inequalities.",
+        "I can apply equations and inequalities to solve real-world problems."
+      ],
+      "vocabulary": [
+        "equation",
+        "inequality",
+        "variable",
+        "solution",
+        "model"
+      ],
+      "sample_assessment": "Create and solve an inequality for the statement: A number decreased by 7 is less than 25."
+    },
+    {
+      "code": "MA.9.SID.1.1",
+      "benchmark": "Summarize, represent, and interpret data on a single count or measurement variable.",
+      "topics": [
+        "Data Analysis",
+        "Statistical Measures",
+        "Interpretation"
+      ],
+      "dok": 2,
+      "item_specs": "Students use statistical tools to summarize and interpret single-variable data.",
+      "essential_questions": [
+        "How do we effectively summarize data?",
+        "What stories do data tell?"
+      ],
+      "learning_targets": [
+        "I can use measures of central tendency to summarize data.",
+        "I can represent single-variable data visually.",
+        "I can interpret data in the context of its collection."
+      ],
+      "vocabulary": [
+        "data",
+        "mean",
+        "median",
+        "mode",
+        "interpret",
+        "summary"
+      ],
+      "sample_assessment": "Given the data set {3, 7, 7, 2, 6, 7, 8}, find the mean, median, and mode."
+    },
+    {
+      "code": "MA.9.GCO.1.1",
+      "benchmark": "Experiment with transformations in the plane.",
+      "topics": [
+        "Transformations",
+        "Geometry",
+        "Plane"
+      ],
+      "dok": 2,
+      "item_specs": "Students apply geometric transformations like translations, rotations, reflections, and dilations.",
+      "essential_questions": [
+        "What are geometric transformations?",
+        "How do transformations affect figures in the plane?"
+      ],
+      "learning_targets": [
+        "I can perform and describe translations, rotations, reflections, and dilations.",
+        "I can understand the effect of transformations on figures.",
+        "I can use transformations to solve geometric problems."
+      ],
+      "vocabulary": [
+        "transformation",
+        "translation",
+        "rotation",
+        "reflection",
+        "dilation",
+        "plane"
+      ],
+      "sample_assessment": "Describe the transformation that maps triangle ABC to triangle A'B'C' if A'B'C' is a reflection of ABC over the y-axis."
+    },
+    {
+      "code": "MA.10.APR.1.1",
+      "benchmark": "Perform operations on polynomials, understanding polynomial expressions are analogous to the integers.",
+      "topics": [
+        "Polynomials",
+        "Arithmetic Operations"
+      ],
+      "dok": 2,
+      "item_specs": "Students add, subtract, and multiply polynomials and understand the closure property for polynomials.",
+      "essential_questions": [
+        "How do polynomial operations compare to arithmetic operations on integers?",
+        "What are the implications of the closure properties on polynomials?"
+      ],
+      "learning_targets": [
+        "I can add, subtract, and multiply polynomials.",
+        "I understand that polynomials are closed under addition, subtraction, and multiplication."
+      ],
+      "vocabulary": [
+        "polynomial",
+        "monomial",
+        "binomial",
+        "trinomial",
+        "degree",
+        "closure property",
+        "operation"
+      ],
+      "sample_assessment": "Simplify (3x^2 + 2x + 5) + (2x^2 - 3x + 4)."
+    },
+    {
+      "code": "MA.10.F.LE.1.1",
+      "benchmark": "Interpret the parameters in a linear or exponential function in terms of a context.",
+      "topics": [
+        "Linear Functions",
+        "Exponential Functions",
+        "Contextual Understanding"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze the parameters of linear and exponential functions and interpret them in real-world contexts.",
+      "essential_questions": [
+        "How can we interpret the parameters of linear and exponential functions in real-life situations?",
+        "What does a parameter signify in a function model?"
+      ],
+      "learning_targets": [
+        "I can interpret the meaning of the slope or rate of change in a linear function.",
+        "I can interpret the initial value and growth factor in an exponential function."
+      ],
+      "vocabulary": [
+        "parameter",
+        "slope",
+        "rate of change",
+        "initial value",
+        "growth factor",
+        "function"
+      ],
+      "sample_assessment": "Given the function f(x) = 3e^(0.5x), what do the parameters 3 and 0.5 represent in a biological growth context?"
+    },
+    {
+      "code": "MA.10.G.A.1.1",
+      "benchmark": "Understand and apply theorems about circles, including angle and segment relationships.",
+      "topics": [
+        "Circles",
+        "Theorems",
+        "Angle Relationships"
+      ],
+      "dok": 2,
+      "item_specs": "Students use and apply theorems related to circles, understanding relationships between angles, radii, chords, tangents, and secants.",
+      "essential_questions": [
+        "What relationships can be found in and around circles?",
+        "How are central and inscribed angles in a circle related?"
+      ],
+      "learning_targets": [
+        "I can apply theorems about angles and segments in circles.",
+        "I can find unknown values using circle properties."
+      ],
+      "vocabulary": [
+        "circle",
+        "radius",
+        "diameter",
+        "chord",
+        "tangent",
+        "secant",
+        "central angle",
+        "inscribed angle"
+      ],
+      "sample_assessment": "In circle O, if angle AOB is 80\u00b0 and arc AB is 120\u00b0, find the measure of inscribed angle ACB."
+    },
+    {
+      "code": "MA.10.G.GPE.1.1",
+      "benchmark": "Use geometric properties to solve equations for a circle on the coordinate plane.",
+      "topics": [
+        "Coordinate Geometry",
+        "Circles",
+        "Equation Solving"
+      ],
+      "dok": 3,
+      "item_specs": "Students solve equations and interpret geometric descriptions of circles in a coordinate plane.",
+      "essential_questions": [
+        "How can circles be represented and solved within a coordinate system?",
+        "How do geometric properties inform algebraic solutions?"
+      ],
+      "learning_targets": [
+        "I can write equations of circles in the coordinate plane.",
+        "I can solve systems involving circles and linear equations."
+      ],
+      "vocabulary": [
+        "coordinate plane",
+        "origin",
+        "radius",
+        "circle equation",
+        "system of equations",
+        "center"
+      ],
+      "sample_assessment": "Find the center and radius of the circle with the equation (x - 3)^2 + (y + 4)^2 = 25."
+    },
+    {
+      "code": "MA.10.S.ID.1.1",
+      "benchmark": "Summarize, represent, and interpret data on a single count or measurement variable.",
+      "topics": [
+        "Data Analysis",
+        "Statistical Analysis",
+        "Data Representation"
+      ],
+      "dok": 2,
+      "item_specs": "Students analyze and interpret data, using appropriate statistical measures, visual displays, and contextual explanations.",
+      "essential_questions": [
+        "How can data be summarized and represented effectively?",
+        "What insights can statistical analysis provide?"
+      ],
+      "learning_targets": [
+        "I can interpret and compare measures of central tendency and variability.",
+        "I can represent data on various plots, including histograms and box plots."
+      ],
+      "vocabulary": [
+        "mean",
+        "median",
+        "mode",
+        "range",
+        "standard deviation",
+        "histogram",
+        "box plot"
+      ],
+      "sample_assessment": "Create a box plot and calculate the interquartile range for the following data: 5, 7, 8, 10, 12, 14, 17."
+    },
+    {
+      "code": "MA.10.A.CED.1.1",
+      "benchmark": "Create equations and inequalities to represent relationships between quantities.",
+      "topics": [
+        "Algebraic Modeling",
+        "Equations",
+        "Inequalities"
+      ],
+      "dok": 2,
+      "item_specs": "Students formulate linear, quadratic, and exponential equations and inequalities to represent real-world scenarios.",
+      "essential_questions": [
+        "How can mathematical equations model real-world relationships?",
+        "What is the process for translating a word problem into equations or inequalities?"
+      ],
+      "learning_targets": [
+        "I can create equations and inequalities from word problems.",
+        "I can use algebraic equations to represent real-life scenarios."
+      ],
+      "vocabulary": [
+        "equation",
+        "inequality",
+        "linear",
+        "quadratic",
+        "exponential",
+        "model",
+        "variable"
+      ],
+      "sample_assessment": "Write an inequality that represents the situation: A car rental costs $30 per day plus a $12 fee, and you want to spend at most $180."
+    },
+    {
+      "code": "MA.11.FB.1.1",
+      "benchmark": "Analyze and represent functions and their transformations, considering domain and range.",
+      "topics": [
+        "Functions",
+        "Transformations",
+        "Domain and Range"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze transformations of functions and determine their domain and range.",
+      "essential_questions": [
+        "How do transformations affect the graph of a function?",
+        "How are domain and range related to functions?"
+      ],
+      "learning_targets": [
+        "I can identify and perform transformations on functions.",
+        "I can determine the domain and range of a function.",
+        "I can represent functions graphically, symbolically, and numerically."
+      ],
+      "vocabulary": [
+        "function",
+        "transformation",
+        "domain",
+        "range",
+        "graph",
+        "shift",
+        "stretch",
+        "reflection"
+      ],
+      "sample_assessment": "Given the function f(x) = x^2, describe the transformation and identify the domain and range if the function is transformed to g(x) = (x - 2)^2 + 3."
+    },
+    {
+      "code": "MA.11.STAT.2.1",
+      "benchmark": "Explore, summarize, and represent data using statistical measures.",
+      "topics": [
+        "Statistics",
+        "Data Analysis",
+        "Statistical Measures"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze data sets using measures of central tendency and variability.",
+      "essential_questions": [
+        "How can different representations and summaries describe the same data set?",
+        "Why is it important to consider variability in data?"
+      ],
+      "learning_targets": [
+        "I can calculate and interpret statistical measures like mean, median, mode, and standard deviation.",
+        "I can represent data visually with graphs.",
+        "I can compare data sets using statistical measures."
+      ],
+      "vocabulary": [
+        "mean",
+        "median",
+        "mode",
+        "standard deviation",
+        "range",
+        "data set",
+        "graph"
+      ],
+      "sample_assessment": "A student records the test scores of a class. Create a box plot and calculate the mean, median, and standard deviation."
+    },
+    {
+      "code": "MA.11.GEO.3.1",
+      "benchmark": "Apply geometric theorems to solve problems involving two-dimensional figures.",
+      "topics": [
+        "Geometry",
+        "Theorems",
+        "Two-Dimensional Figures"
+      ],
+      "dok": 3,
+      "item_specs": "Students use geometric theorems to solve problems with triangles, quadrilaterals, and circles.",
+      "essential_questions": [
+        "What role do theorems play in solving geometric problems?",
+        "How can geometric properties and theorems be applied in real-world contexts?"
+      ],
+      "learning_targets": [
+        "I can prove geometric theorems about triangles and other two-dimensional figures.",
+        "I can apply geometric theorems to solve problems.",
+        "I can connect geometric concepts to real-world applications."
+      ],
+      "vocabulary": [
+        "theorem",
+        "triangle",
+        "quadrilateral",
+        "circle",
+        "congruence",
+        "similarity",
+        "proof"
+      ],
+      "sample_assessment": "Prove that the sum of the interior angles of a triangle is 180 degrees and use this to find a missing angle."
+    },
+    {
+      "code": "MA.11.ALG.4.1",
+      "benchmark": "Explore and apply systems of equations and inequalities to solve real-world problems.",
+      "topics": [
+        "Algebra",
+        "Systems of Equations",
+        "Inequalities"
+      ],
+      "dok": 3,
+      "item_specs": "Students solve systems of equations and inequalities using various methods and interpret solutions in context.",
+      "essential_questions": [
+        "How can systems of equations and inequalities model real-world situations?",
+        "What methods are effective for solving systems of equations?"
+      ],
+      "learning_targets": [
+        "I can solve systems of linear equations algebraically and graphically.",
+        "I can interpret solutions to systems of inequalities.",
+        "I can apply systems of equations and inequalities to real-world problems."
+      ],
+      "vocabulary": [
+        "system of equations",
+        "inequality",
+        "substitution",
+        "elimination",
+        "graphing",
+        "solution"
+      ],
+      "sample_assessment": "A company produces two types of products. Use a system of equations to determine the production levels needed to maximize profit given certain constraints."
+    },
+    {
+      "code": "MA.11.PROB.5.1",
+      "benchmark": "Investigate and apply probability concepts to predict outcomes and make decisions.",
+      "topics": [
+        "Probability",
+        "Outcomes",
+        "Decision Making"
+      ],
+      "dok": 3,
+      "item_specs": "Students calculate and interpret probabilities of compound events and use them to make predictions.",
+      "essential_questions": [
+        "How can probabilities help us predict outcomes and inform decisions?",
+        "What strategies can be used to calculate the probability of compound events?"
+      ],
+      "learning_targets": [
+        "I can calculate probabilities for single and compound events.",
+        "I can use probability to make predictions about events.",
+        "I can evaluate risks and make decisions using probability."
+      ],
+      "vocabulary": [
+        "probability",
+        "outcome",
+        "event",
+        "compound event",
+        "independent",
+        "dependent",
+        "risk"
+      ],
+      "sample_assessment": "Calculate the probability of drawing two aces in a row from a standard deck of cards, without replacement."
+    },
+    {
+      "code": "MA.11.CALC.6.1",
+      "benchmark": "Interpret and analyze the behavior of functions using limits.",
+      "topics": [
+        "Calculus",
+        "Limits",
+        "Function Analysis"
+      ],
+      "dok": 3,
+      "item_specs": "Students analyze functions and their graphs, focusing on behavior as values approach a limit.",
+      "essential_questions": [
+        "What insight can limits provide about the behavior of functions?",
+        "How do you evaluate limits analytically and graphically?"
+      ],
+      "learning_targets": [
+        "I can interpret the concept of a limit graphically and numerically.",
+        "I can calculate limits analytically.",
+        "I can analyze the behavior of functions using limits."
+      ],
+      "vocabulary": [
+        "limit",
+        "function",
+        "continuity",
+        "asymptote",
+        "approach",
+        "infinity",
+        "behavior"
+      ],
+      "sample_assessment": "Determine the limit of f(x) = (3x^2 - x + 1)/(x - 1) as x approaches 1 and discuss the implications for the graph of the function."
+    },
+    {
+      "code": "MA.12.F.TF.1.1",
+      "benchmark": "Apply the unit circle to define trigonometric functions and use them to model periodic phenomena.",
+      "topics": [
+        "Unit Circle",
+        "Trigonometric Functions",
+        "Periodic Phenomena"
+      ],
+      "dok": 3,
+      "item_specs": "Students define and use sine, cosine, and tangent from the unit circle to model and solve real-world problems involving periodic phenomena.",
+      "essential_questions": [
+        "How do the unit circle and trigonometric functions define periodic phenomena?",
+        "In what real-world situations can we apply trigonometric functions?"
+      ],
+      "learning_targets": [
+        "I can explain how the unit circle defines sine, cosine, and tangent.",
+        "I can model periodic phenomena using trigonometric functions.",
+        "I can solve problems involving periodic changes using trigonometry."
+      ],
+      "vocabulary": [
+        "unit circle",
+        "sine",
+        "cosine",
+        "tangent",
+        "period",
+        "amplitude",
+        "frequency",
+        "radian"
+      ],
+      "sample_assessment": "Use the unit circle to find the sine and cosine of \u03c0/4."
+    },
+    {
+      "code": "MA.12.CD.2.1",
+      "benchmark": "Understand and evaluate limits of functions using graphical and algebraic methods.",
+      "topics": [
+        "Limits",
+        "Functions",
+        "Graphical and Algebraic Evaluation"
+      ],
+      "dok": 3,
+      "item_specs": "Students evaluate limits algebraically and graphically, and understand their significance in calculus.",
+      "essential_questions": [
+        "What is the concept of a limit in calculus?",
+        "How can limits be evaluated using graphs and algebra?"
+      ],
+      "learning_targets": [
+        "I can define the limit of a function.",
+        "I can evaluate limits using algebraic methods.",
+        "I can interpret the meaning of limits graphically."
+      ],
+      "vocabulary": [
+        "limit",
+        "approach",
+        "asymptote",
+        "continuity",
+        "infinity"
+      ],
+      "sample_assessment": "Evaluate the limit of (3x^2 - x) as x approaches 2."
+    },
+    {
+      "code": "MA.12.SP.3.1",
+      "benchmark": "Analyze and interpret data using statistical measures and displays.",
+      "topics": [
+        "Data Analysis",
+        "Statistical Measures",
+        "Displays"
+      ],
+      "dok": 2,
+      "item_specs": "Students analyze data sets using mean, median, mode, and range, and interpret various data displays.",
+      "essential_questions": [
+        "How do statistical measures summarize data?",
+        "What can we interpret from different data displays?"
+      ],
+      "learning_targets": [
+        "I can calculate and interpret mean, median, mode, and range.",
+        "I can analyze data presented in different formats.",
+        "I can draw conclusions from statistical data."
+      ],
+      "vocabulary": [
+        "mean",
+        "median",
+        "mode",
+        "range",
+        "histogram",
+        "scatter plot",
+        "box plot"
+      ],
+      "sample_assessment": "Given a data set, construct a box plot and interpret the results."
+    },
+    {
+      "code": "MA.12.CALC.4.1",
+      "benchmark": "Apply derivatives to determine rates of change and solve real-world problems.",
+      "topics": [
+        "Derivatives",
+        "Rates of Change",
+        "Real-World Applications"
+      ],
+      "dok": 3,
+      "item_specs": "Students use derivatives to calculate and interpret the rate of change in various contexts and solve applied problems.",
+      "essential_questions": [
+        "What is a derivative, and how does it represent a rate of change?",
+        "In what situations can derivatives be practically applied?"
+      ],
+      "learning_targets": [
+        "I can find the derivative of a function.",
+        "I can interpret the meaning of derivatives in context.",
+        "I can apply derivatives to solve problems involving motion and change."
+      ],
+      "vocabulary": [
+        "derivative",
+        "rate of change",
+        "tangent line",
+        "differentiation",
+        "instantaneous rate"
+      ],
+      "sample_assessment": "Find the rate of change of the function f(x) = x^3 + 2x at x = 1."
+    },
+    {
+      "code": "MA.12.GT.5.1",
+      "benchmark": "Use geometric transformations to determine congruence and similarity.",
+      "topics": [
+        "Geometric Transformations",
+        "Congruence",
+        "Similarity"
+      ],
+      "dok": 2,
+      "item_specs": "Students apply transformations such as rotations, reflections, translations, and dilations to investigate congruence and similarity.",
+      "essential_questions": [
+        "How do transformations affect the properties of geometric figures?",
+        "How can we prove figures are congruent or similar using transformations?"
+      ],
+      "learning_targets": [
+        "I can perform geometric transformations.",
+        "I can determine congruence and similarity using transformations.",
+        "I can use transformations to solve geometric problems."
+      ],
+      "vocabulary": [
+        "translation",
+        "rotation",
+        "reflection",
+        "dilation",
+        "congruence",
+        "similarity"
+      ],
+      "sample_assessment": "Given a triangle and its image under a transformation, determine if the figures are congruent."
+    },
+    {
+      "code": "MA.12.STE.6.1",
+      "benchmark": "Interpret the structure of expressions and use it to rewrite them in equivalent forms.",
+      "topics": [
+        "Expressions",
+        "Rewriting",
+        "Equivalence"
+      ],
+      "dok": 2,
+      "item_specs": "Students analyze and manipulate expressions to reveal structure and rewrite them in different equivalent forms.",
+      "essential_questions": [
+        "How can the structure of an expression inform its simplification?",
+        "In what ways can expressions be rewritten to reveal different properties?"
+      ],
+      "learning_targets": [
+        "I can identify the structure of algebraic expressions.",
+        "I can rewrite expressions in equivalent forms.",
+        "I can use expression equivalences to solve problems."
+      ],
+      "vocabulary": [
+        "expression",
+        "equivalence",
+        "factoring",
+        "expanding",
+        "simplification",
+        "structure"
+      ],
+      "sample_assessment": "Rewrite the expression 2x^2 + 8x + 8 in its factored form."
     }
   ]
 }
