@@ -19,6 +19,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import Icon from "./components/Icon";
+import { AssignmentPlayer } from "./components";
 import * as api from "./services/api";
 
 // Tab configuration
@@ -102,16 +103,25 @@ const markerLibrary = {
 };
 
 // StandardCard component for Planner
-function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) {
+function StandardCard({
+  standard,
+  isSelected,
+  onToggle,
+  isExpanded,
+  onExpand,
+}) {
   const dokColors = { 1: "#4ade80", 2: "#60a5fa", 3: "#f59e0b", 4: "#ef4444" };
-  const dokLabels = { 1: "Recall", 2: "Skill/Concept", 3: "Strategic Thinking", 4: "Extended Thinking" };
+  const dokLabels = {
+    1: "Recall",
+    2: "Skill/Concept",
+    3: "Strategic Thinking",
+    4: "Extended Thinking",
+  };
 
   return (
     <div
       style={{
-        background: isSelected
-          ? "rgba(99,102,241,0.2)"
-          : "var(--glass-bg)",
+        background: isSelected ? "rgba(99,102,241,0.2)" : "var(--glass-bg)",
         border: isSelected
           ? "1px solid var(--accent-primary)"
           : "1px solid var(--glass-border)",
@@ -121,10 +131,7 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
         marginBottom: "10px",
       }}
     >
-      <div
-        onClick={onToggle}
-        style={{ cursor: "pointer" }}
-      >
+      <div onClick={onToggle} style={{ cursor: "pointer" }}>
         <div
           style={{
             display: "flex",
@@ -137,7 +144,9 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
             <span
               style={{
                 fontWeight: 700,
-                color: isSelected ? "var(--accent-light)" : "var(--text-primary)",
+                color: isSelected
+                  ? "var(--accent-light)"
+                  : "var(--text-primary)",
                 fontSize: "0.9rem",
               }}
             >
@@ -160,7 +169,11 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
             )}
           </div>
           {isSelected && (
-            <Icon name="CheckCircle" size={18} style={{ color: "var(--accent-primary)" }} />
+            <Icon
+              name="CheckCircle"
+              size={18}
+              style={{ color: "var(--accent-primary)" }}
+            />
           )}
         </div>
         <p
@@ -173,7 +186,14 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
         >
           {standard.benchmark}
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "6px",
+            alignItems: "center",
+          }}
+        >
           {(standard.topics || []).map((topic) => (
             <span
               key={topic}
@@ -192,9 +212,14 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
       </div>
 
       {/* Expand button */}
-      {(standard.learning_targets || standard.vocabulary || standard.essential_questions) && (
+      {(standard.learning_targets ||
+        standard.vocabulary ||
+        standard.essential_questions) && (
         <button
-          onClick={(e) => { e.stopPropagation(); onExpand && onExpand(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand && onExpand();
+          }}
           style={{
             marginTop: "10px",
             padding: "4px 10px",
@@ -216,44 +241,114 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
 
       {/* Expanded Details */}
       {isExpanded && (
-        <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid var(--glass-border)" }}>
+        <div
+          style={{
+            marginTop: "15px",
+            paddingTop: "15px",
+            borderTop: "1px solid var(--glass-border)",
+          }}
+        >
           {/* Essential Questions */}
-          {standard.essential_questions && standard.essential_questions.length > 0 && (
-            <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#8b5cf6", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <Icon name="HelpCircle" size={14} /> Essential Questions
+          {standard.essential_questions &&
+            standard.essential_questions.length > 0 && (
+              <div style={{ marginBottom: "12px" }}>
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    color: "#8b5cf6",
+                    marginBottom: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Icon name="HelpCircle" size={14} /> Essential Questions
+                </div>
+                {standard.essential_questions.map((q, i) => (
+                  <p
+                    key={i}
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--text-secondary)",
+                      margin: "4px 0",
+                      paddingLeft: "20px",
+                    }}
+                  >
+                    • {q}
+                  </p>
+                ))}
               </div>
-              {standard.essential_questions.map((q, i) => (
-                <p key={i} style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "4px 0", paddingLeft: "20px" }}>
-                  • {q}
-                </p>
-              ))}
-            </div>
-          )}
+            )}
 
           {/* Learning Targets */}
-          {standard.learning_targets && standard.learning_targets.length > 0 && (
-            <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#10b981", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <Icon name="Target" size={14} /> Learning Targets
+          {standard.learning_targets &&
+            standard.learning_targets.length > 0 && (
+              <div style={{ marginBottom: "12px" }}>
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    color: "#10b981",
+                    marginBottom: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Icon name="Target" size={14} /> Learning Targets
+                </div>
+                {standard.learning_targets.map((t, i) => (
+                  <p
+                    key={i}
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--text-secondary)",
+                      margin: "4px 0",
+                      paddingLeft: "20px",
+                    }}
+                  >
+                    • {t}
+                  </p>
+                ))}
               </div>
-              {standard.learning_targets.map((t, i) => (
-                <p key={i} style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "4px 0", paddingLeft: "20px" }}>
-                  • {t}
-                </p>
-              ))}
-            </div>
-          )}
+            )}
 
           {/* Vocabulary */}
           {standard.vocabulary && standard.vocabulary.length > 0 && (
             <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f59e0b", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  color: "#f59e0b",
+                  marginBottom: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
                 <Icon name="BookOpen" size={14} /> Key Vocabulary
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "20px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px",
+                  paddingLeft: "20px",
+                }}
+              >
                 {standard.vocabulary.map((v, i) => (
-                  <span key={i} style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "12px", background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>
+                  <span
+                    key={i}
+                    style={{
+                      fontSize: "0.8rem",
+                      padding: "3px 10px",
+                      borderRadius: "12px",
+                      background: "rgba(245,158,11,0.15)",
+                      color: "#f59e0b",
+                    }}
+                  >
                     {v}
                   </span>
                 ))}
@@ -264,10 +359,27 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
           {/* Item Specifications */}
           {standard.item_specs && (
             <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#6366f1", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  color: "#6366f1",
+                  marginBottom: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
                 <Icon name="ClipboardList" size={14} /> Item Specifications
               </div>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "0", paddingLeft: "20px" }}>
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "var(--text-secondary)",
+                  margin: "0",
+                  paddingLeft: "20px",
+                }}
+              >
                 {standard.item_specs}
               </p>
             </div>
@@ -276,10 +388,31 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
           {/* Sample Assessment */}
           {standard.sample_assessment && (
             <div>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#ec4899", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  color: "#ec4899",
+                  marginBottom: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
                 <Icon name="FileQuestion" size={14} /> Sample Assessment Item
               </div>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "0", paddingLeft: "20px", fontStyle: "italic", background: "var(--glass-hover)", padding: "10px", borderRadius: "8px" }}>
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "var(--text-secondary)",
+                  margin: "0",
+                  paddingLeft: "20px",
+                  fontStyle: "italic",
+                  background: "var(--glass-hover)",
+                  padding: "10px",
+                  borderRadius: "8px",
+                }}
+              >
                 {standard.sample_assessment}
               </p>
             </div>
@@ -294,7 +427,11 @@ function StandardCard({ standard, isSelected, onToggle, isExpanded, onExpand }) 
 const getAuthenticityStatus = (result) => {
   // New format with separate AI and plagiarism detection
   if (result.ai_detection || result.plagiarism_detection) {
-    const ai = result.ai_detection || { flag: "none", confidence: 0, reason: "" };
+    const ai = result.ai_detection || {
+      flag: "none",
+      confidence: 0,
+      reason: "",
+    };
     const plag = result.plagiarism_detection || { flag: "none", reason: "" };
 
     // Determine overall status for summary views
@@ -316,30 +453,38 @@ const getAuthenticityStatus = (result) => {
   const reason = result.authenticity_reason || "";
   return {
     ai: {
-      flag: flag === "flagged" ? "likely" : flag === "review" ? "possible" : "none",
+      flag:
+        flag === "flagged" ? "likely" : flag === "review" ? "possible" : "none",
       confidence: flag === "flagged" ? 80 : flag === "review" ? 50 : 0,
-      reason: flag !== "clean" ? reason : ""
+      reason: flag !== "clean" ? reason : "",
     },
     plag: { flag: "none", reason: "" },
     overallStatus: flag,
-    isNewFormat: false
+    isNewFormat: false,
   };
 };
 
 const getAIFlagColor = (flag) => {
   switch (flag) {
-    case "likely": return { bg: "rgba(248,113,113,0.2)", text: "#f87171" };
-    case "possible": return { bg: "rgba(251,191,36,0.2)", text: "#fbbf24" };
-    case "unlikely": return { bg: "rgba(96,165,250,0.2)", text: "#60a5fa" };
-    default: return { bg: "rgba(74,222,128,0.2)", text: "#4ade80" };
+    case "likely":
+      return { bg: "rgba(248,113,113,0.2)", text: "#f87171" };
+    case "possible":
+      return { bg: "rgba(251,191,36,0.2)", text: "#fbbf24" };
+    case "unlikely":
+      return { bg: "rgba(96,165,250,0.2)", text: "#60a5fa" };
+    default:
+      return { bg: "rgba(74,222,128,0.2)", text: "#4ade80" };
   }
 };
 
 const getPlagFlagColor = (flag) => {
   switch (flag) {
-    case "likely": return { bg: "rgba(248,113,113,0.2)", text: "#f87171" };
-    case "possible": return { bg: "rgba(251,191,36,0.2)", text: "#fbbf24" };
-    default: return { bg: "rgba(74,222,128,0.2)", text: "#4ade80" };
+    case "likely":
+      return { bg: "rgba(248,113,113,0.2)", text: "#f87171" };
+    case "possible":
+      return { bg: "rgba(251,191,36,0.2)", text: "#fbbf24" };
+    default:
+      return { bg: "rgba(74,222,128,0.2)", text: "#4ade80" };
   }
 };
 
@@ -370,10 +515,264 @@ function App() {
     subject: "US History",
     state: "FL",
     teacher_name: "",
+    teacher_email: "",
+    email_signature: "",
     school_name: "",
     showToastNotifications: true,
     ai_model: "gpt-4o-mini",
+    availableTools: [], // Tools teacher has access to for lesson planning
   });
+
+  // API Keys state (separate from config for security)
+  const [apiKeys, setApiKeys] = useState({
+    openai: "",
+    anthropic: "",
+    openaiConfigured: false,
+    anthropicConfigured: false,
+  });
+  const [showApiKeys, setShowApiKeys] = useState({
+    openai: false,
+    anthropic: false,
+  });
+  const [savingApiKeys, setSavingApiKeys] = useState(false);
+
+  // Focus Export state
+  const [focusExportModal, setFocusExportModal] = useState(false);
+  const [focusExportLoading, setFocusExportLoading] = useState(false);
+
+  // Available EdTech tools that can be selected
+  const EDTECH_TOOLS = [
+    // Microsoft & Google
+    {
+      id: "microsoft_365",
+      name: "Microsoft 365",
+      category: "All",
+      description: "Word, Excel, PowerPoint",
+    },
+    {
+      id: "microsoft_teams",
+      name: "Microsoft Teams",
+      category: "All",
+      description: "Collaboration & meetings",
+    },
+    {
+      id: "google_classroom",
+      name: "Google Classroom",
+      category: "All",
+      description: "Assignment management",
+    },
+    {
+      id: "google_slides",
+      name: "Google Slides",
+      category: "All",
+      description: "Presentations",
+    },
+    {
+      id: "google_docs",
+      name: "Google Docs",
+      category: "All",
+      description: "Collaborative writing",
+    },
+    // LMS & Interactive
+    {
+      id: "canvas",
+      name: "Canvas",
+      category: "All",
+      description: "Learning management system",
+    },
+    {
+      id: "nearpod",
+      name: "Nearpod",
+      category: "All",
+      description: "Interactive lessons",
+    },
+    {
+      id: "edpuzzle",
+      name: "Edpuzzle",
+      category: "All",
+      description: "Interactive video lessons",
+    },
+    {
+      id: "pear_deck",
+      name: "Pear Deck",
+      category: "All",
+      description: "Interactive slides",
+    },
+    {
+      id: "padlet",
+      name: "Padlet",
+      category: "All",
+      description: "Collaborative boards",
+    },
+    {
+      id: "flipgrid",
+      name: "Flip (Flipgrid)",
+      category: "All",
+      description: "Video discussions",
+    },
+    // Design & Media
+    {
+      id: "canva",
+      name: "Canva",
+      category: "All",
+      description: "Design & infographics",
+    },
+    {
+      id: "adobe_express",
+      name: "Adobe Express",
+      category: "All",
+      description: "Creative design tool",
+    },
+    // Math
+    {
+      id: "ixl",
+      name: "IXL",
+      category: "Math/ELA",
+      description: "Adaptive practice",
+    },
+    {
+      id: "desmos",
+      name: "Desmos",
+      category: "Math",
+      description: "Graphing calculator & activities",
+    },
+    {
+      id: "geogebra",
+      name: "GeoGebra",
+      category: "Math",
+      description: "Dynamic math software",
+    },
+    {
+      id: "delta_math",
+      name: "DeltaMath",
+      category: "Math",
+      description: "Math practice & videos",
+    },
+    {
+      id: "fl_math_4_all",
+      name: "FL Math 4 All",
+      category: "Math",
+      description: "Florida math resources",
+    },
+    {
+      id: "prodigy",
+      name: "Prodigy",
+      category: "Math",
+      description: "Math game",
+    },
+    {
+      id: "zearn",
+      name: "Zearn",
+      category: "Math",
+      description: "Math curriculum",
+    },
+    // ELA & Reading
+    {
+      id: "newsela",
+      name: "Newsela",
+      category: "ELA/SS",
+      description: "Leveled articles",
+    },
+    {
+      id: "commonlit",
+      name: "CommonLit",
+      category: "ELA",
+      description: "Reading passages",
+    },
+    // Science
+    {
+      id: "phet",
+      name: "PhET Simulations",
+      category: "Science/Math",
+      description: "Interactive simulations",
+    },
+    // Social Studies
+    {
+      id: "dbq_online",
+      name: "DBQ Online",
+      category: "SS/ELA",
+      description: "Document-based questions",
+    },
+    {
+      id: "cpalms",
+      name: "CPALMS",
+      category: "All",
+      description: "Florida standards & resources",
+    },
+    // General Learning
+    {
+      id: "brainpop",
+      name: "BrainPOP",
+      category: "All",
+      description: "Animated educational videos",
+    },
+    {
+      id: "edgenuity",
+      name: "Edgenuity",
+      category: "All",
+      description: "Online curriculum",
+    },
+    {
+      id: "everfi",
+      name: "EVERFI",
+      category: "Life Skills",
+      description: "Financial literacy & digital citizenship",
+    },
+    {
+      id: "progress_learning",
+      name: "Progress Learning",
+      category: "All",
+      description: "Standards-based practice",
+    },
+    {
+      id: "hour_of_code",
+      name: "Hour of Code",
+      category: "CS",
+      description: "Coding activities",
+    },
+    // Quiz & Games
+    {
+      id: "kahoot",
+      name: "Kahoot",
+      category: "All",
+      description: "Game-based quizzes",
+    },
+    {
+      id: "quizlet",
+      name: "Quizlet",
+      category: "All",
+      description: "Flashcards & study sets",
+    },
+    {
+      id: "blooket",
+      name: "Blooket",
+      category: "All",
+      description: "Game-based review",
+    },
+    {
+      id: "gimkit",
+      name: "Gimkit",
+      category: "All",
+      description: "Live learning games",
+    },
+    // Video
+    {
+      id: "khan_academy",
+      name: "Khan Academy",
+      category: "All",
+      description: "Video lessons & practice",
+    },
+    {
+      id: "youtube",
+      name: "YouTube",
+      category: "All",
+      description: "Educational videos",
+    },
+  ];
+
+  // State for custom tools
+  const [customTools, setCustomTools] = useState([]);
+  const [newCustomTool, setNewCustomTool] = useState("");
 
   const [status, setStatus] = useState({
     is_running: false,
@@ -413,7 +812,10 @@ function App() {
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
-  const [resultsSort, setResultsSort] = useState({ field: "time", direction: "desc" }); // field: time, name, assignment, score, grade
+  const [resultsSort, setResultsSort] = useState({
+    field: "time",
+    direction: "desc",
+  }); // field: time, name, assignment, score, grade
   const [missingAssignmentFilter, setMissingAssignmentFilter] = useState(""); // Assignment to check for missing submissions
   const [missingPeriodFilter, setMissingPeriodFilter] = useState(""); // Period to filter missing report
   const [missingStudentFilter, setMissingStudentFilter] = useState(""); // Student to check for missing assignments
@@ -459,7 +861,9 @@ function App() {
   });
   const [savedAssignments, setSavedAssignments] = useState([]);
   const [savedAssignmentData, setSavedAssignmentData] = useState({}); // Map of name -> {aliases: [], title: ""}
-  const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] = useState(false);
+  const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] =
+    useState(false);
+  const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [gradeAssignment, setGradeAssignment] = useState({
     title: "",
@@ -511,6 +915,11 @@ function App() {
   const [selectedIdea, setSelectedIdea] = useState(null);
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [brainstormLoading, setBrainstormLoading] = useState(false);
+  const [generatedAssignment, setGeneratedAssignment] = useState(null);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [assignmentType, setAssignmentType] = useState("worksheet");
+  const [showInteractivePreview, setShowInteractivePreview] = useState(false);
+  const [interactiveResults, setInteractiveResults] = useState(null);
   const [unitConfig, setUnitConfig] = useState({
     title: "",
     duration: 1,
@@ -519,6 +928,42 @@ function App() {
     format: "Word",
     requirements: "",
   });
+
+  // Assessment generator state
+  const [assessmentConfig, setAssessmentConfig] = useState({
+    type: "quiz",
+    title: "",
+    totalQuestions: 15,
+    questionTypes: {
+      multiple_choice: 10,
+      short_answer: 3,
+      extended_response: 2,
+    },
+    pointsPerType: {
+      multiple_choice: 1,
+      short_answer: 2,
+      true_false: 1,
+      matching: 1,
+      extended_response: 4,
+    },
+    dokDistribution: {
+      "1": 3,
+      "2": 6,
+      "3": 4,
+      "4": 2,
+    },
+    includeAnswerKey: true,
+    includeStandardsReference: true,
+  });
+  const [generatedAssessment, setGeneratedAssessment] = useState(null);
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
+  const [assessmentAnswers, setAssessmentAnswers] = useState({}); // Track interactive answers for preview
+  const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
+  const [gradingAssessment, setGradingAssessment] = useState(false);
+  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson" or "assessment"
+  const [assessmentTemplates, setAssessmentTemplates] = useState([]);
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  const [showPlatformExport, setShowPlatformExport] = useState(false);
 
   // File upload state
   const [rosters, setRosters] = useState([]);
@@ -538,8 +983,12 @@ function App() {
   // Accommodation state (IEP/504 support - FERPA compliant)
   const [accommodationPresets, setAccommodationPresets] = useState([]);
   const [studentAccommodations, setStudentAccommodations] = useState({});
-  const [accommodationModal, setAccommodationModal] = useState({ show: false, studentId: null });
-  const [selectedAccommodationPresets, setSelectedAccommodationPresets] = useState([]);
+  const [accommodationModal, setAccommodationModal] = useState({
+    show: false,
+    studentId: null,
+  });
+  const [selectedAccommodationPresets, setSelectedAccommodationPresets] =
+    useState([]);
   const [accommodationCustomNotes, setAccommodationCustomNotes] = useState("");
 
   // Rubric state
@@ -590,8 +1039,8 @@ function App() {
           if (data.settings?.config) {
             // Migrate old "History" subject to "US History"
             const loadedConfig = { ...data.settings.config };
-            if (loadedConfig.subject === 'History') {
-              loadedConfig.subject = 'US History';
+            if (loadedConfig.subject === "History") {
+              loadedConfig.subject = "US History";
             }
             setConfig((prev) => ({ ...prev, ...loadedConfig }));
           }
@@ -652,6 +1101,18 @@ function App() {
         if (data.accommodations) setStudentAccommodations(data.accommodations);
       })
       .catch(console.error);
+
+    // Check API keys status
+    fetch("/api/check-api-keys")
+      .then((res) => res.json())
+      .then((data) => {
+        setApiKeys((prev) => ({
+          ...prev,
+          openaiConfigured: data.openai_configured,
+          anthropicConfigured: data.anthropic_configured,
+        }));
+      })
+      .catch(console.error);
   }, []);
 
   // Auto-save settings when they change (debounced)
@@ -684,7 +1145,8 @@ function App() {
     const saveTimeout = setTimeout(async () => {
       try {
         let dataToSave = { ...assignment, importedDoc };
-        const isRename = loadedAssignmentName && loadedAssignmentName !== assignment.title;
+        const isRename =
+          loadedAssignmentName && loadedAssignmentName !== assignment.title;
 
         // If title changed from a previously loaded assignment, add old name to aliases
         if (isRename) {
@@ -692,7 +1154,7 @@ function App() {
           if (!currentAliases.includes(loadedAssignmentName)) {
             dataToSave.aliases = [...currentAliases, loadedAssignmentName];
             // Also update local state with new alias
-            setAssignment(prev => ({ ...prev, aliases: dataToSave.aliases }));
+            setAssignment((prev) => ({ ...prev, aliases: dataToSave.aliases }));
           }
         }
 
@@ -732,7 +1194,11 @@ function App() {
 
   // Load files when student filter is set (for file preview)
   useEffect(() => {
-    if (gradeFilterStudent && availableFiles.length === 0 && config.assignments_folder) {
+    if (
+      gradeFilterStudent &&
+      availableFiles.length === 0 &&
+      config.assignments_folder
+    ) {
       loadAvailableFiles();
     }
   }, [gradeFilterStudent, config.assignments_folder]);
@@ -756,18 +1222,18 @@ function App() {
           // Load files and filter by period before auto-grading
           const filesData = await api.listFiles(config.assignments_folder);
           if (filesData.files) {
-            let filesToGrade = filesData.files.filter(f => !f.graded);
+            let filesToGrade = filesData.files.filter((f) => !f.graded);
 
             // Filter by period if one is selected
             if (selectedPeriod && periodStudents.length > 0) {
-              filesToGrade = filesToGrade.filter(f =>
-                fileMatchesPeriodStudent(f.name, periodStudents)
+              filesToGrade = filesToGrade.filter((f) =>
+                fileMatchesPeriodStudent(f.name, periodStudents),
               );
             }
 
             if (filesToGrade.length > 0) {
               // Update selected files and start grading
-              const fileNames = filesToGrade.map(f => f.name);
+              const fileNames = filesToGrade.map((f) => f.name);
               setSelectedFiles(fileNames);
               setAvailableFiles(filesData.files);
               // Small delay to ensure state updates before grading starts
@@ -809,7 +1275,8 @@ function App() {
       setAnalyticsClassStudents([]);
       return;
     }
-    api.getPeriodStudents(analyticsClassPeriod)
+    api
+      .getPeriodStudents(analyticsClassPeriod)
       .then((data) => {
         if (data.students) setAnalyticsClassStudents(data.students);
       })
@@ -822,7 +1289,8 @@ function App() {
       return;
     }
     setMissingFilesLoading(true);
-    api.listFiles(config.assignments_folder)
+    api
+      .listFiles(config.assignments_folder)
       .then((data) => {
         setMissingUploadedFiles(data.files || []);
       })
@@ -830,17 +1298,24 @@ function App() {
       .finally(() => setMissingFilesLoading(false));
   }, [activeTab, config.assignments_folder]);
 
-  // Load standards when settings config changes
+  // Clear selected standards when grade/subject/state changes
+  useEffect(() => {
+    setSelectedStandards([]);
+    setStandards([]);
+  }, [config.state, config.grade_level, config.subject]);
+
+  // Load standards when planner tab is active
   useEffect(() => {
     if (activeTab === "planner" && config.subject) {
       setPlannerLoading(true);
-      api.getStandards({
-        state: config.state || 'FL',
-        grade: config.grade_level || '7',
-        subject: config.subject,
-      })
+      api
+        .getStandards({
+          state: config.state || "FL",
+          grade: config.grade_level || "7",
+          subject: config.subject,
+        })
         .then((data) => {
-          console.log('Standards loaded:', data);
+          console.log("Standards loaded:", data);
           setStandards(data.standards || []);
         })
         .catch((e) => {
@@ -851,12 +1326,20 @@ function App() {
           setPlannerLoading(false);
         });
     }
-  }, [
-    config.state,
-    config.grade_level,
-    config.subject,
-    activeTab,
-  ]);
+  }, [config.state, config.grade_level, config.subject, activeTab]);
+
+  // Load assessment templates when settings tab is opened
+  useEffect(() => {
+    if (activeTab === "settings") {
+      api.getAssessmentTemplates()
+        .then((data) => {
+          setAssessmentTemplates(data.templates || []);
+        })
+        .catch((e) => {
+          console.error("Error loading assessment templates:", e);
+        });
+    }
+  }, [activeTab]);
 
   // Auto-scroll log
   useEffect(() => {
@@ -883,14 +1366,22 @@ function App() {
   // Show toast when new assignments are graded
   useEffect(() => {
     const currentCount = status.results.length;
-    if (config.showToastNotifications && currentCount > lastResultCount.current && lastResultCount.current > 0) {
+    if (
+      config.showToastNotifications &&
+      currentCount > lastResultCount.current &&
+      lastResultCount.current > 0
+    ) {
       const newResults = status.results.slice(lastResultCount.current);
       newResults.forEach((result) => {
         const grade = result.letter_grade || "N/A";
         const score = result.score !== undefined ? `${result.score}%` : "";
         addToast(
           `Graded - ${result.student_name}: ${grade} ${score}`,
-          grade === "A" || grade === "B" ? "success" : grade === "C" ? "info" : "warning"
+          grade === "A" || grade === "B"
+            ? "success"
+            : grade === "C"
+              ? "info"
+              : "warning",
         );
       });
     }
@@ -906,7 +1397,7 @@ function App() {
       if (data.files) {
         setAvailableFiles(data.files);
         // By default, select all ungraded files
-        const ungraded = data.files.filter(f => !f.graded).map(f => f.name);
+        const ungraded = data.files.filter((f) => !f.graded).map((f) => f.name);
         setSelectedFiles(ungraded);
       }
     } catch (e) {
@@ -936,7 +1427,7 @@ function App() {
   const fileMatchesPeriodStudent = (filename, students) => {
     if (!students || students.length === 0) return true; // No filter
     const lowerFilename = filename.toLowerCase();
-    return students.some(student => {
+    return students.some((student) => {
       const first = (student.first || "").toLowerCase().trim();
       const last = (student.last || "").toLowerCase().trim();
       const lastInitial = last.charAt(0);
@@ -950,9 +1441,15 @@ function App() {
         // "First, Last" - e.g., "John, Smith"
         (first && last && lowerFilename.includes(`${first}, ${last}`)) ||
         // "First, L" - e.g., "John, S" (last initial only)
-        (first && lastInitial && lowerFilename.includes(`${first}, ${lastInitial}`)) ||
+        (first &&
+          lastInitial &&
+          lowerFilename.includes(`${first}, ${lastInitial}`)) ||
         // "First L" - e.g., "John S" (no comma, last initial)
-        (first && lastInitial && lowerFilename.match(new RegExp(`${first}\\s+${lastInitial}[^a-z]`, 'i'))) ||
+        (first &&
+          lastInitial &&
+          lowerFilename.match(
+            new RegExp(`${first}\\s+${lastInitial}[^a-z]`, "i"),
+          )) ||
         // "Last, First" - e.g., "Smith, John"
         (first && last && lowerFilename.includes(`${last}, ${first}`)) ||
         // "First Last" - e.g., "John Smith"
@@ -970,12 +1467,15 @@ function App() {
   const studentNameMatchesPeriod = (studentName, students) => {
     if (!students || students.length === 0) return true;
     const lowerName = (studentName || "").toLowerCase();
-    return students.some(student => {
+    return students.some((student) => {
       const first = (student.first || "").toLowerCase().trim();
       const last = (student.last || "").toLowerCase().trim();
       // Match "First Last" or "Last, First" patterns
       return (
-        (first && last && lowerName.includes(first) && lowerName.includes(last)) ||
+        (first &&
+          last &&
+          lowerName.includes(first) &&
+          lowerName.includes(last)) ||
         (first && lowerName.startsWith(first + " ")) ||
         (last && lowerName.endsWith(" " + last))
       );
@@ -985,48 +1485,63 @@ function App() {
   // Sort periods numerically by extracting number from period_name (e.g., "Period 1" → 1)
   const sortedPeriods = useMemo(() => {
     return [...periods].sort((a, b) => {
-      const numA = parseInt((a.period_name || "").match(/\d+/)?.[0] || "999", 10);
-      const numB = parseInt((b.period_name || "").match(/\d+/)?.[0] || "999", 10);
+      const numA = parseInt(
+        (a.period_name || "").match(/\d+/)?.[0] || "999",
+        10,
+      );
+      const numB = parseInt(
+        (b.period_name || "").match(/\d+/)?.[0] || "999",
+        10,
+      );
       return numA - numB;
     });
   }, [periods]);
 
   // Compute filtered analytics based on class period selection (memoized)
   const filteredAnalytics = useMemo(() => {
-    if (!analytics || !analyticsClassPeriod || analyticsClassStudents.length === 0) {
+    if (
+      !analytics ||
+      !analyticsClassPeriod ||
+      analyticsClassStudents.length === 0
+    ) {
       return analytics;
     }
 
     // Filter all_grades by student name
-    const filteredGrades = (analytics.all_grades || []).filter(g =>
-      studentNameMatchesPeriod(g.student_name, analyticsClassStudents)
+    const filteredGrades = (analytics.all_grades || []).filter((g) =>
+      studentNameMatchesPeriod(g.student_name, analyticsClassStudents),
     );
 
     // Filter student_progress by name
-    const filteredProgress = (analytics.student_progress || []).filter(s =>
-      studentNameMatchesPeriod(s.name, analyticsClassStudents)
+    const filteredProgress = (analytics.student_progress || []).filter((s) =>
+      studentNameMatchesPeriod(s.name, analyticsClassStudents),
     );
 
     // Recompute class stats from filtered grades
-    const scores = filteredGrades.map(g => g.score);
+    const scores = filteredGrades.map((g) => g.score);
     const filteredClassStats = {
       total_assignments: filteredGrades.length,
       total_students: filteredProgress.length,
-      class_average: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : 0,
+      class_average:
+        scores.length > 0
+          ? Math.round(
+              (scores.reduce((a, b) => a + b, 0) / scores.length) * 10,
+            ) / 10
+          : 0,
       highest: scores.length > 0 ? Math.max(...scores) : 0,
       lowest: scores.length > 0 ? Math.min(...scores) : 0,
       grade_distribution: {
-        A: scores.filter(s => s >= 90).length,
-        B: scores.filter(s => s >= 80 && s < 90).length,
-        C: scores.filter(s => s >= 70 && s < 80).length,
-        D: scores.filter(s => s >= 60 && s < 70).length,
-        F: scores.filter(s => s < 60).length,
-      }
+        A: scores.filter((s) => s >= 90).length,
+        B: scores.filter((s) => s >= 80 && s < 90).length,
+        C: scores.filter((s) => s >= 70 && s < 80).length,
+        D: scores.filter((s) => s >= 60 && s < 70).length,
+        F: scores.filter((s) => s < 60).length,
+      },
     };
 
     // Filter attention_needed and top_performers
-    const filteredAttention = (analytics.attention_needed || []).filter(s =>
-      studentNameMatchesPeriod(s.name, analyticsClassStudents)
+    const filteredAttention = (analytics.attention_needed || []).filter((s) =>
+      studentNameMatchesPeriod(s.name, analyticsClassStudents),
     );
     const filteredTop = filteredProgress
       .sort((a, b) => b.average - a.average)
@@ -1046,18 +1561,18 @@ function App() {
   const handleStartGrading = async () => {
     try {
       // Auto-save assignment config if it has a title and content
-      const hasGradeConfig = gradeAssignment.title && (
-        gradeAssignment.customMarkers.length > 0 ||
-        gradeAssignment.gradingNotes ||
-        (gradeAssignment.responseSections || []).length > 0 ||
-        gradeImportedDoc.filename
-      );
+      const hasGradeConfig =
+        gradeAssignment.title &&
+        (gradeAssignment.customMarkers.length > 0 ||
+          gradeAssignment.gradingNotes ||
+          (gradeAssignment.responseSections || []).length > 0 ||
+          gradeImportedDoc.filename);
 
       if (hasGradeConfig) {
         try {
           const dataToSave = {
             ...gradeAssignment,
-            importedDoc: gradeImportedDoc.filename ? gradeImportedDoc : null
+            importedDoc: gradeImportedDoc.filename ? gradeImportedDoc : null,
           };
           await api.saveAssignmentConfig(dataToSave);
           // Refresh saved assignments list
@@ -1073,51 +1588,64 @@ function App() {
       let filesToGrade = selectedFiles.length > 0 ? selectedFiles : null;
 
       // If no files selected but filters are active, load and filter files
-      if (!filesToGrade && (selectedPeriod || gradeFilterStudent || gradeFilterAssignment)) {
+      if (
+        !filesToGrade &&
+        (selectedPeriod || gradeFilterStudent || gradeFilterAssignment)
+      ) {
         try {
           const filesData = await api.listFiles(config.assignments_folder);
           if (filesData.files) {
-            let filtered = filesData.files.filter(f => !f.graded);
+            let filtered = filesData.files.filter((f) => !f.graded);
 
             // Filter by period students
             if (selectedPeriod && periodStudents.length > 0) {
-              filtered = filtered.filter(f => fileMatchesPeriodStudent(f.name, periodStudents));
+              filtered = filtered.filter((f) =>
+                fileMatchesPeriodStudent(f.name, periodStudents),
+              );
             }
 
             // Filter by individual student name
             if (gradeFilterStudent) {
-              filtered = filtered.filter(f => {
+              filtered = filtered.filter((f) => {
                 const fileName = f.name.toLowerCase();
                 const studentName = gradeFilterStudent.toLowerCase();
                 // Check if filename contains student name (handles various naming formats)
-                return fileName.includes(studentName.replace(/\s+/g, '')) ||
-                       fileName.includes(studentName.replace(/\s+/g, '_')) ||
-                       fileName.includes(studentName.replace(/\s+/g, '-')) ||
-                       fileName.includes(studentName);
+                return (
+                  fileName.includes(studentName.replace(/\s+/g, "")) ||
+                  fileName.includes(studentName.replace(/\s+/g, "_")) ||
+                  fileName.includes(studentName.replace(/\s+/g, "-")) ||
+                  fileName.includes(studentName)
+                );
               });
             }
 
             // Filter by assignment name in filename
             if (gradeFilterAssignment) {
-              filtered = filtered.filter(f => {
+              filtered = filtered.filter((f) => {
                 const fileName = f.name.toLowerCase();
                 const assignmentName = gradeFilterAssignment.toLowerCase();
                 // Check if filename contains assignment name
-                return fileName.includes(assignmentName.replace(/\s+/g, '')) ||
-                       fileName.includes(assignmentName.replace(/\s+/g, '_')) ||
-                       fileName.includes(assignmentName.replace(/\s+/g, '-')) ||
-                       fileName.includes(assignmentName);
+                return (
+                  fileName.includes(assignmentName.replace(/\s+/g, "")) ||
+                  fileName.includes(assignmentName.replace(/\s+/g, "_")) ||
+                  fileName.includes(assignmentName.replace(/\s+/g, "-")) ||
+                  fileName.includes(assignmentName)
+                );
               });
             }
 
             if (filtered.length > 0) {
-              filesToGrade = filtered.map(f => f.name);
+              filesToGrade = filtered.map((f) => f.name);
             } else {
               const filterDesc = [
                 gradeFilterStudent ? `student "${gradeFilterStudent}"` : null,
-                gradeFilterAssignment ? `assignment "${gradeFilterAssignment}"` : null,
-                selectedPeriod ? "selected period" : null
-              ].filter(Boolean).join(" and ");
+                gradeFilterAssignment
+                  ? `assignment "${gradeFilterAssignment}"`
+                  : null,
+                selectedPeriod ? "selected period" : null,
+              ]
+                .filter(Boolean)
+                .join(" and ");
               addToast(`No ungraded files found for ${filterDesc}`, "warning");
               return;
             }
@@ -1171,7 +1699,9 @@ function App() {
     if (!file) return;
 
     // Create preview URL for images
-    const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+    const preview = file.type.startsWith("image/")
+      ? URL.createObjectURL(file)
+      : null;
     setIndividualUpload((prev) => ({
       ...prev,
       file,
@@ -1200,10 +1730,17 @@ function App() {
       formData.append("school_name", config.school_name || "");
       // Pass student info from CSV if available
       if (individualUpload.studentInfo) {
-        formData.append("studentInfo", JSON.stringify(individualUpload.studentInfo));
+        formData.append(
+          "studentInfo",
+          JSON.stringify(individualUpload.studentInfo),
+        );
       }
       // Pass assignment config if available
-      if (gradeAssignment.gradingNotes || gradeAssignment.customMarkers?.length > 0 || gradeAssignment.title) {
+      if (
+        gradeAssignment.gradingNotes ||
+        gradeAssignment.customMarkers?.length > 0 ||
+        gradeAssignment.title
+      ) {
         formData.append("assignmentConfig", JSON.stringify(gradeAssignment));
       }
 
@@ -1227,7 +1764,10 @@ function App() {
         results: [...prev.results, result],
       }));
 
-      addToast(`Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`, "success");
+      addToast(
+        `Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`,
+        "success",
+      );
     } catch (error) {
       console.error("Individual grading error:", error);
       addToast("Failed to grade: " + error.message, "error");
@@ -1254,12 +1794,18 @@ function App() {
   const getStudentSuggestions = (input) => {
     if (!input || input.length < 2) return [];
     const lowerInput = input.toLowerCase();
-    return periodStudents.filter((s) => {
-      const fullName = s.full?.toLowerCase() || "";
-      const first = s.first?.toLowerCase() || "";
-      const last = s.last?.toLowerCase() || "";
-      return fullName.includes(lowerInput) || first.includes(lowerInput) || last.includes(lowerInput);
-    }).slice(0, 5); // Limit to 5 suggestions
+    return periodStudents
+      .filter((s) => {
+        const fullName = s.full?.toLowerCase() || "";
+        const first = s.first?.toLowerCase() || "";
+        const last = s.last?.toLowerCase() || "";
+        return (
+          fullName.includes(lowerInput) ||
+          first.includes(lowerInput) ||
+          last.includes(lowerInput)
+        );
+      })
+      .slice(0, 5); // Limit to 5 suggestions
   };
 
   const handleBrowse = async (type, field) => {
@@ -1318,25 +1864,30 @@ ${signature}`;
         setImportedDoc({ text: "", html: "", filename: "", loading: false });
       } else {
         // Check for duplicate assignment name
-        const newTitle = data.doc_title || file.name
-          .replace(/\.(docx|pdf|doc)$/i, "")
-          .replace(/_/g, " ");
+        const newTitle =
+          data.doc_title ||
+          file.name.replace(/\.(docx|pdf|doc)$/i, "").replace(/_/g, " ");
 
         // Sanitize title the same way backend does for filename comparison
-        const safeTitle = newTitle.replace(/[^a-zA-Z0-9 \-_]/g, '').trim();
+        const safeTitle = newTitle.replace(/[^a-zA-Z0-9 \-_]/g, "").trim();
 
         // Check if this assignment already exists (compare sanitized names)
-        const existingName = savedAssignments.find(name =>
-          name.toLowerCase() === safeTitle.toLowerCase()
+        const existingName = savedAssignments.find(
+          (name) => name.toLowerCase() === safeTitle.toLowerCase(),
         );
 
         if (existingName) {
           const confirmLoad = window.confirm(
-            `An assignment named "${existingName}" already exists.\n\nDo you want to load the existing assignment instead?`
+            `An assignment named "${existingName}" already exists.\n\nDo you want to load the existing assignment instead?`,
           );
           if (confirmLoad) {
             // Load existing assignment instead
-            setImportedDoc({ text: "", html: "", filename: "", loading: false });
+            setImportedDoc({
+              text: "",
+              html: "",
+              filename: "",
+              loading: false,
+            });
             try {
               const existingData = await api.loadAssignment(existingName);
               if (existingData.assignment) {
@@ -1348,7 +1899,8 @@ ${signature}`;
                   questions: existingData.assignment.questions || [],
                   customMarkers: existingData.assignment.customMarkers || [],
                   gradingNotes: existingData.assignment.gradingNotes || "",
-                  responseSections: existingData.assignment.responseSections || [],
+                  responseSections:
+                    existingData.assignment.responseSections || [],
                 });
                 setLoadedAssignmentName(existingName);
                 if (existingData.assignment.importedDoc) {
@@ -1419,7 +1971,10 @@ ${signature}`;
     } else if (text.length <= 2) {
       addToast("Please select more text (at least 3 characters)", "warning");
     } else if (text.length >= 2000) {
-      addToast("Selection too long. Please select less text (under 2000 characters)", "warning");
+      addToast(
+        "Selection too long. Please select less text (under 2000 characters)",
+        "warning",
+      );
     }
   };
 
@@ -1556,12 +2111,25 @@ ${signature}`;
     setBrainstormLoading(true);
     setBrainstormIdeas([]);
     setSelectedIdea(null);
+    setLessonPlan(null);  // Clear existing lesson plan so brainstorm results show
+    setLessonVariations([]);  // Clear variations too
     try {
-      const data = await api.brainstormLessonIdeas({
-        standards: selectedStandards,
-        config: { state: config.state || 'FL', grade: config.grade_level, subject: config.subject },
+      // Look up full standard objects from codes
+      const fullStandards = selectedStandards.map((code) => {
+        const std = standards.find((s) => s.code === code);
+        return std ? `${std.code}: ${std.benchmark}` : code;
       });
-      if (data.error) addToast("Note: Using sample ideas - " + data.error, "info");
+      const data = await api.brainstormLessonIdeas({
+        standards: fullStandards,
+        config: {
+          state: config.state || "FL",
+          grade: config.grade_level,
+          subject: config.subject,
+          availableTools: config.availableTools || [],
+        },
+      });
+      if (data.error)
+        addToast("Note: Using sample ideas - " + data.error, "info");
       setBrainstormIdeas(data.ideas || []);
     } catch (e) {
       addToast("Error brainstorming: " + e.message, "error");
@@ -1576,21 +2144,29 @@ ${signature}`;
       addToast("Please select at least one standard", "warning");
       return;
     }
-    if (!unitConfig.title && !selectedIdea) {
-      addToast("Please enter a title or select an idea", "warning");
-      return;
-    }
     setPlannerLoading(true);
     setLessonVariations([]);
     try {
+      // Look up full standard objects from codes
+      const fullStandards = selectedStandards.map((code) => {
+        const std = standards.find((s) => s.code === code);
+        return std ? `${std.code}: ${std.benchmark}` : code;
+      });
+      // Build title: use provided title, selected idea title, or let AI generate from standards
+      const standardCodes = selectedStandards.join(", ");
+      const autoTitle =
+        unitConfig.title || (selectedIdea ? selectedIdea.title : "");
+
       const data = await api.generateLessonPlan({
-        standards: selectedStandards,
+        standards: fullStandards,
         config: {
-          state: config.state || 'FL',
+          state: config.state || "FL",
           grade: config.grade_level,
           subject: config.subject,
+          availableTools: config.availableTools || [],
           ...unitConfig,
-          title: unitConfig.title || (selectedIdea ? selectedIdea.title : 'Untitled'),
+          title: autoTitle, // Empty string tells backend to auto-generate title
+          standardCodes: standardCodes, // Pass for title generation if needed
         },
         selectedIdea: selectedIdea,
         generateVariations: generateVariations,
@@ -1598,7 +2174,10 @@ ${signature}`;
       if (data.error) addToast("Error: " + data.error, "error");
       else if (data.variations) {
         setLessonVariations(data.variations);
-        addToast(`Generated ${data.variations.length} lesson plan variations!`, "success");
+        addToast(
+          `Generated ${data.variations.length} lesson plan variations!`,
+          "success",
+        );
       } else {
         setLessonPlan(data.plan || data);
       }
@@ -1617,6 +2196,150 @@ ${signature}`;
       else addToast("Lesson plan exported!", "success");
     } catch (e) {
       addToast("Error exporting: " + e.message, "error");
+    }
+  };
+
+  // Assessment generation handlers
+  const generateAssessmentHandler = async () => {
+    if (selectedStandards.length === 0) {
+      addToast("Please select at least one standard", "warning");
+      return;
+    }
+    setAssessmentLoading(true);
+    setGeneratedAssessment(null);
+    try {
+      // Get full standard objects
+      const fullStandards = selectedStandards.map((code) => {
+        return standards.find((s) => s.code === code) || { code, benchmark: code };
+      });
+
+      // Auto-generate title if not provided
+      const title = assessmentConfig.title ||
+        `${config.subject || "Subject"} ${assessmentConfig.type.charAt(0).toUpperCase() + assessmentConfig.type.slice(1)} - ${selectedStandards.slice(0, 2).join(", ")}${selectedStandards.length > 2 ? "..." : ""}`;
+
+      const data = await api.generateAssessment(
+        fullStandards,
+        {
+          grade: config.grade_level,
+          subject: config.subject,
+          teacher_name: config.teacher_name,
+        },
+        { ...assessmentConfig, title }
+      );
+
+      if (data.error) {
+        addToast("Error: " + data.error, "error");
+      } else if (data.assessment) {
+        setGeneratedAssessment(data.assessment);
+        setAssessmentAnswers({}); // Clear previous answers
+        addToast("Assessment generated successfully!", "success");
+      }
+    } catch (e) {
+      addToast("Error generating assessment: " + e.message, "error");
+    } finally {
+      setAssessmentLoading(false);
+    }
+  };
+
+  const exportAssessmentHandler = async (includeAnswerKey = false) => {
+    if (!generatedAssessment) return;
+    try {
+      const data = await api.exportAssessment(generatedAssessment, includeAnswerKey);
+      if (data.error) {
+        addToast("Error exporting: " + data.error, "error");
+      } else if (data.document) {
+        // Download the document
+        const link = document.createElement("a");
+        link.href = "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64," + data.document;
+        link.download = data.filename || "assessment.docx";
+        link.click();
+        addToast("Assessment exported!", "success");
+      }
+    } catch (e) {
+      addToast("Error exporting: " + e.message, "error");
+    }
+  };
+
+  const exportAssessmentForPlatformHandler = async (platform) => {
+    if (!generatedAssessment) return;
+    try {
+      const data = await api.exportAssessmentForPlatform(generatedAssessment, platform);
+      if (data.error) {
+        addToast("Error exporting: " + data.error, "error");
+      } else if (data.document) {
+        const mimeTypes = {
+          csv: "text/csv",
+          xml: "application/xml",
+          txt: "text/plain",
+          json: "application/json",
+        };
+        const mimeType = mimeTypes[data.format] || data.mime_type || "application/octet-stream";
+        const link = document.createElement("a");
+        link.href = `data:${mimeType};base64,${data.document}`;
+        link.download = data.filename;
+        link.click();
+        addToast(`Exported for ${platform}!`, "success");
+      }
+    } catch (e) {
+      addToast("Error exporting: " + e.message, "error");
+    }
+  };
+
+  // Grade assessment answers with AI
+  const gradeAssessmentAnswersHandler = async () => {
+    if (!generatedAssessment || Object.keys(assessmentAnswers).length === 0) {
+      addToast("Please answer at least one question first", "warning");
+      return;
+    }
+    setGradingAssessment(true);
+    setAssessmentGradingResults(null);
+    try {
+      const data = await api.gradeAssessmentAnswers(generatedAssessment, assessmentAnswers);
+      if (data.error) {
+        addToast("Error grading: " + data.error, "error");
+      } else if (data.results) {
+        setAssessmentGradingResults(data.results);
+        addToast(`Graded! Score: ${data.results.score}/${data.results.total_points} (${data.results.percentage}%)`, "success");
+      }
+    } catch (e) {
+      addToast("Error grading assessment: " + e.message, "error");
+    } finally {
+      setGradingAssessment(false);
+    }
+  };
+
+  // Generate assignment from lesson plan
+  const generateAssignmentFromLessonHandler = async () => {
+    if (!lessonPlan) {
+      addToast("Please generate a lesson plan first", "warning");
+      return;
+    }
+    setAssignmentLoading(true);
+    setGeneratedAssignment(null);
+    try {
+      const data = await api.generateAssignmentFromLesson(
+        lessonPlan,
+        {
+          grade: config.grade_level,
+          subject: config.subject,
+          availableTools: config.availableTools || [],
+        },
+        assignmentType,
+      );
+      if (data.error) {
+        addToast("Error: " + data.error, "warning");
+      }
+      if (data.assignment) {
+        setGeneratedAssignment(data.assignment);
+        addToast(
+          `${assignmentType.charAt(0).toUpperCase() + assignmentType.slice(1)} generated from lesson!`,
+          "success",
+        );
+      }
+    } catch (e) {
+      addToast("Error generating assignment: " + e.message, "error");
+    } finally {
+      setAssignmentLoading(false);
     }
   };
 
@@ -1653,7 +2376,7 @@ ${signature}`;
       message: "Sending emails...",
     });
     try {
-      const data = await api.sendEmails(results);
+      const data = await api.sendEmails(results, config.teacher_email, config.teacher_name, config.email_signature);
       setEmailStatus({
         sending: false,
         sent: data.sent || 0,
@@ -1886,8 +2609,12 @@ ${signature}`;
                 justifyContent: "center",
                 transition: "all 0.2s",
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = "var(--glass-hover)"}
-              onMouseLeave={(e) => e.currentTarget.style.background = "var(--glass-bg)"}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "var(--glass-hover)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "var(--glass-bg)")
+              }
             >
               <Icon name="X" size={20} />
             </button>
@@ -1935,10 +2662,14 @@ ${signature}`;
                             padding: "8px 16px",
                             borderRadius: "8px",
                             border: "none",
-                            background: reviewModalTab === "detected"
-                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
-                              : "var(--glass-hover)",
-                            color: reviewModalTab === "detected" ? "#fff" : "var(--text-secondary)",
+                            background:
+                              reviewModalTab === "detected"
+                                ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                                : "var(--glass-hover)",
+                            color:
+                              reviewModalTab === "detected"
+                                ? "#fff"
+                                : "var(--text-secondary)",
                             fontWeight: 600,
                             fontSize: "0.85rem",
                             cursor: "pointer",
@@ -1957,10 +2688,14 @@ ${signature}`;
                             padding: "8px 16px",
                             borderRadius: "8px",
                             border: "none",
-                            background: reviewModalTab === "raw"
-                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
-                              : "var(--glass-hover)",
-                            color: reviewModalTab === "raw" ? "#fff" : "var(--text-secondary)",
+                            background:
+                              reviewModalTab === "raw"
+                                ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                                : "var(--glass-hover)",
+                            color:
+                              reviewModalTab === "raw"
+                                ? "#fff"
+                                : "var(--text-secondary)",
                             fontWeight: 600,
                             fontSize: "0.85rem",
                             cursor: "pointer",
@@ -1979,7 +2714,10 @@ ${signature}`;
                           try {
                             await api.openFolder(r.filepath);
                           } catch (e) {
-                            addToast("Could not open file: " + e.message, "error");
+                            addToast(
+                              "Could not open file: " + e.message,
+                              "error",
+                            );
                           }
                         }}
                         style={{
@@ -1996,8 +2734,13 @@ ${signature}`;
                           gap: "6px",
                           transition: "all 0.2s",
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = "var(--glass-hover)"}
-                        onMouseLeave={(e) => e.currentTarget.style.background = "var(--glass-bg)"}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background =
+                            "var(--glass-hover)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "var(--glass-bg)")
+                        }
                       >
                         <Icon name="ExternalLink" size={14} />
                         Open Original
@@ -2007,9 +2750,16 @@ ${signature}`;
                     {/* Tab Content */}
                     <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
                       {reviewModalTab === "detected" ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "16px",
+                          }}
+                        >
                           {/* AI Detected Responses */}
-                          {r.student_responses && r.student_responses.length > 0 ? (
+                          {r.student_responses &&
+                          r.student_responses.length > 0 ? (
                             <div>
                               <div
                                 style={{
@@ -2023,9 +2773,16 @@ ${signature}`;
                                 }}
                               >
                                 <Icon name="CheckCircle" size={16} />
-                                Detected Responses ({r.student_responses.length})
+                                Detected Responses ({r.student_responses.length}
+                                )
                               </div>
-                              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "10px",
+                                }}
+                              >
                                 {r.student_responses.map((resp, i) => (
                                   <div
                                     key={i}
@@ -2058,37 +2815,38 @@ ${signature}`;
                           )}
 
                           {/* Unanswered Questions */}
-                          {r.unanswered_questions && r.unanswered_questions.length > 0 && (
-                            <div style={{ marginTop: "8px" }}>
-                              <div
-                                style={{
-                                  fontWeight: 600,
-                                  marginBottom: "12px",
-                                  color: "#fbbf24",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                  fontSize: "0.9rem",
-                                }}
-                              >
-                                <Icon name="AlertCircle" size={16} />
-                                Unanswered ({r.unanswered_questions.length})
+                          {r.unanswered_questions &&
+                            r.unanswered_questions.length > 0 && (
+                              <div style={{ marginTop: "8px" }}>
+                                <div
+                                  style={{
+                                    fontWeight: 600,
+                                    marginBottom: "12px",
+                                    color: "#fbbf24",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    fontSize: "0.9rem",
+                                  }}
+                                >
+                                  <Icon name="AlertCircle" size={16} />
+                                  Unanswered ({r.unanswered_questions.length})
+                                </div>
+                                <div
+                                  style={{
+                                    padding: "14px 16px",
+                                    background: "rgba(251,191,36,0.08)",
+                                    borderRadius: "10px",
+                                    fontSize: "0.9rem",
+                                    color: "var(--text-secondary)",
+                                    border: "1px solid rgba(251,191,36,0.2)",
+                                    lineHeight: 1.6,
+                                  }}
+                                >
+                                  {r.unanswered_questions.join(" • ")}
+                                </div>
                               </div>
-                              <div
-                                style={{
-                                  padding: "14px 16px",
-                                  background: "rgba(251,191,36,0.08)",
-                                  borderRadius: "10px",
-                                  fontSize: "0.9rem",
-                                  color: "var(--text-secondary)",
-                                  border: "1px solid rgba(251,191,36,0.2)",
-                                  lineHeight: 1.6,
-                                }}
-                              >
-                                {r.unanswered_questions.join(" • ")}
-                              </div>
-                            </div>
-                          )}
+                            )}
                         </div>
                       ) : (
                         <div
@@ -2102,25 +2860,35 @@ ${signature}`;
                         >
                           {r.is_handwritten ? (
                             <div style={{ textAlign: "center" }}>
-                              <div style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "8px",
-                                marginBottom: "15px",
-                                color: "#10b981",
-                                fontWeight: 500,
-                              }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: "8px",
+                                  marginBottom: "15px",
+                                  color: "#10b981",
+                                  fontWeight: 500,
+                                }}
+                              >
                                 <Icon name="PenTool" size={18} />
                                 Handwritten Assignment
                               </div>
                               {r.original_image_path ? (
                                 <div>
-                                  <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "15px" }}>
+                                  <p
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      color: "var(--text-muted)",
+                                      marginBottom: "15px",
+                                    }}
+                                  >
                                     Original image saved to output folder
                                   </p>
                                   <button
-                                    onClick={() => api.openFolder(config.output_folder)}
+                                    onClick={() =>
+                                      api.openFolder(config.output_folder)
+                                    }
                                     className="btn btn-secondary"
                                     style={{ margin: "0 auto" }}
                                   >
@@ -2129,21 +2897,33 @@ ${signature}`;
                                   </button>
                                 </div>
                               ) : (
-                                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                                  Handwritten responses were extracted by AI vision.<br/>
-                                  Check the "AI Detected" tab to see extracted answers.
+                                <p
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    color: "var(--text-muted)",
+                                  }}
+                                >
+                                  Handwritten responses were extracted by AI
+                                  vision.
+                                  <br />
+                                  Check the "AI Detected" tab to see extracted
+                                  answers.
                                 </p>
                               )}
                             </div>
                           ) : (
-                            <div style={{
-                              whiteSpace: "pre-wrap",
-                              fontSize: "22px",
-                              lineHeight: 1.7,
-                              color: "var(--text-secondary)",
-                              fontFamily: "monospace",
-                            }}>
-                              {r.full_content || r.student_content || "[No content - click Open Original to view]"}
+                            <div
+                              style={{
+                                whiteSpace: "pre-wrap",
+                                fontSize: "22px",
+                                lineHeight: 1.7,
+                                color: "var(--text-secondary)",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {r.full_content ||
+                                r.student_content ||
+                                "[No content - click Open Original to view]"}
                             </div>
                           )}
                         </div>
@@ -2178,10 +2958,14 @@ ${signature}`;
                             padding: "8px 16px",
                             borderRadius: "8px",
                             border: "none",
-                            background: reviewModalRightTab === "edit"
-                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
-                              : "var(--glass-hover)",
-                            color: reviewModalRightTab === "edit" ? "#fff" : "var(--text-secondary)",
+                            background:
+                              reviewModalRightTab === "edit"
+                                ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                                : "var(--glass-hover)",
+                            color:
+                              reviewModalRightTab === "edit"
+                                ? "#fff"
+                                : "var(--text-secondary)",
                             fontWeight: 600,
                             fontSize: "0.85rem",
                             cursor: "pointer",
@@ -2200,10 +2984,14 @@ ${signature}`;
                             padding: "8px 16px",
                             borderRadius: "8px",
                             border: "none",
-                            background: reviewModalRightTab === "email"
-                              ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
-                              : "var(--glass-hover)",
-                            color: reviewModalRightTab === "email" ? "#fff" : "var(--text-secondary)",
+                            background:
+                              reviewModalRightTab === "email"
+                                ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                                : "var(--glass-hover)",
+                            color:
+                              reviewModalRightTab === "email"
+                                ? "#fff"
+                                : "var(--text-secondary)",
                             fontWeight: 600,
                             fontSize: "0.85rem",
                             cursor: "pointer",
@@ -2221,10 +3009,25 @@ ${signature}`;
 
                     {/* Right Panel Content */}
                     {reviewModalRightTab === "edit" ? (
-                      <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", gap: "20px", overflow: "auto" }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: "20px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "20px",
+                          overflow: "auto",
+                        }}
+                      >
                         <div>
                           <label className="label">Score</label>
-                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                            }}
+                          >
                             <input
                               type="number"
                               className="input"
@@ -2266,9 +3069,24 @@ ${signature}`;
                             </span>
                           </div>
                         </div>
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                            <label className="label" style={{ margin: 0 }}>Feedback</label>
+                        <div
+                          style={{
+                            flex: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <label className="label" style={{ margin: 0 }}>
+                              Feedback
+                            </label>
                             {r.feedback && r.feedback.includes("---") && (
                               <button
                                 onClick={async () => {
@@ -2276,15 +3094,32 @@ ${signature}`;
                                   if (parts.length >= 2) {
                                     const englishPart = parts[0].trim();
                                     try {
-                                      const result = await api.retranslateFeedback(englishPart, r.student_language || "spanish");
+                                      const result =
+                                        await api.retranslateFeedback(
+                                          englishPart,
+                                          r.student_language || "spanish",
+                                        );
                                       if (result.translation) {
-                                        const newFeedback = englishPart + "\n\n---\n\n" + result.translation;
-                                        updateGrade(reviewModal.index, "feedback", newFeedback);
+                                        const newFeedback =
+                                          englishPart +
+                                          "\n\n---\n\n" +
+                                          result.translation;
+                                        updateGrade(
+                                          reviewModal.index,
+                                          "feedback",
+                                          newFeedback,
+                                        );
                                       } else if (result.error) {
-                                        addToast("Translation error: " + result.error, "error");
+                                        addToast(
+                                          "Translation error: " + result.error,
+                                          "error",
+                                        );
                                       }
                                     } catch (err) {
-                                      addToast("Failed to translate: " + err.message, "error");
+                                      addToast(
+                                        "Failed to translate: " + err.message,
+                                        "error",
+                                      );
                                     }
                                   }
                                 }}
@@ -2316,12 +3151,18 @@ ${signature}`;
                                 e.target.value,
                               )
                             }
-                            style={{ flex: 1, minHeight: "200px", resize: "none" }}
+                            style={{
+                              flex: 1,
+                              minHeight: "200px",
+                              resize: "none",
+                            }}
                           />
                         </div>
                       </div>
                     ) : (
-                      <div style={{ flex: 1, padding: "20px", overflow: "auto" }}>
+                      <div
+                        style={{ flex: 1, padding: "20px", overflow: "auto" }}
+                      >
                         <div
                           style={{
                             background: "#fff",
@@ -2333,47 +3174,227 @@ ${signature}`;
                             boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                           }}
                         >
-                          <div style={{ marginBottom: "20px", paddingBottom: "15px", borderBottom: "1px solid #eee" }}>
-                            <div style={{ fontSize: "0.85rem", color: "#666", marginBottom: "4px" }}>To: {r.student_email || r.email || "(no email on file)"}</div>
-                            <div style={{ fontSize: "0.85rem", color: "#666", marginBottom: "4px" }}>Subject: {r.assignment || "Assignment"} - Grade: {r.letter_grade} ({r.score}%)</div>
-                          </div>
-                          <div style={{ marginBottom: "20px" }}>
-                            <p style={{ margin: "0 0 15px 0" }}>Dear {r.first_name || r.student_name?.split(" ")[0] || "Student"},</p>
-                            <p style={{ margin: "0 0 15px 0" }}>
-                              Your assignment <strong>{r.assignment || "Assignment"}</strong> has been graded.
-                            </p>
-                            <div style={{
-                              background: r.score >= 90 ? "#dcfce7" : r.score >= 80 ? "#dbeafe" : r.score >= 70 ? "#fef3c7" : "#fee2e2",
-                              padding: "15px 20px",
-                              borderRadius: "8px",
+                          <div
+                            style={{
                               marginBottom: "20px",
-                              textAlign: "center",
-                            }}>
-                              <div style={{ fontSize: "2rem", fontWeight: 700, color: r.score >= 90 ? "#16a34a" : r.score >= 80 ? "#2563eb" : r.score >= 70 ? "#d97706" : "#dc2626" }}>
-                                {r.letter_grade}
-                              </div>
-                              <div style={{ fontSize: "1rem", color: "#666" }}>{r.score} / 100</div>
+                              paddingBottom: "15px",
+                              borderBottom: "1px solid #eee",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "#666",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              To:{" "}
+                              {r.student_email ||
+                                r.email ||
+                                "(no email on file)"}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "#666",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              Subject: {r.assignment || "Assignment"} - Grade:{" "}
+                              {r.letter_grade} ({r.score}%)
                             </div>
                           </div>
                           <div style={{ marginBottom: "20px" }}>
-                            <h4 style={{ margin: "0 0 10px 0", fontSize: "1rem", color: "#333" }}>Feedback:</h4>
-                            <div style={{ whiteSpace: "pre-wrap", color: "#444" }}>
+                            <p style={{ margin: "0 0 15px 0" }}>
+                              Dear{" "}
+                              {r.first_name ||
+                                r.student_name?.split(" ")[0] ||
+                                "Student"}
+                              ,
+                            </p>
+                            <p style={{ margin: "0 0 15px 0" }}>
+                              Your assignment{" "}
+                              <strong>{r.assignment || "Assignment"}</strong>{" "}
+                              has been graded.
+                            </p>
+                            <div
+                              style={{
+                                background:
+                                  r.score >= 90
+                                    ? "#dcfce7"
+                                    : r.score >= 80
+                                      ? "#dbeafe"
+                                      : r.score >= 70
+                                        ? "#fef3c7"
+                                        : "#fee2e2",
+                                padding: "15px 20px",
+                                borderRadius: "8px",
+                                marginBottom: "20px",
+                                textAlign: "center",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "2rem",
+                                  fontWeight: 700,
+                                  color:
+                                    r.score >= 90
+                                      ? "#16a34a"
+                                      : r.score >= 80
+                                        ? "#2563eb"
+                                        : r.score >= 70
+                                          ? "#d97706"
+                                          : "#dc2626",
+                                }}
+                              >
+                                {r.letter_grade}
+                              </div>
+                              <div style={{ fontSize: "1rem", color: "#666" }}>
+                                {r.score} / 100
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: "20px" }}>
+                            <h4
+                              style={{
+                                margin: "0 0 10px 0",
+                                fontSize: "1rem",
+                                color: "#333",
+                              }}
+                            >
+                              Feedback:
+                            </h4>
+                            <div
+                              style={{ whiteSpace: "pre-wrap", color: "#444" }}
+                            >
                               {r.feedback || "(No feedback provided)"}
                             </div>
                           </div>
-                          <p style={{ margin: "20px 0 0 0", color: "#666", fontSize: "0.9rem" }}>
-                            If you have any questions about your grade, please see me during class or office hours.
+                          <p
+                            style={{
+                              margin: "20px 0 0 0",
+                              color: "#666",
+                              fontSize: "0.9rem",
+                            }}
+                          >
+                            If you have any questions about your grade, please
+                            see me during class or office hours.
                           </p>
-                          <p style={{ margin: "15px 0 0 0", color: "#666" }}>
-                            Best regards,<br />
-                            <strong>{config.teacher_name || "Your Teacher"}</strong><br />
-                            {config.subject && <span>{config.subject}<br /></span>}
-                            {config.school_name && <span>{config.school_name}</span>}
-                          </p>
+                          <div style={{ margin: "15px 0 0 0", color: "#666", whiteSpace: "pre-wrap" }}>
+                            {config.email_signature ? (
+                              config.email_signature
+                            ) : (
+                              <>
+                                Best regards,
+                                <br />
+                                <strong>
+                                  {config.teacher_name || "Your Teacher"}
+                                </strong>
+                                {config.school_name && (
+                                  <>
+                                    <br />
+                                    <span>{config.school_name}</span>
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <p style={{ marginTop: "15px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center" }}>
-                          <Icon name="Info" size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
-                          Editing feedback in "Grade & Feedback" tab updates this preview automatically
+                        {/* Approve/Reject Buttons */}
+                        {!autoApproveEmails && (
+                          <div
+                            style={{
+                              marginTop: "20px",
+                              display: "flex",
+                              gap: "10px",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                setEmailApprovals((prev) => ({
+                                  ...prev,
+                                  [reviewModal.index]: "approved",
+                                }));
+                                addToast(
+                                  "Email approved for sending",
+                                  "success",
+                                );
+                              }}
+                              className="btn"
+                              style={{
+                                padding: "10px 24px",
+                                background:
+                                  emailApprovals[reviewModal.index] ===
+                                  "approved"
+                                    ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                                    : "rgba(74,222,128,0.15)",
+                                border:
+                                  emailApprovals[reviewModal.index] ===
+                                  "approved"
+                                    ? "none"
+                                    : "1px solid rgba(74,222,128,0.3)",
+                                color:
+                                  emailApprovals[reviewModal.index] ===
+                                  "approved"
+                                    ? "#fff"
+                                    : "#4ade80",
+                              }}
+                            >
+                              <Icon name="Check" size={18} />
+                              {emailApprovals[reviewModal.index] === "approved"
+                                ? "Approved"
+                                : "Approve Email"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEmailApprovals((prev) => ({
+                                  ...prev,
+                                  [reviewModal.index]: "rejected",
+                                }));
+                                addToast("Email marked as rejected", "info");
+                              }}
+                              className="btn"
+                              style={{
+                                padding: "10px 24px",
+                                background:
+                                  emailApprovals[reviewModal.index] ===
+                                  "rejected"
+                                    ? "rgba(248,113,113,0.2)"
+                                    : "var(--glass-bg)",
+                                border: "1px solid var(--glass-border)",
+                                color:
+                                  emailApprovals[reviewModal.index] ===
+                                  "rejected"
+                                    ? "#f87171"
+                                    : "var(--text-secondary)",
+                              }}
+                            >
+                              <Icon name="X" size={18} />
+                              {emailApprovals[reviewModal.index] === "rejected"
+                                ? "Rejected"
+                                : "Reject"}
+                            </button>
+                          </div>
+                        )}
+                        <p
+                          style={{
+                            marginTop: "15px",
+                            fontSize: "0.8rem",
+                            color: "var(--text-muted)",
+                            textAlign: "center",
+                          }}
+                        >
+                          <Icon
+                            name="Info"
+                            size={12}
+                            style={{
+                              marginRight: "4px",
+                              verticalAlign: "middle",
+                            }}
+                          />
+                          Editing feedback in "Grade & Feedback" tab updates
+                          this preview automatically
                         </p>
                       </div>
                     )}
@@ -2432,9 +3453,7 @@ ${signature}`;
                 <Icon name="FileEdit" size={20} />{" "}
                 {importedDoc.filename || "Document Editor"}
               </h2>
-              <span
-                style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}
-              >
+              <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 {(assignment.customMarkers || []).length} markers selected
               </span>
             </div>
@@ -2467,21 +3486,29 @@ ${signature}`;
               >
                 <Icon name="X" size={18} />
               </button>
-              <button onClick={addSelectedAsMarker} className="btn btn-secondary">
+              <button
+                onClick={addSelectedAsMarker}
+                className="btn btn-secondary"
+              >
                 <Icon name="Target" size={16} />
                 Mark Selection
               </button>
               <button
                 onClick={async () => {
                   // Save assignment if it has a title and markers
-                  if (assignment.title && (assignment.customMarkers || []).length > 0) {
+                  if (
+                    assignment.title &&
+                    (assignment.customMarkers || []).length > 0
+                  ) {
                     try {
                       const dataToSave = { ...assignment, importedDoc };
                       await api.saveAssignmentConfig(dataToSave);
                       // Refresh saved assignments list
                       const list = await api.listAssignments();
-                      if (list.assignments) setSavedAssignments(list.assignments);
-                      if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
+                      if (list.assignments)
+                        setSavedAssignments(list.assignments);
+                      if (list.assignmentData)
+                        setSavedAssignmentData(list.assignmentData);
                     } catch (error) {
                       console.error("Failed to save assignment:", error);
                     }
@@ -2554,9 +3581,7 @@ ${signature}`;
                 Select text in the document and click "Mark Selection"
               </p>
               {(assignment.customMarkers || []).length === 0 ? (
-                <p
-                  style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}
-                >
+                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
                   No markers yet
                 </p>
               ) : (
@@ -2613,36 +3638,53 @@ ${signature}`;
               )}
 
               {/* Response Sections - Highlighter */}
-              <div style={{
-                marginTop: "25px",
-                padding: "15px",
-                background: "linear-gradient(135deg, rgba(74,222,128,0.08), rgba(250,204,21,0.08))",
-                borderRadius: "12px",
-                border: "1px solid rgba(74,222,128,0.25)",
-                boxShadow: "0 0 15px rgba(74,222,128,0.1)",
-              }}>
-                <h3 style={{
-                  fontSize: "0.95rem",
-                  marginBottom: "10px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px"
-                }}>
-                  <span style={{
-                    display: "inline-flex",
+              <div
+                style={{
+                  marginTop: "25px",
+                  padding: "15px",
+                  background:
+                    "linear-gradient(135deg, rgba(74,222,128,0.08), rgba(250,204,21,0.08))",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(74,222,128,0.25)",
+                  boxShadow: "0 0 15px rgba(74,222,128,0.1)",
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: "0.95rem",
+                    marginBottom: "10px",
+                    display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    width: "26px",
-                    height: "26px",
-                    borderRadius: "6px",
-                    background: "linear-gradient(135deg, #4ade80, #facc15)",
-                    boxShadow: "0 0 10px rgba(74,222,128,0.4)",
-                  }}>
-                    <Icon name="Highlighter" size={14} style={{ color: "#000" }} />
+                    gap: "10px",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "6px",
+                      background: "linear-gradient(135deg, #4ade80, #facc15)",
+                      boxShadow: "0 0 10px rgba(74,222,128,0.4)",
+                    }}
+                  >
+                    <Icon
+                      name="Highlighter"
+                      size={14}
+                      style={{ color: "#000" }}
+                    />
                   </span>
                   Highlighter ({(assignment.responseSections || []).length})
                 </h3>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "12px" }}>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "12px",
+                  }}
+                >
                   Mark sections where student answers are located
                 </p>
 
@@ -2680,14 +3722,21 @@ ${signature}`;
                   />
                   <button
                     onClick={() => {
-                      const startEl = document.getElementById("builder-section-start");
-                      const endEl = document.getElementById("builder-section-end");
+                      const startEl = document.getElementById(
+                        "builder-section-start",
+                      );
+                      const endEl = document.getElementById(
+                        "builder-section-end",
+                      );
                       const start = startEl?.value?.trim();
                       const end = endEl?.value?.trim();
                       if (start) {
-                        setAssignment(prev => ({
+                        setAssignment((prev) => ({
                           ...prev,
-                          responseSections: [...(prev.responseSections || []), { start, end: end || null }]
+                          responseSections: [
+                            ...(prev.responseSections || []),
+                            { start, end: end || null },
+                          ],
                         }));
                         if (startEl) startEl.value = "";
                         if (endEl) endEl.value = "";
@@ -2716,40 +3765,103 @@ ${signature}`;
 
                 {/* Section list */}
                 {(assignment.responseSections || []).length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
                     {(assignment.responseSections || []).map((section, i) => (
                       <div
                         key={i}
                         style={{
                           padding: "10px 12px",
-                          background: "linear-gradient(90deg, rgba(250,204,21,0.2), rgba(74,222,128,0.12))",
+                          background:
+                            "linear-gradient(90deg, rgba(250,204,21,0.2), rgba(74,222,128,0.12))",
                           borderRadius: "6px",
                           border: "1px solid rgba(250,204,21,0.35)",
                           boxShadow: "0 0 8px rgba(250,204,21,0.15)",
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                          }}
+                        >
                           <div style={{ flex: 1 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <Icon name="ArrowRight" size={12} style={{ color: "#facc15" }} />
-                              <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#facc15" }}>"{section.start}"</span>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                              }}
+                            >
+                              <Icon
+                                name="ArrowRight"
+                                size={12}
+                                style={{ color: "#facc15" }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: "0.8rem",
+                                  fontWeight: 600,
+                                  color: "#facc15",
+                                }}
+                              >
+                                "{section.start}"
+                              </span>
                             </div>
                             {section.end ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px", marginLeft: "18px" }}>
-                                <Icon name="ArrowRight" size={12} style={{ color: "#4ade80" }} />
-                                <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#4ade80" }}>"{section.end}"</span>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  marginTop: "4px",
+                                  marginLeft: "18px",
+                                }}
+                              >
+                                <Icon
+                                  name="ArrowRight"
+                                  size={12}
+                                  style={{ color: "#4ade80" }}
+                                />
+                                <span
+                                  style={{
+                                    fontSize: "0.8rem",
+                                    fontWeight: 600,
+                                    color: "#4ade80",
+                                  }}
+                                >
+                                  "{section.end}"
+                                </span>
                               </div>
                             ) : (
-                              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "3px", marginLeft: "18px", fontStyle: "italic" }}>
+                              <div
+                                style={{
+                                  fontSize: "0.7rem",
+                                  color: "var(--text-muted)",
+                                  marginTop: "3px",
+                                  marginLeft: "18px",
+                                  fontStyle: "italic",
+                                }}
+                              >
                                 → until end
                               </div>
                             )}
                           </div>
                           <button
-                            onClick={() => setAssignment(prev => ({
-                              ...prev,
-                              responseSections: (prev.responseSections || []).filter((_, idx) => idx !== i)
-                            }))}
+                            onClick={() =>
+                              setAssignment((prev) => ({
+                                ...prev,
+                                responseSections: (
+                                  prev.responseSections || []
+                                ).filter((_, idx) => idx !== i),
+                              }))
+                            }
                             style={{
                               background: "none",
                               border: "none",
@@ -2777,9 +3889,10 @@ ${signature}`;
         <div
           style={{
             width: sidebarCollapsed ? "70px" : "260px",
-            background: theme === "dark"
-              ? "#000000"
-              : "linear-gradient(180deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)",
+            background:
+              theme === "dark"
+                ? "#000000"
+                : "linear-gradient(180deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)",
             borderRight: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"}`,
             padding: "0",
             display: "flex",
@@ -2820,12 +3933,17 @@ ${signature}`;
               e.currentTarget.style.borderColor = "var(--accent-primary)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = theme === "dark" ? "#1f1f2a" : "#ffffff";
+              e.currentTarget.style.background =
+                theme === "dark" ? "#1f1f2a" : "#ffffff";
               e.currentTarget.style.color = "var(--text-secondary)";
-              e.currentTarget.style.borderColor = theme === "dark" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)";
+              e.currentTarget.style.borderColor =
+                theme === "dark" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)";
             }}
           >
-            <Icon name={sidebarCollapsed ? "ChevronRight" : "ChevronLeft"} size={14} />
+            <Icon
+              name={sidebarCollapsed ? "ChevronRight" : "ChevronLeft"}
+              size={14}
+            />
           </button>
 
           {/* Logo */}
@@ -2869,7 +3987,13 @@ ${signature}`;
           )}
 
           {/* Navigation */}
-          <nav style={{ flex: 1, padding: sidebarCollapsed ? "10px 8px 0 8px" : "0 10px", marginTop: sidebarCollapsed ? "0" : "0" }}>
+          <nav
+            style={{
+              flex: 1,
+              padding: sidebarCollapsed ? "10px 8px 0 8px" : "0 10px",
+              marginTop: sidebarCollapsed ? "0" : "0",
+            }}
+          >
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -2928,7 +4052,7 @@ ${signature}`;
                   lineHeight: "1.4",
                 }}
               >
-                AI-Powered Teaching Assistant
+                AI-Powered Teacher's Assistant
                 <br />
                 Made for Educators by Educators with ❤️
                 <br />
@@ -2944,7 +4068,9 @@ ${signature}`;
             flex: 1,
             marginLeft: sidebarCollapsed ? "70px" : "260px",
             padding: "0",
-            maxWidth: sidebarCollapsed ? "calc(100vw - 70px)" : "calc(100vw - 260px)",
+            maxWidth: sidebarCollapsed
+              ? "calc(100vw - 70px)"
+              : "calc(100vw - 260px)",
             display: "flex",
             flexDirection: "column",
             transition: "all 0.3s ease",
@@ -2966,9 +4092,17 @@ ${signature}`;
           >
             {/* Left: Auto-Grade & Start/Stop */}
             <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <Icon name="Zap" size={18} style={{ color: autoGrade ? '#4ade80' : 'var(--text-muted)' }} />
-                <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Auto-Grade</span>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "10px" }}
+              >
+                <Icon
+                  name="Zap"
+                  size={18}
+                  style={{ color: autoGrade ? "#4ade80" : "var(--text-muted)" }}
+                />
+                <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>
+                  Auto-Grade
+                </span>
                 <button
                   onClick={() => setAutoGrade(!autoGrade)}
                   style={{
@@ -2985,19 +4119,35 @@ ${signature}`;
                   {autoGrade ? "ON" : "OFF"}
                 </button>
                 {autoGrade && watchStatus.lastCheck && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                  <span
+                    style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}
+                  >
                     Last: {watchStatus.lastCheck}
                   </span>
                 )}
               </div>
-              <div style={{ width: "1px", height: "24px", background: "var(--glass-border)" }} />
+              <div
+                style={{
+                  width: "1px",
+                  height: "24px",
+                  background: "var(--glass-border)",
+                }}
+              />
               {!status.is_running ? (
-                <button onClick={handleStartGrading} className="btn btn-primary" style={{ padding: "8px 20px" }}>
+                <button
+                  onClick={handleStartGrading}
+                  className="btn btn-primary"
+                  style={{ padding: "8px 20px" }}
+                >
                   <Icon name="Play" size={16} />
                   Start Grading
                 </button>
               ) : (
-                <button onClick={handleStopGrading} className="btn btn-danger" style={{ padding: "8px 20px" }}>
+                <button
+                  onClick={handleStopGrading}
+                  className="btn btn-danger"
+                  style={{ padding: "8px 20px" }}
+                >
                   <Icon name="Square" size={16} />
                   Stop ({status.progress}/{status.total})
                 </button>
@@ -3018,592 +4168,1032 @@ ${signature}`;
                 color: "var(--text-primary)",
                 cursor: "pointer",
               }}
-              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              title={
+                theme === "dark"
+                  ? "Switch to Light Mode"
+                  : "Switch to Dark Mode"
+              }
             >
               <Icon name={theme === "dark" ? "Sun" : "Moon"} size={18} />
             </button>
           </div>
 
           <div style={{ padding: "30px", flex: 1, overflowY: "auto" }}>
-          <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
-            {/* Grade Tab */}
-            {activeTab === "grade" && (
-              <div className="fade-in">
-                {/* Error Alert Banner */}
-                {status.error && (
-                  <div
-                    className="glass-card fade-in"
-                    style={{
-                      padding: "15px 20px",
-                      marginBottom: "20px",
-                      background: "rgba(248,113,113,0.1)",
-                      border: "1px solid rgba(248,113,113,0.4)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                    }}
-                  >
-                    <Icon name="AlertTriangle" size={24} style={{ color: "#f87171" }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, color: "#f87171", marginBottom: "4px" }}>
-                        Grading Stopped - Error Detected
-                      </div>
-                      <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-                        {status.error}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setStatus((prev) => ({ ...prev, error: null }))}
-                      style={{
-                        background: "rgba(248,113,113,0.2)",
-                        border: "none",
-                        borderRadius: "8px",
-                        padding: "8px 12px",
-                        color: "#f87171",
-                        cursor: "pointer",
-                        fontSize: "0.85rem",
-                        fontWeight: 500,
-                      }}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                )}
-
-                {/* Activity Monitor - Horizontal Collapsible */}
-                <div
-                  className="glass-card"
-                  style={{
-                    padding: "15px 20px",
-                    marginBottom: "20px",
-                    background: status.error
-                      ? "rgba(248,113,113,0.05)"
-                      : status.is_running
-                      ? "rgba(74,222,128,0.05)"
-                      : "var(--glass-bg)",
-                    border: `1px solid ${
-                      status.error
-                        ? "rgba(248,113,113,0.3)"
-                        : status.is_running
-                        ? "rgba(74,222,128,0.3)"
-                        : "var(--glass-border)"
-                    }`,
-                  }}
-                >
-                  <button
-                    onClick={() => setShowActivityLog(!showActivityLog)}
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "var(--text-primary)",
-                      padding: 0,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <Icon
-                        name={status.error ? "AlertCircle" : "Terminal"}
-                        size={18}
-                        style={{
-                          color: status.error
-                            ? "#f87171"
-                            : status.is_running
-                            ? "#4ade80"
-                            : "var(--text-secondary)",
-                        }}
-                      />
-                      <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Activity Monitor</span>
-                      {status.error && (
-                        <span style={{
-                          fontSize: "0.75rem",
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          background: "rgba(248,113,113,0.2)",
-                          color: "#f87171",
-                          fontWeight: 500,
-                        }}>
-                          Error
-                        </span>
-                      )}
-                      {status.is_running && !status.error && (
-                        <span style={{
-                          fontSize: "0.75rem",
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          background: "rgba(74,222,128,0.2)",
-                          color: "#4ade80",
-                          fontWeight: 500,
-                        }}>
-                          Running...
-                        </span>
-                      )}
-                      {status.log.length > 0 && (
-                        <span style={{
-                          fontSize: "0.75rem",
-                          padding: "3px 8px",
-                          borderRadius: "8px",
-                          background: "var(--input-bg)",
-                          color: "var(--text-muted)",
-                        }}>
-                          {status.log.length} entries
-                        </span>
-                      )}
-                    </div>
-                    <Icon
-                      name={showActivityLog ? "ChevronUp" : "ChevronDown"}
-                      size={18}
-                      style={{ color: "var(--text-muted)" }}
-                    />
-                  </button>
-
-                  {showActivityLog && (
+            <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
+              {/* Grade Tab */}
+              {activeTab === "grade" && (
+                <div className="fade-in">
+                  {/* Error Alert Banner */}
+                  {status.error && (
                     <div
-                      ref={logRef}
+                      className="glass-card fade-in"
                       style={{
-                        marginTop: "15px",
-                        maxHeight: "200px",
-                        overflowY: "auto",
-                        background: "var(--input-bg)",
-                        borderRadius: "10px",
-                        padding: "15px",
-                        fontFamily: "Monaco, Consolas, monospace",
-                        fontSize: "0.8rem",
-                        lineHeight: "1.6",
-                      }}
-                    >
-                      {status.log.length === 0 ? (
-                        <p style={{ color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
-                          Ready to grade. Activity will appear here...
-                        </p>
-                      ) : (
-                        status.log.slice(-30).map((line, i) => (
-                          <div key={i} style={{ marginBottom: "4px", color: "var(--text-secondary)" }}>
-                            {line}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Full width layout */}
-                <div className="glass-card" style={{ padding: "25px" }}>
-                  <h2
-                    style={{
-                      fontSize: "1.3rem",
-                      fontWeight: 700,
-                      marginBottom: "20px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                    }}
-                  >
-                    <Icon name="Play" size={24} />
-                    Start Grading
-                  </h2>
-
-                  {/* Period Filter - Show when periods exist */}
-                  {periods.length > 0 && (
-                    <div
-                      style={{
-                        padding: "15px",
-                        background: "linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.05))",
-                        borderRadius: "12px",
-                        border: "1px solid rgba(99, 102, 241, 0.2)",
+                        padding: "15px 20px",
                         marginBottom: "20px",
-                      }}
-                    >
-                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <Icon name="Users" size={16} style={{ color: "var(--accent-primary)" }} />
-                        Filter by Class Period
-                      </label>
-                      <select
-                        className="input"
-                        value={selectedPeriod}
-                        onChange={async (e) => {
-                          const periodFilename = e.target.value;
-                          setSelectedPeriod(periodFilename);
-                          setGradeFilterStudent(""); // Clear student filter when period changes
-                          await loadPeriodStudents(periodFilename);
-                        }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <option value="">All Periods (No Filter)</option>
-                        {sortedPeriods.map((p) => (
-                          <option key={p.filename} value={p.filename}>
-                            {p.period_name} ({p.row_count} students)
-                          </option>
-                        ))}
-                      </select>
-                      {selectedPeriod && periodStudents.length > 0 && (
-                        <p style={{ fontSize: "0.75rem", color: "var(--accent-primary)", marginTop: "8px", fontWeight: 500 }}>
-                          ✓ Filtering to {periodStudents.length} students in {sortedPeriods.find(p => p.filename === selectedPeriod)?.period_name}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Student Filter */}
-                  <div
-                    style={{
-                      padding: "15px",
-                      background: "linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.05))",
-                      borderRadius: "12px",
-                      border: "1px solid rgba(139, 92, 246, 0.2)",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Icon name="User" size={16} style={{ color: "#8b5cf6" }} />
-                      Filter by Student
-                    </label>
-                    {selectedPeriod && periodStudents.length > 0 ? (
-                      <select
-                        className="input"
-                        value={gradeFilterStudent}
-                        onChange={(e) => setGradeFilterStudent(e.target.value)}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <option value="">All Students in Period</option>
-                        {periodStudents.map((student, idx) => {
-                          const displayName = student.full || student.name || `${student.first || ''} ${student.last || ''}`.trim() || String(student);
-                          return (
-                            <option key={idx} value={displayName}>
-                              {displayName}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    ) : (
-                      <div style={{ position: "relative" }}>
-                        <input
-                          type="text"
-                          className="input"
-                          list="grade-student-suggestions"
-                          value={gradeFilterStudent}
-                          onChange={(e) => setGradeFilterStudent(e.target.value)}
-                          onClick={(e) => { if (gradeFilterStudent) { e.target.dataset.prev = gradeFilterStudent; setGradeFilterStudent(""); } }}
-                          onBlur={(e) => { if (!gradeFilterStudent && e.target.dataset.prev) { setGradeFilterStudent(e.target.dataset.prev); e.target.dataset.prev = ""; } }}
-                          placeholder={sortedPeriods.length > 0 ? "Type or select student..." : "Type student name to filter..."}
-                          style={{ fontSize: "0.9rem", paddingRight: gradeFilterStudent ? "30px" : undefined }}
-                        />
-                        {gradeFilterStudent && (
-                          <button
-                            onClick={(e) => { e.preventDefault(); setGradeFilterStudent(""); }}
-                            style={{
-                              position: "absolute",
-                              right: "8px",
-                              top: "50%",
-                              transform: "translateY(-50%)",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              color: "#888",
-                              padding: "4px",
-                              display: "flex",
-                              alignItems: "center",
-                            }}
-                            title="Clear"
-                          >
-                            <Icon name="X" size={14} />
-                          </button>
-                        )}
-                        <datalist id="grade-student-suggestions">
-                          {sortedPeriods.flatMap(p => p.students || []).map((s, i) => {
-                            const name = s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim();
-                            return <option key={i} value={name} />;
-                          })}
-                        </datalist>
-                      </div>
-                    )}
-                    {gradeFilterStudent && (
-                      <p style={{ fontSize: "0.75rem", color: "#8b5cf6", marginTop: "8px", fontWeight: 500 }}>
-                        ✓ Will only grade files for "{gradeFilterStudent}"
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Assignment Filter */}
-                  {savedAssignments.length > 0 && (
-                    <div
-                      style={{
-                        padding: "15px",
-                        background: "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
-                        borderRadius: "12px",
-                        border: "1px solid rgba(16, 185, 129, 0.2)",
-                        marginBottom: "20px",
-                      }}
-                    >
-                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <Icon name="FileText" size={16} style={{ color: "#10b981" }} />
-                        Filter by Assignment
-                      </label>
-                      <select
-                        className="input"
-                        value={gradeFilterAssignment}
-                        onChange={async (e) => {
-                          const assignmentName = e.target.value;
-                          setGradeFilterAssignment(assignmentName);
-                          // Auto-load the assignment config when selected
-                          if (assignmentName) {
-                            try {
-                              const data = await api.loadAssignment(assignmentName);
-                              if (data.assignment) {
-                                setGradeAssignment({
-                                  title: data.assignment.title || "",
-                                  customMarkers: data.assignment.customMarkers || [],
-                                  gradingNotes: data.assignment.gradingNotes || "",
-                                  responseSections: data.assignment.responseSections || [],
-                                });
-                                if (data.assignment.importedDoc) {
-                                  setGradeImportedDoc(data.assignment.importedDoc);
-                                }
-                                addToast(`Loaded "${assignmentName}"`, "success");
-                              }
-                            } catch (err) {
-                              console.error("Load error:", err);
-                            }
-                          }
-                        }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <option value="">Select Assignment...</option>
-                        {savedAssignments.map((name) => (
-                          <option key={name} value={name}>{name}{savedAssignmentData[name]?.completionOnly ? " (Completion)" : ""}</option>
-                        ))}
-                      </select>
-                      {gradeFilterAssignment && (
-                        <p style={{ fontSize: "0.75rem", color: "#10b981", marginTop: "8px", fontWeight: 500 }}>
-                          ✓ Using "{gradeFilterAssignment}" configuration
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Active Filters Summary */}
-                  {(gradeFilterStudent || gradeFilterAssignment) && (
-                    <div
-                      style={{
-                        padding: "12px 15px",
-                        background: "rgba(251, 191, 36, 0.1)",
-                        borderRadius: "10px",
-                        border: "1px solid rgba(251, 191, 36, 0.3)",
-                        marginBottom: "20px",
+                        background: "rgba(248,113,113,0.1)",
+                        border: "1px solid rgba(248,113,113,0.4)",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "space-between",
-                        flexWrap: "wrap",
-                        gap: "10px",
+                        gap: "12px",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                        <Icon name="Filter" size={16} style={{ color: "#f59e0b" }} />
-                        <span style={{ fontSize: "0.85rem", color: "#f59e0b", fontWeight: 600 }}>
-                          Active Filters:
-                        </span>
-                        {gradeFilterStudent && (
-                          <span style={{
-                            padding: "4px 10px",
-                            background: "rgba(99, 102, 241, 0.2)",
-                            borderRadius: "6px",
-                            fontSize: "0.8rem",
-                            color: "var(--accent-primary)"
-                          }}>
-                            Student: {gradeFilterStudent}
-                          </span>
-                        )}
-                        {gradeFilterAssignment && (
-                          <span style={{
-                            padding: "4px 10px",
-                            background: "rgba(16, 185, 129, 0.2)",
-                            borderRadius: "6px",
-                            fontSize: "0.8rem",
-                            color: "#10b981"
-                          }}>
-                            Assignment: {gradeFilterAssignment}
-                          </span>
-                        )}
+                      <Icon
+                        name="AlertTriangle"
+                        size={24}
+                        style={{ color: "#f87171" }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            color: "#f87171",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          Grading Stopped - Error Detected
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {status.error}
+                        </div>
                       </div>
                       <button
-                        onClick={() => {
-                          setGradeFilterStudent("");
-                          setGradeFilterAssignment("");
-                        }}
+                        onClick={() =>
+                          setStatus((prev) => ({ ...prev, error: null }))
+                        }
                         style={{
-                          padding: "4px 10px",
-                          background: "rgba(239, 68, 68, 0.1)",
-                          border: "1px solid rgba(239, 68, 68, 0.3)",
-                          borderRadius: "6px",
-                          color: "#ef4444",
-                          fontSize: "0.8rem",
+                          background: "rgba(248,113,113,0.2)",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          color: "#f87171",
                           cursor: "pointer",
+                          fontSize: "0.85rem",
+                          fontWeight: 500,
                         }}
                       >
-                        Clear Filters
+                        Dismiss
                       </button>
                     </div>
                   )}
 
-                  {/* Matching Files Preview - Show when student filter is set */}
-                  {gradeFilterStudent && availableFiles.length > 0 && (
+                  {/* Assignment Grading Modes - Collapsible */}
+                  {savedAssignments.length > 0 && (
                     <div
+                      className="glass-card"
                       style={{
-                        padding: "15px",
-                        background: "linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05))",
-                        borderRadius: "12px",
-                        border: "1px solid rgba(59, 130, 246, 0.2)",
+                        padding: gradingModesExpanded ? "15px 20px" : "12px 20px",
                         marginBottom: "20px",
                       }}
                     >
-                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                        <Icon name="FileSearch" size={16} style={{ color: "#3b82f6" }} />
-                        Matching Submissions for "{gradeFilterStudent}"
-                      </label>
-                      {(() => {
-                        const studentName = gradeFilterStudent.toLowerCase();
-                        const matchingFiles = availableFiles.filter(f => {
-                          const fileName = f.name.toLowerCase();
-                          return fileName.includes(studentName.replace(/\s+/g, '')) ||
-                                 fileName.includes(studentName.replace(/\s+/g, '_')) ||
-                                 fileName.includes(studentName.replace(/\s+/g, '-')) ||
-                                 fileName.includes(studentName);
-                        });
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          cursor: "pointer",
+                        }}
+                        onClick={() => setGradingModesExpanded(!gradingModesExpanded)}
+                      >
+                        <h3
+                          style={{
+                            fontSize: "1rem",
+                            fontWeight: 600,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            margin: 0,
+                          }}
+                        >
+                          <Icon
+                            name={gradingModesExpanded ? "ChevronDown" : "ChevronRight"}
+                            size={18}
+                          />
+                          <Icon name="FileCheck" size={18} style={{ color: "#10b981" }} />
+                          Assignment Grading Modes
+                          <span
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "var(--text-muted)",
+                              fontWeight: 400,
+                            }}
+                          >
+                            ({savedAssignments.filter(n => savedAssignmentData[n]?.completionOnly).length} completion-only)
+                          </span>
+                        </h3>
+                      </div>
 
-                        if (matchingFiles.length === 0) {
-                          return (
-                            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0 }}>
-                              No files found matching "{gradeFilterStudent}"
-                            </p>
-                          );
-                        }
-
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <p style={{ fontSize: "0.75rem", color: "#3b82f6", margin: "0 0 5px 0" }}>
-                              {matchingFiles.length} file{matchingFiles.length !== 1 ? 's' : ''} found - select to grade:
-                            </p>
-                            {matchingFiles.map((file, idx) => (
-                              <label
-                                key={idx}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "10px",
-                                  padding: "10px 12px",
-                                  background: selectedFiles.includes(file.name) ? "rgba(59, 130, 246, 0.2)" : "var(--input-bg)",
-                                  borderRadius: "8px",
-                                  border: selectedFiles.includes(file.name) ? "1px solid rgba(59, 130, 246, 0.4)" : "1px solid var(--glass-border)",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s",
-                                }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selectedFiles.includes(file.name)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedFiles([...selectedFiles, file.name]);
-                                    } else {
-                                      setSelectedFiles(selectedFiles.filter(f => f !== file.name));
-                                    }
+                      {gradingModesExpanded && (
+                        <div style={{ marginTop: "15px" }}>
+                          <p
+                            style={{
+                              fontSize: "0.85rem",
+                              color: "var(--text-muted)",
+                              marginBottom: "12px",
+                            }}
+                          >
+                            Toggle assignments between AI grading and completion-only tracking.
+                          </p>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                              maxHeight: "250px",
+                              overflowY: "auto",
+                            }}
+                          >
+                            {savedAssignments.map((name) => {
+                              const isCompletionOnly = savedAssignmentData[name]?.completionOnly || false;
+                              return (
+                                <div
+                                  key={name}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "10px 12px",
+                                    borderRadius: "8px",
+                                    background: isCompletionOnly
+                                      ? "rgba(34, 197, 94, 0.1)"
+                                      : "rgba(99, 102, 241, 0.05)",
+                                    border: isCompletionOnly
+                                      ? "1px solid rgba(34, 197, 94, 0.3)"
+                                      : "1px solid var(--glass-border)",
                                   }}
-                                  style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                  <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>{file.name}</span>
-                                  {file.graded && (
-                                    <span style={{
-                                      marginLeft: "8px",
-                                      padding: "2px 6px",
-                                      background: "rgba(16, 185, 129, 0.2)",
-                                      borderRadius: "4px",
-                                      fontSize: "0.7rem",
-                                      color: "#10b981"
-                                    }}>
-                                      Already Graded
-                                    </span>
-                                  )}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <Icon
+                                      name={isCompletionOnly ? "CheckCircle" : "FileText"}
+                                      size={18}
+                                      style={{ color: isCompletionOnly ? "#22c55e" : "#6366f1" }}
+                                    />
+                                    <span style={{ fontWeight: 500 }}>{name}</span>
+                                    {isCompletionOnly && (
+                                      <span
+                                        style={{
+                                          fontSize: "0.7rem",
+                                          background: "rgba(34, 197, 94, 0.2)",
+                                          color: "#22c55e",
+                                          padding: "2px 8px",
+                                          borderRadius: "10px",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        COMPLETION
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button
+                                    className={isCompletionOnly ? "btn btn-secondary" : "btn btn-primary"}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const newData = {
+                                        ...savedAssignmentData[name],
+                                        completionOnly: !isCompletionOnly,
+                                      };
+                                      setSavedAssignmentData(prev => ({
+                                        ...prev,
+                                        [name]: newData,
+                                      }));
+                                      try {
+                                        await api.saveAssignmentConfig({
+                                          ...newData,
+                                          title: name,
+                                          completionOnly: !isCompletionOnly,
+                                        });
+                                        addToast(
+                                          `"${name}" set to ${!isCompletionOnly ? "Completion Only" : "AI Grading"}`,
+                                          "success"
+                                        );
+                                      } catch (e) {
+                                        addToast("Error saving: " + e.message, "error");
+                                      }
+                                    }}
+                                    style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+                                  >
+                                    {isCompletionOnly ? "Enable AI Grading" : "Completion Only"}
+                                  </button>
                                 </div>
-                              </label>
-                            ))}
-                            {selectedFiles.length > 0 && (
-                              <div style={{ display: "flex", gap: "10px", marginTop: "5px" }}>
-                                <button
-                                  onClick={() => setSelectedFiles(matchingFiles.map(f => f.name))}
-                                  style={{
-                                    padding: "6px 12px",
-                                    background: "rgba(59, 130, 246, 0.1)",
-                                    border: "1px solid rgba(59, 130, 246, 0.3)",
-                                    borderRadius: "6px",
-                                    color: "#3b82f6",
-                                    fontSize: "0.8rem",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Select All
-                                </button>
-                                <button
-                                  onClick={() => setSelectedFiles([])}
-                                  style={{
-                                    padding: "6px 12px",
-                                    background: "rgba(239, 68, 68, 0.1)",
-                                    border: "1px solid rgba(239, 68, 68, 0.3)",
-                                    borderRadius: "6px",
-                                    color: "#ef4444",
-                                    fontSize: "0.8rem",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Clear Selection
-                                </button>
-                              </div>
-                            )}
+                              );
+                            })}
                           </div>
-                        );
-                      })()}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Skip Verified Toggle - Show when there are unverified results */}
-                  {status.results && status.results.some(r => r.marker_status === "unverified") && (
-                    <div
+                  {/* Activity Monitor - Horizontal Collapsible */}
+                  <div
+                    className="glass-card"
+                    style={{
+                      padding: "15px 20px",
+                      marginBottom: "20px",
+                      background: status.error
+                        ? "rgba(248,113,113,0.05)"
+                        : status.is_running
+                          ? "rgba(74,222,128,0.05)"
+                          : "var(--glass-bg)",
+                      border: `1px solid ${
+                        status.error
+                          ? "rgba(248,113,113,0.3)"
+                          : status.is_running
+                            ? "rgba(74,222,128,0.3)"
+                            : "var(--glass-border)"
+                      }`,
+                    }}
+                  >
+                    <button
+                      onClick={() => setShowActivityLog(!showActivityLog)}
                       style={{
-                        padding: "15px",
-                        background: "linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.05))",
-                        borderRadius: "12px",
-                        border: "1px solid rgba(251, 191, 36, 0.3)",
-                        marginBottom: "20px",
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--text-primary)",
+                        padding: 0,
                       }}
                     >
-                      <label
+                      <div
                         style={{
                           display: "flex",
                           alignItems: "center",
                           gap: "10px",
-                          cursor: "pointer",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={skipVerified}
-                          onChange={(e) => setSkipVerified(e.target.checked)}
-                          style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                        <Icon
+                          name={status.error ? "AlertCircle" : "Terminal"}
+                          size={18}
+                          style={{
+                            color: status.error
+                              ? "#f87171"
+                              : status.is_running
+                                ? "#4ade80"
+                                : "var(--text-secondary)",
+                          }}
                         />
-                        <div>
-                          <span style={{ fontWeight: 600, color: "#fbbf24" }}>
-                            Skip Verified Grades (Regrade Only Unverified)
+                        <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                          Activity Monitor
+                        </span>
+                        {status.error && (
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              padding: "3px 10px",
+                              borderRadius: "12px",
+                              background: "rgba(248,113,113,0.2)",
+                              color: "#f87171",
+                              fontWeight: 500,
+                            }}
+                          >
+                            Error
                           </span>
-                          <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
-                            {status.results.filter(r => r.marker_status === "unverified").length} unverified assignments will be regraded. {status.results.filter(r => r.marker_status === "verified").length} verified grades will be kept.
+                        )}
+                        {status.is_running && !status.error && (
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              padding: "3px 10px",
+                              borderRadius: "12px",
+                              background: "rgba(74,222,128,0.2)",
+                              color: "#4ade80",
+                              fontWeight: 500,
+                            }}
+                          >
+                            Running...
+                          </span>
+                        )}
+                        {status.log.length > 0 && (
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              padding: "3px 8px",
+                              borderRadius: "8px",
+                              background: "var(--input-bg)",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {status.log.length} entries
+                          </span>
+                        )}
+                      </div>
+                      <Icon
+                        name={showActivityLog ? "ChevronUp" : "ChevronDown"}
+                        size={18}
+                        style={{ color: "var(--text-muted)" }}
+                      />
+                    </button>
+
+                    {showActivityLog && (
+                      <div
+                        ref={logRef}
+                        style={{
+                          marginTop: "15px",
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                          background: "var(--input-bg)",
+                          borderRadius: "10px",
+                          padding: "15px",
+                          fontFamily: "Monaco, Consolas, monospace",
+                          fontSize: "0.8rem",
+                          lineHeight: "1.6",
+                        }}
+                      >
+                        {status.log.length === 0 ? (
+                          <p
+                            style={{
+                              color: "var(--text-muted)",
+                              margin: 0,
+                              textAlign: "center",
+                            }}
+                          >
+                            Ready to grade. Activity will appear here...
                           </p>
-                        </div>
+                        ) : (
+                          status.log.slice(-30).map((line, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                marginBottom: "4px",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              {line}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Full width layout */}
+                  <div className="glass-card" style={{ padding: "25px" }}>
+                    <h2
+                      style={{
+                        fontSize: "1.3rem",
+                        fontWeight: 700,
+                        marginBottom: "20px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
+                    >
+                      <Icon name="Play" size={24} />
+                      Start Grading
+                    </h2>
+
+                    {/* Period Filter - Show when periods exist */}
+                    {periods.length > 0 && (
+                      <div
+                        style={{
+                          padding: "15px",
+                          background:
+                            "linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.05))",
+                          borderRadius: "12px",
+                          border: "1px solid rgba(99, 102, 241, 0.2)",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <label
+                          className="label"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          <Icon
+                            name="Users"
+                            size={16}
+                            style={{ color: "var(--accent-primary)" }}
+                          />
+                          Filter by Class Period
+                        </label>
+                        <select
+                          className="input"
+                          value={selectedPeriod}
+                          onChange={async (e) => {
+                            const periodFilename = e.target.value;
+                            setSelectedPeriod(periodFilename);
+                            setGradeFilterStudent(""); // Clear student filter when period changes
+                            await loadPeriodStudents(periodFilename);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <option value="">All Periods (No Filter)</option>
+                          {sortedPeriods.map((p) => (
+                            <option key={p.filename} value={p.filename}>
+                              {p.period_name} ({p.row_count} students)
+                            </option>
+                          ))}
+                        </select>
+                        {selectedPeriod && periodStudents.length > 0 && (
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--accent-primary)",
+                              marginTop: "8px",
+                              fontWeight: 500,
+                            }}
+                          >
+                            ✓ Filtering to {periodStudents.length} students in{" "}
+                            {
+                              sortedPeriods.find(
+                                (p) => p.filename === selectedPeriod,
+                              )?.period_name
+                            }
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Student Filter */}
+                    <div
+                      style={{
+                        padding: "15px",
+                        background:
+                          "linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.05))",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(139, 92, 246, 0.2)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <label
+                        className="label"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon
+                          name="User"
+                          size={16}
+                          style={{ color: "#8b5cf6" }}
+                        />
+                        Filter by Student
                       </label>
+                      {selectedPeriod && periodStudents.length > 0 ? (
+                        <select
+                          className="input"
+                          value={gradeFilterStudent}
+                          onChange={(e) =>
+                            setGradeFilterStudent(e.target.value)
+                          }
+                          style={{ cursor: "pointer" }}
+                        >
+                          <option value="">All Students in Period</option>
+                          {periodStudents.map((student, idx) => {
+                            const displayName =
+                              student.full ||
+                              student.name ||
+                              `${student.first || ""} ${student.last || ""}`.trim() ||
+                              String(student);
+                            return (
+                              <option key={idx} value={displayName}>
+                                {displayName}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      ) : (
+                        <div style={{ position: "relative" }}>
+                          <input
+                            type="text"
+                            className="input"
+                            list="grade-student-suggestions"
+                            value={gradeFilterStudent}
+                            onChange={(e) =>
+                              setGradeFilterStudent(e.target.value)
+                            }
+                            onClick={(e) => {
+                              if (gradeFilterStudent) {
+                                e.target.dataset.prev = gradeFilterStudent;
+                                setGradeFilterStudent("");
+                              }
+                            }}
+                            onBlur={(e) => {
+                              if (
+                                !gradeFilterStudent &&
+                                e.target.dataset.prev
+                              ) {
+                                setGradeFilterStudent(e.target.dataset.prev);
+                                e.target.dataset.prev = "";
+                              }
+                            }}
+                            placeholder={
+                              sortedPeriods.length > 0
+                                ? "Type or select student..."
+                                : "Type student name to filter..."
+                            }
+                            style={{
+                              fontSize: "0.9rem",
+                              paddingRight: gradeFilterStudent
+                                ? "30px"
+                                : undefined,
+                            }}
+                          />
+                          {gradeFilterStudent && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setGradeFilterStudent("");
+                              }}
+                              style={{
+                                position: "absolute",
+                                right: "8px",
+                                top: "50%",
+                                transform: "translateY(-50%)",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "#888",
+                                padding: "4px",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
+                              title="Clear"
+                            >
+                              <Icon name="X" size={14} />
+                            </button>
+                          )}
+                          <datalist id="grade-student-suggestions">
+                            {sortedPeriods
+                              .flatMap((p) => p.students || [])
+                              .map((s, i) => {
+                                const name =
+                                  s.full ||
+                                  s.name ||
+                                  (
+                                    (s.first || "") +
+                                    " " +
+                                    (s.last || "")
+                                  ).trim();
+                                return <option key={i} value={name} />;
+                              })}
+                          </datalist>
+                        </div>
+                      )}
+                      {gradeFilterStudent && (
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "#8b5cf6",
+                            marginTop: "8px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          ✓ Will only grade files for "{gradeFilterStudent}"
+                        </p>
+                      )}
                     </div>
-                  )}
+
+                    {/* Assignment Filter */}
+                    {savedAssignments.length > 0 && (
+                      <div
+                        style={{
+                          padding: "15px",
+                          background:
+                            "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
+                          borderRadius: "12px",
+                          border: "1px solid rgba(16, 185, 129, 0.2)",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <label
+                          className="label"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          <Icon
+                            name="FileText"
+                            size={16}
+                            style={{ color: "#10b981" }}
+                          />
+                          Filter by Assignment
+                        </label>
+                        <select
+                          className="input"
+                          value={gradeFilterAssignment}
+                          onChange={async (e) => {
+                            const assignmentName = e.target.value;
+                            setGradeFilterAssignment(assignmentName);
+                            // Auto-load the assignment config when selected
+                            if (assignmentName) {
+                              try {
+                                const data =
+                                  await api.loadAssignment(assignmentName);
+                                if (data.assignment) {
+                                  setGradeAssignment({
+                                    title: data.assignment.title || "",
+                                    customMarkers:
+                                      data.assignment.customMarkers || [],
+                                    gradingNotes:
+                                      data.assignment.gradingNotes || "",
+                                    responseSections:
+                                      data.assignment.responseSections || [],
+                                  });
+                                  if (data.assignment.importedDoc) {
+                                    setGradeImportedDoc(
+                                      data.assignment.importedDoc,
+                                    );
+                                  }
+                                  addToast(
+                                    `Loaded "${assignmentName}"`,
+                                    "success",
+                                  );
+                                }
+                              } catch (err) {
+                                console.error("Load error:", err);
+                              }
+                            }
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <option value="">Select Assignment...</option>
+                          {savedAssignments.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                              {savedAssignmentData[name]?.completionOnly
+                                ? " (Completion)"
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                        {gradeFilterAssignment && (
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#10b981",
+                              marginTop: "8px",
+                              fontWeight: 500,
+                            }}
+                          >
+                            ✓ Using "{gradeFilterAssignment}" configuration
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Active Filters Summary */}
+                    {(gradeFilterStudent || gradeFilterAssignment) && (
+                      <div
+                        style={{
+                          padding: "12px 15px",
+                          background: "rgba(251, 191, 36, 0.1)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(251, 191, 36, 0.3)",
+                          marginBottom: "20px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          flexWrap: "wrap",
+                          gap: "10px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Icon
+                            name="Filter"
+                            size={16}
+                            style={{ color: "#f59e0b" }}
+                          />
+                          <span
+                            style={{
+                              fontSize: "0.85rem",
+                              color: "#f59e0b",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Active Filters:
+                          </span>
+                          {gradeFilterStudent && (
+                            <span
+                              style={{
+                                padding: "4px 10px",
+                                background: "rgba(99, 102, 241, 0.2)",
+                                borderRadius: "6px",
+                                fontSize: "0.8rem",
+                                color: "var(--accent-primary)",
+                              }}
+                            >
+                              Student: {gradeFilterStudent}
+                            </span>
+                          )}
+                          {gradeFilterAssignment && (
+                            <span
+                              style={{
+                                padding: "4px 10px",
+                                background: "rgba(16, 185, 129, 0.2)",
+                                borderRadius: "6px",
+                                fontSize: "0.8rem",
+                                color: "#10b981",
+                              }}
+                            >
+                              Assignment: {gradeFilterAssignment}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setGradeFilterStudent("");
+                            setGradeFilterAssignment("");
+                          }}
+                          style={{
+                            padding: "4px 10px",
+                            background: "rgba(239, 68, 68, 0.1)",
+                            border: "1px solid rgba(239, 68, 68, 0.3)",
+                            borderRadius: "6px",
+                            color: "#ef4444",
+                            fontSize: "0.8rem",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Clear Filters
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Matching Files Preview - Show when student filter is set */}
+                    {gradeFilterStudent && availableFiles.length > 0 && (
+                      <div
+                        style={{
+                          padding: "15px",
+                          background:
+                            "linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05))",
+                          borderRadius: "12px",
+                          border: "1px solid rgba(59, 130, 246, 0.2)",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <label
+                          className="label"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          <Icon
+                            name="FileSearch"
+                            size={16}
+                            style={{ color: "#3b82f6" }}
+                          />
+                          Matching Submissions for "{gradeFilterStudent}"
+                        </label>
+                        {(() => {
+                          const studentName = gradeFilterStudent.toLowerCase();
+                          const matchingFiles = availableFiles.filter((f) => {
+                            const fileName = f.name.toLowerCase();
+                            return (
+                              fileName.includes(
+                                studentName.replace(/\s+/g, ""),
+                              ) ||
+                              fileName.includes(
+                                studentName.replace(/\s+/g, "_"),
+                              ) ||
+                              fileName.includes(
+                                studentName.replace(/\s+/g, "-"),
+                              ) ||
+                              fileName.includes(studentName)
+                            );
+                          });
+
+                          if (matchingFiles.length === 0) {
+                            return (
+                              <p
+                                style={{
+                                  fontSize: "0.85rem",
+                                  color: "var(--text-muted)",
+                                  margin: 0,
+                                }}
+                              >
+                                No files found matching "{gradeFilterStudent}"
+                              </p>
+                            );
+                          }
+
+                          return (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "8px",
+                              }}
+                            >
+                              <p
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "#3b82f6",
+                                  margin: "0 0 5px 0",
+                                }}
+                              >
+                                {matchingFiles.length} file
+                                {matchingFiles.length !== 1 ? "s" : ""} found -
+                                select to grade:
+                              </p>
+                              {matchingFiles.map((file, idx) => (
+                                <label
+                                  key={idx}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "10px 12px",
+                                    background: selectedFiles.includes(
+                                      file.name,
+                                    )
+                                      ? "rgba(59, 130, 246, 0.2)"
+                                      : "var(--input-bg)",
+                                    borderRadius: "8px",
+                                    border: selectedFiles.includes(file.name)
+                                      ? "1px solid rgba(59, 130, 246, 0.4)"
+                                      : "1px solid var(--glass-border)",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedFiles.includes(file.name)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedFiles([
+                                          ...selectedFiles,
+                                          file.name,
+                                        ]);
+                                      } else {
+                                        setSelectedFiles(
+                                          selectedFiles.filter(
+                                            (f) => f !== file.name,
+                                          ),
+                                        );
+                                      }
+                                    }}
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      cursor: "pointer",
+                                    }}
+                                  />
+                                  <div style={{ flex: 1 }}>
+                                    <span
+                                      style={{
+                                        fontSize: "0.9rem",
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      {file.name}
+                                    </span>
+                                    {file.graded && (
+                                      <span
+                                        style={{
+                                          marginLeft: "8px",
+                                          padding: "2px 6px",
+                                          background: "rgba(16, 185, 129, 0.2)",
+                                          borderRadius: "4px",
+                                          fontSize: "0.7rem",
+                                          color: "#10b981",
+                                        }}
+                                      >
+                                        Already Graded
+                                      </span>
+                                    )}
+                                  </div>
+                                </label>
+                              ))}
+                              {selectedFiles.length > 0 && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "10px",
+                                    marginTop: "5px",
+                                  }}
+                                >
+                                  <button
+                                    onClick={() =>
+                                      setSelectedFiles(
+                                        matchingFiles.map((f) => f.name),
+                                      )
+                                    }
+                                    style={{
+                                      padding: "6px 12px",
+                                      background: "rgba(59, 130, 246, 0.1)",
+                                      border:
+                                        "1px solid rgba(59, 130, 246, 0.3)",
+                                      borderRadius: "6px",
+                                      color: "#3b82f6",
+                                      fontSize: "0.8rem",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Select All
+                                  </button>
+                                  <button
+                                    onClick={() => setSelectedFiles([])}
+                                    style={{
+                                      padding: "6px 12px",
+                                      background: "rgba(239, 68, 68, 0.1)",
+                                      border:
+                                        "1px solid rgba(239, 68, 68, 0.3)",
+                                      borderRadius: "6px",
+                                      color: "#ef4444",
+                                      fontSize: "0.8rem",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Clear Selection
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Skip Verified Toggle - Show when there are unverified results */}
+                    {status.results &&
+                      status.results.some(
+                        (r) => r.marker_status === "unverified",
+                      ) && (
+                        <div
+                          style={{
+                            padding: "15px",
+                            background:
+                              "linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.05))",
+                            borderRadius: "12px",
+                            border: "1px solid rgba(251, 191, 36, 0.3)",
+                            marginBottom: "20px",
+                          }}
+                        >
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={skipVerified}
+                              onChange={(e) =>
+                                setSkipVerified(e.target.checked)
+                              }
+                              style={{
+                                width: "18px",
+                                height: "18px",
+                                cursor: "pointer",
+                              }}
+                            />
+                            <div>
+                              <span
+                                style={{ fontWeight: 600, color: "#fbbf24" }}
+                              >
+                                Skip Verified Grades (Regrade Only Unverified)
+                              </span>
+                              <p
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "var(--text-secondary)",
+                                  margin: "4px 0 0 0",
+                                }}
+                              >
+                                {
+                                  status.results.filter(
+                                    (r) => r.marker_status === "unverified",
+                                  ).length
+                                }{" "}
+                                unverified assignments will be regraded.{" "}
+                                {
+                                  status.results.filter(
+                                    (r) => r.marker_status === "verified",
+                                  ).length
+                                }{" "}
+                                verified grades will be kept.
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      )}
 
                     {/* Grading Notes - Quick notes for this grading session */}
                     <div
@@ -3615,8 +5205,19 @@ ${signature}`;
                         border: "1px solid rgba(251,191,36,0.2)",
                       }}
                     >
-                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <Icon name="FileEdit" size={16} style={{ color: "#fbbf24" }} />
+                      <label
+                        className="label"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon
+                          name="FileEdit"
+                          size={16}
+                          style={{ color: "#fbbf24" }}
+                        />
                         Grading Notes (Optional)
                       </label>
                       <textarea
@@ -3631,8 +5232,16 @@ ${signature}`;
                         placeholder="Special instructions for this grading session..."
                         style={{ minHeight: "80px" }}
                       />
-                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "8px" }}>
-                        For full assignment setup (markers, imported docs), use the Builder tab and select via "Filter by Assignment" above.
+                      <p
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--text-muted)",
+                          marginTop: "8px",
+                        }}
+                      >
+                        For full assignment setup (markers, imported docs), use
+                        the Builder tab and select via "Filter by Assignment"
+                        above.
                       </p>
                     </div>
 
@@ -3642,11 +5251,19 @@ ${signature}`;
                         marginTop: "20px",
                         padding: "20px",
                         borderRadius: "16px",
-                        background: "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
+                        background:
+                          "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
                         border: "1px solid rgba(16, 185, 129, 0.2)",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "15px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          marginBottom: "15px",
+                        }}
+                      >
                         <div
                           style={{
                             width: "36px",
@@ -3658,89 +5275,178 @@ ${signature}`;
                             justifyContent: "center",
                           }}
                         >
-                          <Icon name="Camera" size={20} style={{ color: "#10b981" }} />
+                          <Icon
+                            name="Camera"
+                            size={20}
+                            style={{ color: "#10b981" }}
+                          />
                         </div>
                         <div>
-                          <h4 style={{ margin: 0, fontWeight: 600 }}>Individual Upload</h4>
-                          <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                            For paper/handwritten assignments (uses GPT-4o vision)
+                          <h4 style={{ margin: 0, fontWeight: 600 }}>
+                            Individual Upload
+                          </h4>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: "0.75rem",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            For paper/handwritten assignments (uses GPT-4o
+                            vision)
                           </p>
                         </div>
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: individualUpload.preview ? "1fr 1fr" : "1fr", gap: "15px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: individualUpload.preview
+                            ? "1fr 1fr"
+                            : "1fr",
+                          gap: "15px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                          }}
+                        >
                           {/* Student Name with Autocomplete */}
                           <div style={{ position: "relative" }}>
                             <input
                               type="text"
                               className="input"
-                              placeholder={periodStudents.length > 0 ? "Start typing student name..." : "Student name..."}
+                              placeholder={
+                                periodStudents.length > 0
+                                  ? "Start typing student name..."
+                                  : "Student name..."
+                              }
                               value={individualUpload.studentName}
-                              onChange={(e) => setIndividualUpload((prev) => ({
-                                ...prev,
-                                studentName: e.target.value,
-                                studentInfo: null, // Clear selected student when typing
-                                showSuggestions: e.target.value.length >= 2,
-                              }))}
-                              onFocus={() => setIndividualUpload((prev) => ({
-                                ...prev,
-                                showSuggestions: prev.studentName.length >= 2,
-                              }))}
-                              onBlur={() => setTimeout(() => setIndividualUpload((prev) => ({ ...prev, showSuggestions: false })), 200)}
+                              onChange={(e) =>
+                                setIndividualUpload((prev) => ({
+                                  ...prev,
+                                  studentName: e.target.value,
+                                  studentInfo: null, // Clear selected student when typing
+                                  showSuggestions: e.target.value.length >= 2,
+                                }))
+                              }
+                              onFocus={() =>
+                                setIndividualUpload((prev) => ({
+                                  ...prev,
+                                  showSuggestions: prev.studentName.length >= 2,
+                                }))
+                              }
+                              onBlur={() =>
+                                setTimeout(
+                                  () =>
+                                    setIndividualUpload((prev) => ({
+                                      ...prev,
+                                      showSuggestions: false,
+                                    })),
+                                  200,
+                                )
+                              }
                             />
                             {/* Autocomplete Dropdown */}
-                            {individualUpload.showSuggestions && getStudentSuggestions(individualUpload.studentName).length > 0 && (
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: "100%",
-                                  left: 0,
-                                  right: 0,
-                                  background: "var(--card-bg)",
-                                  border: "1px solid var(--glass-border)",
-                                  borderRadius: "8px",
-                                  marginTop: "4px",
-                                  zIndex: 100,
-                                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                                  maxHeight: "200px",
-                                  overflowY: "auto",
-                                }}
-                              >
-                                {getStudentSuggestions(individualUpload.studentName).map((student, idx) => (
-                                  <div
-                                    key={idx}
-                                    onClick={() => setIndividualUpload((prev) => ({
-                                      ...prev,
-                                      studentName: student.full || `${student.first} ${student.last}`,
-                                      studentInfo: student,
-                                      showSuggestions: false,
-                                    }))}
-                                    style={{
-                                      padding: "10px 12px",
-                                      cursor: "pointer",
-                                      borderBottom: idx < getStudentSuggestions(individualUpload.studentName).length - 1 ? "1px solid var(--glass-border)" : "none",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "10px",
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.background = "var(--glass-bg)"}
-                                    onMouseLeave={(e) => e.target.style.background = "transparent"}
-                                  >
-                                    <Icon name="User" size={16} style={{ color: "var(--text-muted)" }} />
-                                    <div>
-                                      <div style={{ fontWeight: 500 }}>{student.full || `${student.first} ${student.last}`}</div>
-                                      {student.email && (
-                                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{student.email}</div>
-                                      )}
+                            {individualUpload.showSuggestions &&
+                              getStudentSuggestions(
+                                individualUpload.studentName,
+                              ).length > 0 && (
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    top: "100%",
+                                    left: 0,
+                                    right: 0,
+                                    background: "var(--card-bg)",
+                                    border: "1px solid var(--glass-border)",
+                                    borderRadius: "8px",
+                                    marginTop: "4px",
+                                    zIndex: 100,
+                                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                                    maxHeight: "200px",
+                                    overflowY: "auto",
+                                  }}
+                                >
+                                  {getStudentSuggestions(
+                                    individualUpload.studentName,
+                                  ).map((student, idx) => (
+                                    <div
+                                      key={idx}
+                                      onClick={() =>
+                                        setIndividualUpload((prev) => ({
+                                          ...prev,
+                                          studentName:
+                                            student.full ||
+                                            `${student.first} ${student.last}`,
+                                          studentInfo: student,
+                                          showSuggestions: false,
+                                        }))
+                                      }
+                                      style={{
+                                        padding: "10px 12px",
+                                        cursor: "pointer",
+                                        borderBottom:
+                                          idx <
+                                          getStudentSuggestions(
+                                            individualUpload.studentName,
+                                          ).length -
+                                            1
+                                            ? "1px solid var(--glass-border)"
+                                            : "none",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "10px",
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.target.style.background =
+                                          "var(--glass-bg)")
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.target.style.background =
+                                          "transparent")
+                                      }
+                                    >
+                                      <Icon
+                                        name="User"
+                                        size={16}
+                                        style={{ color: "var(--text-muted)" }}
+                                      />
+                                      <div>
+                                        <div style={{ fontWeight: 500 }}>
+                                          {student.full ||
+                                            `${student.first} ${student.last}`}
+                                        </div>
+                                        {student.email && (
+                                          <div
+                                            style={{
+                                              fontSize: "0.75rem",
+                                              color: "var(--text-muted)",
+                                            }}
+                                          >
+                                            {student.email}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                                  ))}
+                                </div>
+                              )}
                             {/* Selected Student Indicator */}
                             {individualUpload.studentInfo && (
-                              <div style={{ marginTop: "6px", fontSize: "0.75rem", color: "#10b981", display: "flex", alignItems: "center", gap: "4px" }}>
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  fontSize: "0.75rem",
+                                  color: "#10b981",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
                                 <Icon name="CheckCircle" size={12} />
                                 Student matched from roster
                               </div>
@@ -3748,14 +5454,20 @@ ${signature}`;
                           </div>
 
                           <div
-                            onClick={() => document.getElementById("individualFileInput")?.click()}
+                            onClick={() =>
+                              document
+                                .getElementById("individualFileInput")
+                                ?.click()
+                            }
                             style={{
                               padding: "20px",
                               border: "2px dashed var(--glass-border)",
                               borderRadius: "10px",
                               textAlign: "center",
                               cursor: "pointer",
-                              background: individualUpload.file ? "rgba(16, 185, 129, 0.1)" : "var(--glass-bg)",
+                              background: individualUpload.file
+                                ? "rgba(16, 185, 129, 0.1)"
+                                : "var(--glass-bg)",
                             }}
                           >
                             <input
@@ -3766,14 +5478,42 @@ ${signature}`;
                               style={{ display: "none" }}
                             />
                             {individualUpload.file ? (
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                                <Icon name="CheckCircle" size={20} style={{ color: "#10b981" }} />
-                                <span style={{ fontWeight: 500, fontSize: "0.9rem" }}>{individualUpload.file.name}</span>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: "8px",
+                                }}
+                              >
+                                <Icon
+                                  name="CheckCircle"
+                                  size={20}
+                                  style={{ color: "#10b981" }}
+                                />
+                                <span
+                                  style={{
+                                    fontWeight: 500,
+                                    fontSize: "0.9rem",
+                                  }}
+                                >
+                                  {individualUpload.file.name}
+                                </span>
                               </div>
                             ) : (
                               <>
-                                <Icon name="Upload" size={24} style={{ color: "var(--text-muted)" }} />
-                                <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                                <Icon
+                                  name="Upload"
+                                  size={24}
+                                  style={{ color: "var(--text-muted)" }}
+                                />
+                                <p
+                                  style={{
+                                    margin: "8px 0 0",
+                                    fontSize: "0.85rem",
+                                    color: "var(--text-secondary)",
+                                  }}
+                                >
                                   Click to upload image
                                 </p>
                               </>
@@ -3783,9 +5523,21 @@ ${signature}`;
                           <div style={{ display: "flex", gap: "8px" }}>
                             <button
                               onClick={handleIndividualGrade}
-                              disabled={!individualUpload.file || !individualUpload.studentName.trim() || individualUpload.isGrading}
+                              disabled={
+                                !individualUpload.file ||
+                                !individualUpload.studentName.trim() ||
+                                individualUpload.isGrading
+                              }
                               className="btn btn-primary"
-                              style={{ flex: 1, opacity: (!individualUpload.file || !individualUpload.studentName.trim() || individualUpload.isGrading) ? 0.5 : 1 }}
+                              style={{
+                                flex: 1,
+                                opacity:
+                                  !individualUpload.file ||
+                                  !individualUpload.studentName.trim() ||
+                                  individualUpload.isGrading
+                                    ? 0.5
+                                    : 1,
+                              }}
                             >
                               {individualUpload.isGrading ? (
                                 <>Grading...</>
@@ -3797,21 +5549,53 @@ ${signature}`;
                               )}
                             </button>
                             {individualUpload.file && (
-                              <button onClick={clearIndividualUpload} className="btn btn-secondary" style={{ padding: "8px 12px" }}>
+                              <button
+                                onClick={clearIndividualUpload}
+                                className="btn btn-secondary"
+                                style={{ padding: "8px 12px" }}
+                              >
                                 <Icon name="X" size={16} />
                               </button>
                             )}
                           </div>
 
                           {individualUpload.result && (
-                            <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(16, 185, 129, 0.15)", border: "1px solid rgba(16, 185, 129, 0.3)" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "#10b981" }}>
+                            <div
+                              style={{
+                                padding: "12px",
+                                borderRadius: "10px",
+                                background: "rgba(16, 185, 129, 0.15)",
+                                border: "1px solid rgba(16, 185, 129, 0.3)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "1.5rem",
+                                    fontWeight: 800,
+                                    color: "#10b981",
+                                  }}
+                                >
                                   {individualUpload.result.letter_grade}
                                 </span>
                                 <div>
-                                  <div style={{ fontWeight: 600 }}>{individualUpload.result.score}%</div>
-                                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{individualUpload.studentName}</div>
+                                  <div style={{ fontWeight: 600 }}>
+                                    {individualUpload.result.score}%
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "0.75rem",
+                                      color: "var(--text-muted)",
+                                    }}
+                                  >
+                                    {individualUpload.studentName}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -3819,11 +5603,23 @@ ${signature}`;
                         </div>
 
                         {individualUpload.preview && (
-                          <div style={{ borderRadius: "10px", overflow: "hidden", border: "1px solid var(--glass-border)" }}>
+                          <div
+                            style={{
+                              borderRadius: "10px",
+                              overflow: "hidden",
+                              border: "1px solid var(--glass-border)",
+                            }}
+                          >
                             <img
                               src={individualUpload.preview}
                               alt="Preview"
-                              style={{ width: "100%", height: "auto", maxHeight: "250px", objectFit: "contain", background: "#fff" }}
+                              style={{
+                                width: "100%",
+                                height: "auto",
+                                maxHeight: "250px",
+                                objectFit: "contain",
+                                background: "#fff",
+                              }}
                             />
                           </div>
                         )}
@@ -3892,735 +5688,952 @@ ${signature}`;
                         Open Results Folder
                       </button>
                     )}
-
                   </div>
                 </div>
-            )}
+              )}
 
-            {/* Results Tab */}
-            {activeTab === "results" && (
-              <div
-                className="fade-in"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr",
-                  gap: "20px",
-                }}
-              >
-                {/* Results Table */}
-                <div className="glass-card" style={{ padding: "25px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    <h2
-                      style={{
-                        fontSize: "1.3rem",
-                        fontWeight: 700,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}
-                    >
-                      <Icon name="FileText" size={24} />
-                      Grading Results ({
-                        resultsFilter === "all"
-                          ? status.results.length
-                          : status.results.filter(r => {
-                              if (resultsFilter === "handwritten") return r.is_handwritten;
-                              if (resultsFilter === "typed") return !r.is_handwritten;
-                              if (resultsFilter === "verified") return r.marker_status === "verified";
-                              if (resultsFilter === "unverified") return r.marker_status !== "verified";
-                              return true;
-                            }).length
-                      }{resultsFilter !== "all" && ` of ${status.results.length}`})
-                    </h2>
-                    {status.results.length > 0 && (
-                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                        {/* Sort Dropdown */}
-                        <select
-                          className="input"
-                          value={resultsSort.field + "_" + resultsSort.direction}
-                          onChange={(e) => {
-                            const [field, direction] = e.target.value.split("_");
-                            setResultsSort({ field, direction });
-                          }}
-                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
-                        >
-                          <option value="time_desc">Newest First</option>
-                          <option value="time_asc">Oldest First</option>
-                          <option value="name_asc">Name (A-Z)</option>
-                          <option value="name_desc">Name (Z-A)</option>
-                          <option value="score_desc">Score (High-Low)</option>
-                          <option value="score_asc">Score (Low-High)</option>
-                          <option value="assignment_asc">Assignment (A-Z)</option>
-                          <option value="assignment_desc">Assignment (Z-A)</option>
-                          <option value="grade_asc">Grade (A-F)</option>
-                          <option value="grade_desc">Grade (F-A)</option>
-                        </select>
-                        {/* Filter Dropdown */}
-                        <select
-                          className="input"
-                          value={resultsFilter}
-                          onChange={(e) => setResultsFilter(e.target.value)}
-                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
-                        >
-                          <option value="all">All Results</option>
-                          <option value="handwritten">Handwritten Only</option>
-                          <option value="typed">Typed Only</option>
-                          <option value="verified">Verified Only</option>
-                          <option value="unverified">Unverified Only</option>
-                        </select>
-                        <button
-                          onClick={openResults}
-                          className="btn btn-secondary"
-                        >
-                          <Icon name="FolderOpen" size={18} />
-                          Open Folder
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (
-                              confirm(
-                                "Clear all grading results? This cannot be undone.",
-                              )
-                            ) {
-                              try {
-                                await api.clearResults();
-                                setStatus((prev) => ({
-                                  ...prev,
-                                  results: [],
-                                  log: [],
-                                  complete: false,
-                                }));
-                                setEditedResults([]);
-                                setEmailApprovals({});
-                                setEditedEmails({});
-                              } catch (e) {
-                                addToast("Error clearing results: " + e.message, "error");
-                              }
-                            }
-                          }}
-                          className="btn btn-secondary"
-                          style={{ background: "rgba(239,68,68,0.2)" }}
-                        >
-                          <Icon name="Trash2" size={18} />
-                          Clear
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Authenticity Summary Alert */}
-                  {status.results.length > 0 &&
-                    (() => {
-                      const authStats = status.results.reduce((acc, r) => {
-                        const auth = getAuthenticityStatus(r);
-                        if (auth.ai.flag === "likely") acc.aiLikely++;
-                        else if (auth.ai.flag === "possible") acc.aiPossible++;
-                        if (auth.plag.flag === "likely") acc.plagLikely++;
-                        else if (auth.plag.flag === "possible") acc.plagPossible++;
-                        return acc;
-                      }, { aiLikely: 0, aiPossible: 0, plagLikely: 0, plagPossible: 0 });
-
-                      const hasConcerns = authStats.aiLikely + authStats.aiPossible + authStats.plagLikely + authStats.plagPossible > 0;
-
-                      return hasConcerns ? (
-                        <div
-                          style={{
-                            marginBottom: "20px",
-                            padding: "15px 20px",
-                            borderRadius: "12px",
-                            background:
-                              "linear-gradient(135deg, rgba(248,113,113,0.1), rgba(251,191,36,0.1))",
-                            border: "1px solid rgba(248,113,113,0.3)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "15px",
-                          }}
-                        >
-                          <Icon
-                            name="Shield"
-                            size={24}
-                            style={{ color: "#f87171" }}
-                          />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, marginBottom: "8px" }}>
-                              Authenticity Summary
-                            </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: "20px",
-                                fontSize: "0.9rem",
-                              }}
-                            >
-                              {/* AI Detection Stats */}
-                              <div>
-                                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: "4px" }}>
-                                  <Icon name="Bot" size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
-                                  AI Detection
-                                </div>
-                                <div style={{ display: "flex", gap: "10px" }}>
-                                  {authStats.aiLikely > 0 && (
-                                    <span style={{ color: "#f87171" }}>
-                                      {authStats.aiLikely} likely
-                                    </span>
-                                  )}
-                                  {authStats.aiPossible > 0 && (
-                                    <span style={{ color: "#fbbf24" }}>
-                                      {authStats.aiPossible} possible
-                                    </span>
-                                  )}
-                                  {authStats.aiLikely === 0 && authStats.aiPossible === 0 && (
-                                    <span style={{ color: "#4ade80" }}>All clear</span>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Plagiarism Stats */}
-                              <div>
-                                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: "4px" }}>
-                                  <Icon name="Copy" size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
-                                  Plagiarism
-                                </div>
-                                <div style={{ display: "flex", gap: "10px" }}>
-                                  {authStats.plagLikely > 0 && (
-                                    <span style={{ color: "#f87171" }}>
-                                      {authStats.plagLikely} likely
-                                    </span>
-                                  )}
-                                  {authStats.plagPossible > 0 && (
-                                    <span style={{ color: "#fbbf24" }}>
-                                      {authStats.plagPossible} possible
-                                    </span>
-                                  )}
-                                  {authStats.plagLikely === 0 && authStats.plagPossible === 0 && (
-                                    <span style={{ color: "#4ade80" }}>All clear</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Hover for details
-                          </div>
-                        </div>
-                      ) : null;
-                    })()}
-
-                  {/* Auto-Approve Toggle */}
-                  {status.results.length > 0 && (
+              {/* Results Tab */}
+              {activeTab === "results" && (
+                <div
+                  className="fade-in"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: "20px",
+                  }}
+                >
+                  {/* Results Table */}
+                  <div className="glass-card" style={{ padding: "25px" }}>
                     <div
                       style={{
                         display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
-                        gap: "15px",
                         marginBottom: "20px",
-                        padding: "12px 15px",
-                        background: "var(--input-bg)",
-                        borderRadius: "10px",
                       }}
                     >
-                      <div
+                      <h2
                         style={{
+                          fontSize: "1.3rem",
+                          fontWeight: 700,
                           display: "flex",
                           alignItems: "center",
                           gap: "10px",
                         }}
                       >
-                        <button
-                          onClick={() =>
-                            setAutoApproveEmails(!autoApproveEmails)
-                          }
-                          style={{
-                            width: "44px",
-                            height: "24px",
-                            borderRadius: "12px",
-                            border: "none",
-                            background: autoApproveEmails
-                              ? "#6366f1"
-                              : "var(--btn-secondary-border)",
-                            cursor: "pointer",
-                            position: "relative",
-                            transition: "background 0.2s",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: "18px",
-                              height: "18px",
-                              borderRadius: "50%",
-                              background: "#fff",
-                              position: "absolute",
-                              top: "3px",
-                              left: autoApproveEmails ? "23px" : "3px",
-                              transition: "left 0.2s",
-                            }}
-                          />
-                        </button>
-                        <span style={{ fontWeight: 600 }}>
-                          Auto-Approve Emails
-                        </span>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        {autoApproveEmails
-                          ? "Emails will be sent automatically"
-                          : "Review each email before sending"}
-                      </span>
-                      {!autoApproveEmails && (
+                        <Icon name="FileText" size={24} />
+                        Grading Results (
+                        {resultsFilter === "all"
+                          ? status.results.length
+                          : status.results.filter((r) => {
+                              if (resultsFilter === "handwritten")
+                                return r.is_handwritten;
+                              if (resultsFilter === "typed")
+                                return !r.is_handwritten;
+                              if (resultsFilter === "verified")
+                                return r.marker_status === "verified";
+                              if (resultsFilter === "unverified")
+                                return r.marker_status !== "verified";
+                              return true;
+                            }).length}
+                        {resultsFilter !== "all" &&
+                          ` of ${status.results.length}`}
+                        )
+                      </h2>
+                      {status.results.length > 0 && (
                         <div
                           style={{
-                            marginLeft: "auto",
                             display: "flex",
                             gap: "10px",
+                            alignItems: "center",
                           }}
                         >
+                          {/* Sort Dropdown */}
+                          <select
+                            className="input"
+                            value={
+                              resultsSort.field + "_" + resultsSort.direction
+                            }
+                            onChange={(e) => {
+                              const [field, direction] =
+                                e.target.value.split("_");
+                              setResultsSort({ field, direction });
+                            }}
+                            style={{
+                              width: "auto",
+                              padding: "8px 12px",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            <option value="time_desc">Newest First</option>
+                            <option value="time_asc">Oldest First</option>
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="score_desc">Score (High-Low)</option>
+                            <option value="score_asc">Score (Low-High)</option>
+                            <option value="assignment_asc">
+                              Assignment (A-Z)
+                            </option>
+                            <option value="assignment_desc">
+                              Assignment (Z-A)
+                            </option>
+                            <option value="grade_asc">Grade (A-F)</option>
+                            <option value="grade_desc">Grade (F-A)</option>
+                          </select>
+                          {/* Filter Dropdown */}
+                          <select
+                            className="input"
+                            value={resultsFilter}
+                            onChange={(e) => setResultsFilter(e.target.value)}
+                            style={{
+                              width: "auto",
+                              padding: "8px 12px",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            <option value="all">All Results</option>
+                            <option value="handwritten">
+                              Handwritten Only
+                            </option>
+                            <option value="typed">Typed Only</option>
+                            <option value="verified">Verified Only</option>
+                            <option value="unverified">Unverified Only</option>
+                          </select>
                           <button
-                            onClick={() => {
-                              const approvals = {};
-                              status.results.forEach((_, i) => {
-                                approvals[i] = "approved";
-                              });
-                              setEmailApprovals(approvals);
+                            onClick={openResults}
+                            className="btn btn-secondary"
+                          >
+                            <Icon name="FolderOpen" size={18} />
+                            Open Folder
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (
+                                confirm(
+                                  "Clear all grading results? This cannot be undone.",
+                                )
+                              ) {
+                                try {
+                                  await api.clearResults();
+                                  setStatus((prev) => ({
+                                    ...prev,
+                                    results: [],
+                                    log: [],
+                                    complete: false,
+                                  }));
+                                  setEditedResults([]);
+                                  setEmailApprovals({});
+                                  setEditedEmails({});
+                                } catch (e) {
+                                  addToast(
+                                    "Error clearing results: " + e.message,
+                                    "error",
+                                  );
+                                }
+                              }
                             }}
                             className="btn btn-secondary"
-                            style={{ fontSize: "0.85rem", padding: "6px 12px" }}
+                            style={{ background: "rgba(239,68,68,0.2)" }}
                           >
-                            <Icon name="CheckCircle" size={14} />
-                            Approve All
+                            <Icon name="Trash2" size={18} />
+                            Clear
+                          </button>
+                          <button
+                            onClick={() => setFocusExportModal(true)}
+                            className="btn btn-primary"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #8b5cf6, #6366f1)",
+                            }}
+                            title="Export grades for Focus SIS import"
+                          >
+                            <Icon name="Download" size={18} />
+                            Focus Export
                           </button>
                         </div>
                       )}
                     </div>
-                  )}
 
-                  {emailStatus.message && (
-                    <div
-                      style={{
-                        marginBottom: "15px",
-                        padding: "12px 15px",
-                        background: emailStatus.message.includes("Error")
-                          ? "rgba(248,113,113,0.1)"
-                          : "rgba(74,222,128,0.1)",
-                        borderRadius: "8px",
-                        border: emailStatus.message.includes("Error")
-                          ? "1px solid rgba(248,113,113,0.3)"
-                          : "1px solid rgba(74,222,128,0.3)",
-                      }}
-                    >
-                      {emailStatus.message}
-                    </div>
-                  )}
+                    {/* Authenticity Summary Alert */}
+                    {status.results.length > 0 &&
+                      (() => {
+                        const authStats = status.results.reduce(
+                          (acc, r) => {
+                            const auth = getAuthenticityStatus(r);
+                            if (auth.ai.flag === "likely") acc.aiLikely++;
+                            else if (auth.ai.flag === "possible")
+                              acc.aiPossible++;
+                            if (auth.plag.flag === "likely") acc.plagLikely++;
+                            else if (auth.plag.flag === "possible")
+                              acc.plagPossible++;
+                            return acc;
+                          },
+                          {
+                            aiLikely: 0,
+                            aiPossible: 0,
+                            plagLikely: 0,
+                            plagPossible: 0,
+                          },
+                        );
 
-                  {status.results.length === 0 ? (
-                    <p
-                      style={{
-                        color: "var(--text-secondary)",
-                        textAlign: "center",
-                        padding: "40px",
-                      }}
-                    >
-                      No results yet. Grade some assignments first.
-                    </p>
-                  ) : (
-                    <>
-                      {/* Search Input */}
-                      <div style={{ marginBottom: "15px" }}>
-                        <div style={{ position: "relative" }}>
-                          <Icon
-                            name="Search"
-                            size={18}
+                        const hasConcerns =
+                          authStats.aiLikely +
+                            authStats.aiPossible +
+                            authStats.plagLikely +
+                            authStats.plagPossible >
+                          0;
+
+                        return hasConcerns ? (
+                          <div
                             style={{
-                              position: "absolute",
-                              left: "12px",
-                              top: "50%",
-                              transform: "translateY(-50%)",
-                              color: "var(--text-muted)",
+                              marginBottom: "20px",
+                              padding: "15px 20px",
+                              borderRadius: "12px",
+                              background:
+                                "linear-gradient(135deg, rgba(248,113,113,0.1), rgba(251,191,36,0.1))",
+                              border: "1px solid rgba(248,113,113,0.3)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "15px",
                             }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Search by student or assignment name..."
-                            value={resultsSearch}
-                            onChange={(e) => setResultsSearch(e.target.value)}
-                            style={{
-                              width: "100%",
-                              padding: "10px 12px 10px 40px",
-                              borderRadius: "8px",
-                              border: "1px solid var(--glass-border)",
-                              background: "var(--input-bg)",
-                              color: "var(--text-primary)",
-                              fontSize: "0.9rem",
-                            }}
-                          />
-                          {resultsSearch && (
-                            <button
-                              onClick={() => setResultsSearch("")}
-                              style={{
-                                position: "absolute",
-                                right: "12px",
-                                top: "50%",
-                                transform: "translateY(-50%)",
-                                background: "none",
-                                border: "none",
-                                color: "var(--text-muted)",
-                                cursor: "pointer",
-                                padding: "4px",
-                              }}
-                            >
-                              <Icon name="X" size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Student</th>
-                            <th>Assignment</th>
-                            <th>Time</th>
-                            <th>Score</th>
-                            <th>Grade</th>
-                            <th>Authenticity</th>
-                            <th>Email</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(editedResults.length > 0
-                            ? editedResults
-                            : status.results
-                          )
-                            .filter((r) => {
-                              // Apply handwritten/typed filter
-                              if (resultsFilter === "handwritten" && !r.is_handwritten) return false;
-                              if (resultsFilter === "typed" && r.is_handwritten) return false;
-                              // Apply verified/unverified filter
-                              if (resultsFilter === "verified" && r.marker_status !== "verified") return false;
-                              if (resultsFilter === "unverified" && r.marker_status !== "unverified") return false;
-                              // Apply search filter
-                              if (!resultsSearch.trim()) return true;
-                              const search = resultsSearch.toLowerCase();
-                              return (
-                                (r.student_name || "")
-                                  .toLowerCase()
-                                  .includes(search) ||
-                                (r.assignment || "")
-                                  .toLowerCase()
-                                  .includes(search)
-                              );
-                            })
-                            .sort((a, b) => {
-                              const { field, direction } = resultsSort;
-                              let cmp = 0;
-                              switch (field) {
-                                case "time":
-                                  const timeA = a.graded_at || "";
-                                  const timeB = b.graded_at || "";
-                                  cmp = timeA.localeCompare(timeB);
-                                  break;
-                                case "name":
-                                  cmp = (a.student_name || "").localeCompare(b.student_name || "");
-                                  break;
-                                case "assignment":
-                                  cmp = (a.assignment || "").localeCompare(b.assignment || "");
-                                  break;
-                                case "score":
-                                  cmp = (a.score || 0) - (b.score || 0);
-                                  break;
-                                case "grade":
-                                  const gradeOrder = { A: 1, B: 2, C: 3, D: 4, F: 5, ERROR: 6 };
-                                  cmp = (gradeOrder[a.letter_grade] || 99) - (gradeOrder[b.letter_grade] || 99);
-                                  break;
-                                default:
-                                  cmp = 0;
-                              }
-                              return direction === "desc" ? -cmp : cmp;
-                            })
-                            .map((r, i) => {
-                              // Find the original index for actions that need it
-                              const originalIndex = status.results.findIndex(
-                                (orig) => orig.filename === r.filename,
-                              );
-                              return (
-                                <tr
-                                  key={r.filename || i}
-                                  style={{
-                                    background: r.edited
-                                      ? "rgba(251,191,36,0.1)"
-                                      : "transparent",
-                                  }}
-                                >
-                                  <td>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                      {r.student_name}
-                                      {r.is_handwritten && (
-                                        <span
-                                          title="Handwritten/Scanned Assignment"
-                                          style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            width: "20px",
-                                            height: "20px",
-                                            borderRadius: "4px",
-                                            background: "rgba(16, 185, 129, 0.15)",
-                                            color: "#10b981",
-                                          }}
-                                        >
-                                          <Icon name="PenTool" size={12} />
-                                        </span>
-                                      )}
-                                      {r.marker_status === "unverified" && (
-                                        <span
-                                          title="UNVERIFIED: No markers or config found. Grade may be inaccurate. Set up assignment config and regrade."
-                                          style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            width: "20px",
-                                            height: "20px",
-                                            borderRadius: "4px",
-                                            background: "rgba(251, 191, 36, 0.2)",
-                                            color: "#fbbf24",
-                                            cursor: "help",
-                                          }}
-                                        >
-                                          <Icon name="AlertTriangle" size={12} />
-                                        </span>
-                                      )}
-                                      {r.student_id && studentAccommodations[r.student_id] && (
-                                        <span
-                                          title={"Accommodations: " + (studentAccommodations[r.student_id]?.presets?.map(p => p.name).join(", ") || "Custom")}
-                                          style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            width: "20px",
-                                            height: "20px",
-                                            borderRadius: "4px",
-                                            background: "rgba(244, 114, 182, 0.15)",
-                                            color: "#f472b6",
-                                            cursor: "help",
-                                          }}
-                                        >
-                                          <Icon name="Heart" size={12} />
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td
+                          >
+                            <Icon
+                              name="Shield"
+                              size={24}
+                              style={{ color: "#f87171" }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div
+                                style={{ fontWeight: 700, marginBottom: "8px" }}
+                              >
+                                Authenticity Summary
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "20px",
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                {/* AI Detection Stats */}
+                                <div>
+                                  <div
                                     style={{
-                                      maxWidth: "300px",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                      cursor: "help",
-                                    }}
-                                    title={r.filename || r.assignment}
-                                  >
-                                    {r.filename || r.assignment}
-                                  </td>
-                                  <td
-                                    style={{
+                                      color: "var(--text-muted)",
                                       fontSize: "0.8rem",
-                                      color: "var(--text-secondary)",
-                                      whiteSpace: "nowrap",
+                                      marginBottom: "4px",
                                     }}
                                   >
-                                    {r.graded_at || '-'}
-                                  </td>
-                                  <td>{r.score}</td>
-                                  <td>
-                                    <span
+                                    <Icon
+                                      name="Bot"
+                                      size={12}
                                       style={{
-                                        padding: "4px 12px",
-                                        borderRadius: "20px",
-                                        fontWeight: 700,
-                                        background:
-                                          r.score >= 90
-                                            ? "rgba(74,222,128,0.2)"
-                                            : r.score >= 80
-                                              ? "rgba(96,165,250,0.2)"
-                                              : r.score >= 70
-                                                ? "rgba(251,191,36,0.2)"
-                                                : "rgba(248,113,113,0.2)",
-                                        color:
-                                          r.score >= 90
-                                            ? "#4ade80"
-                                            : r.score >= 80
-                                              ? "#60a5fa"
-                                              : r.score >= 70
-                                                ? "#fbbf24"
-                                                : "#f87171",
+                                        marginRight: "4px",
+                                        verticalAlign: "middle",
                                       }}
-                                    >
-                                      {r.letter_grade}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    {(() => {
-                                      const auth = getAuthenticityStatus(r);
-                                      const aiColor = getAIFlagColor(auth.ai.flag);
-                                      const plagColor = getPlagFlagColor(auth.plag.flag);
-                                      return (
-                                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                          {/* AI Detection */}
-                                          <span
-                                            title={auth.ai.reason || `AI: ${auth.ai.flag}${auth.ai.confidence ? ` (${auth.ai.confidence}%)` : ""}`}
-                                            style={{
-                                              display: "inline-flex",
-                                              alignItems: "center",
-                                              gap: "4px",
-                                              padding: "3px 8px",
-                                              borderRadius: "12px",
-                                              fontWeight: 500,
-                                              background: aiColor.bg,
-                                              color: aiColor.text,
-                                              fontSize: "0.75rem",
-                                              cursor: auth.ai.reason ? "help" : "default",
-                                            }}
-                                          >
-                                            <Icon
-                                              name={auth.ai.flag === "likely" ? "Bot" : auth.ai.flag === "possible" ? "Bot" : "CheckCircle"}
-                                              size={12}
-                                            />
-                                            AI: {auth.ai.flag === "none" ? "Clear" : auth.ai.flag}
-                                            {auth.ai.confidence > 0 && ` ${auth.ai.confidence}%`}
-                                          </span>
-                                          {/* Plagiarism Detection */}
-                                          <span
-                                            title={auth.plag.reason || `Plagiarism: ${auth.plag.flag}`}
-                                            style={{
-                                              display: "inline-flex",
-                                              alignItems: "center",
-                                              gap: "4px",
-                                              padding: "3px 8px",
-                                              borderRadius: "12px",
-                                              fontWeight: 500,
-                                              background: plagColor.bg,
-                                              color: plagColor.text,
-                                              fontSize: "0.75rem",
-                                              cursor: auth.plag.reason ? "help" : "default",
-                                            }}
-                                          >
-                                            <Icon
-                                              name={auth.plag.flag === "likely" ? "Copy" : auth.plag.flag === "possible" ? "Copy" : "CheckCircle"}
-                                              size={12}
-                                            />
-                                            Copy: {auth.plag.flag === "none" ? "Clear" : auth.plag.flag}
-                                          </span>
-                                        </div>
-                                      );
-                                    })()}
-                                  </td>
-                                  <td>
-                                    {autoApproveEmails ? (
-                                      <span
-                                        style={{
-                                          color: "#4ade80",
-                                          fontSize: "0.85rem",
-                                        }}
-                                      >
-                                        Auto
-                                      </span>
-                                    ) : (
-                                      <span
-                                        style={{
-                                          padding: "3px 8px",
-                                          borderRadius: "4px",
-                                          fontSize: "0.8rem",
-                                          fontWeight: 600,
-                                          background:
-                                            emailApprovals[originalIndex] ===
-                                            "approved"
-                                              ? "rgba(74,222,128,0.2)"
-                                              : emailApprovals[
-                                                    originalIndex
-                                                  ] === "rejected"
-                                                ? "rgba(248,113,113,0.2)"
-                                                : "var(--glass-border)",
-                                          color:
-                                            emailApprovals[originalIndex] ===
-                                            "approved"
-                                              ? "#4ade80"
-                                              : emailApprovals[
-                                                    originalIndex
-                                                  ] === "rejected"
-                                                ? "#f87171"
-                                                : "var(--text-secondary)",
-                                        }}
-                                      >
-                                        {emailApprovals[originalIndex] ===
-                                        "approved"
-                                          ? "Approved"
-                                          : emailApprovals[originalIndex] ===
-                                              "rejected"
-                                            ? "Rejected"
-                                            : "Pending"}
+                                    />
+                                    AI Detection
+                                  </div>
+                                  <div style={{ display: "flex", gap: "10px" }}>
+                                    {authStats.aiLikely > 0 && (
+                                      <span style={{ color: "#f87171" }}>
+                                        {authStats.aiLikely} likely
                                       </span>
                                     )}
-                                  </td>
-                                  <td style={{ display: "flex", gap: "4px" }}>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openReview(originalIndex);
-                                      }}
+                                    {authStats.aiPossible > 0 && (
+                                      <span style={{ color: "#fbbf24" }}>
+                                        {authStats.aiPossible} possible
+                                      </span>
+                                    )}
+                                    {authStats.aiLikely === 0 &&
+                                      authStats.aiPossible === 0 && (
+                                        <span style={{ color: "#4ade80" }}>
+                                          All clear
+                                        </span>
+                                      )}
+                                  </div>
+                                </div>
+                                {/* Plagiarism Stats */}
+                                <div>
+                                  <div
+                                    style={{
+                                      color: "var(--text-muted)",
+                                      fontSize: "0.8rem",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    <Icon
+                                      name="Copy"
+                                      size={12}
                                       style={{
-                                        background: "none",
-                                        border: "none",
-                                        color: "#a5b4fc",
-                                        cursor: "pointer",
-                                        padding: "4px",
+                                        marginRight: "4px",
+                                        verticalAlign: "middle",
                                       }}
-                                      title="Edit"
+                                    />
+                                    Plagiarism
+                                  </div>
+                                  <div style={{ display: "flex", gap: "10px" }}>
+                                    {authStats.plagLikely > 0 && (
+                                      <span style={{ color: "#f87171" }}>
+                                        {authStats.plagLikely} likely
+                                      </span>
+                                    )}
+                                    {authStats.plagPossible > 0 && (
+                                      <span style={{ color: "#fbbf24" }}>
+                                        {authStats.plagPossible} possible
+                                      </span>
+                                    )}
+                                    {authStats.plagLikely === 0 &&
+                                      authStats.plagPossible === 0 && (
+                                        <span style={{ color: "#4ade80" }}>
+                                          All clear
+                                        </span>
+                                      )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.85rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Hover for details
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
+                    {/* Auto-Approve Toggle */}
+                    {status.results.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "15px",
+                          marginBottom: "20px",
+                          padding: "12px 15px",
+                          background: "var(--input-bg)",
+                          borderRadius: "10px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <button
+                            onClick={() =>
+                              setAutoApproveEmails(!autoApproveEmails)
+                            }
+                            style={{
+                              width: "44px",
+                              height: "24px",
+                              borderRadius: "12px",
+                              border: "none",
+                              background: autoApproveEmails
+                                ? "#6366f1"
+                                : "var(--btn-secondary-border)",
+                              cursor: "pointer",
+                              position: "relative",
+                              transition: "background 0.2s",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "18px",
+                                height: "18px",
+                                borderRadius: "50%",
+                                background: "#fff",
+                                position: "absolute",
+                                top: "3px",
+                                left: autoApproveEmails ? "23px" : "3px",
+                                transition: "left 0.2s",
+                              }}
+                            />
+                          </button>
+                          <span style={{ fontWeight: 600 }}>
+                            Auto-Approve Emails
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {autoApproveEmails
+                            ? "Emails will be sent automatically"
+                            : "Review each email before sending"}
+                        </span>
+                        {!autoApproveEmails && (
+                          <div
+                            style={{
+                              marginLeft: "auto",
+                              display: "flex",
+                              gap: "10px",
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                const approvals = {};
+                                status.results.forEach((_, i) => {
+                                  approvals[i] = "approved";
+                                });
+                                setEmailApprovals(approvals);
+                              }}
+                              className="btn btn-secondary"
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "6px 12px",
+                              }}
+                            >
+                              <Icon name="CheckCircle" size={14} />
+                              Approve All
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {emailStatus.message && (
+                      <div
+                        style={{
+                          marginBottom: "15px",
+                          padding: "12px 15px",
+                          background: emailStatus.message.includes("Error")
+                            ? "rgba(248,113,113,0.1)"
+                            : "rgba(74,222,128,0.1)",
+                          borderRadius: "8px",
+                          border: emailStatus.message.includes("Error")
+                            ? "1px solid rgba(248,113,113,0.3)"
+                            : "1px solid rgba(74,222,128,0.3)",
+                        }}
+                      >
+                        {emailStatus.message}
+                      </div>
+                    )}
+
+                    {status.results.length === 0 ? (
+                      <p
+                        style={{
+                          color: "var(--text-secondary)",
+                          textAlign: "center",
+                          padding: "40px",
+                        }}
+                      >
+                        No results yet. Grade some assignments first.
+                      </p>
+                    ) : (
+                      <>
+                        {/* Search Input */}
+                        <div style={{ marginBottom: "15px" }}>
+                          <div style={{ position: "relative" }}>
+                            <Icon
+                              name="Search"
+                              size={18}
+                              style={{
+                                position: "absolute",
+                                left: "12px",
+                                top: "50%",
+                                transform: "translateY(-50%)",
+                                color: "var(--text-muted)",
+                              }}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Search by student or assignment name..."
+                              value={resultsSearch}
+                              onChange={(e) => setResultsSearch(e.target.value)}
+                              style={{
+                                width: "100%",
+                                padding: "10px 12px 10px 40px",
+                                borderRadius: "8px",
+                                border: "1px solid var(--glass-border)",
+                                background: "var(--input-bg)",
+                                color: "var(--text-primary)",
+                                fontSize: "0.9rem",
+                              }}
+                            />
+                            {resultsSearch && (
+                              <button
+                                onClick={() => setResultsSearch("")}
+                                style={{
+                                  position: "absolute",
+                                  right: "12px",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  padding: "4px",
+                                }}
+                              >
+                                <Icon name="X" size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Student</th>
+                              <th>Assignment</th>
+                              <th>Time</th>
+                              <th>Score</th>
+                              <th>Grade</th>
+                              <th>Authenticity</th>
+                              <th>Email</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(editedResults.length > 0
+                              ? editedResults
+                              : status.results
+                            )
+                              .filter((r) => {
+                                // Apply handwritten/typed filter
+                                if (
+                                  resultsFilter === "handwritten" &&
+                                  !r.is_handwritten
+                                )
+                                  return false;
+                                if (
+                                  resultsFilter === "typed" &&
+                                  r.is_handwritten
+                                )
+                                  return false;
+                                // Apply verified/unverified filter
+                                if (
+                                  resultsFilter === "verified" &&
+                                  r.marker_status !== "verified"
+                                )
+                                  return false;
+                                if (
+                                  resultsFilter === "unverified" &&
+                                  r.marker_status !== "unverified"
+                                )
+                                  return false;
+                                // Apply search filter
+                                if (!resultsSearch.trim()) return true;
+                                const search = resultsSearch.toLowerCase();
+                                return (
+                                  (r.student_name || "")
+                                    .toLowerCase()
+                                    .includes(search) ||
+                                  (r.assignment || "")
+                                    .toLowerCase()
+                                    .includes(search)
+                                );
+                              })
+                              .sort((a, b) => {
+                                const { field, direction } = resultsSort;
+                                let cmp = 0;
+                                switch (field) {
+                                  case "time":
+                                    const timeA = a.graded_at || "";
+                                    const timeB = b.graded_at || "";
+                                    cmp = timeA.localeCompare(timeB);
+                                    break;
+                                  case "name":
+                                    cmp = (a.student_name || "").localeCompare(
+                                      b.student_name || "",
+                                    );
+                                    break;
+                                  case "assignment":
+                                    cmp = (a.assignment || "").localeCompare(
+                                      b.assignment || "",
+                                    );
+                                    break;
+                                  case "score":
+                                    cmp = (a.score || 0) - (b.score || 0);
+                                    break;
+                                  case "grade":
+                                    const gradeOrder = {
+                                      A: 1,
+                                      B: 2,
+                                      C: 3,
+                                      D: 4,
+                                      F: 5,
+                                      ERROR: 6,
+                                    };
+                                    cmp =
+                                      (gradeOrder[a.letter_grade] || 99) -
+                                      (gradeOrder[b.letter_grade] || 99);
+                                    break;
+                                  default:
+                                    cmp = 0;
+                                }
+                                return direction === "desc" ? -cmp : cmp;
+                              })
+                              .map((r, i) => {
+                                // Find the original index for actions that need it
+                                const originalIndex = status.results.findIndex(
+                                  (orig) => orig.filename === r.filename,
+                                );
+                                return (
+                                  <tr
+                                    key={r.filename || i}
+                                    style={{
+                                      background: r.edited
+                                        ? "rgba(251,191,36,0.1)"
+                                        : "transparent",
+                                    }}
+                                  >
+                                    <td>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                        }}
+                                      >
+                                        {r.student_name}
+                                        {r.is_handwritten && (
+                                          <span
+                                            title="Handwritten/Scanned Assignment"
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              width: "20px",
+                                              height: "20px",
+                                              borderRadius: "4px",
+                                              background:
+                                                "rgba(16, 185, 129, 0.15)",
+                                              color: "#10b981",
+                                            }}
+                                          >
+                                            <Icon name="PenTool" size={12} />
+                                          </span>
+                                        )}
+                                        {r.marker_status === "unverified" && (
+                                          <span
+                                            title="UNVERIFIED: No markers or config found. Grade may be inaccurate. Set up assignment config and regrade."
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              width: "20px",
+                                              height: "20px",
+                                              borderRadius: "4px",
+                                              background:
+                                                "rgba(251, 191, 36, 0.2)",
+                                              color: "#fbbf24",
+                                              cursor: "help",
+                                            }}
+                                          >
+                                            <Icon
+                                              name="AlertTriangle"
+                                              size={12}
+                                            />
+                                          </span>
+                                        )}
+                                        {r.student_id &&
+                                          studentAccommodations[
+                                            r.student_id
+                                          ] && (
+                                            <span
+                                              title={
+                                                "Accommodations: " +
+                                                (studentAccommodations[
+                                                  r.student_id
+                                                ]?.presets
+                                                  ?.map((p) => p.name)
+                                                  .join(", ") || "Custom")
+                                              }
+                                              style={{
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                width: "20px",
+                                                height: "20px",
+                                                borderRadius: "4px",
+                                                background:
+                                                  "rgba(244, 114, 182, 0.15)",
+                                                color: "#f472b6",
+                                                cursor: "help",
+                                              }}
+                                            >
+                                              <Icon name="Heart" size={12} />
+                                            </span>
+                                          )}
+                                      </div>
+                                    </td>
+                                    <td
+                                      style={{
+                                        maxWidth: "300px",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        cursor: "help",
+                                      }}
+                                      title={r.filename || r.assignment}
                                     >
-                                      <Icon name="Edit" size={16} />
-                                    </button>
-                                    <button
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        if (
-                                          confirm(
-                                            `Delete result for "${r.student_name}"?`,
-                                          )
-                                        ) {
-                                          try {
-                                            await api.deleteResult(r.filename);
-                                            setStatus((prev) => ({
-                                              ...prev,
-                                              results: prev.results.filter(
-                                                (result) =>
-                                                  result.filename !==
-                                                  r.filename,
-                                              ),
-                                            }));
-                                            setEditedResults((prev) =>
-                                              prev.filter(
-                                                (result) =>
-                                                  result.filename !==
-                                                  r.filename,
-                                              ),
-                                            );
-                                            // Clean up email approvals
-                                            const newApprovals = {};
-                                            Object.keys(emailApprovals).forEach(
-                                              (key) => {
+                                      {r.filename || r.assignment}
+                                    </td>
+                                    <td
+                                      style={{
+                                        fontSize: "0.8rem",
+                                        color: "var(--text-secondary)",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {r.graded_at || "-"}
+                                    </td>
+                                    <td>{r.score}</td>
+                                    <td>
+                                      <span
+                                        style={{
+                                          padding: "4px 12px",
+                                          borderRadius: "20px",
+                                          fontWeight: 700,
+                                          background:
+                                            r.score >= 90
+                                              ? "rgba(74,222,128,0.2)"
+                                              : r.score >= 80
+                                                ? "rgba(96,165,250,0.2)"
+                                                : r.score >= 70
+                                                  ? "rgba(251,191,36,0.2)"
+                                                  : "rgba(248,113,113,0.2)",
+                                          color:
+                                            r.score >= 90
+                                              ? "#4ade80"
+                                              : r.score >= 80
+                                                ? "#60a5fa"
+                                                : r.score >= 70
+                                                  ? "#fbbf24"
+                                                  : "#f87171",
+                                        }}
+                                      >
+                                        {r.letter_grade}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      {(() => {
+                                        const auth = getAuthenticityStatus(r);
+                                        const aiColor = getAIFlagColor(
+                                          auth.ai.flag,
+                                        );
+                                        const plagColor = getPlagFlagColor(
+                                          auth.plag.flag,
+                                        );
+                                        return (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: "4px",
+                                            }}
+                                          >
+                                            {/* AI Detection */}
+                                            <span
+                                              title={
+                                                auth.ai.reason ||
+                                                `AI: ${auth.ai.flag}${auth.ai.confidence ? ` (${auth.ai.confidence}%)` : ""}`
+                                              }
+                                              style={{
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "4px",
+                                                padding: "3px 8px",
+                                                borderRadius: "12px",
+                                                fontWeight: 500,
+                                                background: aiColor.bg,
+                                                color: aiColor.text,
+                                                fontSize: "0.75rem",
+                                                cursor: auth.ai.reason
+                                                  ? "help"
+                                                  : "default",
+                                              }}
+                                            >
+                                              <Icon
+                                                name={
+                                                  auth.ai.flag === "likely"
+                                                    ? "Bot"
+                                                    : auth.ai.flag ===
+                                                        "possible"
+                                                      ? "Bot"
+                                                      : "CheckCircle"
+                                                }
+                                                size={12}
+                                              />
+                                              AI:{" "}
+                                              {auth.ai.flag === "none"
+                                                ? "Clear"
+                                                : auth.ai.flag}
+                                              {auth.ai.confidence > 0 &&
+                                                ` ${auth.ai.confidence}%`}
+                                            </span>
+                                            {/* Plagiarism Detection */}
+                                            <span
+                                              title={
+                                                auth.plag.reason ||
+                                                `Plagiarism: ${auth.plag.flag}`
+                                              }
+                                              style={{
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "4px",
+                                                padding: "3px 8px",
+                                                borderRadius: "12px",
+                                                fontWeight: 500,
+                                                background: plagColor.bg,
+                                                color: plagColor.text,
+                                                fontSize: "0.75rem",
+                                                cursor: auth.plag.reason
+                                                  ? "help"
+                                                  : "default",
+                                              }}
+                                            >
+                                              <Icon
+                                                name={
+                                                  auth.plag.flag === "likely"
+                                                    ? "Copy"
+                                                    : auth.plag.flag ===
+                                                        "possible"
+                                                      ? "Copy"
+                                                      : "CheckCircle"
+                                                }
+                                                size={12}
+                                              />
+                                              Copy:{" "}
+                                              {auth.plag.flag === "none"
+                                                ? "Clear"
+                                                : auth.plag.flag}
+                                            </span>
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                    <td>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          gap: "4px",
+                                          alignItems: "flex-start",
+                                        }}
+                                      >
+                                        {autoApproveEmails ? (
+                                          <span
+                                            style={{
+                                              color: "#4ade80",
+                                              fontSize: "0.85rem",
+                                            }}
+                                          >
+                                            Auto
+                                          </span>
+                                        ) : (
+                                          <span
+                                            style={{
+                                              padding: "3px 8px",
+                                              borderRadius: "4px",
+                                              fontSize: "0.8rem",
+                                              fontWeight: 600,
+                                              background:
+                                                emailApprovals[
+                                                  originalIndex
+                                                ] === "approved"
+                                                  ? "rgba(74,222,128,0.2)"
+                                                  : emailApprovals[
+                                                        originalIndex
+                                                      ] === "rejected"
+                                                    ? "rgba(248,113,113,0.2)"
+                                                    : "var(--glass-border)",
+                                              color:
+                                                emailApprovals[
+                                                  originalIndex
+                                                ] === "approved"
+                                                  ? "#4ade80"
+                                                  : emailApprovals[
+                                                        originalIndex
+                                                      ] === "rejected"
+                                                    ? "#f87171"
+                                                    : "var(--text-secondary)",
+                                            }}
+                                          >
+                                            {emailApprovals[originalIndex] ===
+                                            "approved"
+                                              ? "Approved"
+                                              : emailApprovals[
+                                                    originalIndex
+                                                  ] === "rejected"
+                                                ? "Rejected"
+                                                : "Pending"}
+                                          </span>
+                                        )}
+                                        {r.edited && (
+                                          <span
+                                            style={{
+                                              padding: "2px 6px",
+                                              borderRadius: "4px",
+                                              fontSize: "0.7rem",
+                                              fontWeight: 500,
+                                              background:
+                                                "rgba(251,191,36,0.15)",
+                                              color: "#fbbf24",
+                                            }}
+                                          >
+                                            Edited
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ display: "flex", gap: "4px" }}>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openReview(originalIndex);
+                                        }}
+                                        style={{
+                                          background: "none",
+                                          border: "none",
+                                          color: "#a5b4fc",
+                                          cursor: "pointer",
+                                          padding: "4px",
+                                        }}
+                                        title="Edit"
+                                      >
+                                        <Icon name="Edit" size={16} />
+                                      </button>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          if (
+                                            confirm(
+                                              `Delete result for "${r.student_name}"?`,
+                                            )
+                                          ) {
+                                            try {
+                                              await api.deleteResult(
+                                                r.filename,
+                                              );
+                                              setStatus((prev) => ({
+                                                ...prev,
+                                                results: prev.results.filter(
+                                                  (result) =>
+                                                    result.filename !==
+                                                    r.filename,
+                                                ),
+                                              }));
+                                              setEditedResults((prev) =>
+                                                prev.filter(
+                                                  (result) =>
+                                                    result.filename !==
+                                                    r.filename,
+                                                ),
+                                              );
+                                              // Clean up email approvals
+                                              const newApprovals = {};
+                                              Object.keys(
+                                                emailApprovals,
+                                              ).forEach((key) => {
                                                 const idx = parseInt(key);
                                                 if (idx < originalIndex)
                                                   newApprovals[idx] =
@@ -4628,672 +6641,2731 @@ ${signature}`;
                                                 else if (idx > originalIndex)
                                                   newApprovals[idx - 1] =
                                                     emailApprovals[key];
-                                              },
-                                            );
-                                            setEmailApprovals(newApprovals);
-                                          } catch (err) {
-                                            addToast("Error deleting result: " + err.message, "error");
+                                              });
+                                              setEmailApprovals(newApprovals);
+                                            } catch (err) {
+                                              addToast(
+                                                "Error deleting result: " +
+                                                  err.message,
+                                                "error",
+                                              );
+                                            }
                                           }
-                                        }
-                                      }}
-                                      style={{
-                                        background: "none",
-                                        border: "none",
-                                        color: "#f87171",
-                                        cursor: "pointer",
-                                        padding: "4px",
-                                      }}
-                                      title="Delete"
-                                    >
-                                      <Icon name="Trash2" size={16} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
+                                        }}
+                                        style={{
+                                          background: "none",
+                                          border: "none",
+                                          color: "#f87171",
+                                          cursor: "pointer",
+                                          padding: "4px",
+                                        }}
+                                        title="Delete"
+                                      >
+                                        <Icon name="Trash2" size={16} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
 
-                      {/* Send Approved Emails Button */}
-                      {Object.values(emailApprovals).filter(
-                        (v) => v === "approved",
-                      ).length > 0 &&
-                        !autoApproveEmails && (
-                          <div
-                            style={{
-                              marginTop: "20px",
-                              display: "flex",
-                              justifyContent: "flex-end",
-                            }}
-                          >
-                            <button
-                              onClick={async () => {
-                                // Build approved results with custom email content
-                                const approvedResults = status.results
-                                  .map((r, i) => {
-                                    if (emailApprovals[i] !== "approved")
-                                      return null;
-                                    const edited = editedEmails[i];
-                                    return {
-                                      ...r,
-                                      custom_email_subject:
-                                        edited?.subject ||
-                                        `Grade Report: ${r.assignment}`,
-                                      custom_email_body:
-                                        edited?.body || getDefaultEmailBody(i),
-                                    };
-                                  })
-                                  .filter(Boolean);
-                                if (approvedResults.length === 0) return;
-                                setEmailStatus({
-                                  sending: true,
-                                  sent: 0,
-                                  failed: 0,
-                                  message: "Sending emails...",
-                                });
-                                try {
-                                  const result =
-                                    await api.sendEmails(approvedResults);
-                                  setEmailStatus({
-                                    sending: false,
-                                    sent: result.sent || approvedResults.length,
-                                    failed: result.failed || 0,
-                                    message: `Sent ${result.sent || approvedResults.length} emails successfully!`,
-                                  });
-                                } catch (e) {
-                                  setEmailStatus({
-                                    sending: false,
-                                    sent: 0,
-                                    failed: approvedResults.length,
-                                    message:
-                                      "Error sending emails: " + e.message,
-                                  });
-                                }
+                        {/* Send Approved Emails Button */}
+                        {Object.values(emailApprovals).filter(
+                          (v) => v === "approved",
+                        ).length > 0 &&
+                          !autoApproveEmails && (
+                            <div
+                              style={{
+                                marginTop: "20px",
+                                display: "flex",
+                                justifyContent: "flex-end",
                               }}
-                              className="btn btn-primary"
-                              disabled={emailStatus.sending}
                             >
-                              <Icon name="Send" size={18} />
-                              Send{" "}
-                              {
-                                Object.values(emailApprovals).filter(
-                                  (v) => v === "approved",
-                                ).length
-                              }{" "}
-                              Approved Emails
-                            </button>
-                          </div>
-                        )}
-                    </>
-                  )}
+                              <button
+                                onClick={async () => {
+                                  // Build approved results with custom email content
+                                  const approvedResults = status.results
+                                    .map((r, i) => {
+                                      if (emailApprovals[i] !== "approved")
+                                        return null;
+                                      const edited = editedEmails[i];
+                                      return {
+                                        ...r,
+                                        custom_email_subject:
+                                          edited?.subject ||
+                                          `Grade Report: ${r.assignment}`,
+                                        custom_email_body:
+                                          edited?.body ||
+                                          getDefaultEmailBody(i),
+                                      };
+                                    })
+                                    .filter(Boolean);
+                                  if (approvedResults.length === 0) return;
+                                  setEmailStatus({
+                                    sending: true,
+                                    sent: 0,
+                                    failed: 0,
+                                    message: "Sending emails...",
+                                  });
+                                  try {
+                                    const result =
+                                      await api.sendEmails(approvedResults, config.teacher_email, config.teacher_name, config.email_signature);
+                                    setEmailStatus({
+                                      sending: false,
+                                      sent:
+                                        result.sent || approvedResults.length,
+                                      failed: result.failed || 0,
+                                      message: `Sent ${result.sent || approvedResults.length} emails successfully!`,
+                                    });
+                                  } catch (e) {
+                                    setEmailStatus({
+                                      sending: false,
+                                      sent: 0,
+                                      failed: approvedResults.length,
+                                      message:
+                                        "Error sending emails: " + e.message,
+                                    });
+                                  }
+                                }}
+                                className="btn btn-primary"
+                                disabled={emailStatus.sending}
+                              >
+                                <Icon name="Send" size={18} />
+                                Send{" "}
+                                {
+                                  Object.values(emailApprovals).filter(
+                                    (v) => v === "approved",
+                                  ).length
+                                }{" "}
+                                Approved Emails
+                              </button>
+                            </div>
+                          )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Settings Tab */}
-            {activeTab === "settings" && (
-              <div className="fade-in glass-card" style={{ padding: "25px" }}>
-                <h2
-                  style={{
-                    fontSize: "1.3rem",
-                    fontWeight: 700,
-                    marginBottom: "20px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <Icon name="Settings" size={24} />
-                  Settings
-                </h2>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "20px",
-                  }}
-                >
-                  <div>
-                    <label className="label">Assignments Folder</label>
-                    <div style={{ display: "flex", gap: "10px" }}>
-                      <input
-                        type="text"
-                        className="input"
-                        value={config.assignments_folder}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            assignments_folder: e.target.value,
-                          }))
-                        }
-                      />
-                      <button
-                        onClick={() =>
-                          handleBrowse("folder", "assignments_folder")
-                        }
-                        className="btn btn-secondary"
-                      >
-                        Browse
-                      </button>
-                      <button
-                        onClick={loadAvailableFiles}
-                        disabled={!config.assignments_folder || filesLoading}
-                        className="btn btn-secondary"
-                        style={{ opacity: !config.assignments_folder ? 0.5 : 1 }}
-                      >
-                        {filesLoading ? "Loading..." : "Load Files"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="label">Output Folder</label>
-                    <div style={{ display: "flex", gap: "10px" }}>
-                      <input
-                        type="text"
-                        className="input"
-                        value={config.output_folder}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            output_folder: e.target.value,
-                          }))
-                        }
-                      />
-                      <button
-                        onClick={() => handleBrowse("folder", "output_folder")}
-                        className="btn btn-secondary"
-                      >
-                        Browse
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="label">Roster File</label>
-                    <div style={{ display: "flex", gap: "10px" }}>
-                      <input
-                        type="text"
-                        className="input"
-                        value={config.roster_file}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            roster_file: e.target.value,
-                          }))
-                        }
-                      />
-                      <button
-                        onClick={() => handleBrowse("file", "roster_file")}
-                        className="btn btn-secondary"
-                      >
-                        Browse
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Teacher & School Info */}
-                  <div
+              {/* Settings Tab */}
+              {activeTab === "settings" && (
+                <div className="fade-in glass-card" style={{ padding: "25px" }}>
+                  <h2
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2, 1fr)",
-                      gap: "20px",
-                    }}
-                  >
-                    <div>
-                      <label className="label">Teacher Name</label>
-                      <input
-                        type="text"
-                        className="input"
-                        value={config.teacher_name}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            teacher_name: e.target.value,
-                          }))
-                        }
-                        placeholder="Mr. Smith"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">School Name</label>
-                      <input
-                        type="text"
-                        className="input"
-                        value={config.school_name}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            school_name: e.target.value,
-                          }))
-                        }
-                        placeholder="Lincoln Middle School"
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, 1fr)",
-                      gap: "20px",
-                    }}
-                  >
-                    <div>
-                      <label className="label">State</label>
-                      <select
-                        className="input"
-                        value={config.state}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            state: e.target.value,
-                          }))
-                        }
-                      >
-                        <option value="FL">Florida</option>
-                        <option value="TX">Texas</option>
-                        <option value="CA">California</option>
-                        <option value="NY">New York</option>
-                        <option value="GA">Georgia</option>
-                        <option value="NC">North Carolina</option>
-                        <option value="VA">Virginia</option>
-                        <option value="OH">Ohio</option>
-                        <option value="PA">Pennsylvania</option>
-                        <option value="IL">Illinois</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="label">Grade Level</label>
-                      <select
-                        className="input"
-                        value={config.grade_level}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            grade_level: e.target.value,
-                          }))
-                        }
-                      >
-                        <option value="K">Kindergarten</option>
-                        <option value="1">1st Grade</option>
-                        <option value="2">2nd Grade</option>
-                        <option value="3">3rd Grade</option>
-                        <option value="4">4th Grade</option>
-                        <option value="5">5th Grade</option>
-                        <option value="6">6th Grade</option>
-                        <option value="7">7th Grade</option>
-                        <option value="8">8th Grade</option>
-                        <option value="9">9th Grade</option>
-                        <option value="10">10th Grade</option>
-                        <option value="11">11th Grade</option>
-                        <option value="12">12th Grade</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="label">Subject</label>
-                      <select
-                        className="input"
-                        value={config.subject}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            subject: e.target.value,
-                          }))
-                        }
-                      >
-                        <option value="US History">U.S. History</option>
-                        <option value="World History">World History</option>
-                        <option value="Social Studies">Social Studies</option>
-                        <option value="Civics">Civics</option>
-                        <option value="Geography">Geography</option>
-                        <option value="English/ELA">English/ELA</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="label">Grading Period</label>
-                      <select
-                        className="input"
-                        value={config.grading_period}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            grading_period: e.target.value,
-                          }))
-                        }
-                      >
-                        <option value="Q1">Quarter 1 (Q1)</option>
-                        <option value="Q2">Quarter 2 (Q2)</option>
-                        <option value="Q3">Quarter 3 (Q3)</option>
-                        <option value="Q4">Quarter 4 (Q4)</option>
-                        <option value="S1">Semester 1 (S1)</option>
-                        <option value="S2">Semester 2 (S2)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="label">AI Model</label>
-                      <select
-                        className="input"
-                        value={config.ai_model}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            ai_model: e.target.value,
-                          }))
-                        }
-                      >
-                        <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap - $0.09/100 assignments)</option>
-                        <option value="gpt-4o">GPT-4o (Best Quality - $1.43/100 assignments)</option>
-                      </select>
-                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "6px" }}>
-                        GPT-4o Mini is recommended for most grading. Use GPT-4o for essays or if you need better AI detection.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="label">
-                      Global AI Grading Instructions
-                    </label>
-                    <textarea
-                      className="input"
-                      value={globalAINotes}
-                      onChange={(e) => setGlobalAINotes(e.target.value)}
-                      placeholder="Instructions that apply to ALL assignments..."
-                      style={{ minHeight: "120px", resize: "vertical" }}
-                    />
-                  </div>
-
-                  {/* Preferences */}
-                  <div
-                    style={{
-                      borderTop: "1px solid var(--glass-border)",
-                      paddingTop: "20px",
-                      marginTop: "20px",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        marginBottom: "15px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <Icon name="Bell" size={20} />
-                      Notifications
-                    </h3>
-
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        cursor: "pointer",
-                        padding: "12px 16px",
-                        background: "var(--input-bg)",
-                        borderRadius: "12px",
-                        border: "1px solid var(--input-border)",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={config.showToastNotifications}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            showToastNotifications: e.target.checked,
-                          }))
-                        }
-                        style={{
-                          width: "18px",
-                          height: "18px",
-                          accentColor: "var(--accent-primary)",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                          Toast Notifications
-                        </div>
-                        <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                          Show popup notifications when assignments are graded
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Rubric Configuration */}
-                  <div
-                    style={{
-                      borderTop: "1px solid var(--glass-border)",
-                      paddingTop: "20px",
-                      marginTop: "20px",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        marginBottom: "15px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}
-                    >
-                      <Icon
-                        name="ClipboardCheck"
-                        size={20}
-                        style={{ color: "#8b5cf6" }}
-                      />
-                      Grading Rubric
-                    </h3>
-                    <p
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "var(--text-secondary)",
-                        marginBottom: "15px",
-                      }}
-                    >
-                      Configure how assignments are scored. Weights must total
-                      100%.
-                    </p>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                        marginBottom: "15px",
-                      }}
-                    >
-                      {rubric.categories.map((cat, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: "flex",
-                            gap: "10px",
-                            alignItems: "center",
-                            padding: "12px",
-                            background: "var(--input-bg)",
-                            borderRadius: "8px",
-                          }}
-                        >
-                          <input
-                            type="text"
-                            className="input"
-                            value={cat.name}
-                            onChange={(e) => {
-                              const updated = [...rubric.categories];
-                              updated[idx].name = e.target.value;
-                              setRubric({ ...rubric, categories: updated });
-                            }}
-                            style={{ flex: 1 }}
-                            placeholder="Category name"
-                          />
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "5px",
-                            }}
-                          >
-                            <input
-                              type="number"
-                              className="input"
-                              value={cat.weight}
-                              onChange={(e) => {
-                                const updated = [...rubric.categories];
-                                updated[idx].weight =
-                                  parseInt(e.target.value) || 0;
-                                setRubric({ ...rubric, categories: updated });
-                              }}
-                              style={{ width: "70px", textAlign: "center" }}
-                              min="0"
-                              max="100"
-                            />
-                            <span style={{ color: "var(--text-secondary)" }}>
-                              %
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => {
-                              const updated = rubric.categories.filter(
-                                (_, i) => i !== idx,
-                              );
-                              setRubric({ ...rubric, categories: updated });
-                            }}
-                            style={{
-                              padding: "6px",
-                              background: "none",
-                              border: "none",
-                              color: "var(--text-muted)",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Icon name="X" size={16} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "15px",
-                        marginBottom: "15px",
-                      }}
-                    >
-                      <button
-                        onClick={() => {
-                          setRubric({
-                            ...rubric,
-                            categories: [
-                              ...rubric.categories,
-                              { name: "", weight: 0, description: "" },
-                            ],
-                          });
-                        }}
-                        className="btn btn-secondary"
-                        style={{ fontSize: "0.85rem" }}
-                      >
-                        <Icon name="Plus" size={16} />
-                        Add Category
-                      </button>
-                      <span
-                        style={{
-                          fontSize: "0.85rem",
-                          color:
-                            rubric.categories.reduce(
-                              (sum, c) => sum + c.weight,
-                              0,
-                            ) === 100
-                              ? "#10b981"
-                              : "#ef4444",
-                        }}
-                      >
-                        Total:{" "}
-                        {rubric.categories.reduce(
-                          (sum, c) => sum + c.weight,
-                          0,
-                        )}
-                        %
-                        {rubric.categories.reduce(
-                          (sum, c) => sum + c.weight,
-                          0,
-                        ) !== 100 && " (must equal 100%)"}
-                      </span>
-                    </div>
-
-                    <span
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "var(--text-secondary)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <Icon
-                        name="Check"
-                        size={14}
-                        style={{ color: "#4ade80" }}
-                      />
-                      Auto-saved
-                    </span>
-                  </div>
-
-                  {/* Auto-save indicator */}
-                  <div
-                    style={{
-                      alignSelf: "flex-start",
-                      marginTop: "20px",
-                      padding: "12px 20px",
-                      background: "rgba(74,222,128,0.1)",
-                      border: "1px solid rgba(74,222,128,0.3)",
-                      borderRadius: "10px",
+                      fontSize: "1.3rem",
+                      fontWeight: 700,
+                      marginBottom: "20px",
                       display: "flex",
                       alignItems: "center",
                       gap: "10px",
                     }}
                   >
-                    <Icon
-                      name="CheckCircle"
-                      size={20}
-                      style={{ color: "#4ade80" }}
-                    />
-                    <span style={{ color: "#4ade80", fontWeight: 600 }}>
-                      Settings auto-save
-                    </span>
-                    <span
-                      style={{
-                        color: "var(--text-secondary)",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      Changes are saved automatically
-                    </span>
-                  </div>
+                    <Icon name="Settings" size={24} />
+                    Settings
+                  </h2>
 
-                  {/* Roster Upload Section */}
                   <div
                     style={{
-                      borderTop: "1px solid var(--glass-border)",
-                      paddingTop: "25px",
-                      marginTop: "25px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "20px",
                     }}
                   >
+                    <div>
+                      <label className="label">Assignments Folder</label>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <input
+                          type="text"
+                          className="input"
+                          value={config.assignments_folder}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              assignments_folder: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          onClick={() =>
+                            handleBrowse("folder", "assignments_folder")
+                          }
+                          className="btn btn-secondary"
+                        >
+                          Browse
+                        </button>
+                        <button
+                          onClick={loadAvailableFiles}
+                          disabled={!config.assignments_folder || filesLoading}
+                          className="btn btn-secondary"
+                          style={{
+                            opacity: !config.assignments_folder ? 0.5 : 1,
+                          }}
+                        >
+                          {filesLoading ? "Loading..." : "Load Files"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="label">Output Folder</label>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <input
+                          type="text"
+                          className="input"
+                          value={config.output_folder}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              output_folder: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          onClick={() =>
+                            handleBrowse("folder", "output_folder")
+                          }
+                          className="btn btn-secondary"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="label">Roster File</label>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <input
+                          type="text"
+                          className="input"
+                          value={config.roster_file}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              roster_file: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          onClick={() => handleBrowse("file", "roster_file")}
+                          className="btn btn-secondary"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Teacher & School Info */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, 1fr)",
+                        gap: "20px",
+                      }}
+                    >
+                      <div>
+                        <label className="label">Teacher Name</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={config.teacher_name}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              teacher_name: e.target.value,
+                            }))
+                          }
+                          placeholder="Mr. Smith"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Teacher Email</label>
+                        <input
+                          type="email"
+                          className="input"
+                          value={config.teacher_email}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              teacher_email: e.target.value,
+                            }))
+                          }
+                          placeholder="teacher@school.edu"
+                        />
+                        <span style={{ fontSize: "0.75rem", color: "#888", marginTop: "4px", display: "block" }}>
+                          Students will reply to this email
+                        </span>
+                      </div>
+                      <div>
+                        <label className="label">School Name</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={config.school_name}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              school_name: e.target.value,
+                            }))
+                          }
+                          placeholder="Lincoln Middle School"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Email Signature */}
+                    <div>
+                      <label className="label">Email Signature</label>
+                      <textarea
+                        className="input"
+                        value={config.email_signature}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            email_signature: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.stopPropagation();
+                          }
+                        }}
+                        placeholder={"Best regards," + String.fromCharCode(10) + "Mr. Smith" + String.fromCharCode(10) + "Room 204 | Office Hours: Mon-Fri 3-4pm"}
+                        rows={4}
+                        style={{ resize: "vertical", minHeight: "100px", fontFamily: "inherit", lineHeight: "1.5" }}
+                      />
+                      <span style={{ fontSize: "0.75rem", color: "#888", marginTop: "4px", display: "block" }}>
+                        Appears at the end of grade feedback emails
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, 1fr)",
+                        gap: "20px",
+                      }}
+                    >
+                      <div>
+                        <label className="label">State</label>
+                        <select
+                          className="input"
+                          value={config.state}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              state: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="FL">Florida</option>
+                          <option value="TX">Texas</option>
+                          <option value="CA">California</option>
+                          <option value="NY">New York</option>
+                          <option value="GA">Georgia</option>
+                          <option value="NC">North Carolina</option>
+                          <option value="VA">Virginia</option>
+                          <option value="OH">Ohio</option>
+                          <option value="PA">Pennsylvania</option>
+                          <option value="IL">Illinois</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="label">Grade Level</label>
+                        <select
+                          className="input"
+                          value={config.grade_level}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              grade_level: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="K">Kindergarten</option>
+                          <option value="1">1st Grade</option>
+                          <option value="2">2nd Grade</option>
+                          <option value="3">3rd Grade</option>
+                          <option value="4">4th Grade</option>
+                          <option value="5">5th Grade</option>
+                          <option value="6">6th Grade</option>
+                          <option value="7">7th Grade</option>
+                          <option value="8">8th Grade</option>
+                          <option value="9">9th Grade</option>
+                          <option value="10">10th Grade</option>
+                          <option value="11">11th Grade</option>
+                          <option value="12">12th Grade</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="label">Subject</label>
+                        <select
+                          className="input"
+                          value={config.subject}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              subject: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="US History">U.S. History</option>
+                          <option value="World History">World History</option>
+                          <option value="Social Studies">Social Studies</option>
+                          <option value="Civics">Civics</option>
+                          <option value="Geography">Geography</option>
+                          <option value="English/ELA">English/ELA</option>
+                          <option value="Math">Math</option>
+                          <option value="Science">Science</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="label">Grading Period</label>
+                        <select
+                          className="input"
+                          value={config.grading_period}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              grading_period: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="Q1">Quarter 1 (Q1)</option>
+                          <option value="Q2">Quarter 2 (Q2)</option>
+                          <option value="Q3">Quarter 3 (Q3)</option>
+                          <option value="Q4">Quarter 4 (Q4)</option>
+                          <option value="S1">Semester 1 (S1)</option>
+                          <option value="S2">Semester 2 (S2)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="label">AI Model</label>
+                        <select
+                          className="input"
+                          value={config.ai_model}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              ai_model: e.target.value,
+                            }))
+                          }
+                        >
+                          <optgroup label="OpenAI">
+                            <option value="gpt-4o-mini">
+                              GPT-4o Mini (Fast & Cheap)
+                            </option>
+                            <option value="gpt-4o">
+                              GPT-4o (Best Quality)
+                            </option>
+                          </optgroup>
+                          <optgroup label="Anthropic">
+                            <option value="claude-sonnet">
+                              Claude Sonnet (Balanced)
+                            </option>
+                            <option value="claude-opus">
+                              Claude Opus (Most Capable)
+                            </option>
+                          </optgroup>
+                        </select>
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--text-muted)",
+                            marginTop: "6px",
+                          }}
+                        >
+                          {config.ai_model?.startsWith("claude")
+                            ? apiKeys.anthropicConfigured
+                              ? "Using Anthropic API"
+                              : "⚠️ Add Anthropic API key below"
+                            : apiKeys.openaiConfigured
+                              ? "Using OpenAI API"
+                              : "⚠️ Add OpenAI API key below"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="label">
+                        Global AI Grading Instructions
+                      </label>
+                      <textarea
+                        className="input"
+                        value={globalAINotes}
+                        onChange={(e) => setGlobalAINotes(e.target.value)}
+                        placeholder="Instructions that apply to ALL assignments..."
+                        style={{ minHeight: "120px", resize: "vertical" }}
+                      />
+                    </div>
+
+                    {/* API Keys Section */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "20px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon name="Key" size={20} />
+                        API Keys
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Connect your AI provider API keys. Keys are stored
+                        securely and never shared.
+                      </p>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "15px",
+                        }}
+                      >
+                        {/* OpenAI API Key */}
+                        <div>
+                          <label
+                            className="label"
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                            }}
+                          >
+                            OpenAI API Key
+                            {apiKeys.openaiConfigured && (
+                              <span
+                                style={{
+                                  color: "#22c55e",
+                                  fontSize: "0.75rem",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <Icon name="CheckCircle" size={14} /> Connected
+                              </span>
+                            )}
+                          </label>
+                          <div style={{ display: "flex", gap: "10px" }}>
+                            <div style={{ position: "relative", flex: 1 }}>
+                              <input
+                                type={showApiKeys.openai ? "text" : "password"}
+                                className="input"
+                                value={apiKeys.openai}
+                                onChange={(e) =>
+                                  setApiKeys((prev) => ({
+                                    ...prev,
+                                    openai: e.target.value,
+                                  }))
+                                }
+                                placeholder={
+                                  apiKeys.openaiConfigured
+                                    ? "••••••••••••••••"
+                                    : "sk-..."
+                                }
+                                style={{ paddingRight: "40px" }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowApiKeys((prev) => ({
+                                    ...prev,
+                                    openai: !prev.openai,
+                                  }))
+                                }
+                                style={{
+                                  position: "absolute",
+                                  right: "10px",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                <Icon
+                                  name={showApiKeys.openai ? "EyeOff" : "Eye"}
+                                  size={18}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--text-muted)",
+                              marginTop: "4px",
+                            }}
+                          >
+                            Get your key from{" "}
+                            <a
+                              href="https://platform.openai.com/api-keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "var(--accent)" }}
+                            >
+                              platform.openai.com
+                            </a>
+                          </p>
+                        </div>
+
+                        {/* Anthropic API Key */}
+                        <div>
+                          <label
+                            className="label"
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                            }}
+                          >
+                            Anthropic (Claude) API Key
+                            {apiKeys.anthropicConfigured && (
+                              <span
+                                style={{
+                                  color: "#22c55e",
+                                  fontSize: "0.75rem",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <Icon name="CheckCircle" size={14} /> Connected
+                              </span>
+                            )}
+                          </label>
+                          <div style={{ display: "flex", gap: "10px" }}>
+                            <div style={{ position: "relative", flex: 1 }}>
+                              <input
+                                type={
+                                  showApiKeys.anthropic ? "text" : "password"
+                                }
+                                className="input"
+                                value={apiKeys.anthropic}
+                                onChange={(e) =>
+                                  setApiKeys((prev) => ({
+                                    ...prev,
+                                    anthropic: e.target.value,
+                                  }))
+                                }
+                                placeholder={
+                                  apiKeys.anthropicConfigured
+                                    ? "••••••••••••••••"
+                                    : "sk-ant-..."
+                                }
+                                style={{ paddingRight: "40px" }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowApiKeys((prev) => ({
+                                    ...prev,
+                                    anthropic: !prev.anthropic,
+                                  }))
+                                }
+                                style={{
+                                  position: "absolute",
+                                  right: "10px",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                <Icon
+                                  name={
+                                    showApiKeys.anthropic ? "EyeOff" : "Eye"
+                                  }
+                                  size={18}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--text-muted)",
+                              marginTop: "4px",
+                            }}
+                          >
+                            Get your key from{" "}
+                            <a
+                              href="https://console.anthropic.com/settings/keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "var(--accent)" }}
+                            >
+                              console.anthropic.com
+                            </a>
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={async () => {
+                            setSavingApiKeys(true);
+                            try {
+                              const response = await fetch(
+                                "/api/save-api-keys",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    openai_key: apiKeys.openai || undefined,
+                                    anthropic_key:
+                                      apiKeys.anthropic || undefined,
+                                  }),
+                                },
+                              );
+                              const data = await response.json();
+                              if (data.status === "success") {
+                                setApiKeys((prev) => ({
+                                  ...prev,
+                                  openai: "",
+                                  anthropic: "",
+                                  openaiConfigured: data.openai_configured,
+                                  anthropicConfigured:
+                                    data.anthropic_configured,
+                                }));
+                                addToast(
+                                  "API keys saved successfully",
+                                  "success",
+                                );
+                              } else {
+                                addToast(
+                                  data.error || "Failed to save API keys",
+                                  "error",
+                                );
+                              }
+                            } catch (err) {
+                              addToast(
+                                "Error saving API keys: " + err.message,
+                                "error",
+                              );
+                            } finally {
+                              setSavingApiKeys(false);
+                            }
+                          }}
+                          disabled={
+                            savingApiKeys ||
+                            (!apiKeys.openai && !apiKeys.anthropic)
+                          }
+                          className="btn btn-primary"
+                          style={{
+                            alignSelf: "flex-start",
+                            opacity:
+                              !apiKeys.openai && !apiKeys.anthropic ? 0.5 : 1,
+                          }}
+                        >
+                          {savingApiKeys ? "Saving..." : "Save API Keys"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Available EdTech Tools */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "20px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon name="Laptop" size={20} />
+                        Available EdTech Tools
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Select the tools your school provides. Lesson plans will
+                        only suggest activities using these tools.
+                      </p>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(200px, 1fr))",
+                          gap: "10px",
+                          maxHeight: "300px",
+                          overflowY: "auto",
+                          padding: "10px",
+                          background: "var(--input-bg)",
+                          borderRadius: "12px",
+                          border: "1px solid var(--input-border)",
+                        }}
+                      >
+                        {EDTECH_TOOLS.map((tool) => (
+                          <label
+                            key={tool.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "10px",
+                              cursor: "pointer",
+                              padding: "10px",
+                              borderRadius: "8px",
+                              background: config.availableTools?.includes(
+                                tool.id,
+                              )
+                                ? "rgba(99,102,241,0.15)"
+                                : "transparent",
+                              border: config.availableTools?.includes(tool.id)
+                                ? "1px solid rgba(99,102,241,0.3)"
+                                : "1px solid transparent",
+                              transition: "all 0.2s",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={
+                                config.availableTools?.includes(tool.id) ||
+                                false
+                              }
+                              onChange={(e) => {
+                                const newTools = e.target.checked
+                                  ? [...(config.availableTools || []), tool.id]
+                                  : (config.availableTools || []).filter(
+                                      (t) => t !== tool.id,
+                                    );
+                                setConfig((prev) => ({
+                                  ...prev,
+                                  availableTools: newTools,
+                                }));
+                              }}
+                              style={{
+                                width: "16px",
+                                height: "16px",
+                                accentColor: "var(--accent-primary)",
+                                cursor: "pointer",
+                                marginTop: "2px",
+                              }}
+                            />
+                            <div>
+                              <div
+                                style={{ fontWeight: 600, fontSize: "0.9rem" }}
+                              >
+                                {tool.name}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                {tool.category} • {tool.description}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+
+                        {/* Custom Tools */}
+                        {customTools.map((tool) => (
+                          <label
+                            key={tool}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "10px",
+                              cursor: "pointer",
+                              padding: "10px",
+                              borderRadius: "8px",
+                              background: config.availableTools?.includes(
+                                `custom:${tool}`,
+                              )
+                                ? "rgba(16,185,129,0.15)"
+                                : "transparent",
+                              border: config.availableTools?.includes(
+                                `custom:${tool}`,
+                              )
+                                ? "1px solid rgba(16,185,129,0.3)"
+                                : "1px solid rgba(255,255,255,0.1)",
+                              transition: "all 0.2s",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={
+                                config.availableTools?.includes(
+                                  `custom:${tool}`,
+                                ) || false
+                              }
+                              onChange={(e) => {
+                                const toolId = `custom:${tool}`;
+                                const newTools = e.target.checked
+                                  ? [...(config.availableTools || []), toolId]
+                                  : (config.availableTools || []).filter(
+                                      (t) => t !== toolId,
+                                    );
+                                setConfig((prev) => ({
+                                  ...prev,
+                                  availableTools: newTools,
+                                }));
+                              }}
+                              style={{
+                                width: "16px",
+                                height: "16px",
+                                accentColor: "#10b981",
+                                cursor: "pointer",
+                                marginTop: "2px",
+                              }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div
+                                style={{ fontWeight: 600, fontSize: "0.9rem" }}
+                              >
+                                {tool}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                Custom • Added by you
+                              </div>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCustomTools(
+                                  customTools.filter((t) => t !== tool),
+                                );
+                                setConfig((prev) => ({
+                                  ...prev,
+                                  availableTools: (
+                                    prev.availableTools || []
+                                  ).filter((t) => t !== `custom:${tool}`),
+                                }));
+                              }}
+                              style={{
+                                background: "rgba(239,68,68,0.2)",
+                                border: "none",
+                                borderRadius: "4px",
+                                padding: "4px 8px",
+                                color: "#ef4444",
+                                cursor: "pointer",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </label>
+                        ))}
+                      </div>
+
+                      {/* Add Custom Tool */}
+                      <div style={{ marginTop: "15px" }}>
+                        <label
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-secondary)",
+                            display: "block",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Add a custom tool not in the list:
+                        </label>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <input
+                            type="text"
+                            className="input"
+                            value={newCustomTool}
+                            onChange={(e) => setNewCustomTool(e.target.value)}
+                            placeholder="e.g., Formative, Socrative, Classkick..."
+                            style={{ flex: 1 }}
+                            onKeyPress={(e) => {
+                              if (e.key === "Enter" && newCustomTool.trim()) {
+                                if (
+                                  !customTools.includes(newCustomTool.trim())
+                                ) {
+                                  setCustomTools([
+                                    ...customTools,
+                                    newCustomTool.trim(),
+                                  ]);
+                                }
+                                setNewCustomTool("");
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              if (
+                                newCustomTool.trim() &&
+                                !customTools.includes(newCustomTool.trim())
+                              ) {
+                                setCustomTools([
+                                  ...customTools,
+                                  newCustomTool.trim(),
+                                ]);
+                                setNewCustomTool("");
+                              }
+                            }}
+                            className="btn btn-primary"
+                            style={{ padding: "8px 16px" }}
+                            disabled={!newCustomTool.trim()}
+                          >
+                            <Icon name="Plus" size={16} /> Add
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: "15px",
+                          display: "flex",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            const allTools = [
+                              ...EDTECH_TOOLS.map((t) => t.id),
+                              ...customTools.map((t) => `custom:${t}`),
+                            ];
+                            setConfig((prev) => ({
+                              ...prev,
+                              availableTools: allTools,
+                            }));
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                        >
+                          Select All
+                        </button>
+                        <button
+                          onClick={() =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              availableTools: [],
+                            }))
+                          }
+                          className="btn btn-secondary"
+                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                        >
+                          Clear All
+                        </button>
+                        <span
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {config.availableTools?.length || 0} tools selected
+                          {customTools.length > 0 &&
+                            ` (${customTools.length} custom)`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Assessment Platform Templates */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "20px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon name="FileSpreadsheet" size={20} />
+                        Assessment Platform Templates
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Upload sample templates from your assessment platforms (e.g., Wayground, Mastery Connect).
+                        Graider will match the format when exporting assessments.
+                      </p>
+
+                      {/* Upload New Template */}
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "var(--glass-bg)",
+                          borderRadius: "12px",
+                          border: "1px dashed var(--glass-border)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                          <div style={{ flex: 1, minWidth: "150px" }}>
+                            <label className="label" style={{ fontSize: "0.8rem" }}>Platform Name</label>
+                            <select
+                              className="input"
+                              id="template-platform"
+                              style={{ fontSize: "0.9rem" }}
+                            >
+                              <option value="wayground">Wayground</option>
+                              <option value="mastery_connect">Mastery Connect</option>
+                              <option value="edulastic">Edulastic</option>
+                              <option value="illuminate">Illuminate</option>
+                              <option value="schoology">Schoology</option>
+                              <option value="custom">Other/Custom</option>
+                            </select>
+                          </div>
+                          <div style={{ flex: 1, minWidth: "150px" }}>
+                            <label className="label" style={{ fontSize: "0.8rem" }}>Template Name</label>
+                            <input
+                              type="text"
+                              className="input"
+                              id="template-name"
+                              placeholder="e.g., Quiz Import Template"
+                              style={{ fontSize: "0.9rem" }}
+                            />
+                          </div>
+                          <div>
+                            <input
+                              type="file"
+                              id="template-file"
+                              accept=".csv,.xlsx,.xls,.json,.txt"
+                              style={{ display: "none" }}
+                              onChange={async (e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+
+                                const platform = document.getElementById("template-platform").value;
+                                const name = document.getElementById("template-name").value || file.name;
+
+                                setUploadingTemplate(true);
+                                try {
+                                  const result = await api.uploadAssessmentTemplate(file, platform, name);
+                                  if (result.success) {
+                                    addToast(`Template "${name}" uploaded successfully!`, "success");
+                                    // Refresh templates list
+                                    const templates = await api.getAssessmentTemplates();
+                                    setAssessmentTemplates(templates.templates || []);
+                                  } else {
+                                    addToast("Error: " + (result.error || "Upload failed"), "error");
+                                  }
+                                } catch (err) {
+                                  addToast("Error uploading template: " + err.message, "error");
+                                } finally {
+                                  setUploadingTemplate(false);
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => document.getElementById("template-file").click()}
+                              className="btn btn-primary"
+                              style={{ padding: "8px 16px" }}
+                              disabled={uploadingTemplate}
+                            >
+                              {uploadingTemplate ? (
+                                <>
+                                  <Icon name="Loader2" size={16} className="spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Icon name="Upload" size={16} />
+                                  Upload Template
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "10px" }}>
+                          Supported formats: CSV, Excel (.xlsx), JSON, TXT
+                        </p>
+                      </div>
+
+                      {/* Existing Templates */}
+                      {assessmentTemplates.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "10px",
+                          }}
+                        >
+                          <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                            Uploaded Templates ({assessmentTemplates.length})
+                          </label>
+                          {assessmentTemplates.map((template) => (
+                            <div
+                              key={template.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "12px 15px",
+                                background: "var(--glass-bg)",
+                                borderRadius: "10px",
+                                border: "1px solid var(--glass-border)",
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <Icon
+                                  name={template.extension === ".csv" ? "Table" : template.extension === ".xlsx" ? "FileSpreadsheet" : "FileText"}
+                                  size={20}
+                                  style={{ color: "var(--accent-primary)" }}
+                                />
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+                                    {template.name}
+                                  </div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                    {template.platform} • {template.structure?.columns?.length || 0} columns • {template.extension}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                {template.structure?.columns && (
+                                  <span
+                                    style={{
+                                      fontSize: "0.7rem",
+                                      color: "var(--text-muted)",
+                                      maxWidth: "200px",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                    title={template.structure.columns.join(", ")}
+                                  >
+                                    {template.structure.columns.slice(0, 3).join(", ")}
+                                    {template.structure.columns.length > 3 && "..."}
+                                  </span>
+                                )}
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await api.deleteAssessmentTemplate(template.id);
+                                      setAssessmentTemplates(assessmentTemplates.filter(t => t.id !== template.id));
+                                      addToast("Template deleted", "info");
+                                    } catch (err) {
+                                      addToast("Error deleting template", "error");
+                                    }
+                                  }}
+                                  style={{
+                                    background: "rgba(239, 68, 68, 0.1)",
+                                    border: "none",
+                                    borderRadius: "6px",
+                                    padding: "6px 10px",
+                                    color: "#ef4444",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    fontSize: "0.8rem",
+                                  }}
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {assessmentTemplates.length === 0 && (
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "20px",
+                            color: "var(--text-muted)",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          No templates uploaded yet. Upload a sample file from your assessment platform to get started.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Preferences */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "20px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon name="Bell" size={20} />
+                        Notifications
+                      </h3>
+
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                          cursor: "pointer",
+                          padding: "12px 16px",
+                          background: "var(--input-bg)",
+                          borderRadius: "12px",
+                          border: "1px solid var(--input-border)",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={config.showToastNotifications}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              showToastNotifications: e.target.checked,
+                            }))
+                          }
+                          style={{
+                            width: "18px",
+                            height: "18px",
+                            accentColor: "var(--accent-primary)",
+                            cursor: "pointer",
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                            Toast Notifications
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.85rem",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Show popup notifications when assignments are graded
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Rubric Configuration */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "20px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="ClipboardCheck"
+                          size={20}
+                          style={{ color: "#8b5cf6" }}
+                        />
+                        Grading Rubric
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Configure how assignments are scored. Weights must total
+                        100%.
+                      </p>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "12px",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        {rubric.categories.map((cat, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: "flex",
+                              gap: "10px",
+                              alignItems: "center",
+                              padding: "12px",
+                              background: "var(--input-bg)",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              className="input"
+                              value={cat.name}
+                              onChange={(e) => {
+                                const updated = [...rubric.categories];
+                                updated[idx].name = e.target.value;
+                                setRubric({ ...rubric, categories: updated });
+                              }}
+                              style={{ flex: 1 }}
+                              placeholder="Category name"
+                            />
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "5px",
+                              }}
+                            >
+                              <input
+                                type="number"
+                                className="input"
+                                value={cat.weight}
+                                onChange={(e) => {
+                                  const updated = [...rubric.categories];
+                                  updated[idx].weight =
+                                    parseInt(e.target.value) || 0;
+                                  setRubric({ ...rubric, categories: updated });
+                                }}
+                                style={{ width: "70px", textAlign: "center" }}
+                                min="0"
+                                max="100"
+                              />
+                              <span style={{ color: "var(--text-secondary)" }}>
+                                %
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const updated = rubric.categories.filter(
+                                  (_, i) => i !== idx,
+                                );
+                                setRubric({ ...rubric, categories: updated });
+                              }}
+                              style={{
+                                padding: "6px",
+                                background: "none",
+                                border: "none",
+                                color: "var(--text-muted)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Icon name="X" size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "15px",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            setRubric({
+                              ...rubric,
+                              categories: [
+                                ...rubric.categories,
+                                { name: "", weight: 0, description: "" },
+                              ],
+                            });
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          <Icon name="Plus" size={16} />
+                          Add Category
+                        </button>
+                        <span
+                          style={{
+                            fontSize: "0.85rem",
+                            color:
+                              rubric.categories.reduce(
+                                (sum, c) => sum + c.weight,
+                                0,
+                              ) === 100
+                                ? "#10b981"
+                                : "#ef4444",
+                          }}
+                        >
+                          Total:{" "}
+                          {rubric.categories.reduce(
+                            (sum, c) => sum + c.weight,
+                            0,
+                          )}
+                          %
+                          {rubric.categories.reduce(
+                            (sum, c) => sum + c.weight,
+                            0,
+                          ) !== 100 && " (must equal 100%)"}
+                        </span>
+                      </div>
+
+                      <span
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <Icon
+                          name="Check"
+                          size={14}
+                          style={{ color: "#4ade80" }}
+                        />
+                        Auto-saved
+                      </span>
+                    </div>
+
+                    {/* Auto-save indicator */}
+                    <div
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: "20px",
+                        padding: "12px 20px",
+                        background: "rgba(74,222,128,0.1)",
+                        border: "1px solid rgba(74,222,128,0.3)",
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
+                    >
+                      <Icon
+                        name="CheckCircle"
+                        size={20}
+                        style={{ color: "#4ade80" }}
+                      />
+                      <span style={{ color: "#4ade80", fontWeight: 600 }}>
+                        Settings auto-save
+                      </span>
+                      <span
+                        style={{
+                          color: "var(--text-secondary)",
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        Changes are saved automatically
+                      </span>
+                    </div>
+
+                    {/* Roster Upload Section */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "25px",
+                        marginTop: "25px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Users"
+                          size={20}
+                          style={{ color: "#6366f1" }}
+                        />
+                        Student Roster
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Upload CSV with Student ID, Name, Student Email, and
+                        Parent Email columns
+                      </p>
+
+                      <input
+                        ref={rosterInputRef}
+                        type="file"
+                        accept=".csv"
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingRoster(true);
+                          try {
+                            const result = await api.uploadRoster(file);
+                            if (result.error) {
+                              addToast(result.error, "error");
+                            } else {
+                              const rostersData = await api.listRosters();
+                              setRosters(rostersData.rosters || []);
+                              setRosterMappingModal({
+                                show: true,
+                                roster: result,
+                              });
+                            }
+                          } catch (err) {
+                            addToast("Upload failed: " + err.message, "error");
+                          }
+                          setUploadingRoster(false);
+                          e.target.value = "";
+                        }}
+                      />
+
+                      <button
+                        onClick={() => rosterInputRef.current?.click()}
+                        className="btn btn-secondary"
+                        disabled={uploadingRoster}
+                        style={{ marginBottom: "15px" }}
+                      >
+                        <Icon name="Upload" size={18} />
+                        {uploadingRoster ? "Uploading..." : "Upload Roster CSV"}
+                      </button>
+
+                      {rosters.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "10px",
+                          }}
+                        >
+                          {rosters.map((roster) => (
+                            <div
+                              key={roster.filename}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "12px 15px",
+                                background: "var(--input-bg)",
+                                borderRadius: "8px",
+                                border: "1px solid var(--glass-border)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px",
+                                }}
+                              >
+                                <Icon
+                                  name="FileSpreadsheet"
+                                  size={18}
+                                  style={{ color: "#10b981" }}
+                                />
+                                <div>
+                                  <div style={{ fontWeight: 600 }}>
+                                    {roster.filename}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "0.8rem",
+                                      color: "var(--text-secondary)",
+                                    }}
+                                  >
+                                    {roster.row_count} students •{" "}
+                                    {roster.headers?.length || 0} columns
+                                    {Object.keys(roster.column_mapping || {})
+                                      .length > 0 && " • Mapped"}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                  onClick={() =>
+                                    setRosterMappingModal({
+                                      show: true,
+                                      roster,
+                                    })
+                                  }
+                                  className="btn btn-secondary"
+                                  style={{
+                                    padding: "6px 12px",
+                                    fontSize: "0.8rem",
+                                  }}
+                                >
+                                  <Icon name="Settings2" size={14} />
+                                  Map Columns
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm("Delete this roster?")) {
+                                      await api.deleteRoster(roster.filename);
+                                      const data = await api.listRosters();
+                                      setRosters(data.rosters || []);
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "6px 10px",
+                                    background: "rgba(239,68,68,0.2)",
+                                    border: "none",
+                                    borderRadius: "6px",
+                                    color: "#ef4444",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Period/Class Upload Section */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "25px",
+                        marginTop: "25px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Clock"
+                          size={20}
+                          style={{ color: "#f59e0b" }}
+                        />
+                        Class Periods
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Upload separate rosters for each class period
+                      </p>
+
+                      <input
+                        ref={periodInputRef}
+                        type="file"
+                        accept=".csv,.xlsx,.xls"
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (!newPeriodName.trim()) {
+                            addToast(
+                              "Please enter a period name first",
+                              "warning",
+                            );
+                            e.target.value = "";
+                            return;
+                          }
+                          setUploadingPeriod(true);
+                          try {
+                            const result = await api.uploadPeriod(
+                              file,
+                              newPeriodName,
+                            );
+                            if (result.error) {
+                              addToast(result.error, "error");
+                            } else {
+                              const periodsData = await api.listPeriods();
+                              setPeriods(periodsData.periods || []);
+                              setNewPeriodName("");
+                            }
+                          } catch (err) {
+                            addToast("Upload failed: " + err.message, "error");
+                          }
+                          setUploadingPeriod(false);
+                          e.target.value = "";
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Period name (e.g., Period 1, Block A)"
+                          value={newPeriodName}
+                          onChange={(e) => setNewPeriodName(e.target.value)}
+                          style={{ maxWidth: "250px" }}
+                        />
+                        <button
+                          onClick={() => periodInputRef.current?.click()}
+                          className="btn btn-secondary"
+                          disabled={uploadingPeriod || !newPeriodName.trim()}
+                          style={{
+                            opacity:
+                              !newPeriodName.trim() || uploadingPeriod
+                                ? 0.5
+                                : 1,
+                            cursor:
+                              !newPeriodName.trim() || uploadingPeriod
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                          title={
+                            !newPeriodName.trim()
+                              ? "Enter a period name first"
+                              : ""
+                          }
+                        >
+                          <Icon name="Upload" size={18} />
+                          {uploadingPeriod
+                            ? "Uploading..."
+                            : "Upload CSV/Excel"}
+                        </button>
+                      </div>
+                      {!newPeriodName.trim() && (
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--text-muted)",
+                            marginTop: "-10px",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          Enter a period name above, then click Upload
+                        </p>
+                      )}
+
+                      {sortedPeriods.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "10px",
+                          }}
+                        >
+                          {sortedPeriods.map((period) => (
+                            <div
+                              key={period.filename}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                padding: "10px 15px",
+                                background: "var(--input-bg)",
+                                borderRadius: "8px",
+                                border: "1px solid var(--glass-border)",
+                              }}
+                            >
+                              <Icon
+                                name="Users"
+                                size={16}
+                                style={{ color: "#f59e0b" }}
+                              />
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 600,
+                                    fontSize: "0.9rem",
+                                  }}
+                                >
+                                  {period.period_name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    color: "var(--text-secondary)",
+                                  }}
+                                >
+                                  {period.row_count} students
+                                </div>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (
+                                    confirm(`Delete ${period.period_name}?`)
+                                  ) {
+                                    await api.deletePeriod(period.filename);
+                                    const data = await api.listPeriods();
+                                    setPeriods(data.periods || []);
+                                  }
+                                }}
+                                style={{
+                                  padding: "4px 6px",
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <Icon name="X" size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* IEP/504 Accommodations Section */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "25px",
+                        marginTop: "25px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Heart"
+                          size={20}
+                          style={{ color: "#f472b6" }}
+                        />
+                        IEP/504 Accommodations
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            padding: "2px 8px",
+                            background: "rgba(74, 222, 128, 0.2)",
+                            color: "#4ade80",
+                            borderRadius: "4px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          FERPA Compliant
+                        </span>
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        Assign accommodation presets to students for
+                        personalized feedback. Only accommodation types are sent
+                        to AI - never student names or IDs.
+                      </p>
+
+                      {/* Available Presets */}
+                      <div style={{ marginBottom: "20px" }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            marginBottom: "12px",
+                            fontSize: "0.95rem",
+                          }}
+                        >
+                          Available Presets
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fill, minmax(200px, 1fr))",
+                            gap: "10px",
+                          }}
+                        >
+                          {accommodationPresets.map((preset) => (
+                            <div
+                              key={preset.id}
+                              style={{
+                                padding: "12px",
+                                background: "var(--input-bg)",
+                                borderRadius: "8px",
+                                border: "1px solid var(--input-border)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  marginBottom: "6px",
+                                }}
+                              >
+                                <Icon
+                                  name={preset.icon || "FileText"}
+                                  size={16}
+                                  style={{ color: "#f472b6" }}
+                                />
+                                <span
+                                  style={{
+                                    fontWeight: 600,
+                                    fontSize: "0.85rem",
+                                  }}
+                                >
+                                  {preset.name}
+                                </span>
+                              </div>
+                              <p
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "var(--text-muted)",
+                                  margin: 0,
+                                }}
+                              >
+                                {preset.description}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Student Accommodations List */}
+                      <div style={{ marginBottom: "20px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "12px",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                            Student Accommodations (
+                            {Object.keys(studentAccommodations).length}{" "}
+                            students)
+                          </div>
+                          <button
+                            onClick={() =>
+                              setAccommodationModal({
+                                show: true,
+                                studentId: null,
+                              })
+                            }
+                            className="btn btn-primary"
+                            style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                          >
+                            <Icon name="Plus" size={14} />
+                            Add Student
+                          </button>
+                        </div>
+
+                        {Object.keys(studentAccommodations).length > 0 ? (
+                          <div
+                            style={{
+                              maxHeight: "200px",
+                              overflowY: "auto",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                            }}
+                          >
+                            {Object.entries(studentAccommodations).map(
+                              ([studentId, data]) => (
+                                <div
+                                  key={studentId}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "10px 14px",
+                                    background: "var(--input-bg)",
+                                    borderRadius: "8px",
+                                    border: "1px solid var(--input-border)",
+                                  }}
+                                >
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontWeight: 600,
+                                        fontSize: "0.85rem",
+                                      }}
+                                    >
+                                      Student ID:{" "}
+                                      {studentId.length > 20
+                                        ? studentId.slice(0, 20) + "..."
+                                        : studentId}
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "6px",
+                                        marginTop: "4px",
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      {data.presets.map((preset) => (
+                                        <span
+                                          key={preset.id}
+                                          style={{
+                                            padding: "2px 8px",
+                                            background:
+                                              "rgba(244, 114, 182, 0.15)",
+                                            color: "#f472b6",
+                                            borderRadius: "4px",
+                                            fontSize: "0.7rem",
+                                            fontWeight: 500,
+                                          }}
+                                        >
+                                          {preset.name}
+                                        </span>
+                                      ))}
+                                      {data.custom_notes && (
+                                        <span
+                                          style={{
+                                            padding: "2px 8px",
+                                            background:
+                                              "rgba(99, 102, 241, 0.15)",
+                                            color: "#818cf8",
+                                            borderRadius: "4px",
+                                            fontSize: "0.7rem",
+                                            fontWeight: 500,
+                                          }}
+                                        >
+                                          Custom Notes
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: "6px" }}>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedAccommodationPresets(
+                                          data.presets.map((p) => p.id),
+                                        );
+                                        setAccommodationCustomNotes(
+                                          data.custom_notes || "",
+                                        );
+                                        setAccommodationModal({
+                                          show: true,
+                                          studentId,
+                                        });
+                                      }}
+                                      className="btn btn-secondary"
+                                      style={{ padding: "4px 8px" }}
+                                    >
+                                      <Icon name="Edit2" size={14} />
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        if (
+                                          confirm(
+                                            "Remove accommodations for this student?",
+                                          )
+                                        ) {
+                                          try {
+                                            await api.deleteStudentAccommodation(
+                                              studentId,
+                                            );
+                                            const newData = {
+                                              ...studentAccommodations,
+                                            };
+                                            delete newData[studentId];
+                                            setStudentAccommodations(newData);
+                                          } catch (err) {
+                                            addToast(
+                                              "Error removing accommodation: " +
+                                                err.message,
+                                              "error",
+                                            );
+                                          }
+                                        }
+                                      }}
+                                      className="btn btn-secondary"
+                                      style={{
+                                        padding: "4px 8px",
+                                        color: "#ef4444",
+                                      }}
+                                    >
+                                      <Icon name="Trash2" size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              padding: "30px",
+                              textAlign: "center",
+                              background: "var(--input-bg)",
+                              borderRadius: "8px",
+                              border: "1px dashed var(--input-border)",
+                            }}
+                          >
+                            <Icon
+                              name="Heart"
+                              size={32}
+                              style={{
+                                color: "var(--text-muted)",
+                                marginBottom: "10px",
+                              }}
+                            />
+                            <p
+                              style={{
+                                color: "var(--text-muted)",
+                                fontSize: "0.85rem",
+                                margin: 0,
+                              }}
+                            >
+                              No students with accommodations yet. Add students
+                              from your roster.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Import/Export */}
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "var(--input-bg)",
+                          borderRadius: "10px",
+                          border: "1px solid var(--input-border)",
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, marginBottom: "12px" }}>
+                          Import & Export
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "10px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <label
+                            className="btn btn-secondary"
+                            style={{ fontSize: "0.85rem", cursor: "pointer" }}
+                          >
+                            <Icon name="Upload" size={16} />
+                            Import from CSV
+                            <input
+                              type="file"
+                              accept=".csv"
+                              style={{ display: "none" }}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  const result = await api.importAccommodations(
+                                    file,
+                                    "student_id",
+                                    "accommodation_type",
+                                    "accommodation_notes",
+                                  );
+                                  addToast(
+                                    "Import complete: " +
+                                      result.imported +
+                                      " imported, " +
+                                      result.skipped +
+                                      " skipped",
+                                    "success",
+                                  );
+                                  // Reload accommodations
+                                  const data =
+                                    await api.getStudentAccommodations();
+                                  if (data.accommodations)
+                                    setStudentAccommodations(
+                                      data.accommodations,
+                                    );
+                                } catch (err) {
+                                  addToast(
+                                    "Import failed: " + err.message,
+                                    "error",
+                                  );
+                                }
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const data = await api.exportAccommodations();
+                                const blob = new Blob(
+                                  [JSON.stringify(data, null, 2)],
+                                  { type: "application/json" },
+                                );
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download =
+                                  "graider_accommodations_" +
+                                  new Date().toISOString().split("T")[0] +
+                                  ".json";
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              } catch (err) {
+                                addToast(
+                                  "Export failed: " + err.message,
+                                  "error",
+                                );
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            style={{ fontSize: "0.85rem" }}
+                          >
+                            <Icon name="Download" size={16} />
+                            Export Accommodations
+                          </button>
+                        </div>
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--text-muted)",
+                            marginTop: "10px",
+                          }}
+                        >
+                          CSV should have columns: student_id,
+                          accommodation_type, accommodation_notes (optional)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* FERPA Compliance & Data Privacy */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "25px",
+                        marginTop: "25px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Shield"
+                          size={20}
+                          style={{ color: "#10b981" }}
+                        />
+                        Privacy & Data (FERPA)
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        Graider is designed for FERPA compliance. Student names
+                        are sanitized before AI processing, and all data is
+                        stored locally on your computer.
+                      </p>
+
+                      {/* Privacy Features */}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, 1fr)",
+                          gap: "15px",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: "15px",
+                            background: "rgba(74,222,128,0.1)",
+                            borderRadius: "10px",
+                            border: "1px solid rgba(74,222,128,0.2)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <Icon
+                              name="CheckCircle"
+                              size={16}
+                              style={{ color: "#4ade80" }}
+                            />
+                            <span
+                              style={{ fontWeight: 600, fontSize: "0.9rem" }}
+                            >
+                              PII Sanitization
+                            </span>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "var(--text-secondary)",
+                              margin: 0,
+                            }}
+                          >
+                            Student names, IDs, emails, and phone numbers are
+                            removed before AI processing
+                          </p>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: "15px",
+                            background: "rgba(74,222,128,0.1)",
+                            borderRadius: "10px",
+                            border: "1px solid rgba(74,222,128,0.2)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <Icon
+                              name="CheckCircle"
+                              size={16}
+                              style={{ color: "#4ade80" }}
+                            />
+                            <span
+                              style={{ fontWeight: 600, fontSize: "0.9rem" }}
+                            >
+                              Local Storage Only
+                            </span>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "var(--text-secondary)",
+                              margin: 0,
+                            }}
+                          >
+                            All data stays on your computer. No cloud storage of
+                            student information
+                          </p>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: "15px",
+                            background: "rgba(74,222,128,0.1)",
+                            borderRadius: "10px",
+                            border: "1px solid rgba(74,222,128,0.2)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <Icon
+                              name="CheckCircle"
+                              size={16}
+                              style={{ color: "#4ade80" }}
+                            />
+                            <span
+                              style={{ fontWeight: 600, fontSize: "0.9rem" }}
+                            >
+                              No AI Training
+                            </span>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "var(--text-secondary)",
+                              margin: 0,
+                            }}
+                          >
+                            OpenAI API does not use submitted data to train
+                            models (per their policy)
+                          </p>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: "15px",
+                            background: "rgba(74,222,128,0.1)",
+                            borderRadius: "10px",
+                            border: "1px solid rgba(74,222,128,0.2)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <Icon
+                              name="CheckCircle"
+                              size={16}
+                              style={{ color: "#4ade80" }}
+                            />
+                            <span
+                              style={{ fontWeight: 600, fontSize: "0.9rem" }}
+                            >
+                              Audit Logging
+                            </span>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "var(--text-secondary)",
+                              margin: 0,
+                            }}
+                          >
+                            All data access is logged locally for compliance
+                            tracking
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Data Management Actions */}
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "var(--input-bg)",
+                          borderRadius: "10px",
+                          border: "1px solid var(--input-border)",
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, marginBottom: "12px" }}>
+                          Data Management
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "10px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(
+                                  "/api/ferpa/data-summary",
+                                );
+                                const data = await response.json();
+                                alert(
+                                  `Data Storage Summary\n\n` +
+                                    `• Grading Results: ${data.results.count} records\n` +
+                                    `• Settings: ${data.settings.exists ? "Saved" : "Not saved"}\n` +
+                                    `• Audit Log: ${data.audit_log.exists ? "Active" : "Not started"}\n\n` +
+                                    `Data Locations:\n` +
+                                    data.data_locations.join("\n"),
+                                );
+                              } catch (err) {
+                                addToast(
+                                  "Failed to fetch data summary",
+                                  "error",
+                                );
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            style={{ fontSize: "0.85rem" }}
+                          >
+                            <Icon name="Database" size={16} />
+                            View Data Summary
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(
+                                  "/api/ferpa/export-data",
+                                );
+                                const data = await response.json();
+                                const blob = new Blob(
+                                  [JSON.stringify(data, null, 2)],
+                                  { type: "application/json" },
+                                );
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `graider_export_${new Date().toISOString().split("T")[0]}.json`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              } catch (err) {
+                                addToast("Failed to export data", "error");
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            style={{ fontSize: "0.85rem" }}
+                          >
+                            <Icon name="Download" size={16} />
+                            Export All Data
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              if (
+                                !confirm(
+                                  "⚠️ DELETE ALL STUDENT DATA?\n\n" +
+                                    "This will permanently delete:\n" +
+                                    "• All grading results\n" +
+                                    "• Current session data\n\n" +
+                                    "This action cannot be undone.\n\n" +
+                                    "Type 'DELETE' in the next prompt to confirm.",
+                                )
+                              )
+                                return;
+
+                              const confirmText = prompt(
+                                "Type DELETE to confirm:",
+                              );
+                              if (confirmText !== "DELETE") {
+                                addToast("Deletion cancelled", "warning");
+                                return;
+                              }
+
+                              try {
+                                const response = await fetch(
+                                  "/api/ferpa/delete-all-data",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({ confirm: true }),
+                                  },
+                                );
+                                const data = await response.json();
+                                if (data.status === "success") {
+                                  addToast(
+                                    "All student data has been deleted",
+                                    "success",
+                                  );
+                                  setTimeout(
+                                    () => window.location.reload(),
+                                    1000,
+                                  );
+                                } else {
+                                  addToast(
+                                    "Error: " + (data.error || "Unknown error"),
+                                    "error",
+                                  );
+                                }
+                              } catch (err) {
+                                addToast(
+                                  "Failed to delete data: " + err.message,
+                                  "error",
+                                );
+                              }
+                            }}
+                            className="btn btn-danger"
+                            style={{ fontSize: "0.85rem" }}
+                          >
+                            <Icon name="Trash2" size={16} />
+                            Delete All Data
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Resources Tab */}
+              {activeTab === "resources" && (
+                <div className="fade-in glass-card" style={{ padding: "25px" }}>
+                  <h2
+                    style={{
+                      fontSize: "1.3rem",
+                      fontWeight: 700,
+                      marginBottom: "20px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <Icon name="FolderOpen" size={24} />
+                    Resources
+                  </h2>
+                  <p
+                    style={{
+                      fontSize: "0.9rem",
+                      color: "var(--text-secondary)",
+                      marginBottom: "25px",
+                    }}
+                  >
+                    Upload curriculum guides, rubrics, standards documents, and
+                    other reference materials to enhance AI grading and lesson
+                    planning.
+                  </p>
+
+                  {/* Supporting Documents Section */}
+                  <div>
                     <h3
                       style={{
                         fontSize: "1.1rem",
@@ -5305,11 +9377,11 @@ ${signature}`;
                       }}
                     >
                       <Icon
-                        name="Users"
+                        name="FileText"
                         size={20}
-                        style={{ color: "#6366f1" }}
+                        style={{ color: "#10b981" }}
                       />
-                      Student Roster
+                      Supporting Documents
                     </h3>
                     <p
                       style={{
@@ -5318,50 +9390,78 @@ ${signature}`;
                         marginBottom: "15px",
                       }}
                     >
-                      Upload CSV with Student ID, Name, Student Email, and
-                      Parent Email columns
+                      Upload curriculum guides, rubrics, standards docs, or
+                      other reference materials
                     </p>
 
                     <input
-                      ref={rosterInputRef}
+                      ref={supportDocInputRef}
                       type="file"
-                      accept=".csv"
+                      accept=".pdf,.docx,.doc,.txt,.md"
                       style={{ display: "none" }}
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        setUploadingRoster(true);
+                        setUploadingDoc(true);
                         try {
-                          const result = await api.uploadRoster(file);
+                          const result = await api.uploadSupportDocument(
+                            file,
+                            newDocType,
+                            newDocDescription,
+                          );
                           if (result.error) {
                             addToast(result.error, "error");
                           } else {
-                            const rostersData = await api.listRosters();
-                            setRosters(rostersData.rosters || []);
-                            setRosterMappingModal({
-                              show: true,
-                              roster: result,
-                            });
+                            const docsData = await api.listSupportDocuments();
+                            setSupportDocs(docsData.documents || []);
+                            setNewDocDescription("");
                           }
                         } catch (err) {
                           addToast("Upload failed: " + err.message, "error");
                         }
-                        setUploadingRoster(false);
+                        setUploadingDoc(false);
                         e.target.value = "";
                       }}
                     />
 
-                    <button
-                      onClick={() => rosterInputRef.current?.click()}
-                      className="btn btn-secondary"
-                      disabled={uploadingRoster}
-                      style={{ marginBottom: "15px" }}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginBottom: "15px",
+                        flexWrap: "wrap",
+                      }}
                     >
-                      <Icon name="Upload" size={18} />
-                      {uploadingRoster ? "Uploading..." : "Upload Roster CSV"}
-                    </button>
+                      <select
+                        className="input"
+                        value={newDocType}
+                        onChange={(e) => setNewDocType(e.target.value)}
+                        style={{ maxWidth: "180px" }}
+                      >
+                        <option value="curriculum">Curriculum Guide</option>
+                        <option value="rubric">Rubric Template</option>
+                        <option value="standards">Standards Document</option>
+                        <option value="general">General Reference</option>
+                      </select>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Description (optional)"
+                        value={newDocDescription}
+                        onChange={(e) => setNewDocDescription(e.target.value)}
+                        style={{ flex: 1, minWidth: "200px" }}
+                      />
+                      <button
+                        onClick={() => supportDocInputRef.current?.click()}
+                        className="btn btn-secondary"
+                        disabled={uploadingDoc}
+                      >
+                        <Icon name="Upload" size={18} />
+                        {uploadingDoc ? "Uploading..." : "Upload Document"}
+                      </button>
+                    </div>
 
-                    {rosters.length > 0 && (
+                    {supportDocs.length > 0 && (
                       <div
                         style={{
                           display: "flex",
@@ -5369,9 +9469,9 @@ ${signature}`;
                           gap: "10px",
                         }}
                       >
-                        {rosters.map((roster) => (
+                        {supportDocs.map((doc) => (
                           <div
-                            key={roster.filename}
+                            key={doc.filename}
                             style={{
                               display: "flex",
                               alignItems: "center",
@@ -5390,13 +9490,19 @@ ${signature}`;
                               }}
                             >
                               <Icon
-                                name="FileSpreadsheet"
+                                name={
+                                  doc.doc_type === "rubric"
+                                    ? "ClipboardCheck"
+                                    : doc.doc_type === "standards"
+                                      ? "BookOpen"
+                                      : "FileText"
+                                }
                                 size={18}
                                 style={{ color: "#10b981" }}
                               />
                               <div>
                                 <div style={{ fontWeight: 600 }}>
-                                  {roster.filename}
+                                  {doc.filename}
                                 </div>
                                 <div
                                   style={{
@@ -5404,2096 +9510,649 @@ ${signature}`;
                                     color: "var(--text-secondary)",
                                   }}
                                 >
-                                  {roster.row_count} students •{" "}
-                                  {roster.headers?.length || 0} columns
-                                  {Object.keys(roster.column_mapping || {})
-                                    .length > 0 && " • Mapped"}
+                                  {doc.doc_type}{" "}
+                                  {doc.description && `• ${doc.description}`}
                                 </div>
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              <button
-                                onClick={() =>
-                                  setRosterMappingModal({ show: true, roster })
-                                }
-                                className="btn btn-secondary"
-                                style={{
-                                  padding: "6px 12px",
-                                  fontSize: "0.8rem",
-                                }}
-                              >
-                                <Icon name="Settings2" size={14} />
-                                Map Columns
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  if (confirm("Delete this roster?")) {
-                                    await api.deleteRoster(roster.filename);
-                                    const data = await api.listRosters();
-                                    setRosters(data.rosters || []);
-                                  }
-                                }}
-                                style={{
-                                  padding: "6px 10px",
-                                  background: "rgba(239,68,68,0.2)",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  color: "#ef4444",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Icon name="Trash2" size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Period/Class Upload Section */}
-                  <div
-                    style={{
-                      borderTop: "1px solid var(--glass-border)",
-                      paddingTop: "25px",
-                      marginTop: "25px",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        marginBottom: "15px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}
-                    >
-                      <Icon
-                        name="Clock"
-                        size={20}
-                        style={{ color: "#f59e0b" }}
-                      />
-                      Class Periods
-                    </h3>
-                    <p
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "var(--text-secondary)",
-                        marginBottom: "15px",
-                      }}
-                    >
-                      Upload separate rosters for each class period
-                    </p>
-
-                    <input
-                      ref={periodInputRef}
-                      type="file"
-                      accept=".csv,.xlsx,.xls"
-                      style={{ display: "none" }}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (!newPeriodName.trim()) {
-                          addToast("Please enter a period name first", "warning");
-                          e.target.value = "";
-                          return;
-                        }
-                        setUploadingPeriod(true);
-                        try {
-                          const result = await api.uploadPeriod(
-                            file,
-                            newPeriodName,
-                          );
-                          if (result.error) {
-                            addToast(result.error, "error");
-                          } else {
-                            const periodsData = await api.listPeriods();
-                            setPeriods(periodsData.periods || []);
-                            setNewPeriodName("");
-                          }
-                        } catch (err) {
-                          addToast("Upload failed: " + err.message, "error");
-                        }
-                        setUploadingPeriod(false);
-                        e.target.value = "";
-                      }}
-                    />
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "10px",
-                        marginBottom: "15px",
-                      }}
-                    >
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Period name (e.g., Period 1, Block A)"
-                        value={newPeriodName}
-                        onChange={(e) => setNewPeriodName(e.target.value)}
-                        style={{ maxWidth: "250px" }}
-                      />
-                      <button
-                        onClick={() => periodInputRef.current?.click()}
-                        className="btn btn-secondary"
-                        disabled={uploadingPeriod || !newPeriodName.trim()}
-                        style={{
-                          opacity: (!newPeriodName.trim() || uploadingPeriod) ? 0.5 : 1,
-                          cursor: (!newPeriodName.trim() || uploadingPeriod) ? "not-allowed" : "pointer",
-                        }}
-                        title={!newPeriodName.trim() ? "Enter a period name first" : ""}
-                      >
-                        <Icon name="Upload" size={18} />
-                        {uploadingPeriod ? "Uploading..." : "Upload CSV/Excel"}
-                      </button>
-                    </div>
-                    {!newPeriodName.trim() && (
-                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "-10px", marginBottom: "10px" }}>
-                        Enter a period name above, then click Upload
-                      </p>
-                    )}
-
-                    {sortedPeriods.length > 0 && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "10px",
-                        }}
-                      >
-                        {sortedPeriods.map((period) => (
-                          <div
-                            key={period.filename}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "10px",
-                              padding: "10px 15px",
-                              background: "var(--input-bg)",
-                              borderRadius: "8px",
-                              border: "1px solid var(--glass-border)",
-                            }}
-                          >
-                            <Icon
-                              name="Users"
-                              size={16}
-                              style={{ color: "#f59e0b" }}
-                            />
-                            <div>
-                              <div
-                                style={{ fontWeight: 600, fontSize: "0.9rem" }}
-                              >
-                                {period.period_name}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--text-secondary)",
-                                }}
-                              >
-                                {period.row_count} students
                               </div>
                             </div>
                             <button
                               onClick={async () => {
-                                if (confirm(`Delete ${period.period_name}?`)) {
-                                  await api.deletePeriod(period.filename);
-                                  const data = await api.listPeriods();
-                                  setPeriods(data.periods || []);
+                                if (confirm("Delete this document?")) {
+                                  await api.deleteSupportDocument(doc.filename);
+                                  const data = await api.listSupportDocuments();
+                                  setSupportDocs(data.documents || []);
                                 }
                               }}
                               style={{
-                                padding: "4px 6px",
-                                background: "none",
+                                padding: "6px 10px",
+                                background: "rgba(239,68,68,0.2)",
                                 border: "none",
-                                color: "var(--text-muted)",
+                                borderRadius: "6px",
+                                color: "#ef4444",
                                 cursor: "pointer",
                               }}
                             >
-                              <Icon name="X" size={14} />
+                              <Icon name="Trash2" size={14} />
                             </button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
+                </div>
+              )}
 
-                  {/* IEP/504 Accommodations Section */}
+              {/* Roster Column Mapping Modal */}
+              {rosterMappingModal.show && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "var(--modal-bg)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000,
+                  }}
+                >
                   <div
+                    className="glass-card"
                     style={{
-                      borderTop: "1px solid var(--glass-border)",
-                      paddingTop: "25px",
-                      marginTop: "25px",
+                      width: "90%",
+                      maxWidth: "500px",
+                      maxHeight: "80vh",
+                      overflow: "auto",
+                      padding: "25px",
                     }}
                   >
-                    <h3
+                    <div
                       style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        marginBottom: "15px",
                         display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
-                        gap: "10px",
+                        marginBottom: "20px",
                       }}
                     >
-                      <Icon
-                        name="Heart"
-                        size={20}
-                        style={{ color: "#f472b6" }}
-                      />
-                      IEP/504 Accommodations
-                      <span
+                      <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
+                        Map Roster Columns
+                      </h3>
+                      <button
+                        onClick={() =>
+                          setRosterMappingModal({ show: false, roster: null })
+                        }
                         style={{
-                          fontSize: "0.7rem",
-                          padding: "2px 8px",
-                          background: "rgba(74, 222, 128, 0.2)",
-                          color: "#4ade80",
-                          borderRadius: "4px",
-                          fontWeight: 500,
+                          background: "none",
+                          border: "none",
+                          color: "var(--text-primary)",
+                          cursor: "pointer",
                         }}
                       >
-                        FERPA Compliant
-                      </span>
-                    </h3>
+                        <Icon name="X" size={24} />
+                      </button>
+                    </div>
+
+                    <p
+                      style={{
+                        fontSize: "0.9rem",
+                        color: "var(--text-secondary)",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      Map your CSV columns to the required fields
+                    </p>
+
+                    {[
+                      "student_id",
+                      "student_name",
+                      "first_name",
+                      "last_name",
+                      "student_email",
+                      "parent_email",
+                    ].map((field) => (
+                      <div key={field} style={{ marginBottom: "15px" }}>
+                        <label
+                          className="label"
+                          style={{ textTransform: "capitalize" }}
+                        >
+                          {field.replace(/_/g, " ")}
+                        </label>
+                        <select
+                          className="input"
+                          value={
+                            rosterMappingModal.roster?.column_mapping?.[
+                              field
+                            ] || ""
+                          }
+                          onChange={(e) => {
+                            const newMapping = {
+                              ...rosterMappingModal.roster?.column_mapping,
+                              [field]: e.target.value,
+                            };
+                            setRosterMappingModal((prev) => ({
+                              ...prev,
+                              roster: {
+                                ...prev.roster,
+                                column_mapping: newMapping,
+                              },
+                            }));
+                          }}
+                        >
+                          <option value="">-- Select Column --</option>
+                          {(rosterMappingModal.roster?.headers || []).map(
+                            (header) => (
+                              <option key={header} value={header}>
+                                {header}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </div>
+                    ))}
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.saveRosterMapping(
+                              rosterMappingModal.roster.filename,
+                              rosterMappingModal.roster.column_mapping,
+                            );
+                            const data = await api.listRosters();
+                            setRosters(data.rosters || []);
+                            setRosterMappingModal({
+                              show: false,
+                              roster: null,
+                            });
+                          } catch (err) {
+                            addToast(
+                              "Error saving mapping: " + err.message,
+                              "error",
+                            );
+                          }
+                        }}
+                        className="btn btn-primary"
+                      >
+                        <Icon name="Save" size={18} />
+                        Save Mapping
+                      </button>
+                      <button
+                        onClick={() =>
+                          setRosterMappingModal({ show: false, roster: null })
+                        }
+                        className="btn btn-secondary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Accommodation Assignment Modal */}
+              {accommodationModal.show && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "var(--modal-bg)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000,
+                  }}
+                >
+                  <div
+                    className="glass-card"
+                    style={{
+                      width: "90%",
+                      maxWidth: "500px",
+                      maxHeight: "80vh",
+                      overflow: "auto",
+                      padding: "25px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.2rem",
+                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Heart"
+                          size={22}
+                          style={{ color: "#f472b6" }}
+                        />
+                        {accommodationModal.studentId
+                          ? "Edit Accommodations"
+                          : "Add Student Accommodations"}
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setAccommodationModal({
+                            show: false,
+                            studentId: null,
+                          });
+                          setSelectedAccommodationPresets([]);
+                          setAccommodationCustomNotes("");
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--text-primary)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Icon name="X" size={24} />
+                      </button>
+                    </div>
+
                     <p
                       style={{
                         fontSize: "0.85rem",
                         color: "var(--text-secondary)",
                         marginBottom: "20px",
-                      }}
-                    >
-                      Assign accommodation presets to students for personalized feedback.
-                      Only accommodation types are sent to AI - never student names or IDs.
-                    </p>
-
-                    {/* Available Presets */}
-                    <div style={{ marginBottom: "20px" }}>
-                      <div style={{ fontWeight: 600, marginBottom: "12px", fontSize: "0.95rem" }}>
-                        Available Presets
-                      </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                          gap: "10px",
-                        }}
-                      >
-                        {accommodationPresets.map((preset) => (
-                          <div
-                            key={preset.id}
-                            style={{
-                              padding: "12px",
-                              background: "var(--input-bg)",
-                              borderRadius: "8px",
-                              border: "1px solid var(--input-border)",
-                            }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                              <Icon name={preset.icon || "FileText"} size={16} style={{ color: "#f472b6" }} />
-                              <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{preset.name}</span>
-                            </div>
-                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: 0 }}>
-                              {preset.description}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Student Accommodations List */}
-                    <div style={{ marginBottom: "20px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                          Student Accommodations ({Object.keys(studentAccommodations).length} students)
-                        </div>
-                        <button
-                          onClick={() => setAccommodationModal({ show: true, studentId: null })}
-                          className="btn btn-primary"
-                          style={{ fontSize: "0.8rem", padding: "6px 12px" }}
-                        >
-                          <Icon name="Plus" size={14} />
-                          Add Student
-                        </button>
-                      </div>
-
-                      {Object.keys(studentAccommodations).length > 0 ? (
-                        <div
-                          style={{
-                            maxHeight: "200px",
-                            overflowY: "auto",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                          }}
-                        >
-                          {Object.entries(studentAccommodations).map(([studentId, data]) => (
-                            <div
-                              key={studentId}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "10px 14px",
-                                background: "var(--input-bg)",
-                                borderRadius: "8px",
-                                border: "1px solid var(--input-border)",
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
-                                  Student ID: {studentId.length > 20 ? studentId.slice(0, 20) + "..." : studentId}
-                                </div>
-                                <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap" }}>
-                                  {data.presets.map((preset) => (
-                                    <span
-                                      key={preset.id}
-                                      style={{
-                                        padding: "2px 8px",
-                                        background: "rgba(244, 114, 182, 0.15)",
-                                        color: "#f472b6",
-                                        borderRadius: "4px",
-                                        fontSize: "0.7rem",
-                                        fontWeight: 500,
-                                      }}
-                                    >
-                                      {preset.name}
-                                    </span>
-                                  ))}
-                                  {data.custom_notes && (
-                                    <span
-                                      style={{
-                                        padding: "2px 8px",
-                                        background: "rgba(99, 102, 241, 0.15)",
-                                        color: "#818cf8",
-                                        borderRadius: "4px",
-                                        fontSize: "0.7rem",
-                                        fontWeight: 500,
-                                      }}
-                                    >
-                                      Custom Notes
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div style={{ display: "flex", gap: "6px" }}>
-                                <button
-                                  onClick={() => {
-                                    setSelectedAccommodationPresets(data.presets.map(p => p.id));
-                                    setAccommodationCustomNotes(data.custom_notes || "");
-                                    setAccommodationModal({ show: true, studentId });
-                                  }}
-                                  className="btn btn-secondary"
-                                  style={{ padding: "4px 8px" }}
-                                >
-                                  <Icon name="Edit2" size={14} />
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    if (confirm("Remove accommodations for this student?")) {
-                                      try {
-                                        await api.deleteStudentAccommodation(studentId);
-                                        const newData = { ...studentAccommodations };
-                                        delete newData[studentId];
-                                        setStudentAccommodations(newData);
-                                      } catch (err) {
-                                        addToast("Error removing accommodation: " + err.message, "error");
-                                      }
-                                    }
-                                  }}
-                                  className="btn btn-secondary"
-                                  style={{ padding: "4px 8px", color: "#ef4444" }}
-                                >
-                                  <Icon name="Trash2" size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            padding: "30px",
-                            textAlign: "center",
-                            background: "var(--input-bg)",
-                            borderRadius: "8px",
-                            border: "1px dashed var(--input-border)",
-                          }}
-                        >
-                          <Icon name="Heart" size={32} style={{ color: "var(--text-muted)", marginBottom: "10px" }} />
-                          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-                            No students with accommodations yet. Add students from your roster.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Import/Export */}
-                    <div
-                      style={{
-                        padding: "15px",
-                        background: "var(--input-bg)",
-                        borderRadius: "10px",
-                        border: "1px solid var(--input-border)",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, marginBottom: "12px" }}>Import & Export</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        <label className="btn btn-secondary" style={{ fontSize: "0.85rem", cursor: "pointer" }}>
-                          <Icon name="Upload" size={16} />
-                          Import from CSV
-                          <input
-                            type="file"
-                            accept=".csv"
-                            style={{ display: "none" }}
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              try {
-                                const result = await api.importAccommodations(
-                                  file,
-                                  "student_id",
-                                  "accommodation_type",
-                                  "accommodation_notes"
-                                );
-                                addToast("Import complete: " + result.imported + " imported, " + result.skipped + " skipped", "success");
-                                // Reload accommodations
-                                const data = await api.getStudentAccommodations();
-                                if (data.accommodations) setStudentAccommodations(data.accommodations);
-                              } catch (err) {
-                                addToast("Import failed: " + err.message, "error");
-                              }
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const data = await api.exportAccommodations();
-                              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = "graider_accommodations_" + new Date().toISOString().split("T")[0] + ".json";
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            } catch (err) {
-                              addToast("Export failed: " + err.message, "error");
-                            }
-                          }}
-                          className="btn btn-secondary"
-                          style={{ fontSize: "0.85rem" }}
-                        >
-                          <Icon name="Download" size={16} />
-                          Export Accommodations
-                        </button>
-                      </div>
-                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "10px" }}>
-                        CSV should have columns: student_id, accommodation_type, accommodation_notes (optional)
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* FERPA Compliance & Data Privacy */}
-                  <div
-                    style={{
-                      borderTop: "1px solid var(--glass-border)",
-                      paddingTop: "25px",
-                      marginTop: "25px",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        marginBottom: "15px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
+                        padding: "10px",
+                        background: "rgba(74, 222, 128, 0.1)",
+                        borderRadius: "8px",
+                        border: "1px solid rgba(74, 222, 128, 0.2)",
                       }}
                     >
                       <Icon
                         name="Shield"
-                        size={20}
-                        style={{ color: "#10b981" }}
+                        size={14}
+                        style={{ color: "#4ade80", marginRight: "6px" }}
                       />
-                      Privacy & Data (FERPA)
-                    </h3>
-                    <p
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "var(--text-secondary)",
-                        marginBottom: "20px",
-                      }}
-                    >
-                      Graider is designed for FERPA compliance. Student names are
-                      sanitized before AI processing, and all data is stored locally
-                      on your computer.
+                      FERPA Compliant: Only accommodation types are sent to AI,
+                      never student names or IDs.
                     </p>
 
-                    {/* Privacy Features */}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(2, 1fr)",
-                        gap: "15px",
-                        marginBottom: "20px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: "15px",
-                          background: "rgba(74,222,128,0.1)",
-                          borderRadius: "10px",
-                          border: "1px solid rgba(74,222,128,0.2)",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
-                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>PII Sanitization</span>
-                        </div>
-                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
-                          Student names, IDs, emails, and phone numbers are removed before AI processing
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: "15px",
-                          background: "rgba(74,222,128,0.1)",
-                          borderRadius: "10px",
-                          border: "1px solid rgba(74,222,128,0.2)",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
-                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Local Storage Only</span>
-                        </div>
-                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
-                          All data stays on your computer. No cloud storage of student information
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: "15px",
-                          background: "rgba(74,222,128,0.1)",
-                          borderRadius: "10px",
-                          border: "1px solid rgba(74,222,128,0.2)",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
-                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>No AI Training</span>
-                        </div>
-                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
-                          OpenAI API does not use submitted data to train models (per their policy)
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: "15px",
-                          background: "rgba(74,222,128,0.1)",
-                          borderRadius: "10px",
-                          border: "1px solid rgba(74,222,128,0.2)",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                          <Icon name="CheckCircle" size={16} style={{ color: "#4ade80" }} />
-                          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Audit Logging</span>
-                        </div>
-                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
-                          All data access is logged locally for compliance tracking
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Data Management Actions */}
-                    <div
-                      style={{
-                        padding: "15px",
-                        background: "var(--input-bg)",
-                        borderRadius: "10px",
-                        border: "1px solid var(--input-border)",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, marginBottom: "12px" }}>Data Management</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const response = await fetch("/api/ferpa/data-summary");
-                              const data = await response.json();
-                              alert(
-                                `Data Storage Summary\n\n` +
-                                `• Grading Results: ${data.results.count} records\n` +
-                                `• Settings: ${data.settings.exists ? "Saved" : "Not saved"}\n` +
-                                `• Audit Log: ${data.audit_log.exists ? "Active" : "Not started"}\n\n` +
-                                `Data Locations:\n` +
-                                data.data_locations.join("\n")
-                              );
-                            } catch (err) {
-                              addToast("Failed to fetch data summary", "error");
-                            }
-                          }}
-                          className="btn btn-secondary"
-                          style={{ fontSize: "0.85rem" }}
-                        >
-                          <Icon name="Database" size={16} />
-                          View Data Summary
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            try {
-                              const response = await fetch("/api/ferpa/export-data");
-                              const data = await response.json();
-                              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `graider_export_${new Date().toISOString().split("T")[0]}.json`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            } catch (err) {
-                              addToast("Failed to export data", "error");
-                            }
-                          }}
-                          className="btn btn-secondary"
-                          style={{ fontSize: "0.85rem" }}
-                        >
-                          <Icon name="Download" size={16} />
-                          Export All Data
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            if (!confirm(
-                              "⚠️ DELETE ALL STUDENT DATA?\n\n" +
-                              "This will permanently delete:\n" +
-                              "• All grading results\n" +
-                              "• Current session data\n\n" +
-                              "This action cannot be undone.\n\n" +
-                              "Type 'DELETE' in the next prompt to confirm."
-                            )) return;
-
-                            const confirmText = prompt("Type DELETE to confirm:");
-                            if (confirmText !== "DELETE") {
-                              addToast("Deletion cancelled", "warning");
-                              return;
-                            }
-
-                            try {
-                              const response = await fetch("/api/ferpa/delete-all-data", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ confirm: true }),
-                              });
-                              const data = await response.json();
-                              if (data.status === "success") {
-                                addToast("All student data has been deleted", "success");
-                                setTimeout(() => window.location.reload(), 1000);
-                              } else {
-                                addToast("Error: " + (data.error || "Unknown error"), "error");
-                              }
-                            } catch (err) {
-                              addToast("Failed to delete data: " + err.message, "error");
-                            }
-                          }}
-                          className="btn btn-danger"
-                          style={{ fontSize: "0.85rem" }}
-                        >
-                          <Icon name="Trash2" size={16} />
-                          Delete All Data
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Resources Tab */}
-            {activeTab === "resources" && (
-              <div className="fade-in glass-card" style={{ padding: "25px" }}>
-                <h2
-                  style={{
-                    fontSize: "1.3rem",
-                    fontWeight: 700,
-                    marginBottom: "20px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <Icon name="FolderOpen" size={24} />
-                  Resources
-                </h2>
-                <p
-                  style={{
-                    fontSize: "0.9rem",
-                    color: "var(--text-secondary)",
-                    marginBottom: "25px",
-                  }}
-                >
-                  Upload curriculum guides, rubrics, standards documents, and
-                  other reference materials to enhance AI grading and lesson
-                  planning.
-                </p>
-
-                {/* Supporting Documents Section */}
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "1.1rem",
-                      fontWeight: 700,
-                      marginBottom: "15px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                    }}
-                  >
-                    <Icon
-                      name="FileText"
-                      size={20}
-                      style={{ color: "#10b981" }}
-                    />
-                    Supporting Documents
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: "0.85rem",
-                      color: "var(--text-secondary)",
-                      marginBottom: "15px",
-                    }}
-                  >
-                    Upload curriculum guides, rubrics, standards docs, or other
-                    reference materials
-                  </p>
-
-                  <input
-                    ref={supportDocInputRef}
-                    type="file"
-                    accept=".pdf,.docx,.doc,.txt,.md"
-                    style={{ display: "none" }}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setUploadingDoc(true);
-                      try {
-                        const result = await api.uploadSupportDocument(
-                          file,
-                          newDocType,
-                          newDocDescription,
-                        );
-                        if (result.error) {
-                          addToast(result.error, "error");
-                        } else {
-                          const docsData = await api.listSupportDocuments();
-                          setSupportDocs(docsData.documents || []);
-                          setNewDocDescription("");
-                        }
-                      } catch (err) {
-                        addToast("Upload failed: " + err.message, "error");
-                      }
-                      setUploadingDoc(false);
-                      e.target.value = "";
-                    }}
-                  />
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      marginBottom: "15px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <select
-                      className="input"
-                      value={newDocType}
-                      onChange={(e) => setNewDocType(e.target.value)}
-                      style={{ maxWidth: "180px" }}
-                    >
-                      <option value="curriculum">Curriculum Guide</option>
-                      <option value="rubric">Rubric Template</option>
-                      <option value="standards">Standards Document</option>
-                      <option value="general">General Reference</option>
-                    </select>
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="Description (optional)"
-                      value={newDocDescription}
-                      onChange={(e) => setNewDocDescription(e.target.value)}
-                      style={{ flex: 1, minWidth: "200px" }}
-                    />
-                    <button
-                      onClick={() => supportDocInputRef.current?.click()}
-                      className="btn btn-secondary"
-                      disabled={uploadingDoc}
-                    >
-                      <Icon name="Upload" size={18} />
-                      {uploadingDoc ? "Uploading..." : "Upload Document"}
-                    </button>
-                  </div>
-
-                  {supportDocs.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "10px",
-                      }}
-                    >
-                      {supportDocs.map((doc) => (
-                        <div
-                          key={doc.filename}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "12px 15px",
-                            background: "var(--input-bg)",
-                            borderRadius: "8px",
-                            border: "1px solid var(--glass-border)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "12px",
-                            }}
-                          >
-                            <Icon
-                              name={
-                                doc.doc_type === "rubric"
-                                  ? "ClipboardCheck"
-                                  : doc.doc_type === "standards"
-                                    ? "BookOpen"
-                                    : "FileText"
-                              }
-                              size={18}
-                              style={{ color: "#10b981" }}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 600 }}>
-                                {doc.filename}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "0.8rem",
-                                  color: "var(--text-secondary)",
-                                }}
-                              >
-                                {doc.doc_type}{" "}
-                                {doc.description && `• ${doc.description}`}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={async () => {
-                              if (confirm("Delete this document?")) {
-                                await api.deleteSupportDocument(doc.filename);
-                                const data = await api.listSupportDocuments();
-                                setSupportDocs(data.documents || []);
-                              }
-                            }}
-                            style={{
-                              padding: "6px 10px",
-                              background: "rgba(239,68,68,0.2)",
-                              border: "none",
-                              borderRadius: "6px",
-                              color: "#ef4444",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Icon name="Trash2" size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Roster Column Mapping Modal */}
-            {rosterMappingModal.show && (
-              <div
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  background: "var(--modal-bg)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 1000,
-                }}
-              >
-                <div
-                  className="glass-card"
-                  style={{
-                    width: "90%",
-                    maxWidth: "500px",
-                    maxHeight: "80vh",
-                    overflow: "auto",
-                    padding: "25px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
-                      Map Roster Columns
-                    </h3>
-                    <button
-                      onClick={() =>
-                        setRosterMappingModal({ show: false, roster: null })
-                      }
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text-primary)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Icon name="X" size={24} />
-                    </button>
-                  </div>
-
-                  <p
-                    style={{
-                      fontSize: "0.9rem",
-                      color: "var(--text-secondary)",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    Map your CSV columns to the required fields
-                  </p>
-
-                  {[
-                    "student_id",
-                    "student_name",
-                    "first_name",
-                    "last_name",
-                    "student_email",
-                    "parent_email",
-                  ].map((field) => (
-                    <div key={field} style={{ marginBottom: "15px" }}>
-                      <label
-                        className="label"
-                        style={{ textTransform: "capitalize" }}
-                      >
-                        {field.replace(/_/g, " ")}
-                      </label>
-                      <select
-                        className="input"
-                        value={
-                          rosterMappingModal.roster?.column_mapping?.[field] ||
-                          ""
-                        }
-                        onChange={(e) => {
-                          const newMapping = {
-                            ...rosterMappingModal.roster?.column_mapping,
-                            [field]: e.target.value,
-                          };
-                          setRosterMappingModal((prev) => ({
-                            ...prev,
-                            roster: {
-                              ...prev.roster,
-                              column_mapping: newMapping,
-                            },
-                          }));
-                        }}
-                      >
-                        <option value="">-- Select Column --</option>
-                        {(rosterMappingModal.roster?.headers || []).map(
-                          (header) => (
-                            <option key={header} value={header}>
-                              {header}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-                  ))}
-
-                  <div
-                    style={{ display: "flex", gap: "10px", marginTop: "20px" }}
-                  >
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.saveRosterMapping(
-                            rosterMappingModal.roster.filename,
-                            rosterMappingModal.roster.column_mapping,
-                          );
-                          const data = await api.listRosters();
-                          setRosters(data.rosters || []);
-                          setRosterMappingModal({ show: false, roster: null });
-                        } catch (err) {
-                          addToast("Error saving mapping: " + err.message, "error");
-                        }
-                      }}
-                      className="btn btn-primary"
-                    >
-                      <Icon name="Save" size={18} />
-                      Save Mapping
-                    </button>
-                    <button
-                      onClick={() =>
-                        setRosterMappingModal({ show: false, roster: null })
-                      }
-                      className="btn btn-secondary"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Accommodation Assignment Modal */}
-            {accommodationModal.show && (
-              <div
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  background: "var(--modal-bg)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 1000,
-                }}
-              >
-                <div
-                  className="glass-card"
-                  style={{
-                    width: "90%",
-                    maxWidth: "500px",
-                    maxHeight: "80vh",
-                    overflow: "auto",
-                    padding: "25px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    <h3 style={{ fontSize: "1.2rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
-                      <Icon name="Heart" size={22} style={{ color: "#f472b6" }} />
-                      {accommodationModal.studentId ? "Edit Accommodations" : "Add Student Accommodations"}
-                    </h3>
-                    <button
-                      onClick={() => {
-                        setAccommodationModal({ show: false, studentId: null });
-                        setSelectedAccommodationPresets([]);
-                        setAccommodationCustomNotes("");
-                      }}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text-primary)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Icon name="X" size={24} />
-                    </button>
-                  </div>
-
-                  <p
-                    style={{
-                      fontSize: "0.85rem",
-                      color: "var(--text-secondary)",
-                      marginBottom: "20px",
-                      padding: "10px",
-                      background: "rgba(74, 222, 128, 0.1)",
-                      borderRadius: "8px",
-                      border: "1px solid rgba(74, 222, 128, 0.2)",
-                    }}
-                  >
-                    <Icon name="Shield" size={14} style={{ color: "#4ade80", marginRight: "6px" }} />
-                    FERPA Compliant: Only accommodation types are sent to AI, never student names or IDs.
-                  </p>
-
-                  {/* Student ID Input (for new students) */}
-                  {!accommodationModal.studentId && (
-                    <div style={{ marginBottom: "20px" }}>
-                      <label className="label">Student ID</label>
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Enter student ID from roster..."
-                        id="accommodation-student-id"
-                      />
-                    </div>
-                  )}
-
-                  {/* Preset Selection */}
-                  <div style={{ marginBottom: "20px" }}>
-                    <label className="label">Select Accommodation Presets</label>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "8px",
-                        maxHeight: "200px",
-                        overflowY: "auto",
-                      }}
-                    >
-                      {accommodationPresets.map((preset) => (
-                        <label
-                          key={preset.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            gap: "10px",
-                            padding: "10px",
-                            background: selectedAccommodationPresets.includes(preset.id)
-                              ? "rgba(244, 114, 182, 0.15)"
-                              : "var(--input-bg)",
-                            borderRadius: "8px",
-                            border: selectedAccommodationPresets.includes(preset.id)
-                              ? "1px solid rgba(244, 114, 182, 0.4)"
-                              : "1px solid var(--input-border)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedAccommodationPresets.includes(preset.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedAccommodationPresets([...selectedAccommodationPresets, preset.id]);
-                              } else {
-                                setSelectedAccommodationPresets(selectedAccommodationPresets.filter(id => id !== preset.id));
-                              }
-                            }}
-                            style={{ marginTop: "2px" }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}>
-                              <Icon name={preset.icon || "FileText"} size={14} style={{ color: "#f472b6" }} />
-                              {preset.name}
-                            </div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                              {preset.description}
-                            </div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Custom Notes */}
-                  <div style={{ marginBottom: "20px" }}>
-                    <label className="label">Additional Notes (Optional)</label>
-                    <textarea
-                      className="input"
-                      value={accommodationCustomNotes}
-                      onChange={(e) => setAccommodationCustomNotes(e.target.value)}
-                      placeholder="Any additional accommodation instructions..."
-                      style={{ minHeight: "80px", resize: "vertical" }}
-                    />
-                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "6px" }}>
-                      These notes will be included in AI grading instructions (without student identity).
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={async () => {
-                        const studentId = accommodationModal.studentId ||
-                          document.getElementById("accommodation-student-id")?.value;
-
-                        if (!studentId) {
-                          addToast("Please enter a student ID", "warning");
-                          return;
-                        }
-
-                        if (selectedAccommodationPresets.length === 0 && !accommodationCustomNotes) {
-                          addToast("Please select at least one preset or add custom notes", "warning");
-                          return;
-                        }
-
-                        try {
-                          await api.setStudentAccommodation(
-                            studentId,
-                            selectedAccommodationPresets,
-                            accommodationCustomNotes
-                          );
-
-                          // Reload accommodations
-                          const data = await api.getStudentAccommodations();
-                          if (data.accommodations) setStudentAccommodations(data.accommodations);
-
-                          setAccommodationModal({ show: false, studentId: null });
-                          setSelectedAccommodationPresets([]);
-                          setAccommodationCustomNotes("");
-                        } catch (err) {
-                          addToast("Error saving accommodation: " + err.message, "error");
-                        }
-                      }}
-                      className="btn btn-primary"
-                    >
-                      <Icon name="Save" size={18} />
-                      Save Accommodations
-                    </button>
-                    <button
-                      onClick={() => {
-                        setAccommodationModal({ show: false, studentId: null });
-                        setSelectedAccommodationPresets([]);
-                        setAccommodationCustomNotes("");
-                      }}
-                      className="btn btn-secondary"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Builder Tab */}
-            {activeTab === "builder" && (
-              <div className="fade-in">
-                {/* Saved Assignments - Collapsible */}
-                <div
-                  className="glass-card"
-                  style={{ padding: "15px 20px", marginBottom: "20px" }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setSavedAssignmentsExpanded(!savedAssignmentsExpanded)}
-                  >
-                    <h3
-                      style={{
-                        fontSize: "1rem",
-                        fontWeight: 600,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        margin: 0,
-                      }}
-                    >
-                      <Icon
-                        name={savedAssignmentsExpanded ? "ChevronDown" : "ChevronRight"}
-                        size={18}
-                        style={{ color: "var(--text-secondary)" }}
-                      />
-                      <Icon
-                        name="FolderOpen"
-                        size={18}
-                        style={{ color: "#10b981" }}
-                      />
-                      Saved Assignments ({savedAssignments.length})
-                    </h3>
-                  </div>
-
-                  {savedAssignmentsExpanded && (
-                    <>
-                      {savedAssignments.length === 0 ? (
-                        <p
-                          style={{
-                            textAlign: "center",
-                            padding: "20px",
-                            color: "var(--text-muted)",
-                            margin: 0,
-                          }}
-                        >
-                          No saved assignments yet. Create one below!
-                        </p>
-                      ) : (
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns:
-                              "repeat(auto-fill, minmax(250px, 1fr))",
-                            gap: "10px",
-                            marginTop: "15px",
-                          }}
-                        >
-                          {savedAssignments.map((name) => (
-                            <div
-                              key={name}
-                              style={{
-                                padding: "12px 15px",
-                                background:
-                                  loadedAssignmentName === name
-                                    ? "rgba(99,102,241,0.2)"
-                                    : "var(--input-bg)",
-                                borderRadius: "10px",
-                                border:
-                                  loadedAssignmentName === name
-                                    ? "2px solid rgba(99,102,241,0.5)"
-                                    : "1px solid var(--glass-border)",
-                                cursor: "pointer",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                              }}
-                              onClick={() => loadAssignment(name)}
-                            >
-                              <div
-                                style={{
-                                  fontWeight: 500,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                  fontSize: "0.9rem",
-                                  flex: 1,
-                                }}
-                              >
-                                <Icon
-                                  name={savedAssignmentData[name]?.completionOnly ? "CheckCircle" : "FileText"}
-                                  size={14}
-                                  style={{ color: savedAssignmentData[name]?.completionOnly ? "#22c55e" : "#a5b4fc" }}
-                                />
-                                {name}
-                                {savedAssignmentData[name]?.completionOnly && (
-                                  <span style={{ fontSize: "0.7rem", background: "rgba(34, 197, 94, 0.2)", color: "#22c55e", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px" }}>
-                                    Completion
-                                  </span>
-                                )}
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteAssignment(name);
-                                }}
-                                style={{
-                                  padding: "4px",
-                                  background: "none",
-                                  border: "none",
-                                  color: "var(--text-muted)",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Icon name="Trash2" size={14} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Assignment Editor */}
-                <div className="glass-card" style={{ padding: "30px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "25px",
-                    }}
-                  >
-                    <h2
-                      style={{
-                        fontSize: "1.3rem",
-                        fontWeight: 700,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}
-                    >
-                      <Icon name="FileEdit" size={24} />
-                      {assignment.title
-                        ? `Editing: ${assignment.title}`
-                        : "New Assignment"}
-                    </h2>
-                    {assignment.title && (
-                      <span
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        {(assignment.customMarkers || []).length} markers
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Assignment Details */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "2fr 1fr 1fr",
-                      gap: "15px",
-                      marginBottom: "25px",
-                    }}
-                  >
-                    <div>
-                      <label className="label">Assignment Title</label>
-                      <input
-                        type="text"
-                        className="input"
-                        value={assignment.title}
-                        onChange={(e) =>
-                          setAssignment({
-                            ...assignment,
-                            title: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., Louisiana Purchase Quiz"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Subject</label>
-                      <input
-                        type="text"
-                        className="input"
-                        value={config.subject || "Social Studies"}
-                        disabled
-                        style={{
-                          background: "var(--glass-hover)",
-                          color: "var(--text-secondary)",
-                        }}
-                        title="Subject is set in Settings tab"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Total Points</label>
-                      <input
-                        type="number"
-                        className="input"
-                        value={assignment.totalPoints}
-                        onChange={(e) =>
-                          setAssignment({
-                            ...assignment,
-                            totalPoints: parseInt(e.target.value) || 100,
-                          })
-                        }
-                        disabled={assignment.completionOnly}
-                        style={assignment.completionOnly ? { opacity: 0.5 } : {}}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Completion Only Toggle */}
-                  <div
-                    style={{
-                      marginBottom: "20px",
-                      padding: "15px",
-                      background: assignment.completionOnly ? "rgba(34, 197, 94, 0.1)" : "rgba(100, 116, 139, 0.1)",
-                      borderRadius: "10px",
-                      border: assignment.completionOnly ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid rgba(100, 116, 139, 0.2)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <Icon name={assignment.completionOnly ? "CheckCircle" : "FileCheck"} size={20} style={{ color: assignment.completionOnly ? "#22c55e" : "#64748b" }} />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                          {assignment.completionOnly ? "Completion Only" : "AI Grading Enabled"}
-                        </div>
-                        <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                          {assignment.completionOnly
-                            ? "Tracks submission status only - no AI grading"
-                            : "AI will grade submissions based on rubric"}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      className={assignment.completionOnly ? "btn btn-secondary" : "btn btn-primary"}
-                      onClick={() => setAssignment({ ...assignment, completionOnly: !assignment.completionOnly })}
-                      style={{ minWidth: "140px" }}
-                    >
-                      {assignment.completionOnly ? "Enable Grading" : "Completion Only"}
-                    </button>
-                  </div>
-
-                  {/* Import Document */}
-                  <div
-                    style={{
-                      marginBottom: "25px",
-                      padding: "20px",
-                      background: "rgba(251,191,36,0.1)",
-                      borderRadius: "12px",
-                      border: "1px solid rgba(251,191,36,0.3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div>
-                        <h3
-                          style={{
-                            fontSize: "1rem",
-                            fontWeight: 600,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            marginBottom: "5px",
-                          }}
-                        >
-                          <Icon name="FileUp" size={20} />
-                          Import Document & Mark Sections
-                        </h3>
-                        <p
-                          style={{
-                            fontSize: "0.85rem",
-                            color: "var(--text-secondary)",
-                            margin: 0,
-                          }}
-                        >
-                          {importedDoc.text ? (
-                            <>
-                              <strong style={{ color: "#fbbf24" }}>
-                                {importedDoc.filename}
-                              </strong>{" "}
-                              loaded
-                            </>
-                          ) : (
-                            "Import a Word or PDF to highlight gradeable sections"
-                          )}
-                        </p>
-                      </div>
-                      <div style={{ display: "flex", gap: "10px" }}>
+                    {/* Student ID Input (for new students) */}
+                    {!accommodationModal.studentId && (
+                      <div style={{ marginBottom: "20px" }}>
+                        <label className="label">Student ID</label>
                         <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleDocImport}
-                          accept=".docx,.pdf,.doc,.txt"
-                          style={{ display: "none" }}
+                          type="text"
+                          className="input"
+                          placeholder="Enter student ID from roster..."
+                          id="accommodation-student-id"
                         />
-                        {importedDoc.text && (
-                          <>
-                            <button
-                              onClick={openDocEditor}
-                              className="btn btn-secondary"
-                            >
-                              <Icon name="Edit" size={16} />
-                              Edit & Mark
-                            </button>
-                            <button
-                              onClick={() => setImportedDoc({ text: '', html: '', filename: '', loading: false })}
-                              className="btn btn-secondary"
-                              style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444' }}
-                              title="Clear imported document"
-                            >
-                              <Icon name="Trash2" size={16} />
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="btn btn-primary"
-                          style={{
-                            background:
-                              "linear-gradient(135deg, #f59e0b, #d97706)",
-                          }}
-                        >
-                          <Icon name="Upload" size={16} />
-                          {importedDoc.loading
-                            ? "Loading..."
-                            : "Import Word/PDF"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Manual Marker Input */}
-                    <div
-                      style={{
-                        marginTop: "15px",
-                        display: "flex",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="text"
-                        id="manualMarkerInput"
-                        placeholder="Type a marker phrase and press Add..."
-                        className="input"
-                        style={{ flex: 1 }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && e.target.value.trim()) {
-                            const newMarker = e.target.value.trim();
-                            if (
-                              !(assignment.customMarkers || []).includes(
-                                newMarker,
-                              )
-                            ) {
-                              setAssignment({
-                                ...assignment,
-                                customMarkers: [
-                                  ...(assignment.customMarkers || []),
-                                  newMarker,
-                                ],
-                              });
-                            }
-                            e.target.value = "";
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={() => {
-                          const input =
-                            document.getElementById("manualMarkerInput");
-                          if (input?.value.trim()) {
-                            const newMarker = input.value.trim();
-                            if (
-                              !(assignment.customMarkers || []).includes(
-                                newMarker,
-                              )
-                            ) {
-                              setAssignment({
-                                ...assignment,
-                                customMarkers: [
-                                  ...(assignment.customMarkers || []),
-                                  newMarker,
-                                ],
-                              });
-                            }
-                            input.value = "";
-                          }
-                        }}
-                        className="btn btn-secondary"
-                      >
-                        <Icon name="Plus" size={16} />
-                        Add
-                      </button>
-                    </div>
-
-                    {/* Custom Markers */}
-                    {(assignment.customMarkers || []).length > 0 && (
-                      <div
-                        style={{
-                          marginTop: "15px",
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "8px",
-                        }}
-                      >
-                        {assignment.customMarkers.map((marker, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              padding: "6px 12px",
-                              background: "rgba(251,191,36,0.2)",
-                              borderRadius: "6px",
-                              border: "1px solid rgba(251,191,36,0.3)",
-                            }}
-                          >
-                            <Icon
-                              name="Target"
-                              size={12}
-                              style={{ color: "#fbbf24" }}
-                            />
-                            <span
-                              style={{
-                                fontSize: "0.8rem",
-                                maxWidth: "200px",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {marker}
-                            </span>
-                            <button
-                              onClick={() => removeMarker(marker)}
-                              style={{
-                                background: "none",
-                                border: "none",
-                                color: "var(--text-muted)",
-                                cursor: "pointer",
-                                padding: "0",
-                              }}
-                            >
-                              <Icon name="X" size={12} />
-                            </button>
-                          </div>
-                        ))}
                       </div>
                     )}
-                  </div>
 
-                  {/* Marker Library */}
-                  <div
-                    style={{
-                      marginBottom: "25px",
-                      padding: "15px 20px",
-                      background: "rgba(99,102,241,0.1)",
-                      borderRadius: "12px",
-                      border: "1px solid rgba(99,102,241,0.2)",
-                    }}
-                  >
-                    <label
-                      style={{
-                        display: "block",
-                        fontSize: "0.9rem",
-                        fontWeight: 600,
-                        marginBottom: "10px",
-                      }}
-                    >
-                      <Icon
-                        name="Bookmark"
-                        size={16}
-                        style={{ marginRight: "8px" }}
-                      />
-                      Suggested Markers for {config.subject || "Social Studies"}
-                    </label>
-                    <div
-                      style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}
-                    >
-                      {(
-                        markerLibrary[config.subject] ||
-                        markerLibrary["Social Studies"] ||
-                        []
-                      ).map((marker, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            padding: "6px 12px",
-                            background: "var(--btn-secondary-bg)",
-                            borderRadius: "6px",
-                            fontSize: "0.85rem",
-                            cursor: "pointer",
-                          }}
-                          onClick={() => {
-                            if (
-                              !(assignment.customMarkers || []).includes(marker)
-                            ) {
-                              setAssignment({
-                                ...assignment,
-                                customMarkers: [
-                                  ...(assignment.customMarkers || []),
-                                  marker,
-                                ],
-                              });
-                            }
-                          }}
-                          title="Click to add"
-                        >
-                          {marker}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Grading Notes */}
-                  <div style={{ marginBottom: "25px" }}>
-                    <label className="label">
-                      Assignment-Specific Grading Notes
-                    </label>
-                    <textarea
-                      className="input"
-                      value={assignment.gradingNotes}
-                      onChange={(e) =>
-                        setAssignment({
-                          ...assignment,
-                          gradingNotes: e.target.value,
-                        })
-                      }
-                      placeholder="Special instructions for grading this assignment..."
-                      style={{ minHeight: "100px" }}
-                    />
-                  </div>
-
-                  {/* Questions */}
-                  <div style={{ marginBottom: "20px" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "15px",
-                      }}
-                    >
-                      <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>
-                        Questions ({assignment.questions.length}) -{" "}
-                        {assignment.questions.reduce(
-                          (sum, q) => sum + (q.points || 0),
-                          0,
-                        )}{" "}
-                        pts
-                      </h3>
-                      <button onClick={addQuestion} className="btn btn-primary">
-                        <Icon name="Plus" size={16} /> Add Question
-                      </button>
-                    </div>
-
-                    {assignment.questions.length === 0 ? (
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "40px",
-                          background: "var(--input-bg)",
-                          borderRadius: "12px",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        <Icon name="FileQuestion" size={40} />
-                        <p style={{ marginTop: "10px" }}>
-                          No questions yet. Click "Add Question" to start
-                          building.
-                        </p>
-                      </div>
-                    ) : (
+                    {/* Preset Selection */}
+                    <div style={{ marginBottom: "20px" }}>
+                      <label className="label">
+                        Select Accommodation Presets
+                      </label>
                       <div
                         style={{
                           display: "flex",
                           flexDirection: "column",
-                          gap: "15px",
+                          gap: "8px",
+                          maxHeight: "200px",
+                          overflowY: "auto",
                         }}
                       >
-                        {assignment.questions.map((q, i) => (
-                          <div
-                            key={q.id}
+                        {accommodationPresets.map((preset) => (
+                          <label
+                            key={preset.id}
                             style={{
-                              background: "var(--glass-bg)",
-                              borderRadius: "12px",
-                              border: "1px solid var(--glass-border)",
-                              padding: "20px",
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "10px",
+                              padding: "10px",
+                              background: selectedAccommodationPresets.includes(
+                                preset.id,
+                              )
+                                ? "rgba(244, 114, 182, 0.15)"
+                                : "var(--input-bg)",
+                              borderRadius: "8px",
+                              border: selectedAccommodationPresets.includes(
+                                preset.id,
+                              )
+                                ? "1px solid rgba(244, 114, 182, 0.4)"
+                                : "1px solid var(--input-border)",
+                              cursor: "pointer",
                             }}
                           >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                marginBottom: "15px",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: "0.9rem",
-                                  fontWeight: 600,
-                                  color: "#a5b4fc",
-                                }}
-                              >
-                                Question {i + 1}
-                              </span>
-                              <button
-                                onClick={() => removeQuestion(i)}
-                                style={{
-                                  padding: "6px 10px",
-                                  borderRadius: "6px",
-                                  border: "none",
-                                  background: "rgba(248,113,113,0.2)",
-                                  color: "#f87171",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Icon name="Trash2" size={14} />
-                              </button>
-                            </div>
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 150px 100px",
-                                gap: "12px",
-                                marginBottom: "12px",
-                              }}
-                            >
-                              <div>
-                                <label
-                                  className="label"
-                                  style={{ fontSize: "0.8rem" }}
-                                >
-                                  Marker
-                                </label>
-                                <select
-                                  className="input"
-                                  value={q.marker}
-                                  onChange={(e) =>
-                                    updateQuestion(i, "marker", e.target.value)
-                                  }
-                                >
-                                  {(
-                                    markerLibrary[assignment.subject] ||
-                                    markerLibrary["Other"]
-                                  ).map((m) => (
-                                    <option key={m} value={m}>
-                                      {m}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label
-                                  className="label"
-                                  style={{ fontSize: "0.8rem" }}
-                                >
-                                  Type
-                                </label>
-                                <select
-                                  className="input"
-                                  value={q.type}
-                                  onChange={(e) =>
-                                    updateQuestion(i, "type", e.target.value)
-                                  }
-                                >
-                                  <option value="short_answer">
-                                    Short Answer
-                                  </option>
-                                  <option value="essay">Essay</option>
-                                  <option value="fill_blank">
-                                    Fill in Blank
-                                  </option>
-                                  <option value="multiple_choice">
-                                    Multiple Choice
-                                  </option>
-                                </select>
-                              </div>
-                              <div>
-                                <label
-                                  className="label"
-                                  style={{ fontSize: "0.8rem" }}
-                                >
-                                  Points
-                                </label>
-                                <input
-                                  type="number"
-                                  className="input"
-                                  value={q.points}
-                                  onChange={(e) =>
-                                    updateQuestion(
-                                      i,
-                                      "points",
-                                      parseInt(e.target.value) || 0,
-                                    )
-                                  }
-                                  min="0"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label
-                                className="label"
-                                style={{ fontSize: "0.8rem" }}
-                              >
-                                Question/Prompt
-                              </label>
-                              <textarea
-                                className="input"
-                                value={q.prompt}
-                                onChange={(e) =>
-                                  updateQuestion(i, "prompt", e.target.value)
+                            <input
+                              type="checkbox"
+                              checked={selectedAccommodationPresets.includes(
+                                preset.id,
+                              )}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedAccommodationPresets([
+                                    ...selectedAccommodationPresets,
+                                    preset.id,
+                                  ]);
+                                } else {
+                                  setSelectedAccommodationPresets(
+                                    selectedAccommodationPresets.filter(
+                                      (id) => id !== preset.id,
+                                    ),
+                                  );
                                 }
-                                placeholder="Enter the question..."
-                                style={{ minHeight: "60px" }}
-                              />
+                              }}
+                              style={{ marginTop: "2px" }}
+                            />
+                            <div>
+                              <div
+                                style={{
+                                  fontWeight: 600,
+                                  fontSize: "0.85rem",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                }}
+                              >
+                                <Icon
+                                  name={preset.icon || "FileText"}
+                                  size={14}
+                                  style={{ color: "#f472b6" }}
+                                />
+                                {preset.name}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "var(--text-muted)",
+                                  marginTop: "2px",
+                                }}
+                              >
+                                {preset.description}
+                              </div>
                             </div>
-                          </div>
+                          </label>
                         ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Export Buttons */}
-                  <div
-                    style={{ display: "flex", gap: "15px", flexWrap: "wrap", alignItems: "center" }}
-                  >
-                    {assignment.title && (
-                      <span
+                    {/* Custom Notes */}
+                    <div style={{ marginBottom: "20px" }}>
+                      <label className="label">
+                        Additional Notes (Optional)
+                      </label>
+                      <textarea
+                        className="input"
+                        value={accommodationCustomNotes}
+                        onChange={(e) =>
+                          setAccommodationCustomNotes(e.target.value)
+                        }
+                        placeholder="Any additional accommodation instructions..."
+                        style={{ minHeight: "80px", resize: "vertical" }}
+                      />
+                      <p
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          color: "#4ade80",
-                          fontSize: "0.85rem",
-                          padding: "8px 12px",
-                          background: "rgba(74,222,128,0.1)",
-                          border: "1px solid rgba(74,222,128,0.3)",
-                          borderRadius: "8px",
+                          fontSize: "0.75rem",
+                          color: "var(--text-muted)",
+                          marginTop: "6px",
                         }}
                       >
-                        <Icon name="Check" size={14} style={{ color: "#4ade80" }} />
-                        Auto-saves
-                      </span>
-                    )}
-                    <button
-                      onClick={saveAssignmentConfig}
-                      disabled={!assignment.title}
-                      className="btn btn-secondary"
-                      style={{ opacity: !assignment.title ? 0.5 : 1 }}
-                    >
-                      <Icon name="Save" size={18} /> Save Now
-                    </button>
-                    <button
-                      onClick={() => exportAssignment("docx")}
-                      disabled={!assignment.title}
-                      className="btn btn-secondary"
-                      style={{ opacity: !assignment.title ? 0.5 : 1 }}
-                    >
-                      <Icon name="FileText" size={18} /> Export Word Doc
-                    </button>
-                    <button
-                      onClick={() => exportAssignment("pdf")}
-                      disabled={!assignment.title}
-                      className="btn btn-secondary"
-                      style={{ opacity: !assignment.title ? 0.5 : 1 }}
-                    >
-                      <Icon name="FileType" size={18} /> Export PDF
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+                        These notes will be included in AI grading instructions
+                        (without student identity).
+                      </p>
+                    </div>
 
-            {/* Analytics Tab */}
-            {activeTab === "analytics" && (
-              <div className="fade-in">
-                {!filteredAnalytics || filteredAnalytics.error ? (
-                  <div
-                    className="glass-card"
-                    style={{ padding: "60px", textAlign: "center" }}
-                  >
-                    <Icon name="BarChart3" size={64} />
-                    <h2 style={{ marginTop: "20px", fontSize: "1.5rem" }}>
-                      No Data Yet
-                    </h2>
-                    <p
-                      style={{
-                        color: "var(--text-secondary)",
-                        marginTop: "10px",
-                      }}
-                    >
-                      Grade some assignments to see analytics here.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Period Filter */}
+                    {/* Actions */}
                     <div
                       style={{
                         display: "flex",
-                        alignItems: "center",
+                        gap: "10px",
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <button
+                        onClick={async () => {
+                          const studentId =
+                            accommodationModal.studentId ||
+                            document.getElementById("accommodation-student-id")
+                              ?.value;
+
+                          if (!studentId) {
+                            addToast("Please enter a student ID", "warning");
+                            return;
+                          }
+
+                          if (
+                            selectedAccommodationPresets.length === 0 &&
+                            !accommodationCustomNotes
+                          ) {
+                            addToast(
+                              "Please select at least one preset or add custom notes",
+                              "warning",
+                            );
+                            return;
+                          }
+
+                          try {
+                            await api.setStudentAccommodation(
+                              studentId,
+                              selectedAccommodationPresets,
+                              accommodationCustomNotes,
+                            );
+
+                            // Reload accommodations
+                            const data = await api.getStudentAccommodations();
+                            if (data.accommodations)
+                              setStudentAccommodations(data.accommodations);
+
+                            setAccommodationModal({
+                              show: false,
+                              studentId: null,
+                            });
+                            setSelectedAccommodationPresets([]);
+                            setAccommodationCustomNotes("");
+                          } catch (err) {
+                            addToast(
+                              "Error saving accommodation: " + err.message,
+                              "error",
+                            );
+                          }
+                        }}
+                        className="btn btn-primary"
+                      >
+                        <Icon name="Save" size={18} />
+                        Save Accommodations
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAccommodationModal({
+                            show: false,
+                            studentId: null,
+                          });
+                          setSelectedAccommodationPresets([]);
+                          setAccommodationCustomNotes("");
+                        }}
+                        className="btn btn-secondary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Builder Tab */}
+              {activeTab === "builder" && (
+                <div className="fade-in">
+                  {/* Saved Assignments - Collapsible */}
+                  <div
+                    className="glass-card"
+                    style={{ padding: "15px 20px", marginBottom: "20px" }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
                         justifyContent: "space-between",
-                        marginBottom: "20px",
+                        alignItems: "center",
+                        cursor: "pointer",
+                      }}
+                      onClick={() =>
+                        setSavedAssignmentsExpanded(!savedAssignmentsExpanded)
+                      }
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1rem",
+                          fontWeight: 600,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          margin: 0,
+                        }}
+                      >
+                        <Icon
+                          name={
+                            savedAssignmentsExpanded
+                              ? "ChevronDown"
+                              : "ChevronRight"
+                          }
+                          size={18}
+                          style={{ color: "var(--text-secondary)" }}
+                        />
+                        <Icon
+                          name="FolderOpen"
+                          size={18}
+                          style={{ color: "#10b981" }}
+                        />
+                        Saved Assignments ({savedAssignments.length})
+                      </h3>
+                    </div>
+
+                    {savedAssignmentsExpanded && (
+                      <>
+                        {savedAssignments.length === 0 ? (
+                          <p
+                            style={{
+                              textAlign: "center",
+                              padding: "20px",
+                              color: "var(--text-muted)",
+                              margin: 0,
+                            }}
+                          >
+                            No saved assignments yet. Create one below!
+                          </p>
+                        ) : (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns:
+                                "repeat(auto-fill, minmax(250px, 1fr))",
+                              gap: "10px",
+                              marginTop: "15px",
+                            }}
+                          >
+                            {savedAssignments.map((name) => (
+                              <div
+                                key={name}
+                                style={{
+                                  padding: "12px 15px",
+                                  background:
+                                    loadedAssignmentName === name
+                                      ? "rgba(99,102,241,0.2)"
+                                      : "var(--input-bg)",
+                                  borderRadius: "10px",
+                                  border:
+                                    loadedAssignmentName === name
+                                      ? "2px solid rgba(99,102,241,0.5)"
+                                      : "1px solid var(--glass-border)",
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                                onClick={() => loadAssignment(name)}
+                              >
+                                <div
+                                  style={{
+                                    fontWeight: 500,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    fontSize: "0.9rem",
+                                    flex: 1,
+                                  }}
+                                >
+                                  <Icon
+                                    name={
+                                      savedAssignmentData[name]?.completionOnly
+                                        ? "CheckCircle"
+                                        : "FileText"
+                                    }
+                                    size={14}
+                                    style={{
+                                      color: savedAssignmentData[name]
+                                        ?.completionOnly
+                                        ? "#22c55e"
+                                        : "#a5b4fc",
+                                    }}
+                                  />
+                                  {name}
+                                  {savedAssignmentData[name]
+                                    ?.completionOnly && (
+                                    <span
+                                      style={{
+                                        fontSize: "0.7rem",
+                                        background: "rgba(34, 197, 94, 0.2)",
+                                        color: "#22c55e",
+                                        padding: "2px 6px",
+                                        borderRadius: "4px",
+                                        marginLeft: "4px",
+                                      }}
+                                    >
+                                      Completion
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteAssignment(name);
+                                  }}
+                                  style={{
+                                    padding: "4px",
+                                    background: "none",
+                                    border: "none",
+                                    color: "var(--text-muted)",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Assignment Editor */}
+                  <div className="glass-card" style={{ padding: "30px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "25px",
                       }}
                     >
                       <h2
@@ -7505,429 +10164,396 @@ ${signature}`;
                           gap: "10px",
                         }}
                       >
-                        <Icon name="BarChart3" size={24} />
-                        Class Analytics
+                        <Icon name="FileEdit" size={24} />
+                        {assignment.title
+                          ? `Editing: ${assignment.title}`
+                          : "New Assignment"}
                       </h2>
+                      {assignment.title && (
+                        <span
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {(assignment.customMarkers || []).length} markers
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Assignment Details */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "2fr 1fr 1fr",
+                        gap: "15px",
+                        marginBottom: "25px",
+                      }}
+                    >
+                      <div>
+                        <label className="label">Assignment Title</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={assignment.title}
+                          onChange={(e) =>
+                            setAssignment({
+                              ...assignment,
+                              title: e.target.value,
+                            })
+                          }
+                          placeholder="e.g., Louisiana Purchase Quiz"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Subject</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={config.subject || "Social Studies"}
+                          disabled
+                          style={{
+                            background: "var(--glass-hover)",
+                            color: "var(--text-secondary)",
+                          }}
+                          title="Subject is set in Settings tab"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Total Points</label>
+                        <input
+                          type="number"
+                          className="input"
+                          value={assignment.totalPoints}
+                          onChange={(e) =>
+                            setAssignment({
+                              ...assignment,
+                              totalPoints: parseInt(e.target.value) || 100,
+                            })
+                          }
+                          disabled={assignment.completionOnly}
+                          style={
+                            assignment.completionOnly ? { opacity: 0.5 } : {}
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* Import Document */}
+                    <div
+                      style={{
+                        marginBottom: "25px",
+                        padding: "20px",
+                        background: "rgba(251,191,36,0.1)",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(251,191,36,0.3)",
+                      }}
+                    >
                       <div
                         style={{
                           display: "flex",
+                          justifyContent: "space-between",
                           alignItems: "center",
-                          gap: "15px",
                         }}
                       >
-                        {/* Period Filter */}
-                        {sortedPeriods.length > 0 && (
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <label
-                              style={{
-                                fontSize: "0.9rem",
-                                color: "var(--text-secondary)",
-                              }}
-                            >
-                              Period:
-                            </label>
-                            <select
-                              value={analyticsClassPeriod}
-                              onChange={(e) => setAnalyticsClassPeriod(e.target.value)}
-                              className="input"
-                              style={{ width: "auto" }}
-                            >
-                              <option value="">All Periods</option>
-                              {sortedPeriods.map((p) => (
-                                <option key={p.filename} value={p.filename}>
-                                  {p.period_name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        {/* Quarter Filter */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <label
+                        <div>
+                          <h3
                             style={{
-                              fontSize: "0.9rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            Quarter:
-                          </label>
-                          <select
-                            value={analyticsPeriod}
-                            onChange={(e) => setAnalyticsPeriod(e.target.value)}
-                            className="input"
-                            style={{ width: "auto" }}
-                          >
-                            <option value="all">All Quarters</option>
-                            {(filteredAnalytics.available_periods || []).map((p) => (
-                              <option key={p} value={p}>
-                                {p}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        {/* Export District Report Button */}
-                        <button
-                          className="btn btn-secondary"
-                          onClick={async () => {
-                            try {
-                              const report = await api.exportDistrictReport();
-                              if (report.error) {
-                                addToast(report.error, "error");
-                                return;
-                              }
-                              const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `district_report_${new Date().toISOString().split("T")[0]}.json`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            } catch (err) {
-                              addToast("Failed to export report: " + err.message, "error");
-                            }
-                          }}
-                          style={{ display: "flex", alignItems: "center", gap: "6px" }}
-                        >
-                          <Icon name="Download" size={16} />
-                          Export District Report
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Stats Cards */}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(4, 1fr)",
-                        gap: "15px",
-                        marginBottom: "20px",
-                      }}
-                    >
-                      {[
-                        {
-                          label: "Total Graded",
-                          value: filteredAnalytics.class_stats?.total_assignments || 0,
-                          icon: "FileCheck",
-                          color: "#6366f1",
-                        },
-                        {
-                          label: "Students",
-                          value: filteredAnalytics.class_stats?.total_students || 0,
-                          icon: "Users",
-                          color: "#8b5cf6",
-                        },
-                        {
-                          label: "Class Average",
-                          value: `${filteredAnalytics.class_stats?.class_average || 0}%`,
-                          icon: "TrendingUp",
-                          color: "#10b981",
-                        },
-                        {
-                          label: "Highest Score",
-                          value: `${filteredAnalytics.class_stats?.highest || 0}%`,
-                          icon: "Trophy",
-                          color: "#f59e0b",
-                        },
-                      ].map((stat, i) => (
-                        <div
-                          key={i}
-                          className="glass-card"
-                          style={{ padding: "20px" }}
-                        >
-                          <div
-                            style={{
+                              fontSize: "1rem",
+                              fontWeight: 600,
                               display: "flex",
                               alignItems: "center",
-                              gap: "10px",
-                              marginBottom: "10px",
+                              gap: "8px",
+                              marginBottom: "5px",
                             }}
                           >
-                            <div
-                              style={{
-                                background: `${stat.color}20`,
-                                padding: "8px",
-                                borderRadius: "10px",
-                              }}
-                            >
-                              <Icon name={stat.icon} size={20} />
-                            </div>
-                            <span
-                              style={{
-                                color: "var(--text-secondary)",
-                                fontSize: "0.9rem",
-                              }}
-                            >
-                              {stat.label}
-                            </span>
-                          </div>
-                          <div
+                            <Icon name="FileUp" size={20} />
+                            Import Document & Mark Sections
+                          </h3>
+                          <p
                             style={{
-                              fontSize: "2rem",
-                              fontWeight: 800,
-                              color: stat.color,
+                              fontSize: "0.85rem",
+                              color: "var(--text-secondary)",
+                              margin: 0,
                             }}
                           >
-                            {stat.value}
-                          </div>
+                            {importedDoc.text ? (
+                              <>
+                                <strong style={{ color: "#fbbf24" }}>
+                                  {importedDoc.filename}
+                                </strong>{" "}
+                                loaded
+                              </>
+                            ) : (
+                              "Import a Word or PDF to highlight gradeable sections"
+                            )}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-
-                    {/* Charts */}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 2fr",
-                        gap: "20px",
-                        marginBottom: "20px",
-                      }}
-                    >
-                      <div className="glass-card" style={{ padding: "25px" }}>
-                        <h3
-                          style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 700,
-                            marginBottom: "20px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
-                          <Icon name="PieChart" size={20} />
-                          Grade Distribution
-                        </h3>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <PieChart>
-                            <Pie
-                              data={[
-                                {
-                                  name: "A",
-                                  value:
-                                    filteredAnalytics.class_stats?.grade_distribution
-                                      ?.A || 0,
-                                },
-                                {
-                                  name: "B",
-                                  value:
-                                    filteredAnalytics.class_stats?.grade_distribution
-                                      ?.B || 0,
-                                },
-                                {
-                                  name: "C",
-                                  value:
-                                    filteredAnalytics.class_stats?.grade_distribution
-                                      ?.C || 0,
-                                },
-                                {
-                                  name: "D",
-                                  value:
-                                    filteredAnalytics.class_stats?.grade_distribution
-                                      ?.D || 0,
-                                },
-                                {
-                                  name: "F",
-                                  value:
-                                    filteredAnalytics.class_stats?.grade_distribution
-                                      ?.F || 0,
-                                },
-                              ].filter((d) => d.value > 0)}
-                              cx="50%"
-                              cy="50%"
-                              outerRadius={70}
-                              dataKey="value"
-                              label={({ name, value }) => `${name}: ${value}`}
-                            >
-                              {[
-                                "#4ade80",
-                                "#60a5fa",
-                                "#fbbf24",
-                                "#f97316",
-                                "#ef4444",
-                              ].map((c, i) => (
-                                <Cell key={i} fill={c} />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                          </PieChart>
-                        </ResponsiveContainer>
+                        <div style={{ display: "flex", gap: "10px" }}>
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleDocImport}
+                            accept=".docx,.pdf,.doc,.txt"
+                            style={{ display: "none" }}
+                          />
+                          {importedDoc.text && (
+                            <>
+                              <button
+                                onClick={openDocEditor}
+                                className="btn btn-secondary"
+                              >
+                                <Icon name="Edit" size={16} />
+                                Edit & Mark
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setImportedDoc({
+                                    text: "",
+                                    html: "",
+                                    filename: "",
+                                    loading: false,
+                                  })
+                                }
+                                className="btn btn-secondary"
+                                style={{
+                                  background: "rgba(239,68,68,0.2)",
+                                  color: "#ef4444",
+                                }}
+                                title="Clear imported document"
+                              >
+                                <Icon name="Trash2" size={16} />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="btn btn-primary"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #f59e0b, #d97706)",
+                            }}
+                          >
+                            <Icon name="Upload" size={16} />
+                            {importedDoc.loading
+                              ? "Loading..."
+                              : "Import Word/PDF"}
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="glass-card" style={{ padding: "25px" }}>
-                        <h3
-                          style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 700,
-                            marginBottom: "20px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
-                          <Icon name="BarChart3" size={20} />
-                          Assignment Averages
-                        </h3>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <BarChart data={filteredAnalytics.assignment_stats || []}>
-                            <CartesianGrid
-                              strokeDasharray="3 3"
-                              stroke="var(--glass-border)"
-                            />
-                            <XAxis
-                              dataKey="name"
-                              tick={{
-                                fill: "var(--text-secondary)",
-                                fontSize: 11,
-                              }}
-                            />
-                            <YAxis
-                              domain={[0, 100]}
-                              tick={{ fill: "var(--text-secondary)" }}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                background: "var(--modal-content-bg)",
-                                border: "1px solid var(--glass-border)",
-                                borderRadius: "8px",
-                              }}
-                            />
-                            <Bar
-                              dataKey="average"
-                              fill="#6366f1"
-                              radius={[4, 4, 0, 0]}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Proficiency vs Growth Scatterplot */}
-                    <div className="glass-card" style={{ padding: "25px", marginBottom: "20px" }}>
-                      <h3
+                      {/* Manual Marker Input */}
+                      <div
                         style={{
-                          fontSize: "1.1rem",
-                          fontWeight: 700,
-                          marginBottom: "10px",
+                          marginTop: "15px",
                           display: "flex",
-                          alignItems: "center",
                           gap: "10px",
+                          alignItems: "center",
                         }}
                       >
-                        <Icon name="Target" size={20} />
-                        Student Proficiency vs Growth
-                      </h3>
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
-                        Click any dot to view that student's detailed progress. Quadrants show performance patterns.
-                      </p>
-                      <ResponsiveContainer width="100%" height={350}>
-                        <ScatterChart margin={{ top: 20, right: 30, bottom: 60, left: 50 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
-                          <XAxis
-                            type="number"
-                            dataKey="proficiency"
-                            name="Proficiency"
-                            domain={[0, 100]}
-                            tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                            label={{ value: "Average Score (%)", position: "insideBottom", offset: -5, fill: "var(--text-secondary)", fontSize: 12 }}
-                          />
-                          <YAxis
-                            type="number"
-                            dataKey="growth"
-                            name="Growth"
-                            domain={[-30, 100]}
-                            tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                            label={{ value: "Growth (pts)", angle: -90, position: "insideLeft", fill: "var(--text-secondary)", fontSize: 12 }}
-                          />
-                          <ZAxis type="number" dataKey="assignments" range={[60, 200]} name="Assignments" />
-                          <ReferenceLine x={70} stroke="#f59e0b" strokeDasharray="5 5" />
-                          <ReferenceLine y={0} stroke="#6366f1" strokeDasharray="5 5" />
-                          <Tooltip
-                            cursor={{ strokeDasharray: "3 3" }}
-                            contentStyle={{
-                              background: "var(--modal-content-bg)",
-                              border: "1px solid var(--glass-border)",
-                              borderRadius: "8px",
-                              color: "var(--text-primary)",
-                            }}
-                            labelStyle={{ color: "var(--text-primary)" }}
-                            itemStyle={{ color: "var(--text-secondary)" }}
-                            formatter={(value, name) => {
-                              if (name === "Growth") return [value > 0 ? `+${value}` : value, "Growth (pts)"];
-                              if (name === "Proficiency") return [`${value}%`, "Avg Score"];
-                              if (name === "Assignments") return [value, "# Graded"];
-                              return [value, name];
-                            }}
-                            labelFormatter={(_, payload) => payload[0]?.payload?.name || ""}
-                          />
-                          <Legend
-                            verticalAlign="bottom"
-                            align="center"
-                            wrapperStyle={{ paddingTop: "20px", fontSize: "11px" }}
-                            payload={[
-                              { value: "Star Performer", type: "circle", color: "#10b981" },
-                              { value: "Improving", type: "circle", color: "#f59e0b" },
-                              { value: "Stable", type: "circle", color: "#6366f1" },
-                              { value: "Needs Support", type: "circle", color: "#ef4444" },
-                            ]}
-                          />
-                          <Scatter
-                            name="Students"
-                            data={(filteredAnalytics.student_progress || []).map((s) => {
-                              const grades = s.grades || [];
-                              let growth = 0;
-                              if (grades.length >= 2) {
-                                const firstHalf = grades.slice(0, Math.ceil(grades.length / 2));
-                                const secondHalf = grades.slice(Math.ceil(grades.length / 2));
-                                const firstAvg = firstHalf.reduce((sum, g) => sum + g.score, 0) / firstHalf.length;
-                                const secondAvg = secondHalf.reduce((sum, g) => sum + g.score, 0) / secondHalf.length;
-                                growth = Math.round(secondAvg - firstAvg);
+                        <input
+                          type="text"
+                          id="manualMarkerInput"
+                          placeholder="Type a marker phrase and press Add..."
+                          className="input"
+                          style={{ flex: 1 }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.target.value.trim()) {
+                              const newMarker = e.target.value.trim();
+                              if (
+                                !(assignment.customMarkers || []).includes(
+                                  newMarker,
+                                )
+                              ) {
+                                setAssignment({
+                                  ...assignment,
+                                  customMarkers: [
+                                    ...(assignment.customMarkers || []),
+                                    newMarker,
+                                  ],
+                                });
                               }
-                              return {
-                                name: s.name,
-                                proficiency: s.average,
-                                growth: growth,
-                                assignments: grades.length,
-                                trend: s.trend,
-                              };
-                            })}
-                            onClick={(data) => {
-                              if (data && data.name) setSelectedStudent(data.name);
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            {(filteredAnalytics.student_progress || []).map((s, index) => {
-                              const isLow = s.average < 70;
-                              const grades = s.grades || [];
-                              let growth = 0;
-                              if (grades.length >= 2) {
-                                const firstHalf = grades.slice(0, Math.ceil(grades.length / 2));
-                                const secondHalf = grades.slice(Math.ceil(grades.length / 2));
-                                const firstAvg = firstHalf.reduce((sum, g) => sum + g.score, 0) / firstHalf.length;
-                                const secondAvg = secondHalf.reduce((sum, g) => sum + g.score, 0) / secondHalf.length;
-                                growth = secondAvg - firstAvg;
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const input =
+                              document.getElementById("manualMarkerInput");
+                            if (input?.value.trim()) {
+                              const newMarker = input.value.trim();
+                              if (
+                                !(assignment.customMarkers || []).includes(
+                                  newMarker,
+                                )
+                              ) {
+                                setAssignment({
+                                  ...assignment,
+                                  customMarkers: [
+                                    ...(assignment.customMarkers || []),
+                                    newMarker,
+                                  ],
+                                });
                               }
-                              let color = "#6366f1"; // Default purple
-                              if (isLow && growth <= 0) color = "#ef4444"; // Red - struggling
-                              else if (isLow && growth > 0) color = "#f59e0b"; // Orange - improving
-                              else if (!isLow && growth < -5) color = "#f97316"; // Dark orange - declining
-                              else if (!isLow && growth >= 5) color = "#10b981"; // Green - star
-                              return <Cell key={index} fill={color} />;
-                            })}
-                          </Scatter>
-                        </ScatterChart>
-                      </ResponsiveContainer>
+                              input.value = "";
+                            }
+                          }}
+                          className="btn btn-secondary"
+                        >
+                          <Icon name="Plus" size={16} />
+                          Add
+                        </button>
+                      </div>
+
+                      {/* Custom Markers */}
+                      {(assignment.customMarkers || []).length > 0 && (
+                        <div
+                          style={{
+                            marginTop: "15px",
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "8px",
+                          }}
+                        >
+                          {assignment.customMarkers.map((marker, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "6px 12px",
+                                background: "rgba(251,191,36,0.2)",
+                                borderRadius: "6px",
+                                border: "1px solid rgba(251,191,36,0.3)",
+                              }}
+                            >
+                              <Icon
+                                name="Target"
+                                size={12}
+                                style={{ color: "#fbbf24" }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: "0.8rem",
+                                  maxWidth: "200px",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {marker}
+                              </span>
+                              <button
+                                onClick={() => removeMarker(marker)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  padding: "0",
+                                }}
+                              >
+                                <Icon name="X" size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Student Progress */}
+                    {/* Marker Library */}
                     <div
-                      className="glass-card"
                       style={{
-                        padding: "25px",
-                        marginBottom: "20px",
-                        border: selectedStudent
-                          ? "2px solid #6366f1"
-                          : undefined,
+                        marginBottom: "25px",
+                        padding: "15px 20px",
+                        background: "rgba(99,102,241,0.1)",
+                        borderRadius: "12px",
+                        border: "1px solid rgba(99,102,241,0.2)",
                       }}
                     >
+                      <label
+                        style={{
+                          display: "block",
+                          fontSize: "0.9rem",
+                          fontWeight: 600,
+                          marginBottom: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Bookmark"
+                          size={16}
+                          style={{ marginRight: "8px" }}
+                        />
+                        Suggested Markers for{" "}
+                        {config.subject || "Social Studies"}
+                      </label>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        {(
+                          markerLibrary[config.subject] ||
+                          markerLibrary["Social Studies"] ||
+                          []
+                        ).map((marker, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              padding: "6px 12px",
+                              background: "var(--btn-secondary-bg)",
+                              borderRadius: "6px",
+                              fontSize: "0.85rem",
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              if (
+                                !(assignment.customMarkers || []).includes(
+                                  marker,
+                                )
+                              ) {
+                                setAssignment({
+                                  ...assignment,
+                                  customMarkers: [
+                                    ...(assignment.customMarkers || []),
+                                    marker,
+                                  ],
+                                });
+                              }
+                            }}
+                            title="Click to add"
+                          >
+                            {marker}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Grading Notes */}
+                    <div style={{ marginBottom: "25px" }}>
+                      <label className="label">
+                        Assignment-Specific Grading Notes
+                      </label>
+                      <textarea
+                        className="input"
+                        value={assignment.gradingNotes}
+                        onChange={(e) =>
+                          setAssignment({
+                            ...assignment,
+                            gradingNotes: e.target.value,
+                          })
+                        }
+                        placeholder="Special instructions for grading this assignment..."
+                        style={{ minHeight: "100px" }}
+                      />
+                    </div>
+
+                    {/* Questions */}
+                    <div style={{ marginBottom: "20px" }}>
                       <div
                         style={{
                           display: "flex",
@@ -7936,168 +10562,642 @@ ${signature}`;
                           marginBottom: "15px",
                         }}
                       >
-                        <h3
+                        <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>
+                          Questions ({assignment.questions.length}) -{" "}
+                          {assignment.questions.reduce(
+                            (sum, q) => sum + (q.points || 0),
+                            0,
+                          )}{" "}
+                          pts
+                        </h3>
+                        <button
+                          onClick={addQuestion}
+                          className="btn btn-primary"
+                        >
+                          <Icon name="Plus" size={16} /> Add Question
+                        </button>
+                      </div>
+
+                      {assignment.questions.length === 0 ? (
+                        <div
                           style={{
-                            fontSize: "1.1rem",
+                            textAlign: "center",
+                            padding: "40px",
+                            background: "var(--input-bg)",
+                            borderRadius: "12px",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          <Icon name="FileQuestion" size={40} />
+                          <p style={{ marginTop: "10px" }}>
+                            No questions yet. Click "Add Question" to start
+                            building.
+                          </p>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "15px",
+                          }}
+                        >
+                          {assignment.questions.map((q, i) => (
+                            <div
+                              key={q.id}
+                              style={{
+                                background: "var(--glass-bg)",
+                                borderRadius: "12px",
+                                border: "1px solid var(--glass-border)",
+                                padding: "20px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "15px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "0.9rem",
+                                    fontWeight: 600,
+                                    color: "#a5b4fc",
+                                  }}
+                                >
+                                  Question {i + 1}
+                                </span>
+                                <button
+                                  onClick={() => removeQuestion(i)}
+                                  style={{
+                                    padding: "6px 10px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: "rgba(248,113,113,0.2)",
+                                    color: "#f87171",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                </button>
+                              </div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 150px 100px",
+                                  gap: "12px",
+                                  marginBottom: "12px",
+                                }}
+                              >
+                                <div>
+                                  <label
+                                    className="label"
+                                    style={{ fontSize: "0.8rem" }}
+                                  >
+                                    Marker
+                                  </label>
+                                  <select
+                                    className="input"
+                                    value={q.marker}
+                                    onChange={(e) =>
+                                      updateQuestion(
+                                        i,
+                                        "marker",
+                                        e.target.value,
+                                      )
+                                    }
+                                  >
+                                    {(
+                                      markerLibrary[assignment.subject] ||
+                                      markerLibrary["Other"]
+                                    ).map((m) => (
+                                      <option key={m} value={m}>
+                                        {m}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label
+                                    className="label"
+                                    style={{ fontSize: "0.8rem" }}
+                                  >
+                                    Type
+                                  </label>
+                                  <select
+                                    className="input"
+                                    value={q.type}
+                                    onChange={(e) =>
+                                      updateQuestion(i, "type", e.target.value)
+                                    }
+                                  >
+                                    <option value="short_answer">
+                                      Short Answer
+                                    </option>
+                                    <option value="essay">Essay</option>
+                                    <option value="fill_blank">
+                                      Fill in Blank
+                                    </option>
+                                    <option value="multiple_choice">
+                                      Multiple Choice
+                                    </option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label
+                                    className="label"
+                                    style={{ fontSize: "0.8rem" }}
+                                  >
+                                    Points
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="input"
+                                    value={q.points}
+                                    onChange={(e) =>
+                                      updateQuestion(
+                                        i,
+                                        "points",
+                                        parseInt(e.target.value) || 0,
+                                      )
+                                    }
+                                    min="0"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label
+                                  className="label"
+                                  style={{ fontSize: "0.8rem" }}
+                                >
+                                  Question/Prompt
+                                </label>
+                                <textarea
+                                  className="input"
+                                  value={q.prompt}
+                                  onChange={(e) =>
+                                    updateQuestion(i, "prompt", e.target.value)
+                                  }
+                                  placeholder="Enter the question..."
+                                  style={{ minHeight: "60px" }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Export Buttons */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "15px",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
+                      {assignment.title && (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            color: "#4ade80",
+                            fontSize: "0.85rem",
+                            padding: "8px 12px",
+                            background: "rgba(74,222,128,0.1)",
+                            border: "1px solid rgba(74,222,128,0.3)",
+                            borderRadius: "8px",
+                          }}
+                        >
+                          <Icon
+                            name="Check"
+                            size={14}
+                            style={{ color: "#4ade80" }}
+                          />
+                          Auto-saves
+                        </span>
+                      )}
+                      <button
+                        onClick={saveAssignmentConfig}
+                        disabled={!assignment.title}
+                        className="btn btn-secondary"
+                        style={{ opacity: !assignment.title ? 0.5 : 1 }}
+                      >
+                        <Icon name="Save" size={18} /> Save Now
+                      </button>
+                      <button
+                        onClick={() => exportAssignment("docx")}
+                        disabled={!assignment.title}
+                        className="btn btn-secondary"
+                        style={{ opacity: !assignment.title ? 0.5 : 1 }}
+                      >
+                        <Icon name="FileText" size={18} /> Export Word Doc
+                      </button>
+                      <button
+                        onClick={() => exportAssignment("pdf")}
+                        disabled={!assignment.title}
+                        className="btn btn-secondary"
+                        style={{ opacity: !assignment.title ? 0.5 : 1 }}
+                      >
+                        <Icon name="FileType" size={18} /> Export PDF
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Analytics Tab */}
+              {activeTab === "analytics" && (
+                <div className="fade-in">
+                  {!filteredAnalytics || filteredAnalytics.error ? (
+                    <div
+                      className="glass-card"
+                      style={{ padding: "60px", textAlign: "center" }}
+                    >
+                      <Icon name="BarChart3" size={64} />
+                      <h2 style={{ marginTop: "20px", fontSize: "1.5rem" }}>
+                        No Data Yet
+                      </h2>
+                      <p
+                        style={{
+                          color: "var(--text-secondary)",
+                          marginTop: "10px",
+                        }}
+                      >
+                        Grade some assignments to see analytics here.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Period Filter */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <h2
+                          style={{
+                            fontSize: "1.3rem",
                             fontWeight: 700,
                             display: "flex",
                             alignItems: "center",
                             gap: "10px",
                           }}
                         >
-                          <Icon name="TrendingUp" size={20} />
-                          {selectedStudent
-                            ? `${selectedStudent}'s Progress`
-                            : "Student Progress Over Time"}
-                        </h3>
-                        {selectedStudent && (
-                          <button
-                            onClick={() => setSelectedStudent(null)}
-                            className="btn btn-secondary"
-                            style={{ padding: "6px 12px" }}
-                          >
-                            <Icon name="X" size={14} /> Clear Selection
-                          </button>
-                        )}
-                      </div>
-
-                      {selectedStudent &&
-                        (() => {
-                          const studentData = (
-                            filteredAnalytics.student_progress || []
-                          ).find((s) => s.name === selectedStudent);
-                          if (!studentData) return null;
-                          const grades = studentData.grades || [];
-                          const highest =
-                            grades.length > 0
-                              ? Math.max(...grades.map((g) => g.score))
-                              : 0;
-                          const lowest =
-                            grades.length > 0
-                              ? Math.min(...grades.map((g) => g.score))
-                              : 0;
-                          return (
+                          <Icon name="BarChart3" size={24} />
+                          Class Analytics
+                        </h2>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "15px",
+                          }}
+                        >
+                          {/* Period Filter */}
+                          {sortedPeriods.length > 0 && (
                             <div
                               style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(4, 1fr)",
-                                gap: "15px",
-                                marginBottom: "20px",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                              }}
+                            >
+                              <label
+                                style={{
+                                  fontSize: "0.9rem",
+                                  color: "var(--text-secondary)",
+                                }}
+                              >
+                                Period:
+                              </label>
+                              <select
+                                value={analyticsClassPeriod}
+                                onChange={(e) =>
+                                  setAnalyticsClassPeriod(e.target.value)
+                                }
+                                className="input"
+                                style={{ width: "auto" }}
+                              >
+                                <option value="">All Periods</option>
+                                {sortedPeriods.map((p) => (
+                                  <option key={p.filename} value={p.filename}>
+                                    {p.period_name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          {/* Quarter Filter */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                            }}
+                          >
+                            <label
+                              style={{
+                                fontSize: "0.9rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              Quarter:
+                            </label>
+                            <select
+                              value={analyticsPeriod}
+                              onChange={(e) =>
+                                setAnalyticsPeriod(e.target.value)
+                              }
+                              className="input"
+                              style={{ width: "auto" }}
+                            >
+                              <option value="all">All Quarters</option>
+                              {(filteredAnalytics.available_periods || []).map(
+                                (p) => (
+                                  <option key={p} value={p}>
+                                    {p}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </div>
+                          {/* Export District Report Button */}
+                          <button
+                            className="btn btn-secondary"
+                            onClick={async () => {
+                              try {
+                                const report = await api.exportDistrictReport();
+                                if (report.error) {
+                                  addToast(report.error, "error");
+                                  return;
+                                }
+                                const blob = new Blob(
+                                  [JSON.stringify(report, null, 2)],
+                                  { type: "application/json" },
+                                );
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `district_report_${new Date().toISOString().split("T")[0]}.json`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              } catch (err) {
+                                addToast(
+                                  "Failed to export report: " + err.message,
+                                  "error",
+                                );
+                              }
+                            }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            <Icon name="Download" size={16} />
+                            Export District Report
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Stats Cards */}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(4, 1fr)",
+                          gap: "15px",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        {[
+                          {
+                            label: "Total Graded",
+                            value:
+                              filteredAnalytics.class_stats
+                                ?.total_assignments || 0,
+                            icon: "FileCheck",
+                            color: "#6366f1",
+                          },
+                          {
+                            label: "Students",
+                            value:
+                              filteredAnalytics.class_stats?.total_students ||
+                              0,
+                            icon: "Users",
+                            color: "#8b5cf6",
+                          },
+                          {
+                            label: "Class Average",
+                            value: `${filteredAnalytics.class_stats?.class_average || 0}%`,
+                            icon: "TrendingUp",
+                            color: "#10b981",
+                          },
+                          {
+                            label: "Highest Score",
+                            value: `${filteredAnalytics.class_stats?.highest || 0}%`,
+                            icon: "Trophy",
+                            color: "#f59e0b",
+                          },
+                        ].map((stat, i) => (
+                          <div
+                            key={i}
+                            className="glass-card"
+                            style={{ padding: "20px" }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                marginBottom: "10px",
                               }}
                             >
                               <div
                                 style={{
-                                  background: "rgba(99,102,241,0.1)",
-                                  borderRadius: "12px",
-                                  padding: "15px",
-                                  textAlign: "center",
+                                  background: `${stat.color}20`,
+                                  padding: "8px",
+                                  borderRadius: "10px",
                                 }}
                               >
-                                <div
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    color: "var(--text-secondary)",
-                                    marginBottom: "5px",
-                                  }}
-                                >
-                                  Average
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "1.5rem",
-                                    fontWeight: 700,
-                                    color: "#6366f1",
-                                  }}
-                                >
-                                  {studentData.average}%
-                                </div>
+                                <Icon name={stat.icon} size={20} />
                               </div>
-                              <div
+                              <span
                                 style={{
-                                  background: "rgba(74,222,128,0.1)",
-                                  borderRadius: "12px",
-                                  padding: "15px",
-                                  textAlign: "center",
+                                  color: "var(--text-secondary)",
+                                  fontSize: "0.9rem",
                                 }}
                               >
-                                <div
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    color: "var(--text-secondary)",
-                                    marginBottom: "5px",
-                                  }}
-                                >
-                                  Highest
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "1.5rem",
-                                    fontWeight: 700,
-                                    color: "#4ade80",
-                                  }}
-                                >
-                                  {highest}%
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  background: "rgba(248,113,113,0.1)",
-                                  borderRadius: "12px",
-                                  padding: "15px",
-                                  textAlign: "center",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    color: "var(--text-secondary)",
-                                    marginBottom: "5px",
-                                  }}
-                                >
-                                  Lowest
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "1.5rem",
-                                    fontWeight: 700,
-                                    color: "#f87171",
-                                  }}
-                                >
-                                  {lowest}%
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  background: "rgba(251,191,36,0.1)",
-                                  borderRadius: "12px",
-                                  padding: "15px",
-                                  textAlign: "center",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    color: "var(--text-secondary)",
-                                    marginBottom: "5px",
-                                  }}
-                                >
-                                  Assignments
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "1.5rem",
-                                    fontWeight: 700,
-                                    color: "#fbbf24",
-                                  }}
-                                >
-                                  {grades.length}
-                                </div>
-                              </div>
+                                {stat.label}
+                              </span>
                             </div>
-                          );
-                        })()}
+                            <div
+                              style={{
+                                fontSize: "2rem",
+                                fontWeight: 800,
+                                color: stat.color,
+                              }}
+                            >
+                              {stat.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
 
-                      {!selectedStudent && (
+                      {/* Charts */}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 2fr",
+                          gap: "20px",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <div className="glass-card" style={{ padding: "25px" }}>
+                          <h3
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              marginBottom: "20px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Icon name="PieChart" size={20} />
+                            Grade Distribution
+                          </h3>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  {
+                                    name: "A",
+                                    value:
+                                      filteredAnalytics.class_stats
+                                        ?.grade_distribution?.A || 0,
+                                  },
+                                  {
+                                    name: "B",
+                                    value:
+                                      filteredAnalytics.class_stats
+                                        ?.grade_distribution?.B || 0,
+                                  },
+                                  {
+                                    name: "C",
+                                    value:
+                                      filteredAnalytics.class_stats
+                                        ?.grade_distribution?.C || 0,
+                                  },
+                                  {
+                                    name: "D",
+                                    value:
+                                      filteredAnalytics.class_stats
+                                        ?.grade_distribution?.D || 0,
+                                  },
+                                  {
+                                    name: "F",
+                                    value:
+                                      filteredAnalytics.class_stats
+                                        ?.grade_distribution?.F || 0,
+                                  },
+                                ].filter((d) => d.value > 0)}
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={70}
+                                dataKey="value"
+                                label={({ name, value }) => `${name}: ${value}`}
+                              >
+                                {[
+                                  "#4ade80",
+                                  "#60a5fa",
+                                  "#fbbf24",
+                                  "#f97316",
+                                  "#ef4444",
+                                ].map((c, i) => (
+                                  <Cell key={i} fill={c} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        <div className="glass-card" style={{ padding: "25px" }}>
+                          <h3
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              marginBottom: "20px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Icon name="BarChart3" size={20} />
+                            Assignment Averages
+                          </h3>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <BarChart
+                              data={filteredAnalytics.assignment_stats || []}
+                            >
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="var(--glass-border)"
+                              />
+                              <XAxis
+                                dataKey="name"
+                                tick={{
+                                  fill: "var(--text-secondary)",
+                                  fontSize: 11,
+                                }}
+                              />
+                              <YAxis
+                                domain={[0, 100]}
+                                tick={{ fill: "var(--text-secondary)" }}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  background: "var(--modal-content-bg)",
+                                  border: "1px solid var(--glass-border)",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                              <Bar
+                                dataKey="average"
+                                fill="#6366f1"
+                                radius={[4, 4, 0, 0]}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Proficiency vs Growth Scatterplot */}
+                      <div
+                        className="glass-card"
+                        style={{ padding: "25px", marginBottom: "20px" }}
+                      >
+                        <h3
+                          style={{
+                            fontSize: "1.1rem",
+                            fontWeight: 700,
+                            marginBottom: "10px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <Icon name="Target" size={20} />
+                          Student Proficiency vs Growth
+                        </h3>
                         <p
                           style={{
                             fontSize: "0.85rem",
@@ -8105,1222 +11205,222 @@ ${signature}`;
                             marginBottom: "15px",
                           }}
                         >
-                          Click a student name below to view details
+                          Click any dot to view that student's detailed
+                          progress. Quadrants show performance patterns.
                         </p>
-                      )}
-
-                      {(() => {
-                        const filtered = selectedStudent
-                          ? (filteredAnalytics.student_progress || []).filter(
-                              (s) => s.name === selectedStudent,
-                            )
-                          : filteredAnalytics.student_progress || [];
-                        const allGrades = filtered.flatMap((s) =>
-                          (s.grades || []).map((g) => ({
-                            ...g,
-                            student: s.name.split(" ")[0],
-                          })),
-                        );
-                        const chartData = allGrades.sort((a, b) =>
-                          (a.date || "").localeCompare(b.date || ""),
-                        );
-                        const chartWidth = Math.max(800, chartData.length * 80);
-
-                        return (
-                          <div style={{ overflowX: "auto", overflowY: "hidden" }}>
-                            <div style={{ width: chartWidth, height: 300 }}>
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData} margin={{ top: 15, bottom: 80, left: 10, right: 30 }}>
-                                  <CartesianGrid
-                                    strokeDasharray="3 3"
-                                    stroke="var(--glass-border)"
-                                  />
-                                  <XAxis
-                                    dataKey="assignment"
-                                    tick={{
-                                      fill: "var(--text-secondary)",
-                                      fontSize: 10,
-                                    }}
-                                    angle={-45}
-                                    textAnchor="end"
-                                    height={100}
-                                    interval={0}
-                                    tickFormatter={(value) => value && value.length > 25 ? value.substring(0, 25) + "..." : value}
-                                  />
-                                  <YAxis
-                                    domain={[0, 100]}
-                                    tick={{ fill: "var(--text-secondary)" }}
-                                  />
-                                  <Tooltip
-                                    contentStyle={{
-                                      background: "var(--modal-content-bg)",
-                                      border: "1px solid var(--glass-border)",
-                                      borderRadius: "8px",
-                                    }}
-                                    formatter={(value, name) => [value + "%", "Score"]}
-                                    labelFormatter={(label) => label}
-                                  />
-                                  <Line
-                                    type="monotone"
-                                    dataKey="score"
-                                    stroke="#6366f1"
-                                    strokeWidth={3}
-                                    dot={{ fill: "#6366f1", r: 5 }}
-                                  />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Needs Attention + Top Performers */}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "20px",
-                        marginBottom: "20px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          background: "rgba(239,68,68,0.1)",
-                          borderRadius: "20px",
-                          border: "1px solid rgba(239,68,68,0.3)",
-                          padding: "25px",
-                        }}
-                      >
-                        <h3
-                          style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 700,
-                            marginBottom: "15px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            color: "#f87171",
-                          }}
-                        >
-                          <Icon name="AlertTriangle" size={20} />
-                          Needs Attention
-                        </h3>
-                        {(filteredAnalytics.attention_needed || []).length === 0 ? (
-                          <p style={{ color: "var(--text-secondary)" }}>
-                            All students are doing well!
-                          </p>
-                        ) : (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "10px",
+                        <ResponsiveContainer width="100%" height={350}>
+                          <ScatterChart
+                            margin={{
+                              top: 20,
+                              right: 30,
+                              bottom: 60,
+                              left: 50,
                             }}
                           >
-                            {(filteredAnalytics.attention_needed || [])
-                              .slice(0, 5)
-                              .map((s, i) => (
-                                <div
-                                  key={i}
-                                  onClick={() => setSelectedStudent(s.name)}
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    padding: "10px 15px",
-                                    background: "var(--input-bg)",
-                                    borderRadius: "10px",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      textDecoration: "underline dotted",
-                                    }}
-                                  >
-                                    {s.name}
-                                  </span>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "10px",
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        color: "#f87171",
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      {s.average}%
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: "0.8rem",
-                                        padding: "2px 8px",
-                                        borderRadius: "4px",
-                                        background:
-                                          s.trend === "declining"
-                                            ? "rgba(239,68,68,0.3)"
-                                            : "rgba(251,191,36,0.3)",
-                                        color:
-                                          s.trend === "declining"
-                                            ? "#f87171"
-                                            : "#fbbf24",
-                                      }}
-                                    >
-                                      {s.trend}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div
-                        style={{
-                          background: "rgba(74,222,128,0.1)",
-                          borderRadius: "20px",
-                          border: "1px solid rgba(74,222,128,0.3)",
-                          padding: "25px",
-                        }}
-                      >
-                        <h3
-                          style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 700,
-                            marginBottom: "15px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            color: "#4ade80",
-                          }}
-                        >
-                          <Icon name="Award" size={20} />
-                          Top Performers
-                        </h3>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "10px",
-                          }}
-                        >
-                          {(filteredAnalytics.top_performers || []).map((s, i) => (
-                            <div
-                              key={i}
-                              onClick={() => setSelectedStudent(s.name)}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                padding: "10px 15px",
-                                background: "var(--input-bg)",
-                                borderRadius: "10px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "10px",
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    width: "24px",
-                                    height: "24px",
-                                    borderRadius: "50%",
-                                    background:
-                                      i === 0
-                                        ? "#fbbf24"
-                                        : i === 1
-                                          ? "#94a3b8"
-                                          : i === 2
-                                            ? "#cd7f32"
-                                            : "var(--glass-border)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontSize: "0.75rem",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {i + 1}
-                                </span>
-                                <span
-                                  style={{ textDecoration: "underline dotted" }}
-                                >
-                                  {s.name}
-                                </span>
-                              </div>
-                              <span
-                                style={{ color: "#4ade80", fontWeight: 700 }}
-                              >
-                                {s.average}%
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Missing Assignments Section */}
-                    <div className="glass-card" style={{ padding: "25px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-                        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
-                          <Icon name="UserX" size={20} />
-                          Missing Assignments
-                        </h3>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => {
-                            if (!config.assignments_folder) {
-                              addToast("Set assignments folder in Settings first", "error");
-                              return;
-                            }
-                            setMissingFilesLoading(true);
-                            api.listFiles(config.assignments_folder)
-                              .then(data => setMissingUploadedFiles(data.files || []))
-                              .catch(() => setMissingUploadedFiles([]))
-                              .finally(() => setMissingFilesLoading(false));
-                          }}
-                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
-                        >
-                          <Icon name="RefreshCw" size={14} />
-                          Refresh
-                        </button>
-                      </div>
-
-                      {/* Filters */}
-                      <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "20px" }}>
-                        <div style={{ flex: "1", minWidth: "180px" }}>
-                          <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Period</label>
-                          <select
-                            className="input"
-                            value={missingPeriodFilter}
-                            onChange={(e) => { setMissingPeriodFilter(e.target.value); setMissingStudentFilter(""); }}
-                            style={{ width: "100%" }}
-                          >
-                            <option value="">All Periods</option>
-                            {sortedPeriods.map(p => <option key={p.filename} value={p.filename}>{p.period_name}</option>)}
-                          </select>
-                        </div>
-                        <div style={{ flex: "1", minWidth: "180px" }}>
-                          <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Student</label>
-                          <div style={{ position: "relative" }}>
-                            <input
-                              type="text"
-                              className="input"
-                              list="missing-student-suggestions"
-                              placeholder="Type or select student..."
-                              value={missingStudentFilter}
-                              onChange={(e) => setMissingStudentFilter(e.target.value)}
-                              onClick={(e) => { if (missingStudentFilter) { e.target.dataset.prev = missingStudentFilter; setMissingStudentFilter(""); } }}
-                              onBlur={(e) => { if (!missingStudentFilter && e.target.dataset.prev) { setMissingStudentFilter(e.target.dataset.prev); e.target.dataset.prev = ""; } }}
-                              style={{ width: "100%", paddingRight: missingStudentFilter ? "30px" : undefined }}
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="var(--glass-border)"
                             />
-                            {missingStudentFilter && (
-                              <button
-                                onClick={(e) => { e.preventDefault(); setMissingStudentFilter(""); }}
-                                style={{
-                                  position: "absolute",
-                                  right: "8px",
-                                  top: "50%",
-                                  transform: "translateY(-50%)",
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  color: "#888",
-                                  padding: "4px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                }}
-                                title="Clear"
-                              >
-                                <Icon name="X" size={14} />
-                              </button>
-                            )}
-                          </div>
-                          <datalist id="missing-student-suggestions">
-                            {(missingPeriodFilter
-                              ? (sortedPeriods.find(p => p.filename === missingPeriodFilter)?.students || [])
-                              : sortedPeriods.flatMap(p => p.students || [])
-                            ).map((s, i) => {
-                              const name = s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim();
-                              return <option key={i} value={name} />;
-                            })}
-                          </datalist>
-                        </div>
-                        <div style={{ flex: "1", minWidth: "180px" }}>
-                          <label style={{ fontSize: "0.8rem", color: "#888", marginBottom: "4px", display: "block" }}>Assignment</label>
-                          <select
-                            className="input"
-                            value={missingAssignmentFilter}
-                            onChange={(e) => setMissingAssignmentFilter(e.target.value)}
-                            style={{ width: "100%" }}
-                          >
-                            <option value="">All Assignments</option>
-                            {savedAssignments.map(name => <option key={name} value={name}>{name}{savedAssignmentData[name]?.completionOnly ? " (Completion)" : ""}</option>)}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Missing Report */}
-                      {periods.length === 0 ? (
-                        <div style={{ color: "#888", textAlign: "center", padding: "20px" }}>
-                          <Icon name="AlertCircle" size={24} style={{ marginBottom: "10px", opacity: 0.5 }} />
-                          <div>Upload period rosters in Settings to track missing assignments</div>
-                        </div>
-                      ) : missingFilesLoading ? (
-                        <div style={{ color: "#888", textAlign: "center", padding: "20px" }}>Loading files...</div>
-                      ) : (
-                        (() => {
-                          // Get assignments to check
-                          const assignmentsToCheck = missingAssignmentFilter
-                            ? [missingAssignmentFilter]
-                            : savedAssignments;
-
-                          // Get periods to check
-                          const periodsToCheck = missingPeriodFilter
-                            ? sortedPeriods.filter(p => p.filename === missingPeriodFilter)
-                            : sortedPeriods;
-
-                          // Build set of uploaded file names (normalized)
-                          const uploadedNames = new Set(
-                            missingUploadedFiles.map(f => (f.name || f).toLowerCase().replace(/[_\-\.]/g, ' ').trim())
-                          );
-
-                          // Check if student has uploaded for an assignment (including aliases)
-                          const hasUploaded = (studentName, assignmentName) => {
-                            const sName = studentName.toLowerCase();
-                            // Get all names to check (current name + aliases)
-                            const assignmentData = savedAssignmentData[assignmentName] || {};
-                            const namesToCheck = [
-                              assignmentName.toLowerCase(),
-                              ...(assignmentData.aliases || []).map(a => a.toLowerCase())
-                            ];
-
-                            return [...uploadedNames].some(fileName => {
-                              const fLower = fileName.toLowerCase();
-                              const nameParts = sName.split(' ');
-                              const hasStudentName = nameParts.every(part => fLower.includes(part)) ||
-                                fLower.includes(sName.replace(' ', ''));
-                              // Check if file matches any of the assignment names (current or aliases)
-                              const hasAssignment = namesToCheck.some(aName =>
-                                fLower.includes(aName.replace(/[_\-]/g, ' '))
-                              );
-                              return hasStudentName && hasAssignment;
-                            });
-                          };
-
-                          // If filtering by student
-                          if (missingStudentFilter) {
-                            const studentLower = missingStudentFilter.toLowerCase();
-                            let studentInfo = null;
-                            let studentPeriod = null;
-
-                            for (const period of periodsToCheck) {
-                              const found = (period.students || []).find(s => {
-                                const fullName = (s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim()).toLowerCase();
-                                return fullName.includes(studentLower) || studentLower.includes(fullName);
-                              });
-                              if (found) {
-                                studentInfo = found;
-                                studentPeriod = period.period_name;
-                                break;
-                              }
-                            }
-
-                            const displayName = studentInfo
-                              ? (studentInfo.full || studentInfo.name || ((studentInfo.first || "") + " " + (studentInfo.last || "")).trim())
-                              : missingStudentFilter;
-
-                            const missing = assignmentsToCheck.filter(a => !hasUploaded(displayName, a));
-                            const submitted = assignmentsToCheck.filter(a => hasUploaded(displayName, a));
-
-                            return (
-                              <div>
-                                <div style={{ padding: "15px", background: "rgba(0,0,0,0.2)", borderRadius: "8px", marginBottom: "15px" }}>
-                                  <div style={{ fontWeight: 600, marginBottom: "8px" }}>
-                                    {displayName} {studentPeriod && <span style={{ color: "#888", fontWeight: 400 }}>({studentPeriod})</span>}
-                                  </div>
-                                  <div style={{ display: "flex", gap: "20px", fontSize: "0.9rem" }}>
-                                    <span><span style={{ color: "#f59e0b", fontWeight: 600 }}>{missing.length}</span> missing</span>
-                                    <span><span style={{ color: "#10b981", fontWeight: 600 }}>{submitted.length}</span> uploaded</span>
-                                    <span><span style={{ color: "#6366f1", fontWeight: 600 }}>{assignmentsToCheck.length}</span> total</span>
-                                  </div>
-                                </div>
-                                {missing.length > 0 ? (
-                                  <div>
-                                    <div style={{ fontSize: "0.85rem", color: "#888", marginBottom: "10px" }}>Missing:</div>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                                      {missing.map(a => (
-                                        <span key={a} style={{ padding: "6px 12px", background: "rgba(251,191,36,0.2)", borderRadius: "6px", fontSize: "0.85rem", color: "#fbbf24" }}>
-                                          {a}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div style={{ color: "#10b981", display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <Icon name="CheckCircle" size={18} />
-                                    All assignments uploaded!
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-
-                          // Default: show by period
-                          let totalMissing = 0;
-                          let totalStudents = 0;
-                          const periodReports = [];
-
-                          periodsToCheck.forEach(period => {
-                            const students = period.students || [];
-                            totalStudents += students.length;
-                            const studentsWithMissing = [];
-
-                            students.forEach(student => {
-                              const name = student.full || student.name || ((student.first || "") + " " + (student.last || "")).trim();
-                              const missing = assignmentsToCheck.filter(a => !hasUploaded(name, a));
-                              if (missing.length > 0) {
-                                studentsWithMissing.push({ name, missing });
-                                totalMissing += missing.length;
-                              }
-                            });
-
-                            periodReports.push({
-                              period: period.period_name,
-                              total: students.length,
-                              studentsWithMissing,
-                              allComplete: studentsWithMissing.length === 0,
-                            });
-                          });
-
-                          const totalSlots = totalStudents * assignmentsToCheck.length;
-                          const totalUploaded = totalSlots - totalMissing;
-
-                          return (
-                            <div>
-                              {/* Summary Stats */}
-                              <div style={{ display: "flex", gap: "20px", marginBottom: "20px", padding: "15px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
-                                <div style={{ textAlign: "center" }}>
-                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#f59e0b" }}>{totalMissing}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Missing</div>
-                                </div>
-                                <div style={{ textAlign: "center" }}>
-                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#10b981" }}>{totalUploaded}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Uploaded</div>
-                                </div>
-                                <div style={{ textAlign: "center" }}>
-                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#6366f1" }}>{totalStudents}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Students</div>
-                                </div>
-                                <div style={{ textAlign: "center" }}>
-                                  <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#8b5cf6" }}>{assignmentsToCheck.length}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "#888" }}>Assignments</div>
-                                </div>
-                              </div>
-
-                              {/* Per Period Breakdown */}
-                              <div style={{ display: "grid", gap: "12px" }}>
-                                {periodReports.map(report => (
-                                  <div
-                                    key={report.period}
-                                    style={{
-                                      padding: "12px 15px",
-                                      background: "rgba(0,0,0,0.15)",
-                                      borderRadius: "8px",
-                                      border: report.allComplete ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(251,191,36,0.3)",
-                                    }}
-                                  >
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: report.studentsWithMissing.length > 0 ? "10px" : 0 }}>
-                                      <span style={{ fontWeight: 600 }}>{report.period}</span>
-                                      <span style={{ fontSize: "0.85rem" }}>
-                                        {report.allComplete ? (
-                                          <span style={{ color: "#10b981" }}>✓ All complete</span>
-                                        ) : (
-                                          <span style={{ color: "#f59e0b" }}>{report.studentsWithMissing.length} students missing work</span>
-                                        )}
-                                      </span>
-                                    </div>
-                                    {report.studentsWithMissing.length > 0 && (
-                                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                        {report.studentsWithMissing.map((s, idx) => (
-                                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                                            <span style={{ minWidth: "140px", fontWeight: 500, fontSize: "0.9rem" }}>{s.name}</span>
-                                            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-                                              {s.missing.map(a => (
-                                                <span key={a} style={{ padding: "2px 8px", background: "rgba(251,191,36,0.2)", borderRadius: "4px", fontSize: "0.75rem", color: "#fbbf24" }}>
-                                                  {a}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })()
-                      )}
-                    </div>
-
-                    {/* All Students Table */}
-                    <div className="glass-card" style={{ padding: "25px" }}>
-                      <h3
-                        style={{
-                          fontSize: "1.1rem",
-                          fontWeight: 700,
-                          marginBottom: "15px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                        }}
-                      >
-                        <Icon name="Users" size={20} />
-                        All Students Overview
-                      </h3>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Student</th>
-                            <th style={{ textAlign: "center" }}>Assignments</th>
-                            <th style={{ textAlign: "center" }}>Average</th>
-                            <th style={{ textAlign: "center" }}>Trend</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(filteredAnalytics.student_progress || []).map((s, i) => (
-                            <tr
-                              key={i}
-                              onClick={() => setSelectedStudent(s.name)}
-                              style={{
-                                cursor: "pointer",
-                                background:
-                                  selectedStudent === s.name
-                                    ? "rgba(99,102,241,0.2)"
-                                    : "transparent",
-                              }}
-                            >
-                              <td
-                                style={{
-                                  fontWeight: 600,
-                                  textDecoration: "underline dotted",
-                                }}
-                              >
-                                {s.name}
-                              </td>
-                              <td style={{ textAlign: "center" }}>
-                                {(s.grades || []).length}
-                              </td>
-                              <td style={{ textAlign: "center" }}>
-                                <span
-                                  style={{
-                                    padding: "4px 12px",
-                                    borderRadius: "20px",
-                                    fontWeight: 700,
-                                    background:
-                                      s.average >= 90
-                                        ? "rgba(74,222,128,0.2)"
-                                        : s.average >= 80
-                                          ? "rgba(96,165,250,0.2)"
-                                          : s.average >= 70
-                                            ? "rgba(251,191,36,0.2)"
-                                            : "rgba(248,113,113,0.2)",
-                                    color:
-                                      s.average >= 90
-                                        ? "#4ade80"
-                                        : s.average >= 80
-                                          ? "#60a5fa"
-                                          : s.average >= 70
-                                            ? "#fbbf24"
-                                            : "#f87171",
-                                  }}
-                                >
-                                  {s.average}%
-                                </span>
-                              </td>
-                              <td style={{ textAlign: "center" }}>
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: "4px",
-                                    color:
-                                      s.trend === "improving"
-                                        ? "#4ade80"
-                                        : s.trend === "declining"
-                                          ? "#f87171"
-                                          : "#94a3b8",
-                                  }}
-                                >
-                                  <Icon
-                                    name={
-                                      s.trend === "improving"
-                                        ? "TrendingUp"
-                                        : s.trend === "declining"
-                                          ? "TrendingDown"
-                                          : "Minus"
-                                    }
-                                    size={16}
-                                  />
-                                  {s.trend}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Planner Tab */}
-            {activeTab === "planner" && (
-              <div className="fade-in">
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "300px 1fr",
-                    gap: "25px",
-                  }}
-                >
-                  {/* Sidebar */}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "20px",
-                    }}
-                  >
-                    {/* Unit Details */}
-                    <div className="glass-card" style={{ padding: "20px" }}>
-                      <h3
-                        style={{
-                          fontSize: "1.1rem",
-                          fontWeight: 700,
-                          marginBottom: "15px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                        }}
-                      >
-                        <Icon name="FileText" size={20} /> Details
-                      </h3>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "15px",
-                        }}
-                      >
-                        <div>
-                          <label className="label">Content Type</label>
-                          <select
-                            className="input"
-                            value={unitConfig.type}
-                            onChange={(e) =>
-                              setUnitConfig({
-                                ...unitConfig,
-                                type: e.target.value,
-                              })
-                            }
-                          >
-                            <option value="Unit Plan">Unit Plan</option>
-                            <option value="Lesson Plan">Lesson Plan</option>
-                            <option value="Assignment">Assignment</option>
-                            <option value="Project">Project</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="label">Title</label>
-                          <input
-                            type="text"
-                            className="input"
-                            value={unitConfig.title}
-                            onChange={(e) =>
-                              setUnitConfig({
-                                ...unitConfig,
-                                title: e.target.value,
-                              })
-                            }
-                            placeholder="e.g., Foundations of Government"
-                          />
-                        </div>
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: "12px",
-                          }}
-                        >
-                          <div>
-                            <label className="label">Duration (Days)</label>
-                            <input
+                            <XAxis
                               type="number"
-                              className="input"
-                              value={unitConfig.duration}
-                              onChange={(e) =>
-                                setUnitConfig({
-                                  ...unitConfig,
-                                  duration: parseInt(e.target.value) || 1,
-                                })
-                              }
-                              min="1"
-                              max="20"
+                              dataKey="proficiency"
+                              name="Proficiency"
+                              domain={[0, 100]}
+                              tick={{
+                                fill: "var(--text-secondary)",
+                                fontSize: 11,
+                              }}
+                              label={{
+                                value: "Average Score (%)",
+                                position: "insideBottom",
+                                offset: -5,
+                                fill: "var(--text-secondary)",
+                                fontSize: 12,
+                              }}
                             />
-                          </div>
-                          <div>
-                            <label className="label">Period Length</label>
-                            <input
+                            <YAxis
                               type="number"
-                              className="input"
-                              value={unitConfig.periodLength}
-                              onChange={(e) =>
-                                setUnitConfig({
-                                  ...unitConfig,
-                                  periodLength: parseInt(e.target.value) || 50,
-                                })
-                              }
-                              min="20"
-                              max="120"
+                              dataKey="growth"
+                              name="Growth"
+                              domain={[-30, 100]}
+                              tick={{
+                                fill: "var(--text-secondary)",
+                                fontSize: 11,
+                              }}
+                              label={{
+                                value: "Growth (pts)",
+                                angle: -90,
+                                position: "insideLeft",
+                                fill: "var(--text-secondary)",
+                                fontSize: 12,
+                              }}
                             />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="label">
-                            Additional Requirements
-                          </label>
-                          <textarea
-                            className="input"
-                            value={unitConfig.requirements}
-                            onChange={(e) =>
-                              setUnitConfig({
-                                ...unitConfig,
-                                requirements: e.target.value,
-                              })
-                            }
-                            placeholder="e.g. Focus on primary sources..."
-                            style={{ minHeight: "80px" }}
-                          />
-                        </div>
-                        {/* Brainstorm Button */}
-                        <button
-                          onClick={brainstormIdeasHandler}
-                          disabled={brainstormLoading || selectedStandards.length === 0}
-                          className="btn btn-secondary"
-                          style={{
-                            width: "100%",
-                            justifyContent: "center",
-                            marginBottom: "10px",
-                            opacity: brainstormLoading || selectedStandards.length === 0 ? 0.5 : 1,
-                          }}
-                        >
-                          {brainstormLoading ? (
-                            <Icon name="Loader2" size={18} style={{ animation: "spin 1s linear infinite" }} />
-                          ) : (
-                            <Icon name="Lightbulb" size={18} />
-                          )}
-                          {brainstormLoading ? "Brainstorming..." : "Brainstorm Ideas"}
-                        </button>
-
-                        {/* Generate Plan Button */}
-                        <button
-                          onClick={() => generateLessonPlan(false)}
-                          disabled={plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea)}
-                          className="btn btn-primary"
-                          style={{
-                            width: "100%",
-                            justifyContent: "center",
-                            marginBottom: "10px",
-                            opacity: plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea) ? 0.5 : 1,
-                          }}
-                        >
-                          {plannerLoading ? (
-                            <Icon name="Loader2" size={18} style={{ animation: "spin 1s linear infinite" }} />
-                          ) : (
-                            <Icon name="Sparkles" size={18} />
-                          )}
-                          {plannerLoading ? "Generating..." : selectedIdea ? "Generate from Idea" : "Generate Plan"}
-                        </button>
-
-                        {/* Generate Variations Button */}
-                        <button
-                          onClick={() => generateLessonPlan(true)}
-                          disabled={plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea)}
-                          className="btn btn-secondary"
-                          style={{
-                            width: "100%",
-                            justifyContent: "center",
-                            opacity: plannerLoading || selectedStandards.length === 0 || (!unitConfig.title && !selectedIdea) ? 0.5 : 1,
-                            fontSize: "0.85rem",
-                          }}
-                        >
-                          <Icon name="Layers" size={16} />
-                          Generate 3 Variations
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Brainstormed Ideas Section */}
-                    {brainstormIdeas.length > 0 && !lessonPlan && lessonVariations.length === 0 && (
-                      <div className="glass-card" style={{ padding: "20px", marginTop: "20px" }}>
-                        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
-                          <Icon name="Lightbulb" size={20} style={{ color: "#f59e0b" }} /> Lesson Plan Ideas
-                        </h3>
-                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
-                          Select an idea to develop into a full lesson plan, or use it as inspiration.
-                        </p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                          {brainstormIdeas.map((idea) => (
-                            <div
-                              key={idea.id}
-                              onClick={() => {
-                                setSelectedIdea(selectedIdea?.id === idea.id ? null : idea);
-                                if (selectedIdea?.id !== idea.id) {
-                                  setUnitConfig(prev => ({ ...prev, title: idea.title }));
+                            <ZAxis
+                              type="number"
+                              dataKey="assignments"
+                              range={[60, 200]}
+                              name="Assignments"
+                            />
+                            <ReferenceLine
+                              x={70}
+                              stroke="#f59e0b"
+                              strokeDasharray="5 5"
+                            />
+                            <ReferenceLine
+                              y={0}
+                              stroke="#6366f1"
+                              strokeDasharray="5 5"
+                            />
+                            <Tooltip
+                              cursor={{ strokeDasharray: "3 3" }}
+                              contentStyle={{
+                                background: "var(--modal-content-bg)",
+                                border: "1px solid var(--glass-border)",
+                                borderRadius: "8px",
+                                color: "var(--text-primary)",
+                              }}
+                              labelStyle={{ color: "var(--text-primary)" }}
+                              itemStyle={{ color: "var(--text-secondary)" }}
+                              formatter={(value, name) => {
+                                if (name === "Growth")
+                                  return [
+                                    value > 0 ? `+${value}` : value,
+                                    "Growth (pts)",
+                                  ];
+                                if (name === "Proficiency")
+                                  return [`${value}%`, "Avg Score"];
+                                if (name === "Assignments")
+                                  return [value, "# Graded"];
+                                return [value, name];
+                              }}
+                              labelFormatter={(_, payload) =>
+                                payload[0]?.payload?.name || ""
+                              }
+                            />
+                            <Legend
+                              verticalAlign="bottom"
+                              align="center"
+                              wrapperStyle={{
+                                paddingTop: "20px",
+                                fontSize: "11px",
+                              }}
+                              payload={[
+                                {
+                                  value: "Star Performer",
+                                  type: "circle",
+                                  color: "#10b981",
+                                },
+                                {
+                                  value: "Improving",
+                                  type: "circle",
+                                  color: "#f59e0b",
+                                },
+                                {
+                                  value: "Stable",
+                                  type: "circle",
+                                  color: "#6366f1",
+                                },
+                                {
+                                  value: "Needs Support",
+                                  type: "circle",
+                                  color: "#ef4444",
+                                },
+                              ]}
+                            />
+                            <Scatter
+                              name="Students"
+                              data={(
+                                filteredAnalytics.student_progress || []
+                              ).map((s) => {
+                                const grades = s.grades || [];
+                                let growth = 0;
+                                if (grades.length >= 2) {
+                                  const firstHalf = grades.slice(
+                                    0,
+                                    Math.ceil(grades.length / 2),
+                                  );
+                                  const secondHalf = grades.slice(
+                                    Math.ceil(grades.length / 2),
+                                  );
+                                  const firstAvg =
+                                    firstHalf.reduce(
+                                      (sum, g) => sum + g.score,
+                                      0,
+                                    ) / firstHalf.length;
+                                  const secondAvg =
+                                    secondHalf.reduce(
+                                      (sum, g) => sum + g.score,
+                                      0,
+                                    ) / secondHalf.length;
+                                  growth = Math.round(secondAvg - firstAvg);
                                 }
+                                return {
+                                  name: s.name,
+                                  proficiency: s.average,
+                                  growth: growth,
+                                  assignments: grades.length,
+                                  trend: s.trend,
+                                };
+                              })}
+                              onClick={(data) => {
+                                if (data && data.name)
+                                  setSelectedStudent(data.name);
                               }}
-                              style={{
-                                padding: "15px",
-                                borderRadius: "10px",
-                                background: selectedIdea?.id === idea.id ? "rgba(99,102,241,0.2)" : "var(--input-bg)",
-                                border: selectedIdea?.id === idea.id ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
-                                cursor: "pointer",
-                                transition: "all 0.2s",
-                              }}
+                              style={{ cursor: "pointer" }}
                             >
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                                <h4 style={{ fontWeight: 600, fontSize: "1rem", margin: 0 }}>{idea.title}</h4>
-                                <span style={{
-                                  padding: "3px 10px",
-                                  borderRadius: "12px",
-                                  fontSize: "0.7rem",
-                                  fontWeight: 600,
-                                  background: idea.approach === "Activity-Based" ? "rgba(16,185,129,0.2)" :
-                                    idea.approach === "Discussion" ? "rgba(99,102,241,0.2)" :
-                                    idea.approach === "Project" ? "rgba(245,158,11,0.2)" :
-                                    idea.approach === "Simulation" ? "rgba(236,72,153,0.2)" :
-                                    "rgba(107,114,128,0.2)",
-                                  color: idea.approach === "Activity-Based" ? "#10b981" :
-                                    idea.approach === "Discussion" ? "#6366f1" :
-                                    idea.approach === "Project" ? "#f59e0b" :
-                                    idea.approach === "Simulation" ? "#ec4899" :
-                                    "#6b7280",
-                                }}>
-                                  {idea.approach}
-                                </span>
-                              </div>
-                              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>{idea.brief}</p>
-                              <div style={{ display: "flex", gap: "15px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                                <span><strong>Hook:</strong> {idea.hook}</span>
-                              </div>
-                              <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                                <span><strong>Activity:</strong> {idea.key_activity}</span>
-                              </div>
-                              {selectedIdea?.id === idea.id && (
-                                <div style={{ marginTop: "10px", padding: "8px", background: "rgba(99,102,241,0.1)", borderRadius: "6px", fontSize: "0.8rem", color: "var(--accent-light)" }}>
-                                  <Icon name="CheckCircle" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
-                                  Selected - Click "Generate from Idea" to create a full lesson plan
-                                </div>
+                              {(filteredAnalytics.student_progress || []).map(
+                                (s, index) => {
+                                  const isLow = s.average < 70;
+                                  const grades = s.grades || [];
+                                  let growth = 0;
+                                  if (grades.length >= 2) {
+                                    const firstHalf = grades.slice(
+                                      0,
+                                      Math.ceil(grades.length / 2),
+                                    );
+                                    const secondHalf = grades.slice(
+                                      Math.ceil(grades.length / 2),
+                                    );
+                                    const firstAvg =
+                                      firstHalf.reduce(
+                                        (sum, g) => sum + g.score,
+                                        0,
+                                      ) / firstHalf.length;
+                                    const secondAvg =
+                                      secondHalf.reduce(
+                                        (sum, g) => sum + g.score,
+                                        0,
+                                      ) / secondHalf.length;
+                                    growth = secondAvg - firstAvg;
+                                  }
+                                  let color = "#6366f1"; // Default purple
+                                  if (isLow && growth <= 0)
+                                    color = "#ef4444"; // Red - struggling
+                                  else if (isLow && growth > 0)
+                                    color = "#f59e0b"; // Orange - improving
+                                  else if (!isLow && growth < -5)
+                                    color = "#f97316"; // Dark orange - declining
+                                  else if (!isLow && growth >= 5)
+                                    color = "#10b981"; // Green - star
+                                  return <Cell key={index} fill={color} />;
+                                },
                               )}
-                            </div>
-                          ))}
-                        </div>
+                            </Scatter>
+                          </ScatterChart>
+                        </ResponsiveContainer>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Main Content */}
-                  <div>
-                    {/* Lesson Variations Display */}
-                    {lessonVariations.length > 0 && !lessonPlan && (
-                      <div className="glass-card" style={{ padding: "30px", maxHeight: "80vh", overflowY: "auto" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px", paddingBottom: "15px", borderBottom: "1px solid var(--glass-border)" }}>
-                          <div>
-                            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "5px" }}>
-                              <Icon name="Layers" size={24} style={{ marginRight: "10px", verticalAlign: "middle", color: "var(--accent-primary)" }} />
-                              Lesson Plan Variations
-                            </h2>
-                            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                              Compare {lessonVariations.length} different approaches to teaching this content
-                            </p>
-                          </div>
-                          <button onClick={() => setLessonVariations([])} className="btn btn-secondary">
-                            <Icon name="X" size={16} /> Close
-                          </button>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                          {lessonVariations.map((variation, idx) => (
-                            <div key={idx} style={{ padding: "20px", background: "var(--input-bg)", borderRadius: "12px", border: "1px solid var(--glass-border)" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "15px" }}>
-                                <div>
-                                  <span style={{
-                                    display: "inline-block",
-                                    padding: "4px 12px",
-                                    borderRadius: "15px",
-                                    fontSize: "0.75rem",
-                                    fontWeight: 600,
-                                    marginBottom: "8px",
-                                    background: idx === 0 ? "rgba(16,185,129,0.2)" : idx === 1 ? "rgba(99,102,241,0.2)" : "rgba(245,158,11,0.2)",
-                                    color: idx === 0 ? "#10b981" : idx === 1 ? "#6366f1" : "#f59e0b",
-                                  }}>
-                                    {variation.approach || `Variation ${idx + 1}`}
-                                  </span>
-                                  <h3 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "8px 0" }}>{variation.title}</h3>
-                                  <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5 }}>{variation.overview}</p>
-                                </div>
-                                <button
-                                  onClick={() => { setLessonPlan(variation); setLessonVariations([]); }}
-                                  className="btn btn-primary"
-                                  style={{ flexShrink: 0 }}
-                                >
-                                  <Icon name="Check" size={16} /> Use This Plan
-                                </button>
-                              </div>
-                              {variation.essential_questions && (
-                                <div style={{ marginTop: "10px" }}>
-                                  <strong style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>Essential Questions:</strong>
-                                  <ul style={{ margin: "5px 0 0 20px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                                    {variation.essential_questions.slice(0, 2).map((q, i) => <li key={i}>{q}</li>)}
-                                  </ul>
-                                </div>
-                              )}
-                              {variation.days && (
-                                <div style={{ marginTop: "10px", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                                  <Icon name="Calendar" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
-                                  {variation.days.length} day{variation.days.length !== 1 ? 's' : ''} planned
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Single Lesson Plan Display */}
-                    {lessonPlan ? (
+                      {/* Student Progress */}
                       <div
                         className="glass-card"
                         style={{
-                          padding: "30px",
-                          maxHeight: "80vh",
-                          overflowY: "auto",
+                          padding: "25px",
+                          marginBottom: "20px",
+                          border: selectedStudent
+                            ? "2px solid #6366f1"
+                            : undefined,
                         }}
                       >
-                        {/* Header */}
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            marginBottom: "25px",
-                            borderBottom: "1px solid var(--glass-border)",
-                            paddingBottom: "20px",
-                          }}
-                        >
-                          <div>
-                            <h2
-                              style={{
-                                fontSize: "1.8rem",
-                                fontWeight: 700,
-                                marginBottom: "10px",
-                              }}
-                            >
-                              {lessonPlan.title}
-                            </h2>
-                            <p
-                              style={{
-                                color: "var(--text-secondary)",
-                                lineHeight: "1.6",
-                              }}
-                            >
-                              {lessonPlan.overview}
-                            </p>
-                          </div>
-                          <div style={{ display: "flex", gap: "10px" }}>
-                            <button
-                              onClick={exportLessonPlanHandler}
-                              className="btn btn-secondary"
-                            >
-                              <Icon name="Download" size={16} /> Export
-                            </button>
-                            <button
-                              onClick={() => { setLessonPlan(null); setSelectedIdea(null); setBrainstormIdeas([]); }}
-                              className="btn btn-secondary"
-                            >
-                              Close
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Days */}
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "30px",
-                          }}
-                        >
-                          {(lessonPlan.days || []).map((day, i) => (
-                            <div
-                              key={i}
-                              style={{
-                                background: "var(--input-bg)",
-                                borderRadius: "16px",
-                                padding: "25px",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "flex-start",
-                                  gap: "15px",
-                                  marginBottom: "20px",
-                                  paddingBottom: "15px",
-                                  borderBottom:
-                                    "1px solid var(--glass-border)",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: "50px",
-                                    height: "50px",
-                                    borderRadius: "12px",
-                                    background:
-                                      "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontWeight: 700,
-                                    fontSize: "1.2rem",
-                                  }}
-                                >
-                                  {day.day}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <h3
-                                    style={{
-                                      fontSize: "1.3rem",
-                                      fontWeight: 600,
-                                      marginBottom: "8px",
-                                    }}
-                                  >
-                                    {day.topic}
-                                  </h3>
-                                  <p
-                                    style={{
-                                      fontSize: "0.9rem",
-                                      color: "var(--text-primary)",
-                                    }}
-                                  >
-                                    <strong style={{ color: "#10b981" }}>
-                                      Objective:
-                                    </strong>{" "}
-                                    {day.objective}
-                                  </p>
-                                </div>
-                              </div>
-
-                              {day.bell_ringer && (
-                                <div
-                                  style={{
-                                    marginBottom: "15px",
-                                    padding: "15px",
-                                    background: "rgba(165,180,252,0.1)",
-                                    borderRadius: "10px",
-                                    border: "1px solid rgba(165,180,252,0.2)",
-                                  }}
-                                >
-                                  <h4
-                                    style={{
-                                      fontSize: "0.9rem",
-                                      color: "#a5b4fc",
-                                      marginBottom: "8px",
-                                    }}
-                                  >
-                                    <Icon name="Zap" size={14} /> Bell Ringer
-                                  </h4>
-                                  <p style={{ fontSize: "0.9rem" }}>
-                                    {typeof day.bell_ringer === "object"
-                                      ? day.bell_ringer.prompt
-                                      : day.bell_ringer}
-                                  </p>
-                                </div>
-                              )}
-
-                              {day.activity && (
-                                <div
-                                  style={{
-                                    marginBottom: "15px",
-                                    padding: "15px",
-                                    background: "rgba(74,222,128,0.1)",
-                                    borderRadius: "10px",
-                                    border: "1px solid rgba(74,222,128,0.2)",
-                                  }}
-                                >
-                                  <h4
-                                    style={{
-                                      fontSize: "0.9rem",
-                                      color: "#4ade80",
-                                      marginBottom: "8px",
-                                    }}
-                                  >
-                                    <Icon name="Activity" size={14} /> Main
-                                    Activity
-                                  </h4>
-                                  <p style={{ fontSize: "0.9rem" }}>
-                                    {typeof day.activity === "object"
-                                      ? day.activity.description
-                                      : day.activity}
-                                  </p>
-                                </div>
-                              )}
-
-                              {day.assessment && (
-                                <div
-                                  style={{
-                                    padding: "15px",
-                                    background: "rgba(248,113,113,0.1)",
-                                    borderRadius: "10px",
-                                    border: "1px solid rgba(248,113,113,0.2)",
-                                  }}
-                                >
-                                  <h4
-                                    style={{
-                                      fontSize: "0.9rem",
-                                      color: "#f87171",
-                                      marginBottom: "8px",
-                                    }}
-                                  >
-                                    <Icon name="CheckCircle" size={14} />{" "}
-                                    Assessment
-                                  </h4>
-                                  <p style={{ fontSize: "0.9rem" }}>
-                                    {typeof day.assessment === "object"
-                                      ? day.assessment.description
-                                      : day.assessment}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="glass-card" style={{ padding: "25px" }}>
                         <div
                           style={{
                             display: "flex",
@@ -9338,129 +11438,4161 @@ ${signature}`;
                               gap: "10px",
                             }}
                           >
-                            <Icon name="Library" size={20} /> Select Standards (
-                            {selectedStandards.length})
+                            <Icon name="TrendingUp" size={20} />
+                            {selectedStudent
+                              ? `${selectedStudent}'s Progress`
+                              : "Student Progress Over Time"}
                           </h3>
-                          <span
-                            style={{
-                              fontSize: "0.9rem",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            {standards.length} standards available
-                          </span>
+                          {selectedStudent && (
+                            <button
+                              onClick={() => setSelectedStudent(null)}
+                              className="btn btn-secondary"
+                              style={{ padding: "6px 12px" }}
+                            >
+                              <Icon name="X" size={14} /> Clear Selection
+                            </button>
+                          )}
                         </div>
 
-                        {/* Current config display */}
+                        {selectedStudent &&
+                          (() => {
+                            const studentData = (
+                              filteredAnalytics.student_progress || []
+                            ).find((s) => s.name === selectedStudent);
+                            if (!studentData) return null;
+                            const grades = studentData.grades || [];
+                            const highest =
+                              grades.length > 0
+                                ? Math.max(...grades.map((g) => g.score))
+                                : 0;
+                            const lowest =
+                              grades.length > 0
+                                ? Math.min(...grades.map((g) => g.score))
+                                : 0;
+                            return (
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(4, 1fr)",
+                                  gap: "15px",
+                                  marginBottom: "20px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    background: "rgba(99,102,241,0.1)",
+                                    borderRadius: "12px",
+                                    padding: "15px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "0.8rem",
+                                      color: "var(--text-secondary)",
+                                      marginBottom: "5px",
+                                    }}
+                                  >
+                                    Average
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "1.5rem",
+                                      fontWeight: 700,
+                                      color: "#6366f1",
+                                    }}
+                                  >
+                                    {studentData.average}%
+                                  </div>
+                                </div>
+                                <div
+                                  style={{
+                                    background: "rgba(74,222,128,0.1)",
+                                    borderRadius: "12px",
+                                    padding: "15px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "0.8rem",
+                                      color: "var(--text-secondary)",
+                                      marginBottom: "5px",
+                                    }}
+                                  >
+                                    Highest
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "1.5rem",
+                                      fontWeight: 700,
+                                      color: "#4ade80",
+                                    }}
+                                  >
+                                    {highest}%
+                                  </div>
+                                </div>
+                                <div
+                                  style={{
+                                    background: "rgba(248,113,113,0.1)",
+                                    borderRadius: "12px",
+                                    padding: "15px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "0.8rem",
+                                      color: "var(--text-secondary)",
+                                      marginBottom: "5px",
+                                    }}
+                                  >
+                                    Lowest
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "1.5rem",
+                                      fontWeight: 700,
+                                      color: "#f87171",
+                                    }}
+                                  >
+                                    {lowest}%
+                                  </div>
+                                </div>
+                                <div
+                                  style={{
+                                    background: "rgba(251,191,36,0.1)",
+                                    borderRadius: "12px",
+                                    padding: "15px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "0.8rem",
+                                      color: "var(--text-secondary)",
+                                      marginBottom: "5px",
+                                    }}
+                                  >
+                                    Assignments
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "1.5rem",
+                                      fontWeight: 700,
+                                      color: "#fbbf24",
+                                    }}
+                                  >
+                                    {grades.length}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                        {!selectedStudent && (
+                          <p
+                            style={{
+                              fontSize: "0.85rem",
+                              color: "var(--text-secondary)",
+                              marginBottom: "15px",
+                            }}
+                          >
+                            Click a student name below to view details
+                          </p>
+                        )}
+
+                        {(() => {
+                          const filtered = selectedStudent
+                            ? (filteredAnalytics.student_progress || []).filter(
+                                (s) => s.name === selectedStudent,
+                              )
+                            : filteredAnalytics.student_progress || [];
+                          const allGrades = filtered.flatMap((s) =>
+                            (s.grades || []).map((g) => ({
+                              ...g,
+                              student: s.name.split(" ")[0],
+                            })),
+                          );
+                          const chartData = allGrades.sort((a, b) =>
+                            (a.date || "").localeCompare(b.date || ""),
+                          );
+                          const chartWidth = Math.max(
+                            800,
+                            chartData.length * 80,
+                          );
+
+                          return (
+                            <div
+                              style={{ overflowX: "auto", overflowY: "hidden" }}
+                            >
+                              <div style={{ width: chartWidth, height: 300 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart
+                                    data={chartData}
+                                    margin={{
+                                      top: 15,
+                                      bottom: 80,
+                                      left: 10,
+                                      right: 30,
+                                    }}
+                                  >
+                                    <CartesianGrid
+                                      strokeDasharray="3 3"
+                                      stroke="var(--glass-border)"
+                                    />
+                                    <XAxis
+                                      dataKey="assignment"
+                                      tick={{
+                                        fill: "var(--text-secondary)",
+                                        fontSize: 10,
+                                      }}
+                                      angle={-45}
+                                      textAnchor="end"
+                                      height={100}
+                                      interval={0}
+                                      tickFormatter={(value) =>
+                                        value && value.length > 25
+                                          ? value.substring(0, 25) + "..."
+                                          : value
+                                      }
+                                    />
+                                    <YAxis
+                                      domain={[0, 100]}
+                                      tick={{ fill: "var(--text-secondary)" }}
+                                    />
+                                    <Tooltip
+                                      contentStyle={{
+                                        background: "var(--modal-content-bg)",
+                                        border: "1px solid var(--glass-border)",
+                                        borderRadius: "8px",
+                                      }}
+                                      formatter={(value, name) => [
+                                        value + "%",
+                                        "Score",
+                                      ]}
+                                      labelFormatter={(label) => label}
+                                    />
+                                    <Line
+                                      type="monotone"
+                                      dataKey="score"
+                                      stroke="#6366f1"
+                                      strokeWidth={3}
+                                      dot={{ fill: "#6366f1", r: 5 }}
+                                    />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Needs Attention + Top Performers */}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: "20px",
+                          marginBottom: "20px",
+                        }}
+                      >
                         <div
                           style={{
-                            display: "flex",
-                            gap: "10px",
-                            marginBottom: "15px",
-                            flexWrap: "wrap",
+                            background: "rgba(239,68,68,0.1)",
+                            borderRadius: "20px",
+                            border: "1px solid rgba(239,68,68,0.3)",
+                            padding: "25px",
                           }}
                         >
-                          <span
+                          <h3
                             style={{
-                              padding: "6px 12px",
-                              borderRadius: "20px",
-                              background: "rgba(99,102,241,0.15)",
-                              color: "var(--accent-light)",
-                              fontSize: "0.85rem",
-                              fontWeight: 500,
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              color: "#f87171",
                             }}
                           >
-                            <Icon name="MapPin" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
-                            {{FL: "Florida", TX: "Texas", CA: "California", NY: "New York", GA: "Georgia", NC: "North Carolina", VA: "Virginia", OH: "Ohio", PA: "Pennsylvania", IL: "Illinois"}[config.state] || config.state}
-                          </span>
-                          <span
-                            style={{
-                              padding: "6px 12px",
-                              borderRadius: "20px",
-                              background: "rgba(74,222,128,0.15)",
-                              color: "#4ade80",
-                              fontSize: "0.85rem",
-                              fontWeight: 500,
-                            }}
-                          >
-                            <Icon name="GraduationCap" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
-                            Grade {config.grade_level}
-                          </span>
-                          <span
-                            style={{
-                              padding: "6px 12px",
-                              borderRadius: "20px",
-                              background: "rgba(251,191,36,0.15)",
-                              color: "#fbbf24",
-                              fontSize: "0.85rem",
-                              fontWeight: 500,
-                            }}
-                          >
-                            <Icon name="BookOpen" size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
-                            {config.subject}
-                          </span>
-                        </div>
-
-                        <div style={{ maxHeight: "500px", overflowY: "auto" }}>
-                          {plannerLoading ? (
-                            <div
-                              style={{
-                                textAlign: "center",
-                                padding: "40px",
-                                color: "var(--text-secondary)",
-                              }}
-                            >
-                              <Icon
-                                name="Loader2"
-                                size={30}
-                                style={{ animation: "spin 1s linear infinite" }}
-                              />
-                              <p style={{ marginTop: "10px" }}>
-                                Loading standards...
-                              </p>
-                            </div>
-                          ) : standards.length > 0 ? (
-                            standards.map((std) => (
-                              <StandardCard
-                                key={std.code}
-                                standard={std}
-                                isSelected={selectedStandards.includes(
-                                  std.code,
-                                )}
-                                onToggle={() => toggleStandard(std.code)}
-                                isExpanded={expandedStandards.includes(std.code)}
-                                onExpand={() => setExpandedStandards(prev =>
-                                  prev.includes(std.code)
-                                    ? prev.filter(c => c !== std.code)
-                                    : [...prev, std.code]
-                                )}
-                              />
-                            ))
+                            <Icon name="AlertTriangle" size={20} />
+                            Needs Attention
+                          </h3>
+                          {(filteredAnalytics.attention_needed || []).length ===
+                          0 ? (
+                            <p style={{ color: "var(--text-secondary)" }}>
+                              All students are doing well!
+                            </p>
                           ) : (
                             <div
                               style={{
-                                textAlign: "center",
-                                padding: "40px",
-                                background: "var(--glass-bg)",
-                                borderRadius: "12px",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "10px",
                               }}
                             >
-                              <p style={{ color: "var(--text-secondary)" }}>
-                                No standards found for this configuration.
-                              </p>
+                              {(filteredAnalytics.attention_needed || [])
+                                .slice(0, 5)
+                                .map((s, i) => (
+                                  <div
+                                    key={i}
+                                    onClick={() => setSelectedStudent(s.name)}
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      padding: "10px 15px",
+                                      background: "var(--input-bg)",
+                                      borderRadius: "10px",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        textDecoration: "underline dotted",
+                                      }}
+                                    >
+                                      {s.name}
+                                    </span>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "10px",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          color: "#f87171",
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        {s.average}%
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: "0.8rem",
+                                          padding: "2px 8px",
+                                          borderRadius: "4px",
+                                          background:
+                                            s.trend === "declining"
+                                              ? "rgba(239,68,68,0.3)"
+                                              : "rgba(251,191,36,0.3)",
+                                          color:
+                                            s.trend === "declining"
+                                              ? "#f87171"
+                                              : "#fbbf24",
+                                        }}
+                                      >
+                                        {s.trend}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
                             </div>
                           )}
                         </div>
+
+                        <div
+                          style={{
+                            background: "rgba(74,222,128,0.1)",
+                            borderRadius: "20px",
+                            border: "1px solid rgba(74,222,128,0.3)",
+                            padding: "25px",
+                          }}
+                        >
+                          <h3
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              color: "#4ade80",
+                            }}
+                          >
+                            <Icon name="Award" size={20} />
+                            Top Performers
+                          </h3>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "10px",
+                            }}
+                          >
+                            {(filteredAnalytics.top_performers || []).map(
+                              (s, i) => (
+                                <div
+                                  key={i}
+                                  onClick={() => setSelectedStudent(s.name)}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    padding: "10px 15px",
+                                    background: "var(--input-bg)",
+                                    borderRadius: "10px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        width: "24px",
+                                        height: "24px",
+                                        borderRadius: "50%",
+                                        background:
+                                          i === 0
+                                            ? "#fbbf24"
+                                            : i === 1
+                                              ? "#94a3b8"
+                                              : i === 2
+                                                ? "#cd7f32"
+                                                : "var(--glass-border)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontSize: "0.75rem",
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      {i + 1}
+                                    </span>
+                                    <span
+                                      style={{
+                                        textDecoration: "underline dotted",
+                                      }}
+                                    >
+                                      {s.name}
+                                    </span>
+                                  </div>
+                                  <span
+                                    style={{
+                                      color: "#4ade80",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {s.average}%
+                                  </span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
+
+                      {/* Missing Assignments Section */}
+                      <div className="glass-card" style={{ padding: "25px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: "20px",
+                          }}
+                        >
+                          <h3
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              margin: 0,
+                            }}
+                          >
+                            <Icon name="UserX" size={20} />
+                            Missing Assignments
+                          </h3>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (!config.assignments_folder) {
+                                addToast(
+                                  "Set assignments folder in Settings first",
+                                  "error",
+                                );
+                                return;
+                              }
+                              setMissingFilesLoading(true);
+                              api
+                                .listFiles(config.assignments_folder)
+                                .then((data) =>
+                                  setMissingUploadedFiles(data.files || []),
+                                )
+                                .catch(() => setMissingUploadedFiles([]))
+                                .finally(() => setMissingFilesLoading(false));
+                            }}
+                            style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                          >
+                            <Icon name="RefreshCw" size={14} />
+                            Refresh
+                          </button>
+                        </div>
+
+                        {/* Filters */}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "15px",
+                            flexWrap: "wrap",
+                            marginBottom: "20px",
+                          }}
+                        >
+                          <div style={{ flex: "1", minWidth: "180px" }}>
+                            <label
+                              style={{
+                                fontSize: "0.8rem",
+                                color: "#888",
+                                marginBottom: "4px",
+                                display: "block",
+                              }}
+                            >
+                              Period
+                            </label>
+                            <select
+                              className="input"
+                              value={missingPeriodFilter}
+                              onChange={(e) => {
+                                setMissingPeriodFilter(e.target.value);
+                                setMissingStudentFilter("");
+                              }}
+                              style={{ width: "100%" }}
+                            >
+                              <option value="">All Periods</option>
+                              {sortedPeriods.map((p) => (
+                                <option key={p.filename} value={p.filename}>
+                                  {p.period_name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div style={{ flex: "1", minWidth: "180px" }}>
+                            <label
+                              style={{
+                                fontSize: "0.8rem",
+                                color: "#888",
+                                marginBottom: "4px",
+                                display: "block",
+                              }}
+                            >
+                              Student
+                            </label>
+                            <div style={{ position: "relative" }}>
+                              <input
+                                type="text"
+                                className="input"
+                                list="missing-student-suggestions"
+                                placeholder="Type or select student..."
+                                value={missingStudentFilter}
+                                onChange={(e) =>
+                                  setMissingStudentFilter(e.target.value)
+                                }
+                                onClick={(e) => {
+                                  if (missingStudentFilter) {
+                                    e.target.dataset.prev =
+                                      missingStudentFilter;
+                                    setMissingStudentFilter("");
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  if (
+                                    !missingStudentFilter &&
+                                    e.target.dataset.prev
+                                  ) {
+                                    setMissingStudentFilter(
+                                      e.target.dataset.prev,
+                                    );
+                                    e.target.dataset.prev = "";
+                                  }
+                                }}
+                                style={{
+                                  width: "100%",
+                                  paddingRight: missingStudentFilter
+                                    ? "30px"
+                                    : undefined,
+                                }}
+                              />
+                              {missingStudentFilter && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setMissingStudentFilter("");
+                                  }}
+                                  style={{
+                                    position: "absolute",
+                                    right: "8px",
+                                    top: "50%",
+                                    transform: "translateY(-50%)",
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    color: "#888",
+                                    padding: "4px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                  }}
+                                  title="Clear"
+                                >
+                                  <Icon name="X" size={14} />
+                                </button>
+                              )}
+                            </div>
+                            <datalist id="missing-student-suggestions">
+                              {(missingPeriodFilter
+                                ? sortedPeriods.find(
+                                    (p) => p.filename === missingPeriodFilter,
+                                  )?.students || []
+                                : sortedPeriods.flatMap((p) => p.students || [])
+                              ).map((s, i) => {
+                                const name =
+                                  s.full ||
+                                  s.name ||
+                                  (
+                                    (s.first || "") +
+                                    " " +
+                                    (s.last || "")
+                                  ).trim();
+                                return <option key={i} value={name} />;
+                              })}
+                            </datalist>
+                          </div>
+                          <div style={{ flex: "1", minWidth: "180px" }}>
+                            <label
+                              style={{
+                                fontSize: "0.8rem",
+                                color: "#888",
+                                marginBottom: "4px",
+                                display: "block",
+                              }}
+                            >
+                              Assignment
+                            </label>
+                            <select
+                              className="input"
+                              value={missingAssignmentFilter}
+                              onChange={(e) =>
+                                setMissingAssignmentFilter(e.target.value)
+                              }
+                              style={{ width: "100%" }}
+                            >
+                              <option value="">All Assignments</option>
+                              {savedAssignments.map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                  {savedAssignmentData[name]?.completionOnly
+                                    ? " (Completion)"
+                                    : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Missing Report */}
+                        {periods.length === 0 ? (
+                          <div
+                            style={{
+                              color: "#888",
+                              textAlign: "center",
+                              padding: "20px",
+                            }}
+                          >
+                            <Icon
+                              name="AlertCircle"
+                              size={24}
+                              style={{ marginBottom: "10px", opacity: 0.5 }}
+                            />
+                            <div>
+                              Upload period rosters in Settings to track missing
+                              assignments
+                            </div>
+                          </div>
+                        ) : missingFilesLoading ? (
+                          <div
+                            style={{
+                              color: "#888",
+                              textAlign: "center",
+                              padding: "20px",
+                            }}
+                          >
+                            Loading files...
+                          </div>
+                        ) : (
+                          (() => {
+                            // Get assignments to check
+                            const assignmentsToCheck = missingAssignmentFilter
+                              ? [missingAssignmentFilter]
+                              : savedAssignments;
+
+                            // Get periods to check
+                            const periodsToCheck = missingPeriodFilter
+                              ? sortedPeriods.filter(
+                                  (p) => p.filename === missingPeriodFilter,
+                                )
+                              : sortedPeriods;
+
+                            // Build set of uploaded file names (normalized)
+                            const uploadedNames = new Set(
+                              missingUploadedFiles.map((f) =>
+                                (f.name || f)
+                                  .toLowerCase()
+                                  .replace(/[_\-\.]/g, " ")
+                                  .trim(),
+                              ),
+                            );
+
+                            // Check if student has uploaded for an assignment (including aliases)
+                            const hasUploaded = (
+                              studentName,
+                              assignmentName,
+                            ) => {
+                              const sName = studentName.toLowerCase();
+                              // Get all names to check (current name + aliases)
+                              const assignmentData =
+                                savedAssignmentData[assignmentName] || {};
+                              const namesToCheck = [
+                                assignmentName.toLowerCase(),
+                                ...(assignmentData.aliases || []).map((a) =>
+                                  a.toLowerCase(),
+                                ),
+                              ];
+
+                              return [...uploadedNames].some((fileName) => {
+                                const fLower = fileName.toLowerCase();
+                                const nameParts = sName.split(" ");
+                                const hasStudentName =
+                                  nameParts.every((part) =>
+                                    fLower.includes(part),
+                                  ) || fLower.includes(sName.replace(" ", ""));
+                                // Check if file matches any of the assignment names (current or aliases)
+                                const hasAssignment = namesToCheck.some(
+                                  (aName) =>
+                                    fLower.includes(
+                                      aName.replace(/[_\-]/g, " "),
+                                    ),
+                                );
+                                return hasStudentName && hasAssignment;
+                              });
+                            };
+
+                            // If filtering by student
+                            if (missingStudentFilter) {
+                              const studentLower =
+                                missingStudentFilter.toLowerCase();
+                              let studentInfo = null;
+                              let studentPeriod = null;
+
+                              for (const period of periodsToCheck) {
+                                const found = (period.students || []).find(
+                                  (s) => {
+                                    const fullName = (
+                                      s.full ||
+                                      s.name ||
+                                      (
+                                        (s.first || "") +
+                                        " " +
+                                        (s.last || "")
+                                      ).trim()
+                                    ).toLowerCase();
+                                    return (
+                                      fullName.includes(studentLower) ||
+                                      studentLower.includes(fullName)
+                                    );
+                                  },
+                                );
+                                if (found) {
+                                  studentInfo = found;
+                                  studentPeriod = period.period_name;
+                                  break;
+                                }
+                              }
+
+                              const displayName = studentInfo
+                                ? studentInfo.full ||
+                                  studentInfo.name ||
+                                  (
+                                    (studentInfo.first || "") +
+                                    " " +
+                                    (studentInfo.last || "")
+                                  ).trim()
+                                : missingStudentFilter;
+
+                              const missing = assignmentsToCheck.filter(
+                                (a) => !hasUploaded(displayName, a),
+                              );
+                              const submitted = assignmentsToCheck.filter((a) =>
+                                hasUploaded(displayName, a),
+                              );
+
+                              return (
+                                <div>
+                                  <div
+                                    style={{
+                                      padding: "15px",
+                                      background: "rgba(0,0,0,0.2)",
+                                      borderRadius: "8px",
+                                      marginBottom: "15px",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontWeight: 600,
+                                        marginBottom: "8px",
+                                      }}
+                                    >
+                                      {displayName}{" "}
+                                      {studentPeriod && (
+                                        <span
+                                          style={{
+                                            color: "#888",
+                                            fontWeight: 400,
+                                          }}
+                                        >
+                                          ({studentPeriod})
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "20px",
+                                        fontSize: "0.9rem",
+                                      }}
+                                    >
+                                      <span>
+                                        <span
+                                          style={{
+                                            color: "#f59e0b",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {missing.length}
+                                        </span>{" "}
+                                        missing
+                                      </span>
+                                      <span>
+                                        <span
+                                          style={{
+                                            color: "#10b981",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {submitted.length}
+                                        </span>{" "}
+                                        uploaded
+                                      </span>
+                                      <span>
+                                        <span
+                                          style={{
+                                            color: "#6366f1",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {assignmentsToCheck.length}
+                                        </span>{" "}
+                                        total
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {missing.length > 0 ? (
+                                    <div>
+                                      <div
+                                        style={{
+                                          fontSize: "0.85rem",
+                                          color: "#888",
+                                          marginBottom: "10px",
+                                        }}
+                                      >
+                                        Missing:
+                                      </div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexWrap: "wrap",
+                                          gap: "8px",
+                                        }}
+                                      >
+                                        {missing.map((a) => (
+                                          <span
+                                            key={a}
+                                            style={{
+                                              padding: "6px 12px",
+                                              background:
+                                                "rgba(251,191,36,0.2)",
+                                              borderRadius: "6px",
+                                              fontSize: "0.85rem",
+                                              color: "#fbbf24",
+                                            }}
+                                          >
+                                            {a}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      style={{
+                                        color: "#10b981",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                      }}
+                                    >
+                                      <Icon name="CheckCircle" size={18} />
+                                      All assignments uploaded!
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            // Default: show by period
+                            let totalMissing = 0;
+                            let totalStudents = 0;
+                            const periodReports = [];
+
+                            periodsToCheck.forEach((period) => {
+                              const students = period.students || [];
+                              totalStudents += students.length;
+                              const studentsWithMissing = [];
+
+                              students.forEach((student) => {
+                                const name =
+                                  student.full ||
+                                  student.name ||
+                                  (
+                                    (student.first || "") +
+                                    " " +
+                                    (student.last || "")
+                                  ).trim();
+                                const missing = assignmentsToCheck.filter(
+                                  (a) => !hasUploaded(name, a),
+                                );
+                                if (missing.length > 0) {
+                                  studentsWithMissing.push({ name, missing });
+                                  totalMissing += missing.length;
+                                }
+                              });
+
+                              periodReports.push({
+                                period: period.period_name,
+                                total: students.length,
+                                studentsWithMissing,
+                                allComplete: studentsWithMissing.length === 0,
+                              });
+                            });
+
+                            const totalSlots =
+                              totalStudents * assignmentsToCheck.length;
+                            const totalUploaded = totalSlots - totalMissing;
+
+                            return (
+                              <div>
+                                {/* Summary Stats */}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "20px",
+                                    marginBottom: "20px",
+                                    padding: "15px",
+                                    background: "rgba(0,0,0,0.2)",
+                                    borderRadius: "8px",
+                                  }}
+                                >
+                                  <div style={{ textAlign: "center" }}>
+                                    <div
+                                      style={{
+                                        fontSize: "1.8rem",
+                                        fontWeight: 700,
+                                        color: "#f59e0b",
+                                      }}
+                                    >
+                                      {totalMissing}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#888",
+                                      }}
+                                    >
+                                      Missing
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "center" }}>
+                                    <div
+                                      style={{
+                                        fontSize: "1.8rem",
+                                        fontWeight: 700,
+                                        color: "#10b981",
+                                      }}
+                                    >
+                                      {totalUploaded}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#888",
+                                      }}
+                                    >
+                                      Uploaded
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "center" }}>
+                                    <div
+                                      style={{
+                                        fontSize: "1.8rem",
+                                        fontWeight: 700,
+                                        color: "#6366f1",
+                                      }}
+                                    >
+                                      {totalStudents}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#888",
+                                      }}
+                                    >
+                                      Students
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "center" }}>
+                                    <div
+                                      style={{
+                                        fontSize: "1.8rem",
+                                        fontWeight: 700,
+                                        color: "#8b5cf6",
+                                      }}
+                                    >
+                                      {assignmentsToCheck.length}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#888",
+                                      }}
+                                    >
+                                      Assignments
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Per Period Breakdown */}
+                                <div style={{ display: "grid", gap: "12px" }}>
+                                  {periodReports.map((report) => (
+                                    <div
+                                      key={report.period}
+                                      style={{
+                                        padding: "12px 15px",
+                                        background: "rgba(0,0,0,0.15)",
+                                        borderRadius: "8px",
+                                        border: report.allComplete
+                                          ? "1px solid rgba(16,185,129,0.3)"
+                                          : "1px solid rgba(251,191,36,0.3)",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                          marginBottom:
+                                            report.studentsWithMissing.length >
+                                            0
+                                              ? "10px"
+                                              : 0,
+                                        }}
+                                      >
+                                        <span style={{ fontWeight: 600 }}>
+                                          {report.period}
+                                        </span>
+                                        <span style={{ fontSize: "0.85rem" }}>
+                                          {report.allComplete ? (
+                                            <span style={{ color: "#10b981" }}>
+                                              ✓ All complete
+                                            </span>
+                                          ) : (
+                                            <span style={{ color: "#f59e0b" }}>
+                                              {
+                                                report.studentsWithMissing
+                                                  .length
+                                              }{" "}
+                                              students missing work
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      {report.studentsWithMissing.length >
+                                        0 && (
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: "6px",
+                                          }}
+                                        >
+                                          {report.studentsWithMissing.map(
+                                            (s, idx) => (
+                                              <div
+                                                key={idx}
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: "10px",
+                                                  flexWrap: "wrap",
+                                                }}
+                                              >
+                                                <span
+                                                  style={{
+                                                    minWidth: "140px",
+                                                    fontWeight: 500,
+                                                    fontSize: "0.9rem",
+                                                  }}
+                                                >
+                                                  {s.name}
+                                                </span>
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    gap: "5px",
+                                                    flexWrap: "wrap",
+                                                  }}
+                                                >
+                                                  {s.missing.map((a) => (
+                                                    <span
+                                                      key={a}
+                                                      style={{
+                                                        padding: "2px 8px",
+                                                        background:
+                                                          "rgba(251,191,36,0.2)",
+                                                        borderRadius: "4px",
+                                                        fontSize: "0.75rem",
+                                                        color: "#fbbf24",
+                                                      }}
+                                                    >
+                                                      {a}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            ),
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </div>
+
+                      {/* All Students Table */}
+                      <div className="glass-card" style={{ padding: "25px" }}>
+                        <h3
+                          style={{
+                            fontSize: "1.1rem",
+                            fontWeight: 700,
+                            marginBottom: "15px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <Icon name="Users" size={20} />
+                          All Students Overview
+                        </h3>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Student</th>
+                              <th style={{ textAlign: "center" }}>
+                                Assignments
+                              </th>
+                              <th style={{ textAlign: "center" }}>Average</th>
+                              <th style={{ textAlign: "center" }}>Trend</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(filteredAnalytics.student_progress || []).map(
+                              (s, i) => (
+                                <tr
+                                  key={i}
+                                  onClick={() => setSelectedStudent(s.name)}
+                                  style={{
+                                    cursor: "pointer",
+                                    background:
+                                      selectedStudent === s.name
+                                        ? "rgba(99,102,241,0.2)"
+                                        : "transparent",
+                                  }}
+                                >
+                                  <td
+                                    style={{
+                                      fontWeight: 600,
+                                      textDecoration: "underline dotted",
+                                    }}
+                                  >
+                                    {s.name}
+                                  </td>
+                                  <td style={{ textAlign: "center" }}>
+                                    {(s.grades || []).length}
+                                  </td>
+                                  <td style={{ textAlign: "center" }}>
+                                    <span
+                                      style={{
+                                        padding: "4px 12px",
+                                        borderRadius: "20px",
+                                        fontWeight: 700,
+                                        background:
+                                          s.average >= 90
+                                            ? "rgba(74,222,128,0.2)"
+                                            : s.average >= 80
+                                              ? "rgba(96,165,250,0.2)"
+                                              : s.average >= 70
+                                                ? "rgba(251,191,36,0.2)"
+                                                : "rgba(248,113,113,0.2)",
+                                        color:
+                                          s.average >= 90
+                                            ? "#4ade80"
+                                            : s.average >= 80
+                                              ? "#60a5fa"
+                                              : s.average >= 70
+                                                ? "#fbbf24"
+                                                : "#f87171",
+                                      }}
+                                    >
+                                      {s.average}%
+                                    </span>
+                                  </td>
+                                  <td style={{ textAlign: "center" }}>
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        color:
+                                          s.trend === "improving"
+                                            ? "#4ade80"
+                                            : s.trend === "declining"
+                                              ? "#f87171"
+                                              : "#94a3b8",
+                                      }}
+                                    >
+                                      <Icon
+                                        name={
+                                          s.trend === "improving"
+                                            ? "TrendingUp"
+                                            : s.trend === "declining"
+                                              ? "TrendingDown"
+                                              : "Minus"
+                                        }
+                                        size={16}
+                                      />
+                                      {s.trend}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ),
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+
+              {/* Planner Tab */}
+              {activeTab === "planner" && (
+                <div className="fade-in">
+                  {/* Mode Toggle */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    <button
+                      onClick={() => setPlannerMode("lesson")}
+                      className="btn"
+                      style={{
+                        padding: "10px 20px",
+                        background:
+                          plannerMode === "lesson"
+                            ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                            : "var(--glass-bg)",
+                        border:
+                          plannerMode === "lesson"
+                            ? "none"
+                            : "1px solid var(--glass-border)",
+                        color: plannerMode === "lesson" ? "#fff" : "var(--text-secondary)",
+                        fontWeight: 600,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="BookOpen" size={18} />
+                      Lesson Planning
+                    </button>
+                    <button
+                      onClick={() => setPlannerMode("assessment")}
+                      className="btn"
+                      style={{
+                        padding: "10px 20px",
+                        background:
+                          plannerMode === "assessment"
+                            ? "linear-gradient(135deg, #8b5cf6, #6366f1)"
+                            : "var(--glass-bg)",
+                        border:
+                          plannerMode === "assessment"
+                            ? "none"
+                            : "1px solid var(--glass-border)",
+                        color: plannerMode === "assessment" ? "#fff" : "var(--text-secondary)",
+                        fontWeight: 600,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="ClipboardCheck" size={18} />
+                      Assessment Generator
+                    </button>
+                  </div>
+
+                  {/* Lesson Planning Mode */}
+                  {plannerMode === "lesson" && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "300px 1fr",
+                      gap: "25px",
+                    }}
+                  >
+                    {/* Sidebar */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "20px",
+                      }}
+                    >
+                      {/* Unit Details */}
+                      <div className="glass-card" style={{ padding: "20px" }}>
+                        <h3
+                          style={{
+                            fontSize: "1.1rem",
+                            fontWeight: 700,
+                            marginBottom: "15px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <Icon name="FileText" size={20} /> Details
+                        </h3>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "15px",
+                          }}
+                        >
+                          <div>
+                            <label className="label">Content Type</label>
+                            <select
+                              className="input"
+                              value={unitConfig.type}
+                              onChange={(e) =>
+                                setUnitConfig({
+                                  ...unitConfig,
+                                  type: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="Unit Plan">Unit Plan</option>
+                              <option value="Lesson Plan">Lesson Plan</option>
+                              <option value="Assignment">Assignment</option>
+                              <option value="Project">Project</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="label">Title</label>
+                            <input
+                              type="text"
+                              className="input"
+                              value={unitConfig.title}
+                              onChange={(e) =>
+                                setUnitConfig({
+                                  ...unitConfig,
+                                  title: e.target.value,
+                                })
+                              }
+                              placeholder="e.g., Foundations of Government"
+                            />
+                          </div>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: "12px",
+                            }}
+                          >
+                            <div>
+                              <label className="label">Duration (Days)</label>
+                              <input
+                                type="number"
+                                className="input"
+                                value={unitConfig.duration}
+                                onChange={(e) =>
+                                  setUnitConfig({
+                                    ...unitConfig,
+                                    duration: parseInt(e.target.value) || 1,
+                                  })
+                                }
+                                min="1"
+                                max="20"
+                              />
+                            </div>
+                            <div>
+                              <label className="label">Period Length</label>
+                              <input
+                                type="number"
+                                className="input"
+                                value={unitConfig.periodLength}
+                                onChange={(e) =>
+                                  setUnitConfig({
+                                    ...unitConfig,
+                                    periodLength:
+                                      parseInt(e.target.value) || 50,
+                                  })
+                                }
+                                min="20"
+                                max="120"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="label">
+                              Additional Requirements
+                            </label>
+                            <textarea
+                              className="input"
+                              value={unitConfig.requirements}
+                              onChange={(e) =>
+                                setUnitConfig({
+                                  ...unitConfig,
+                                  requirements: e.target.value,
+                                })
+                              }
+                              placeholder="e.g. Focus on primary sources..."
+                              style={{ minHeight: "80px" }}
+                            />
+                          </div>
+                          {/* Brainstorm Button */}
+                          <button
+                            onClick={brainstormIdeasHandler}
+                            disabled={
+                              brainstormLoading ||
+                              selectedStandards.length === 0
+                            }
+                            className="btn btn-secondary"
+                            style={{
+                              width: "100%",
+                              justifyContent: "center",
+                              marginBottom: "10px",
+                              opacity:
+                                brainstormLoading ||
+                                selectedStandards.length === 0
+                                  ? 0.5
+                                  : 1,
+                            }}
+                          >
+                            {brainstormLoading ? (
+                              <Icon
+                                name="Loader2"
+                                size={18}
+                                style={{ animation: "spin 1s linear infinite" }}
+                              />
+                            ) : (
+                              <Icon name="Lightbulb" size={18} />
+                            )}
+                            {brainstormLoading
+                              ? "Brainstorming..."
+                              : "Brainstorm Ideas"}
+                          </button>
+
+                          {/* Generate Plan Button */}
+                          <button
+                            onClick={() => generateLessonPlan(false)}
+                            disabled={
+                              plannerLoading || selectedStandards.length === 0
+                            }
+                            className="btn btn-primary"
+                            style={{
+                              width: "100%",
+                              justifyContent: "center",
+                              marginBottom: "10px",
+                              opacity:
+                                plannerLoading || selectedStandards.length === 0
+                                  ? 0.5
+                                  : 1,
+                            }}
+                          >
+                            {plannerLoading ? (
+                              <Icon
+                                name="Loader2"
+                                size={18}
+                                style={{ animation: "spin 1s linear infinite" }}
+                              />
+                            ) : (
+                              <Icon name="Sparkles" size={18} />
+                            )}
+                            {plannerLoading
+                              ? "Generating..."
+                              : selectedIdea
+                                ? "Generate from Idea"
+                                : "Generate Plan"}
+                          </button>
+
+                          {/* Generate Variations Button */}
+                          <button
+                            onClick={() => generateLessonPlan(true)}
+                            disabled={
+                              plannerLoading || selectedStandards.length === 0
+                            }
+                            className="btn btn-secondary"
+                            style={{
+                              width: "100%",
+                              justifyContent: "center",
+                              opacity:
+                                plannerLoading || selectedStandards.length === 0
+                                  ? 0.5
+                                  : 1,
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            <Icon name="Layers" size={16} />
+                            Generate 3 Variations
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <div>
+                      {/* Brainstormed Ideas Section - Full Width */}
+                      {brainstormIdeas.length > 0 &&
+                        !lessonPlan &&
+                        lessonVariations.length === 0 && (
+                          <div
+                            className="glass-card"
+                            style={{ padding: "25px", marginBottom: "20px" }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "20px",
+                              }}
+                            >
+                              <h3
+                                style={{
+                                  fontSize: "1.2rem",
+                                  fontWeight: 700,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "10px",
+                                  margin: 0,
+                                }}
+                              >
+                                <Icon
+                                  name="Lightbulb"
+                                  size={24}
+                                  style={{ color: "#f59e0b" }}
+                                />{" "}
+                                Lesson Plan Ideas
+                              </h3>
+                              <button
+                                onClick={() => setBrainstormIdeas([])}
+                                className="btn btn-secondary"
+                                style={{
+                                  padding: "6px 12px",
+                                  fontSize: "0.85rem",
+                                }}
+                              >
+                                <Icon name="X" size={14} /> Clear
+                              </button>
+                            </div>
+                            <p
+                              style={{
+                                fontSize: "0.9rem",
+                                color: "var(--text-secondary)",
+                                marginBottom: "20px",
+                              }}
+                            >
+                              Select an idea to develop into a full lesson plan,
+                              or use it as inspiration.
+                            </p>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns:
+                                  "repeat(auto-fill, minmax(300px, 1fr))",
+                                gap: "15px",
+                              }}
+                            >
+                              {brainstormIdeas.map((idea) => (
+                                <div
+                                  key={idea.id}
+                                  onClick={() => {
+                                    setSelectedIdea(
+                                      selectedIdea?.id === idea.id
+                                        ? null
+                                        : idea,
+                                    );
+                                    if (selectedIdea?.id !== idea.id) {
+                                      setUnitConfig((prev) => ({
+                                        ...prev,
+                                        title: idea.title,
+                                      }));
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "20px",
+                                    borderRadius: "12px",
+                                    background:
+                                      selectedIdea?.id === idea.id
+                                        ? "rgba(99,102,241,0.15)"
+                                        : "var(--input-bg)",
+                                    border:
+                                      selectedIdea?.id === idea.id
+                                        ? "2px solid var(--accent-primary)"
+                                        : "1px solid var(--glass-border)",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      marginBottom: "10px",
+                                    }}
+                                  >
+                                    <h4
+                                      style={{
+                                        fontWeight: 600,
+                                        fontSize: "1.05rem",
+                                        margin: 0,
+                                        flex: 1,
+                                      }}
+                                    >
+                                      {idea.title}
+                                    </h4>
+                                    <span
+                                      style={{
+                                        padding: "4px 12px",
+                                        borderRadius: "12px",
+                                        fontSize: "0.75rem",
+                                        fontWeight: 600,
+                                        marginLeft: "10px",
+                                        background:
+                                          idea.approach === "Activity-Based"
+                                            ? "rgba(16,185,129,0.2)"
+                                            : idea.approach === "Discussion"
+                                              ? "rgba(99,102,241,0.2)"
+                                              : idea.approach === "Project"
+                                                ? "rgba(245,158,11,0.2)"
+                                                : idea.approach === "Simulation"
+                                                  ? "rgba(236,72,153,0.2)"
+                                                  : "rgba(107,114,128,0.2)",
+                                        color:
+                                          idea.approach === "Activity-Based"
+                                            ? "#10b981"
+                                            : idea.approach === "Discussion"
+                                              ? "#6366f1"
+                                              : idea.approach === "Project"
+                                                ? "#f59e0b"
+                                                : idea.approach === "Simulation"
+                                                  ? "#ec4899"
+                                                  : "#6b7280",
+                                      }}
+                                    >
+                                      {idea.approach}
+                                    </span>
+                                  </div>
+                                  <p
+                                    style={{
+                                      fontSize: "0.9rem",
+                                      color: "var(--text-secondary)",
+                                      marginBottom: "12px",
+                                      lineHeight: 1.5,
+                                    }}
+                                  >
+                                    {idea.brief}
+                                  </p>
+                                  <div
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      color: "var(--text-muted)",
+                                      marginBottom: "6px",
+                                    }}
+                                  >
+                                    <strong>Hook:</strong> {idea.hook}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      color: "var(--text-muted)",
+                                    }}
+                                  >
+                                    <strong>Activity:</strong>{" "}
+                                    {idea.key_activity}
+                                  </div>
+                                  {idea.tools_used && idea.tools_used !== "None - hands-on activity" && (
+                                    <div
+                                      style={{
+                                        fontSize: "0.85rem",
+                                        color: "var(--accent-light)",
+                                        marginTop: "6px",
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        gap: "6px",
+                                      }}
+                                    >
+                                      <Icon name="Monitor" size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
+                                      <span><strong>Tools:</strong> {idea.tools_used}</span>
+                                    </div>
+                                  )}
+                                  {selectedIdea?.id === idea.id && (
+                                    <div
+                                      style={{
+                                        marginTop: "12px",
+                                        padding: "10px",
+                                        background: "rgba(99,102,241,0.1)",
+                                        borderRadius: "8px",
+                                        fontSize: "0.85rem",
+                                        color: "var(--accent-light)",
+                                      }}
+                                    >
+                                      <Icon
+                                        name="CheckCircle"
+                                        size={14}
+                                        style={{
+                                          marginRight: "6px",
+                                          verticalAlign: "middle",
+                                        }}
+                                      />
+                                      Selected - Click "Generate" to create
+                                      lesson plan
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      {/* Lesson Variations Display */}
+                      {lessonVariations.length > 0 && !lessonPlan && (
+                        <div
+                          className="glass-card"
+                          style={{
+                            padding: "30px",
+                            maxHeight: "80vh",
+                            overflowY: "auto",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "25px",
+                              paddingBottom: "15px",
+                              borderBottom: "1px solid var(--glass-border)",
+                            }}
+                          >
+                            <div>
+                              <h2
+                                style={{
+                                  fontSize: "1.5rem",
+                                  fontWeight: 700,
+                                  marginBottom: "5px",
+                                }}
+                              >
+                                <Icon
+                                  name="Layers"
+                                  size={24}
+                                  style={{
+                                    marginRight: "10px",
+                                    verticalAlign: "middle",
+                                    color: "var(--accent-primary)",
+                                  }}
+                                />
+                                Lesson Plan Variations
+                              </h2>
+                              <p
+                                style={{
+                                  color: "var(--text-secondary)",
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                Compare {lessonVariations.length} different
+                                approaches to teaching this content
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setLessonVariations([])}
+                              className="btn btn-secondary"
+                            >
+                              <Icon name="X" size={16} /> Close
+                            </button>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "20px",
+                            }}
+                          >
+                            {lessonVariations.map((variation, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: "20px",
+                                  background: "var(--input-bg)",
+                                  borderRadius: "12px",
+                                  border: "1px solid var(--glass-border)",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    marginBottom: "15px",
+                                  }}
+                                >
+                                  <div>
+                                    <span
+                                      style={{
+                                        display: "inline-block",
+                                        padding: "4px 12px",
+                                        borderRadius: "15px",
+                                        fontSize: "0.75rem",
+                                        fontWeight: 600,
+                                        marginBottom: "8px",
+                                        background:
+                                          idx === 0
+                                            ? "rgba(16,185,129,0.2)"
+                                            : idx === 1
+                                              ? "rgba(99,102,241,0.2)"
+                                              : "rgba(245,158,11,0.2)",
+                                        color:
+                                          idx === 0
+                                            ? "#10b981"
+                                            : idx === 1
+                                              ? "#6366f1"
+                                              : "#f59e0b",
+                                      }}
+                                    >
+                                      {variation.approach ||
+                                        `Variation ${idx + 1}`}
+                                    </span>
+                                    <h3
+                                      style={{
+                                        fontSize: "1.2rem",
+                                        fontWeight: 600,
+                                        margin: "8px 0",
+                                      }}
+                                    >
+                                      {variation.title}
+                                    </h3>
+                                    <p
+                                      style={{
+                                        color: "var(--text-secondary)",
+                                        fontSize: "0.9rem",
+                                        lineHeight: 1.5,
+                                      }}
+                                    >
+                                      {variation.overview}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setLessonPlan(variation);
+                                      setLessonVariations([]);
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ flexShrink: 0 }}
+                                  >
+                                    <Icon name="Check" size={16} /> Use This
+                                    Plan
+                                  </button>
+                                </div>
+                                {variation.essential_questions && (
+                                  <div style={{ marginTop: "10px" }}>
+                                    <strong
+                                      style={{
+                                        fontSize: "0.85rem",
+                                        color: "var(--text-primary)",
+                                      }}
+                                    >
+                                      Essential Questions:
+                                    </strong>
+                                    <ul
+                                      style={{
+                                        margin: "5px 0 0 20px",
+                                        fontSize: "0.85rem",
+                                        color: "var(--text-secondary)",
+                                      }}
+                                    >
+                                      {variation.essential_questions
+                                        .slice(0, 2)
+                                        .map((q, i) => (
+                                          <li key={i}>{q}</li>
+                                        ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {variation.days && (
+                                  <div
+                                    style={{
+                                      marginTop: "10px",
+                                      fontSize: "0.85rem",
+                                      color: "var(--text-muted)",
+                                    }}
+                                  >
+                                    <Icon
+                                      name="Calendar"
+                                      size={14}
+                                      style={{
+                                        marginRight: "6px",
+                                        verticalAlign: "middle",
+                                      }}
+                                    />
+                                    {variation.days.length} day
+                                    {variation.days.length !== 1
+                                      ? "s"
+                                      : ""}{" "}
+                                    planned
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Single Lesson Plan Display */}
+                      {lessonPlan ? (
+                        <div
+                          className="glass-card"
+                          style={{
+                            padding: "30px",
+                            maxHeight: "80vh",
+                            overflowY: "auto",
+                          }}
+                        >
+                          {/* Header */}
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                              marginBottom: "25px",
+                              borderBottom: "1px solid var(--glass-border)",
+                              paddingBottom: "20px",
+                            }}
+                          >
+                            <div>
+                              <h2
+                                style={{
+                                  fontSize: "1.8rem",
+                                  fontWeight: 700,
+                                  marginBottom: "10px",
+                                }}
+                              >
+                                {lessonPlan.title}
+                              </h2>
+                              <p
+                                style={{
+                                  color: "var(--text-secondary)",
+                                  lineHeight: "1.6",
+                                }}
+                              >
+                                {lessonPlan.overview}
+                              </p>
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "10px",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <button
+                                onClick={exportLessonPlanHandler}
+                                className="btn btn-secondary"
+                              >
+                                <Icon name="Download" size={16} /> Export
+                              </button>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "8px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <select
+                                  value={assignmentType}
+                                  onChange={(e) =>
+                                    setAssignmentType(e.target.value)
+                                  }
+                                  className="input"
+                                  style={{
+                                    padding: "8px 12px",
+                                    minWidth: "120px",
+                                  }}
+                                >
+                                  <option value="worksheet">Worksheet</option>
+                                  <option value="quiz">Quiz</option>
+                                  <option value="homework">Homework</option>
+                                  <option value="project">Project</option>
+                                  <option value="essay">Essay</option>
+                                  <option value="lab">Lab Activity</option>
+                                </select>
+                                <button
+                                  onClick={generateAssignmentFromLessonHandler}
+                                  className="btn btn-primary"
+                                  disabled={assignmentLoading}
+                                >
+                                  {assignmentLoading ? (
+                                    <>
+                                      <Icon
+                                        name="Loader"
+                                        size={16}
+                                        className="spinning"
+                                      />{" "}
+                                      Generating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Icon name="FileText" size={16} /> Create
+                                      Assignment
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setLessonPlan(null);
+                                  setSelectedIdea(null);
+                                  setBrainstormIdeas([]);
+                                  setGeneratedAssignment(null);
+                                }}
+                                className="btn btn-secondary"
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Days */}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "30px",
+                            }}
+                          >
+                            {(lessonPlan.days || []).map((day, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  background: "var(--input-bg)",
+                                  borderRadius: "16px",
+                                  padding: "25px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "15px",
+                                    marginBottom: "20px",
+                                    paddingBottom: "15px",
+                                    borderBottom:
+                                      "1px solid var(--glass-border)",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: "50px",
+                                      height: "50px",
+                                      borderRadius: "12px",
+                                      background:
+                                        "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontWeight: 700,
+                                      fontSize: "1.2rem",
+                                    }}
+                                  >
+                                    {day.day}
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <h3
+                                      style={{
+                                        fontSize: "1.3rem",
+                                        fontWeight: 600,
+                                        marginBottom: "8px",
+                                      }}
+                                    >
+                                      {day.topic}
+                                    </h3>
+                                    <p
+                                      style={{
+                                        fontSize: "0.9rem",
+                                        color: "var(--text-primary)",
+                                      }}
+                                    >
+                                      <strong style={{ color: "#10b981" }}>
+                                        Objective:
+                                      </strong>{" "}
+                                      {day.objective}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {day.bell_ringer && (
+                                  <div
+                                    style={{
+                                      marginBottom: "15px",
+                                      padding: "15px",
+                                      background: "rgba(165,180,252,0.1)",
+                                      borderRadius: "10px",
+                                      border: "1px solid rgba(165,180,252,0.2)",
+                                    }}
+                                  >
+                                    <h4
+                                      style={{
+                                        fontSize: "0.9rem",
+                                        color: "#a5b4fc",
+                                        marginBottom: "8px",
+                                      }}
+                                    >
+                                      <Icon name="Zap" size={14} /> Bell Ringer
+                                    </h4>
+                                    <p style={{ fontSize: "0.9rem" }}>
+                                      {typeof day.bell_ringer === "object"
+                                        ? day.bell_ringer.prompt
+                                        : day.bell_ringer}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {day.activity && (
+                                  <div
+                                    style={{
+                                      marginBottom: "15px",
+                                      padding: "15px",
+                                      background: "rgba(74,222,128,0.1)",
+                                      borderRadius: "10px",
+                                      border: "1px solid rgba(74,222,128,0.2)",
+                                    }}
+                                  >
+                                    <h4
+                                      style={{
+                                        fontSize: "0.9rem",
+                                        color: "#4ade80",
+                                        marginBottom: "8px",
+                                      }}
+                                    >
+                                      <Icon name="Activity" size={14} /> Main
+                                      Activity
+                                    </h4>
+                                    <p style={{ fontSize: "0.9rem" }}>
+                                      {typeof day.activity === "object"
+                                        ? day.activity.description
+                                        : day.activity}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {day.assessment && (
+                                  <div
+                                    style={{
+                                      padding: "15px",
+                                      background: "rgba(248,113,113,0.1)",
+                                      borderRadius: "10px",
+                                      border: "1px solid rgba(248,113,113,0.2)",
+                                    }}
+                                  >
+                                    <h4
+                                      style={{
+                                        fontSize: "0.9rem",
+                                        color: "#f87171",
+                                        marginBottom: "8px",
+                                      }}
+                                    >
+                                      <Icon name="CheckCircle" size={14} />{" "}
+                                      Assessment
+                                    </h4>
+                                    <p style={{ fontSize: "0.9rem" }}>
+                                      {typeof day.assessment === "object"
+                                        ? day.assessment.description
+                                        : day.assessment}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Generated Assignment Section */}
+                          {generatedAssignment && (
+                            <div
+                              style={{
+                                marginTop: "30px",
+                                padding: "25px",
+                                background:
+                                  "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(6,182,212,0.1))",
+                                borderRadius: "16px",
+                                border: "1px solid rgba(16,185,129,0.3)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  marginBottom: "20px",
+                                }}
+                              >
+                                <div>
+                                  <h3
+                                    style={{
+                                      fontSize: "1.4rem",
+                                      fontWeight: 700,
+                                      marginBottom: "8px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                    }}
+                                  >
+                                    <Icon
+                                      name="FileText"
+                                      size={24}
+                                      style={{ color: "#10b981" }}
+                                    />
+                                    {generatedAssignment.title}
+                                  </h3>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "10px",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        padding: "4px 10px",
+                                        background: "rgba(16,185,129,0.2)",
+                                        color: "#10b981",
+                                        borderRadius: "12px",
+                                        fontSize: "0.8rem",
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      {generatedAssignment.type
+                                        ?.charAt(0)
+                                        .toUpperCase() +
+                                        generatedAssignment.type?.slice(1)}
+                                    </span>
+                                    {generatedAssignment.time_estimate && (
+                                      <span
+                                        style={{
+                                          padding: "4px 10px",
+                                          background: "rgba(99,102,241,0.2)",
+                                          color: "#818cf8",
+                                          borderRadius: "12px",
+                                          fontSize: "0.8rem",
+                                        }}
+                                      >
+                                        <Icon
+                                          name="Clock"
+                                          size={12}
+                                          style={{ marginRight: "4px" }}
+                                        />
+                                        {generatedAssignment.time_estimate}
+                                      </span>
+                                    )}
+                                    {generatedAssignment.total_points && (
+                                      <span
+                                        style={{
+                                          padding: "4px 10px",
+                                          background: "rgba(251,191,36,0.2)",
+                                          color: "#fbbf24",
+                                          borderRadius: "12px",
+                                          fontSize: "0.8rem",
+                                        }}
+                                      >
+                                        {generatedAssignment.total_points}{" "}
+                                        points
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result =
+                                          await api.exportGeneratedAssignment(
+                                            generatedAssignment,
+                                            "pdf",
+                                            false,
+                                          );
+                                        if (result.error) {
+                                          addToast(
+                                            "Error: " + result.error,
+                                            "error",
+                                          );
+                                        } else {
+                                          addToast(
+                                            "Student worksheet exported as PDF!",
+                                            "success",
+                                          );
+                                        }
+                                      } catch (e) {
+                                        addToast(
+                                          "Export failed: " + e.message,
+                                          "error",
+                                        );
+                                      }
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export student version as PDF"
+                                  >
+                                    <Icon name="Download" size={16} />
+                                    Export PDF
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result =
+                                          await api.exportGeneratedAssignment(
+                                            generatedAssignment,
+                                            "pdf",
+                                            true,
+                                          );
+                                        if (result.error) {
+                                          addToast(
+                                            "Error: " + result.error,
+                                            "error",
+                                          );
+                                        } else {
+                                          addToast(
+                                            "Answer key exported as PDF!",
+                                            "success",
+                                          );
+                                        }
+                                      } catch (e) {
+                                        addToast(
+                                          "Export failed: " + e.message,
+                                          "error",
+                                        );
+                                      }
+                                    }}
+                                    className="btn btn-secondary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export teacher version with answers as PDF"
+                                  >
+                                    <Icon name="Key" size={16} />
+                                    Answer Key
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setShowInteractivePreview(true)
+                                    }
+                                    className="btn btn-primary"
+                                    style={{
+                                      padding: "8px 14px",
+                                      background:
+                                        "linear-gradient(135deg, #10b981, #059669)",
+                                    }}
+                                    title="Preview assignment as students will see it"
+                                  >
+                                    <Icon name="Play" size={16} />
+                                    Interactive Preview
+                                  </button>
+                                  <button
+                                    onClick={() => setGeneratedAssignment(null)}
+                                    className="btn btn-secondary"
+                                    style={{ padding: "6px 12px" }}
+                                  >
+                                    <Icon name="X" size={16} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {generatedAssignment.instructions && (
+                                <div
+                                  style={{
+                                    padding: "15px",
+                                    background: "var(--glass-bg)",
+                                    borderRadius: "10px",
+                                    marginBottom: "20px",
+                                  }}
+                                >
+                                  <h4
+                                    style={{
+                                      fontSize: "0.9rem",
+                                      fontWeight: 600,
+                                      marginBottom: "8px",
+                                    }}
+                                  >
+                                    <Icon
+                                      name="Info"
+                                      size={14}
+                                      style={{ marginRight: "6px" }}
+                                    />
+                                    Instructions
+                                  </h4>
+                                  <p
+                                    style={{
+                                      fontSize: "0.9rem",
+                                      color: "var(--text-secondary)",
+                                    }}
+                                  >
+                                    {generatedAssignment.instructions}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Assignment Sections */}
+                              {generatedAssignment.sections?.map(
+                                (section, sIdx) => (
+                                  <div
+                                    key={sIdx}
+                                    style={{
+                                      marginBottom: "20px",
+                                      padding: "20px",
+                                      background: "var(--input-bg)",
+                                      borderRadius: "12px",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        marginBottom: "15px",
+                                      }}
+                                    >
+                                      <h4
+                                        style={{
+                                          fontSize: "1rem",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {section.name}
+                                      </h4>
+                                      <span
+                                        style={{
+                                          padding: "4px 8px",
+                                          background: "rgba(99,102,241,0.15)",
+                                          color: "var(--accent-light)",
+                                          borderRadius: "8px",
+                                          fontSize: "0.8rem",
+                                        }}
+                                      >
+                                        {section.points} pts
+                                      </span>
+                                    </div>
+
+                                    {section.questions?.map((q, qIdx) => (
+                                      <div
+                                        key={qIdx}
+                                        style={{
+                                          padding: "12px",
+                                          background: "var(--glass-bg)",
+                                          borderRadius: "8px",
+                                          marginBottom: "10px",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "10px",
+                                          }}
+                                        >
+                                          <span
+                                            style={{
+                                              minWidth: "24px",
+                                              height: "24px",
+                                              background:
+                                                "var(--accent-primary)",
+                                              borderRadius: "50%",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              fontSize: "0.8rem",
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            {q.number}
+                                          </span>
+                                          <div style={{ flex: 1 }}>
+                                            <p style={{ marginBottom: "8px" }}>
+                                              {q.question}
+                                            </p>
+                                            {q.options && (
+                                              <div
+                                                style={{
+                                                  paddingLeft: "10px",
+                                                  fontSize: "0.9rem",
+                                                  color:
+                                                    "var(--text-secondary)",
+                                                }}
+                                              >
+                                                {q.options.map((opt, oIdx) => (
+                                                  <div key={oIdx}>{opt}</div>
+                                                ))}
+                                              </div>
+                                            )}
+                                            <div
+                                              style={{
+                                                marginTop: "8px",
+                                                fontSize: "0.8rem",
+                                                color: "#10b981",
+                                                fontStyle: "italic",
+                                              }}
+                                            >
+                                              Answer: {q.answer}
+                                            </div>
+                                          </div>
+                                          <span
+                                            style={{
+                                              fontSize: "0.8rem",
+                                              color: "var(--text-secondary)",
+                                            }}
+                                          >
+                                            {q.points} pts
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ),
+                              )}
+
+                              {/* Rubric */}
+                              {generatedAssignment.rubric?.criteria && (
+                                <div
+                                  style={{
+                                    padding: "15px",
+                                    background: "rgba(251,191,36,0.1)",
+                                    borderRadius: "10px",
+                                    border: "1px solid rgba(251,191,36,0.2)",
+                                  }}
+                                >
+                                  <h4
+                                    style={{
+                                      fontSize: "0.9rem",
+                                      color: "#fbbf24",
+                                      marginBottom: "10px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    <Icon
+                                      name="Award"
+                                      size={14}
+                                      style={{ marginRight: "6px" }}
+                                    />
+                                    Grading Rubric
+                                  </h4>
+                                  {generatedAssignment.rubric.criteria.map(
+                                    (c, cIdx) => (
+                                      <div
+                                        key={cIdx}
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          padding: "8px 0",
+                                          borderBottom:
+                                            cIdx <
+                                            generatedAssignment.rubric.criteria
+                                              .length -
+                                              1
+                                              ? "1px solid rgba(251,191,36,0.2)"
+                                              : "none",
+                                        }}
+                                      >
+                                        <span style={{ fontWeight: 500 }}>
+                                          {c.name}
+                                        </span>
+                                        <span
+                                          style={{
+                                            color: "var(--text-secondary)",
+                                            fontSize: "0.9rem",
+                                          }}
+                                        >
+                                          {c.points} pts - {c.description}
+                                        </span>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="glass-card" style={{ padding: "25px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "15px",
+                            }}
+                          >
+                            <h3
+                              style={{
+                                fontSize: "1.1rem",
+                                fontWeight: 700,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                              }}
+                            >
+                              <Icon name="Library" size={20} /> Select Standards
+                              ({selectedStandards.length})
+                            </h3>
+                            <span
+                              style={{
+                                fontSize: "0.9rem",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              {standards.length} standards available
+                            </span>
+                          </div>
+
+                          {/* Current config display */}
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "10px",
+                              marginBottom: "15px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "20px",
+                                background: "rgba(99,102,241,0.15)",
+                                color: "var(--accent-light)",
+                                fontSize: "0.85rem",
+                                fontWeight: 500,
+                              }}
+                            >
+                              <Icon
+                                name="MapPin"
+                                size={14}
+                                style={{
+                                  marginRight: "6px",
+                                  verticalAlign: "middle",
+                                }}
+                              />
+                              {{
+                                FL: "Florida",
+                                TX: "Texas",
+                                CA: "California",
+                                NY: "New York",
+                                GA: "Georgia",
+                                NC: "North Carolina",
+                                VA: "Virginia",
+                                OH: "Ohio",
+                                PA: "Pennsylvania",
+                                IL: "Illinois",
+                              }[config.state] || config.state}
+                            </span>
+                            <span
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "20px",
+                                background: "rgba(74,222,128,0.15)",
+                                color: "#4ade80",
+                                fontSize: "0.85rem",
+                                fontWeight: 500,
+                              }}
+                            >
+                              <Icon
+                                name="GraduationCap"
+                                size={14}
+                                style={{
+                                  marginRight: "6px",
+                                  verticalAlign: "middle",
+                                }}
+                              />
+                              Grade {config.grade_level}
+                            </span>
+                            <span
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "20px",
+                                background: "rgba(251,191,36,0.15)",
+                                color: "#fbbf24",
+                                fontSize: "0.85rem",
+                                fontWeight: 500,
+                              }}
+                            >
+                              <Icon
+                                name="BookOpen"
+                                size={14}
+                                style={{
+                                  marginRight: "6px",
+                                  verticalAlign: "middle",
+                                }}
+                              />
+                              {config.subject}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{ maxHeight: "500px", overflowY: "auto" }}
+                          >
+                            {plannerLoading ? (
+                              <div
+                                style={{
+                                  textAlign: "center",
+                                  padding: "40px",
+                                  color: "var(--text-secondary)",
+                                }}
+                              >
+                                <Icon
+                                  name="Loader2"
+                                  size={30}
+                                  style={{
+                                    animation: "spin 1s linear infinite",
+                                  }}
+                                />
+                                <p style={{ marginTop: "10px" }}>
+                                  Loading standards...
+                                </p>
+                              </div>
+                            ) : standards.length > 0 ? (
+                              standards.map((std) => (
+                                <StandardCard
+                                  key={std.code}
+                                  standard={std}
+                                  isSelected={selectedStandards.includes(
+                                    std.code,
+                                  )}
+                                  onToggle={() => toggleStandard(std.code)}
+                                  isExpanded={expandedStandards.includes(
+                                    std.code,
+                                  )}
+                                  onExpand={() =>
+                                    setExpandedStandards((prev) =>
+                                      prev.includes(std.code)
+                                        ? prev.filter((c) => c !== std.code)
+                                        : [...prev, std.code],
+                                    )
+                                  }
+                                />
+                              ))
+                            ) : (
+                              <div
+                                style={{
+                                  textAlign: "center",
+                                  padding: "40px",
+                                  background: "var(--glass-bg)",
+                                  borderRadius: "12px",
+                                }}
+                              >
+                                <Icon
+                                  name="FileQuestion"
+                                  size={40}
+                                  style={{
+                                    color: "var(--text-muted)",
+                                    marginBottom: "15px",
+                                  }}
+                                />
+                                <p
+                                  style={{
+                                    color: "var(--text-secondary)",
+                                    marginBottom: "10px",
+                                  }}
+                                >
+                                  No standards found for Grade{" "}
+                                  {config.grade_level} {config.subject}.
+                                </p>
+                                <p
+                                  style={{
+                                    color: "var(--text-muted)",
+                                    fontSize: "0.85rem",
+                                  }}
+                                >
+                                  Try a different grade level or subject in
+                                  Settings.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  )}
+
+                  {/* Assessment Generator Mode */}
+                  {plannerMode === "assessment" && (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "350px 1fr",
+                        gap: "25px",
+                      }}
+                    >
+                      {/* Assessment Config Sidebar */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "20px",
+                        }}
+                      >
+                        {/* Assessment Type */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <h3
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Icon name="Settings" size={20} /> Assessment Settings
+                          </h3>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "15px",
+                            }}
+                          >
+                            <div>
+                              <label className="label">Assessment Type</label>
+                              <select
+                                className="input"
+                                value={assessmentConfig.type}
+                                onChange={(e) =>
+                                  setAssessmentConfig({
+                                    ...assessmentConfig,
+                                    type: e.target.value,
+                                  })
+                                }
+                              >
+                                <option value="quiz">Quiz</option>
+                                <option value="test">Test</option>
+                                <option value="benchmark">Benchmark Assessment</option>
+                                <option value="formative">Formative Check</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="label">Title (Optional)</label>
+                              <input
+                                type="text"
+                                className="input"
+                                value={assessmentConfig.title}
+                                onChange={(e) =>
+                                  setAssessmentConfig({
+                                    ...assessmentConfig,
+                                    title: e.target.value,
+                                  })
+                                }
+                                placeholder="Auto-generated from standards"
+                              />
+                            </div>
+                            <div>
+                              <label className="label">Total Questions</label>
+                              <input
+                                type="number"
+                                className="input"
+                                value={assessmentConfig.totalQuestions}
+                                onChange={(e) => {
+                                  const newTotal = parseInt(e.target.value) || 10;
+                                  const currentTypes = assessmentConfig.questionTypes || {};
+                                  const currentTotal = Object.values(currentTypes).reduce((a, b) => a + b, 0);
+
+                                  // Redistribute question types proportionately
+                                  let newTypes = { ...currentTypes };
+                                  if (currentTotal > 0) {
+                                    let remaining = newTotal;
+                                    const keys = Object.keys(currentTypes).filter(k => currentTypes[k] > 0);
+                                    keys.forEach((key, idx) => {
+                                      if (idx === keys.length - 1) {
+                                        newTypes[key] = Math.max(0, remaining);
+                                      } else {
+                                        const proportion = currentTypes[key] / currentTotal;
+                                        const newCount = Math.round(newTotal * proportion);
+                                        newTypes[key] = newCount;
+                                        remaining -= newCount;
+                                      }
+                                    });
+                                  } else {
+                                    newTypes = {
+                                      multiple_choice: Math.round(newTotal * 0.6),
+                                      short_answer: Math.round(newTotal * 0.2),
+                                      extended_response: newTotal - Math.round(newTotal * 0.6) - Math.round(newTotal * 0.2),
+                                    };
+                                  }
+
+                                  // Redistribute DOK distribution proportionately
+                                  const currentDok = assessmentConfig.dokDistribution || {};
+                                  const currentDokTotal = Object.values(currentDok).reduce((a, b) => a + b, 0);
+                                  let newDok = { ...currentDok };
+                                  if (currentDokTotal > 0) {
+                                    let dokRemaining = newTotal;
+                                    const dokKeys = Object.keys(currentDok).filter(k => currentDok[k] > 0);
+                                    dokKeys.forEach((key, idx) => {
+                                      if (idx === dokKeys.length - 1) {
+                                        newDok[key] = Math.max(0, dokRemaining);
+                                      } else {
+                                        const proportion = currentDok[key] / currentDokTotal;
+                                        const newCount = Math.round(newTotal * proportion);
+                                        newDok[key] = newCount;
+                                        dokRemaining -= newCount;
+                                      }
+                                    });
+                                  } else {
+                                    // Default DOK distribution
+                                    newDok = {
+                                      "1": Math.round(newTotal * 0.2),
+                                      "2": Math.round(newTotal * 0.4),
+                                      "3": Math.round(newTotal * 0.27),
+                                      "4": newTotal - Math.round(newTotal * 0.2) - Math.round(newTotal * 0.4) - Math.round(newTotal * 0.27),
+                                    };
+                                  }
+
+                                  setAssessmentConfig({
+                                    ...assessmentConfig,
+                                    totalQuestions: newTotal,
+                                    questionTypes: newTypes,
+                                    dokDistribution: newDok,
+                                  });
+                                }}
+                                min="5"
+                                max="50"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Question Types */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <h3
+                            style={{
+                              fontSize: "1rem",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Icon name="List" size={18} /> Question Types
+                          </h3>
+                          {/* Column Headers */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginBottom: "8px",
+                              paddingBottom: "8px",
+                              borderBottom: "1px solid rgba(255,255,255,0.1)",
+                            }}
+                          >
+                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", flex: 1 }}>Type</span>
+                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", width: "60px", textAlign: "center" }}>Count</span>
+                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", width: "60px", textAlign: "center" }}>Points</span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "12px",
+                            }}
+                          >
+                            {[
+                              { key: "multiple_choice", label: "Multiple Choice", defaultPts: 1 },
+                              { key: "short_answer", label: "Short Answer", defaultPts: 2 },
+                              { key: "extended_response", label: "Extended Response", defaultPts: 4 },
+                              { key: "true_false", label: "True/False", defaultPts: 1 },
+                              { key: "matching", label: "Matching", defaultPts: 1 },
+                            ].map((qType) => (
+                              <div
+                                key={qType.key}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                }}
+                              >
+                                <label style={{ fontSize: "0.9rem", flex: 1 }}>{qType.label}</label>
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={assessmentConfig.questionTypes[qType.key] || 0}
+                                  onChange={(e) =>
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      questionTypes: {
+                                        ...assessmentConfig.questionTypes,
+                                        [qType.key]: parseInt(e.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  style={{ width: "60px", textAlign: "center" }}
+                                  min="0"
+                                  max="30"
+                                  title="Number of questions"
+                                />
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={assessmentConfig.pointsPerType?.[qType.key] ?? qType.defaultPts}
+                                  onChange={(e) =>
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      pointsPerType: {
+                                        ...assessmentConfig.pointsPerType,
+                                        [qType.key]: parseInt(e.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  style={{ width: "60px", textAlign: "center", marginLeft: "8px" }}
+                                  min="0"
+                                  max="100"
+                                  title="Points per question"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          {/* Total Points Display */}
+                          <div
+                            style={{
+                              marginTop: "15px",
+                              paddingTop: "12px",
+                              borderTop: "1px solid rgba(255,255,255,0.1)",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Total Points:</span>
+                            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#7c3aed" }}>
+                              {Object.entries(assessmentConfig.questionTypes || {}).reduce((total, [key, count]) => {
+                                const pts = assessmentConfig.pointsPerType?.[key] || { multiple_choice: 1, short_answer: 2, extended_response: 4, true_false: 1, matching: 1 }[key] || 1;
+                                return total + (count * pts);
+                              }, 0)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* DOK Distribution */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <h3
+                            style={{
+                              fontSize: "1rem",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Icon name="BarChart3" size={18} /> DOK Distribution
+                          </h3>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "12px",
+                            }}
+                          >
+                            {[
+                              { level: "1", label: "DOK 1 - Recall", color: "#22c55e" },
+                              { level: "2", label: "DOK 2 - Skills", color: "#3b82f6" },
+                              { level: "3", label: "DOK 3 - Strategic", color: "#f59e0b" },
+                              { level: "4", label: "DOK 4 - Extended", color: "#ef4444" },
+                            ].map((dok) => (
+                              <div
+                                key={dok.level}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    fontSize: "0.9rem",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: "12px",
+                                      height: "12px",
+                                      borderRadius: "50%",
+                                      background: dok.color,
+                                    }}
+                                  />
+                                  {dok.label}
+                                </label>
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={assessmentConfig.dokDistribution[dok.level] || 0}
+                                  onChange={(e) =>
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      dokDistribution: {
+                                        ...assessmentConfig.dokDistribution,
+                                        [dok.level]: parseInt(e.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  style={{ width: "70px" }}
+                                  min="0"
+                                  max="20"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Generate Button */}
+                        <button
+                          onClick={generateAssessmentHandler}
+                          disabled={selectedStandards.length === 0 || assessmentLoading}
+                          className="btn btn-primary"
+                          style={{
+                            padding: "14px 24px",
+                            fontSize: "1rem",
+                            opacity: selectedStandards.length === 0 ? 0.5 : 1,
+                          }}
+                        >
+                          {assessmentLoading ? (
+                            <>
+                              <Icon name="Loader2" size={20} className="spin" />
+                              Generating Assessment...
+                            </>
+                          ) : (
+                            <>
+                              <Icon name="Sparkles" size={20} />
+                              Generate Assessment
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Main Content Area */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "20px",
+                        }}
+                      >
+                        {/* Standards Selection */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "15px",
+                            }}
+                          >
+                            <h3
+                              style={{
+                                fontSize: "1.1rem",
+                                fontWeight: 700,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                              }}
+                            >
+                              <Icon name="Target" size={20} />
+                              Select Standards ({selectedStandards.length} selected)
+                            </h3>
+                            {selectedStandards.length > 0 && (
+                              <button
+                                onClick={() => setSelectedStandards([])}
+                                className="btn btn-secondary"
+                                style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                              >
+                                Clear All
+                              </button>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              maxHeight: "300px",
+                              overflowY: "auto",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                            }}
+                          >
+                            {plannerLoading ? (
+                              <div style={{ textAlign: "center", padding: "20px" }}>
+                                <Icon name="Loader2" size={24} className="spin" />
+                                <p style={{ marginTop: "10px" }}>Loading standards...</p>
+                              </div>
+                            ) : standards.length > 0 ? (
+                              standards.map((std) => (
+                                <div
+                                  key={std.code}
+                                  onClick={() => toggleStandard(std.code)}
+                                  style={{
+                                    padding: "12px 15px",
+                                    background: selectedStandards.includes(std.code)
+                                      ? "rgba(139, 92, 246, 0.15)"
+                                      : "var(--glass-bg)",
+                                    border: selectedStandards.includes(std.code)
+                                      ? "1px solid rgba(139, 92, 246, 0.4)"
+                                      : "1px solid var(--glass-border)",
+                                    borderRadius: "10px",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      gap: "12px",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: "20px",
+                                        height: "20px",
+                                        borderRadius: "6px",
+                                        border: selectedStandards.includes(std.code)
+                                          ? "none"
+                                          : "2px solid var(--glass-border)",
+                                        background: selectedStandards.includes(std.code)
+                                          ? "linear-gradient(135deg, #8b5cf6, #6366f1)"
+                                          : "transparent",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                        marginTop: "2px",
+                                      }}
+                                    >
+                                      {selectedStandards.includes(std.code) && (
+                                        <Icon name="Check" size={14} style={{ color: "#fff" }} />
+                                      )}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "10px",
+                                          marginBottom: "4px",
+                                        }}
+                                      >
+                                        <span style={{ fontWeight: 700, color: "var(--accent-primary)" }}>
+                                          {std.code}
+                                        </span>
+                                        <span
+                                          style={{
+                                            padding: "2px 8px",
+                                            borderRadius: "12px",
+                                            fontSize: "0.75rem",
+                                            fontWeight: 600,
+                                            background:
+                                              std.dok === 1
+                                                ? "rgba(34, 197, 94, 0.15)"
+                                                : std.dok === 2
+                                                  ? "rgba(59, 130, 246, 0.15)"
+                                                  : std.dok === 3
+                                                    ? "rgba(245, 158, 11, 0.15)"
+                                                    : "rgba(239, 68, 68, 0.15)",
+                                            color:
+                                              std.dok === 1
+                                                ? "#22c55e"
+                                                : std.dok === 2
+                                                  ? "#3b82f6"
+                                                  : std.dok === 3
+                                                    ? "#f59e0b"
+                                                    : "#ef4444",
+                                          }}
+                                        >
+                                          DOK {std.dok}
+                                        </span>
+                                      </div>
+                                      <p
+                                        style={{
+                                          fontSize: "0.85rem",
+                                          color: "var(--text-secondary)",
+                                          margin: 0,
+                                          lineHeight: 1.4,
+                                        }}
+                                      >
+                                        {std.benchmark.length > 150
+                                          ? std.benchmark.slice(0, 150) + "..."
+                                          : std.benchmark}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div style={{ textAlign: "center", padding: "30px" }}>
+                                <Icon
+                                  name="FileQuestion"
+                                  size={40}
+                                  style={{ color: "var(--text-muted)", marginBottom: "10px" }}
+                                />
+                                <p style={{ color: "var(--text-secondary)" }}>
+                                  No standards found. Check your grade and subject in Settings.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Generated Assessment Preview */}
+                        {generatedAssessment && (
+                          <div className="glass-card" style={{ padding: "25px" }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                marginBottom: "20px",
+                              }}
+                            >
+                              <div>
+                                <h2
+                                  style={{
+                                    fontSize: "1.4rem",
+                                    fontWeight: 700,
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  {generatedAssessment.title}
+                                </h2>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "15px",
+                                    fontSize: "0.9rem",
+                                    color: "var(--text-secondary)",
+                                  }}
+                                >
+                                  <span>{generatedAssessment.total_points} points</span>
+                                  <span>{generatedAssessment.time_estimate}</span>
+                                  <span>
+                                    {generatedAssessment.sections?.reduce(
+                                      (sum, s) => sum + (s.questions?.length || 0),
+                                      0
+                                    )}{" "}
+                                    questions
+                                  </span>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                                <button
+                                  onClick={() => exportAssessmentHandler(false)}
+                                  className="btn btn-secondary"
+                                  style={{ padding: "8px 16px" }}
+                                >
+                                  <Icon name="FileText" size={16} />
+                                  Word Doc
+                                </button>
+                                <button
+                                  onClick={() => exportAssessmentHandler(true)}
+                                  className="btn btn-secondary"
+                                  style={{ padding: "8px 16px" }}
+                                >
+                                  <Icon name="Key" size={16} />
+                                  With Answer Key
+                                </button>
+                                <button
+                                  onClick={gradeAssessmentAnswersHandler}
+                                  disabled={gradingAssessment || Object.keys(assessmentAnswers).length === 0}
+                                  className="btn"
+                                  style={{
+                                    padding: "8px 16px",
+                                    background: Object.keys(assessmentAnswers).length > 0 ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.1)",
+                                    opacity: Object.keys(assessmentAnswers).length === 0 ? 0.5 : 1,
+                                  }}
+                                >
+                                  <Icon name={gradingAssessment ? "Loader" : "CheckCircle"} size={16} />
+                                  {gradingAssessment ? "Grading..." : "Grade My Answers"}
+                                </button>
+                                <div style={{ position: "relative" }}>
+                                  <button
+                                    onClick={() => setShowPlatformExport(!showPlatformExport)}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 16px" }}
+                                  >
+                                    <Icon name="Upload" size={16} />
+                                    Export to Platform
+                                    <Icon name="ChevronDown" size={14} style={{ marginLeft: "4px" }} />
+                                  </button>
+                                  {showPlatformExport && (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: "100%",
+                                        right: 0,
+                                        marginTop: "5px",
+                                        background: "var(--surface)",
+                                        border: "1px solid var(--glass-border)",
+                                        borderRadius: "10px",
+                                        boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
+                                        zIndex: 100,
+                                        minWidth: "200px",
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      {[
+                                        { id: "wayground", name: "Wayground", icon: "FileSpreadsheet" },
+                                        { id: "csv", name: "CSV (Generic)", icon: "Table" },
+                                        { id: "canvas_qti", name: "Canvas (QTI)", icon: "GraduationCap" },
+                                        { id: "kahoot", name: "Kahoot", icon: "Gamepad2" },
+                                        { id: "quizlet", name: "Quizlet", icon: "BookOpen" },
+                                        { id: "google_forms", name: "Google Forms", icon: "FormInput" },
+                                      ].map((platform) => (
+                                        <button
+                                          key={platform.id}
+                                          onClick={() => {
+                                            exportAssessmentForPlatformHandler(platform.id);
+                                            setShowPlatformExport(false);
+                                          }}
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "10px",
+                                            width: "100%",
+                                            padding: "12px 16px",
+                                            background: "transparent",
+                                            border: "none",
+                                            borderBottom: "1px solid var(--glass-border)",
+                                            color: "var(--text-primary)",
+                                            cursor: "pointer",
+                                            textAlign: "left",
+                                            fontSize: "0.9rem",
+                                          }}
+                                          onMouseEnter={(e) => e.target.style.background = "var(--glass-hover)"}
+                                          onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                        >
+                                          <Icon name={platform.icon} size={18} />
+                                          {platform.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* DOK Summary */}
+                            {generatedAssessment.dok_summary && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "15px",
+                                  marginBottom: "20px",
+                                  padding: "15px",
+                                  background: "var(--glass-bg)",
+                                  borderRadius: "10px",
+                                }}
+                              >
+                                {[
+                                  { level: 1, color: "#22c55e", label: "DOK 1" },
+                                  { level: 2, color: "#3b82f6", label: "DOK 2" },
+                                  { level: 3, color: "#f59e0b", label: "DOK 3" },
+                                  { level: 4, color: "#ef4444", label: "DOK 4" },
+                                ].map((dok) => (
+                                  <div
+                                    key={dok.level}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        width: "10px",
+                                        height: "10px",
+                                        borderRadius: "50%",
+                                        background: dok.color,
+                                      }}
+                                    />
+                                    <span style={{ fontSize: "0.85rem" }}>
+                                      {dok.label}:{" "}
+                                      {generatedAssessment.dok_summary[`dok_${dok.level}_count`] || 0}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Instructions */}
+                            {generatedAssessment.instructions && (
+                              <div
+                                style={{
+                                  padding: "15px",
+                                  background: "rgba(99, 102, 241, 0.1)",
+                                  borderRadius: "10px",
+                                  marginBottom: "20px",
+                                }}
+                              >
+                                <strong>Instructions:</strong> {generatedAssessment.instructions}
+                              </div>
+                            )}
+
+                            {/* Sections */}
+                            {generatedAssessment.sections?.map((section, sIdx) => (
+                              <div key={sIdx} style={{ marginBottom: "25px" }}>
+                                <h4
+                                  style={{
+                                    fontSize: "1.1rem",
+                                    fontWeight: 700,
+                                    marginBottom: "10px",
+                                    color: "var(--accent-primary)",
+                                  }}
+                                >
+                                  {section.name}
+                                </h4>
+                                {section.instructions && (
+                                  <p
+                                    style={{
+                                      fontSize: "0.9rem",
+                                      color: "var(--text-secondary)",
+                                      marginBottom: "15px",
+                                      fontStyle: "italic",
+                                    }}
+                                  >
+                                    {section.instructions}
+                                  </p>
+                                )}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "12px",
+                                  }}
+                                >
+                                  {section.questions?.map((q, qIdx) => (
+                                    <div
+                                      key={qIdx}
+                                      style={{
+                                        padding: "15px",
+                                        background: "var(--glass-bg)",
+                                        borderRadius: "10px",
+                                        borderLeft: `4px solid ${
+                                          q.dok === 1
+                                            ? "#22c55e"
+                                            : q.dok === 2
+                                              ? "#3b82f6"
+                                              : q.dok === 3
+                                                ? "#f59e0b"
+                                                : "#ef4444"
+                                        }`,
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          marginBottom: "8px",
+                                        }}
+                                      >
+                                        <span style={{ fontWeight: 700 }}>
+                                          {q.number}. {q.question}
+                                        </span>
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "8px",
+                                            fontSize: "0.75rem",
+                                            flexWrap: "wrap",
+                                          }}
+                                        >
+                                          {q.type && (
+                                            <span
+                                              style={{
+                                                padding: "2px 8px",
+                                                borderRadius: "8px",
+                                                background: "rgba(100, 116, 139, 0.15)",
+                                                color: "#94a3b8",
+                                                textTransform: "capitalize",
+                                              }}
+                                            >
+                                              {q.type.replace(/_/g, " ")}
+                                            </span>
+                                          )}
+                                          <span
+                                            style={{
+                                              padding: "2px 8px",
+                                              borderRadius: "8px",
+                                              background: "rgba(139, 92, 246, 0.15)",
+                                              color: "#8b5cf6",
+                                            }}
+                                          >
+                                            {q.points} pt{q.points > 1 ? "s" : ""}
+                                          </span>
+                                          <span
+                                            style={{
+                                              padding: "2px 8px",
+                                              borderRadius: "8px",
+                                              background:
+                                                q.dok === 1
+                                                  ? "rgba(34, 197, 94, 0.15)"
+                                                  : q.dok === 2
+                                                    ? "rgba(59, 130, 246, 0.15)"
+                                                    : q.dok === 3
+                                                      ? "rgba(245, 158, 11, 0.15)"
+                                                      : "rgba(239, 68, 68, 0.15)",
+                                              color:
+                                                q.dok === 1
+                                                  ? "#22c55e"
+                                                  : q.dok === 2
+                                                    ? "#3b82f6"
+                                                    : q.dok === 3
+                                                      ? "#f59e0b"
+                                                      : "#ef4444",
+                                            }}
+                                          >
+                                            DOK {q.dok}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {/* Multiple Choice Options - Interactive */}
+                                      {q.options && q.options.length > 0 && (
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: "8px",
+                                            marginTop: "12px",
+                                            paddingLeft: "15px",
+                                          }}
+                                        >
+                                          {q.options.map((opt, oIdx) => {
+                                            const answerKey = `${sIdx}-${qIdx}`;
+                                            const isSelected = assessmentAnswers[answerKey] === oIdx;
+                                            return (
+                                              <label
+                                                key={oIdx}
+                                                onClick={() => setAssessmentAnswers({...assessmentAnswers, [answerKey]: oIdx})}
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: "10px",
+                                                  padding: "10px 12px",
+                                                  borderRadius: "8px",
+                                                  cursor: "pointer",
+                                                  background: isSelected ? "rgba(99, 102, 241, 0.2)" : "rgba(255,255,255,0.03)",
+                                                  border: isSelected ? "2px solid var(--accent-primary)" : "2px solid transparent",
+                                                  transition: "all 0.15s ease",
+                                                }}
+                                              >
+                                                <span style={{
+                                                  width: "20px",
+                                                  height: "20px",
+                                                  borderRadius: "50%",
+                                                  border: isSelected ? "6px solid var(--accent-primary)" : "2px solid var(--text-muted)",
+                                                  background: isSelected ? "white" : "transparent",
+                                                  flexShrink: 0,
+                                                }}></span>
+                                                <span style={{ fontSize: "0.9rem", color: isSelected ? "white" : "var(--text-secondary)" }}>{opt}</span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      {/* True/False Options - Interactive */}
+                                      {q.type === "true_false" && (
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "15px",
+                                            marginTop: "12px",
+                                            paddingLeft: "15px",
+                                          }}
+                                        >
+                                          {["True", "False"].map((tf) => {
+                                            const answerKey = `${sIdx}-${qIdx}`;
+                                            const isSelected = assessmentAnswers[answerKey] === tf;
+                                            return (
+                                              <label
+                                                key={tf}
+                                                onClick={() => setAssessmentAnswers({...assessmentAnswers, [answerKey]: tf})}
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: "10px",
+                                                  padding: "12px 24px",
+                                                  borderRadius: "8px",
+                                                  cursor: "pointer",
+                                                  background: isSelected ? (tf === "True" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)") : "rgba(255,255,255,0.03)",
+                                                  border: isSelected ? `2px solid ${tf === "True" ? "#22c55e" : "#ef4444"}` : "2px solid var(--text-muted)",
+                                                  transition: "all 0.15s ease",
+                                                }}
+                                              >
+                                                <span style={{
+                                                  width: "20px",
+                                                  height: "20px",
+                                                  borderRadius: "50%",
+                                                  border: isSelected ? `6px solid ${tf === "True" ? "#22c55e" : "#ef4444"}` : "2px solid var(--text-muted)",
+                                                  background: isSelected ? "white" : "transparent",
+                                                  flexShrink: 0,
+                                                }}></span>
+                                                <span style={{ fontSize: "0.95rem", fontWeight: 600, color: isSelected ? (tf === "True" ? "#22c55e" : "#ef4444") : "var(--text-secondary)" }}>{tf}</span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      {/* Matching - Interactive with dropdowns */}
+                                      {q.type === "matching" && q.terms && q.definitions && (
+                                        <div
+                                          style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "1fr 1fr",
+                                            gap: "20px",
+                                            marginTop: "12px",
+                                            padding: "15px",
+                                            background: "rgba(0,0,0,0.1)",
+                                            borderRadius: "10px",
+                                          }}
+                                        >
+                                          <div>
+                                            <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "10px", color: "var(--accent-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                              <Icon name="List" size={14} /> Terms - Select matching letter
+                                            </div>
+                                            {q.terms.map((term, tIdx) => {
+                                              const answerKey = `${sIdx}-${qIdx}-match-${tIdx}`;
+                                              const selectedValue = assessmentAnswers[answerKey] || "";
+                                              return (
+                                                <div
+                                                  key={tIdx}
+                                                  style={{
+                                                    padding: "10px 12px",
+                                                    marginBottom: "8px",
+                                                    background: selectedValue ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.05)",
+                                                    borderRadius: "8px",
+                                                    fontSize: "0.9rem",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "10px",
+                                                    border: selectedValue ? "1px solid var(--accent-primary)" : "1px solid transparent",
+                                                  }}
+                                                >
+                                                  <span style={{ fontWeight: 700, color: "var(--accent-primary)", minWidth: "20px" }}>{tIdx + 1}.</span>
+                                                  <span style={{ flex: 1 }}>{term}</span>
+                                                  <select
+                                                    value={selectedValue}
+                                                    onChange={(e) => setAssessmentAnswers({...assessmentAnswers, [answerKey]: e.target.value})}
+                                                    style={{
+                                                      padding: "6px 10px",
+                                                      borderRadius: "6px",
+                                                      border: "1px solid var(--text-muted)",
+                                                      background: "var(--glass-bg)",
+                                                      color: "white",
+                                                      fontSize: "0.9rem",
+                                                      fontWeight: 600,
+                                                      cursor: "pointer",
+                                                      minWidth: "50px",
+                                                    }}
+                                                  >
+                                                    <option value="">--</option>
+                                                    {q.definitions.map((_, dIdx) => (
+                                                      <option key={dIdx} value={String.fromCharCode(65 + dIdx)}>{String.fromCharCode(65 + dIdx)}</option>
+                                                    ))}
+                                                  </select>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                          <div>
+                                            <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "10px", color: "#22c55e", display: "flex", alignItems: "center", gap: "6px" }}>
+                                              <Icon name="BookOpen" size={14} /> Definitions
+                                            </div>
+                                            {q.definitions.map((def, dIdx) => {
+                                              // Check if this definition is selected
+                                              const letter = String.fromCharCode(65 + dIdx);
+                                              const isUsed = Object.entries(assessmentAnswers).some(([k, v]) => k.startsWith(`${sIdx}-${qIdx}-match-`) && v === letter);
+                                              return (
+                                                <div
+                                                  key={dIdx}
+                                                  style={{
+                                                    padding: "10px 12px",
+                                                    marginBottom: "8px",
+                                                    background: isUsed ? "rgba(34, 197, 94, 0.15)" : "rgba(34, 197, 94, 0.05)",
+                                                    borderRadius: "8px",
+                                                    fontSize: "0.9rem",
+                                                    display: "flex",
+                                                    alignItems: "flex-start",
+                                                    gap: "10px",
+                                                    border: isUsed ? "1px solid #22c55e" : "1px solid transparent",
+                                                    opacity: isUsed ? 0.7 : 1,
+                                                  }}
+                                                >
+                                                  <span style={{ fontWeight: 700, color: "#22c55e", minWidth: "20px" }}>{letter}.</span>
+                                                  <span>{def}</span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Short Answer - Interactive text input */}
+                                      {q.type === "short_answer" && !q.options && !q.terms && (
+                                        <div style={{ marginTop: "12px", paddingLeft: "15px" }}>
+                                          <textarea
+                                            value={assessmentAnswers[`${sIdx}-${qIdx}`] || ""}
+                                            onChange={(e) => setAssessmentAnswers({...assessmentAnswers, [`${sIdx}-${qIdx}`]: e.target.value})}
+                                            placeholder="Type your answer here..."
+                                            rows={3}
+                                            style={{
+                                              width: "100%",
+                                              padding: "12px",
+                                              borderRadius: "8px",
+                                              border: "1px solid var(--text-muted)",
+                                              background: "rgba(255,255,255,0.03)",
+                                              color: "white",
+                                              fontSize: "0.9rem",
+                                              resize: "vertical",
+                                              fontFamily: "inherit",
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+                                      {/* Extended Response - Interactive textarea */}
+                                      {q.type === "extended_response" && !q.options && !q.terms && (
+                                        <div style={{ marginTop: "12px", paddingLeft: "15px" }}>
+                                          {q.rubric && (
+                                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "10px", padding: "8px 12px", background: "rgba(245, 158, 11, 0.1)", borderRadius: "6px", borderLeft: "3px solid #f59e0b" }}>
+                                              <strong>Scoring Criteria:</strong> {q.rubric}
+                                            </div>
+                                          )}
+                                          <textarea
+                                            value={assessmentAnswers[`${sIdx}-${qIdx}`] || ""}
+                                            onChange={(e) => setAssessmentAnswers({...assessmentAnswers, [`${sIdx}-${qIdx}`]: e.target.value})}
+                                            placeholder="Write your extended response here. Be sure to include evidence and analysis to support your answer..."
+                                            rows={6}
+                                            style={{
+                                              width: "100%",
+                                              padding: "15px",
+                                              borderRadius: "8px",
+                                              border: "1px solid var(--text-muted)",
+                                              background: "rgba(255,255,255,0.03)",
+                                              color: "white",
+                                              fontSize: "0.9rem",
+                                              resize: "vertical",
+                                              fontFamily: "inherit",
+                                              lineHeight: 1.6,
+                                            }}
+                                          />
+                                          <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "right" }}>
+                                            {(assessmentAnswers[`${sIdx}-${qIdx}`] || "").split(/\s+/).filter(w => w).length} words
+                                          </div>
+                                        </div>
+                                      )}
+                                      {q.standard && (
+                                        <div
+                                          style={{
+                                            marginTop: "8px",
+                                            fontSize: "0.8rem",
+                                            color: "var(--text-muted)",
+                                          }}
+                                        >
+                                          Standard: {q.standard}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Focus Export Modal */}
+      {focusExportModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              borderRadius: "12px",
+              width: "100%",
+              maxWidth: "500px",
+              padding: "25px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                }}
+              >
+                <Icon name="Download" size={24} />
+                Export to Focus
+              </h2>
+              <button
+                onClick={() => setFocusExportModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "5px",
+                }}
+              >
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                marginBottom: "20px",
+                fontSize: "0.9rem",
+              }}
+            >
+              Generate a CSV file formatted for Focus SIS import with Student_ID
+              and Score columns.
+            </p>
+
+            {/* Group results by assignment */}
+            {(() => {
+              const assignments = [
+                ...new Set(
+                  status.results.map((r) => r.assignment || "Unknown"),
+                ),
+              ];
+              const periods = [
+                ...new Set(status.results.map((r) => r.period || "All")),
+              ];
+              return (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "15px",
+                  }}
+                >
+                  <div>
+                    <label className="label">Assignment</label>
+                    <select
+                      id="focus-assignment"
+                      className="input"
+                      defaultValue={assignments[0]}
+                    >
+                      {assignments.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {periods.length > 1 && (
+                    <div>
+                      <label className="label">Period</label>
+                      <select
+                        id="focus-period"
+                        className="input"
+                        defaultValue="all"
+                      >
+                        <option value="all">All Periods</option>
+                        {periods
+                          .filter((p) => p !== "All")
+                          .map((p) => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      padding: "12px",
+                      background: "var(--glass-bg)",
+                      borderRadius: "8px",
+                      fontSize: "0.85rem",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    <Icon
+                      name="Info"
+                      size={14}
+                      style={{ marginRight: "6px", verticalAlign: "middle" }}
+                    />
+                    Students without a Student_ID will be matched by name using
+                    Claude AI.
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setFocusExportLoading(true);
+                      try {
+                        const assignment =
+                          document.getElementById("focus-assignment")?.value;
+                        const period =
+                          document.getElementById("focus-period")?.value ||
+                          "all";
+
+                        // Filter results
+                        let resultsToExport = status.results.filter(
+                          (r) =>
+                            (r.assignment || "Unknown") === assignment &&
+                            (period === "all" ||
+                              (r.period || "All") === period),
+                        );
+
+                        const response = await fetch("/api/export-focus-csv", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            results: resultsToExport,
+                            assignment,
+                            period,
+                            periods: periods.map((p) => ({ name: p })),
+                          }),
+                        });
+
+                        const data = await response.json();
+                        if (data.csv) {
+                          // Download the CSV
+                          const blob = new Blob([data.csv], {
+                            type: "text/csv",
+                          });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = data.filename || "focus_grades.csv";
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+
+                          addToast(
+                            `Exported ${data.count} grades to ${data.filename}`,
+                            "success",
+                          );
+                          setFocusExportModal(false);
+                        } else {
+                          addToast(data.error || "Export failed", "error");
+                        }
+                      } catch (err) {
+                        addToast("Export error: " + err.message, "error");
+                      } finally {
+                        setFocusExportLoading(false);
+                      }
+                    }}
+                    disabled={focusExportLoading || status.results.length === 0}
+                    className="btn btn-primary"
+                    style={{ width: "100%", marginTop: "10px" }}
+                  >
+                    {focusExportLoading ? (
+                      <>
+                        <Icon
+                          name="Loader2"
+                          size={18}
+                          style={{ animation: "spin 1s linear infinite" }}
+                        />
+                        Generating CSV with Claude...
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="Download" size={18} />
+                        Download Focus CSV
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Toast Notifications */}
       <div
@@ -9488,18 +15620,18 @@ ${signature}`;
                 toast.type === "success"
                   ? "rgba(74,222,128,0.15)"
                   : toast.type === "warning"
-                  ? "rgba(251,191,36,0.15)"
-                  : toast.type === "error"
-                  ? "rgba(248,113,113,0.15)"
-                  : "rgba(96,165,250,0.15)",
+                    ? "rgba(251,191,36,0.15)"
+                    : toast.type === "error"
+                      ? "rgba(248,113,113,0.15)"
+                      : "rgba(96,165,250,0.15)",
               border: `1px solid ${
                 toast.type === "success"
                   ? "rgba(74,222,128,0.4)"
                   : toast.type === "warning"
-                  ? "rgba(251,191,36,0.4)"
-                  : toast.type === "error"
-                  ? "rgba(248,113,113,0.4)"
-                  : "rgba(96,165,250,0.4)"
+                    ? "rgba(251,191,36,0.4)"
+                    : toast.type === "error"
+                      ? "rgba(248,113,113,0.4)"
+                      : "rgba(96,165,250,0.4)"
               }`,
               boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
             }}
@@ -9509,10 +15641,10 @@ ${signature}`;
                 toast.type === "success"
                   ? "CheckCircle"
                   : toast.type === "warning"
-                  ? "AlertTriangle"
-                  : toast.type === "error"
-                  ? "XCircle"
-                  : "Info"
+                    ? "AlertTriangle"
+                    : toast.type === "error"
+                      ? "XCircle"
+                      : "Info"
               }
               size={18}
               style={{
@@ -9520,10 +15652,10 @@ ${signature}`;
                   toast.type === "success"
                     ? "#4ade80"
                     : toast.type === "warning"
-                    ? "#fbbf24"
-                    : toast.type === "error"
-                    ? "#f87171"
-                    : "#60a5fa",
+                      ? "#fbbf24"
+                      : toast.type === "error"
+                        ? "#f87171"
+                        : "#60a5fa",
                 flexShrink: 0,
               }}
             />
@@ -9537,7 +15669,9 @@ ${signature}`;
               {toast.message}
             </span>
             <button
-              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              onClick={() =>
+                setToasts((prev) => prev.filter((t) => t.id !== toast.id))
+              }
               style={{
                 background: "none",
                 border: "none",
@@ -9552,6 +15686,63 @@ ${signature}`;
           </div>
         ))}
       </div>
+
+      {/* Interactive Assignment Player Modal */}
+      {showInteractivePreview && generatedAssignment && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              borderRadius: "12px",
+              width: "100%",
+              maxWidth: "900px",
+              maxHeight: "90vh",
+              overflow: "auto",
+            }}
+          >
+            <AssignmentPlayer
+              assignment={generatedAssignment}
+              onSubmit={async (answers) => {
+                try {
+                  const published =
+                    await api.publishAssignment(generatedAssignment);
+                  const result = await api.submitAssignment(
+                    published.assignment_id,
+                    answers,
+                    "Teacher Preview",
+                  );
+                  setInteractiveResults(result.results);
+                  addToast(
+                    "Assignment graded! Score: " + result.results.percent + "%",
+                    "success",
+                  );
+                } catch (err) {
+                  addToast("Error grading: " + err.message, "error");
+                }
+              }}
+              onClose={() => {
+                setShowInteractivePreview(false);
+                setInteractiveResults(null);
+              }}
+              results={interactiveResults}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

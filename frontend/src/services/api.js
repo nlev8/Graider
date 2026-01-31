@@ -202,12 +202,110 @@ export async function exportLessonPlan(plan) {
   })
 }
 
+export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'worksheet') {
+  return fetchApi('/api/generate-assignment-from-lesson', {
+    method: 'POST',
+    body: JSON.stringify({ lessonPlan, config, assignmentType }),
+  })
+}
+
+export async function exportGeneratedAssignment(assignment, format = 'docx', includeAnswers = false) {
+  return fetchApi('/api/export-generated-assignment', {
+    method: 'POST',
+    body: JSON.stringify({ assignment, format, include_answers: includeAnswers }),
+  })
+}
+
+// ============ Assessment Generation ============
+
+export async function generateAssessment(standards, config, assessmentConfig) {
+  return fetchApi('/api/generate-assessment', {
+    method: 'POST',
+    body: JSON.stringify({ standards, config, assessmentConfig }),
+  })
+}
+
+export async function exportAssessment(assessment, includeAnswerKey = false) {
+  return fetchApi('/api/export-assessment', {
+    method: 'POST',
+    body: JSON.stringify({ assessment, includeAnswerKey }),
+  })
+}
+
+export async function exportAssessmentForPlatform(assessment, platform, templateId = null) {
+  return fetchApi('/api/export-assessment-platform', {
+    method: 'POST',
+    body: JSON.stringify({ assessment, platform, templateId }),
+  })
+}
+
+export async function gradeAssessmentAnswers(assessment, answers) {
+  return fetchApi('/api/grade-assessment-answers', {
+    method: 'POST',
+    body: JSON.stringify({ assessment, answers }),
+  })
+}
+
+// ============ Assessment Templates ============
+
+export async function uploadAssessmentTemplate(file, platform, name) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('platform', platform)
+  formData.append('name', name)
+
+  const response = await fetch('/api/upload-assessment-template', {
+    method: 'POST',
+    body: formData,
+  })
+  return response.json()
+}
+
+export async function getAssessmentTemplates() {
+  return fetchApi('/api/assessment-templates')
+}
+
+export async function deleteAssessmentTemplate(templateId) {
+  return fetchApi(`/api/assessment-template/${templateId}`, {
+    method: 'DELETE',
+  })
+}
+
+// ============ Interactive Assignments ============
+
+export async function publishAssignment(assignment) {
+  return fetchApi('/api/assignment', {
+    method: 'POST',
+    body: JSON.stringify({ assignment }),
+  })
+}
+
+export async function getAssignment(assignmentId) {
+  return fetchApi(`/api/assignment/${assignmentId}`)
+}
+
+export async function submitAssignment(assignmentId, answers, studentName) {
+  return fetchApi(`/api/assignment/${assignmentId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ answers, student_name: studentName }),
+  })
+}
+
+export async function getAssignmentSubmissions(assignmentId) {
+  return fetchApi(`/api/assignment/${assignmentId}/submissions`)
+}
+
 // ============ Email ============
 
-export async function sendEmails(results) {
+export async function sendEmails(results, teacherEmail = '', teacherName = '', emailSignature = '') {
   return fetchApi('/api/send-emails', {
     method: 'POST',
-    body: JSON.stringify({ results }),
+    body: JSON.stringify({
+      results,
+      teacher_email: teacherEmail,
+      teacher_name: teacherName,
+      email_signature: emailSignature
+    }),
   })
 }
 
@@ -392,6 +490,12 @@ export default {
   brainstormLessonIdeas,
   generateLessonPlan,
   exportLessonPlan,
+  generateAssignmentFromLesson,
+  exportGeneratedAssignment,
+  publishAssignment,
+  getAssignment,
+  submitAssignment,
+  getAssignmentSubmissions,
   sendEmails,
   uploadRoster,
   listRosters,
