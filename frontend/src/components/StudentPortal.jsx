@@ -433,8 +433,8 @@ export default function StudentPortal() {
                       </div>
                     )}
 
-                    {/* Matching */}
-                    {q.type === "matching" && q.terms && q.definitions && (
+                    {/* Matching - show if type is matching OR if terms and definitions arrays exist */}
+                    {(q.type === "matching" || (q.terms && q.terms.length > 0 && q.definitions && q.definitions.length > 0)) && (
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
                         <div>
                           <div style={{ fontWeight: 600, marginBottom: "10px", color: "#8b5cf6" }}>Terms</div>
@@ -499,7 +499,8 @@ export default function StudentPortal() {
 
                     {/* Short Answer / Extended Response / Text Input Fallback */}
                     {(q.type === "short_answer" || q.type === "extended_response" ||
-                      (!q.options && q.type !== "true_false" && q.type !== "matching" && !q.terms)) && (
+                      (!q.options && q.type !== "true_false" && q.type !== "matching" &&
+                       !(q.terms && q.terms.length > 0 && q.definitions && q.definitions.length > 0))) && (
                       <textarea
                         value={currentAnswer || ""}
                         onChange={(e) => setAnswer(answerKey, e.target.value)}
