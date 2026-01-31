@@ -29,3 +29,6 @@ resend>=0.7.0
 
 # Database (Student Portal)
 supabase>=2.0.0
+
+# Production Server
+gunicorn>=21.0.0
