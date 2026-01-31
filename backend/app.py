@@ -1224,6 +1224,14 @@ def serve_frontend():
     return send_from_directory(app.static_folder, 'index.html')
 
 
+@app.route('/join')
+@app.route('/join/')
+@app.route('/join/<path:code>')
+def serve_student_portal(code=None):
+    """Serve React app for student portal routes."""
+    return send_from_directory(app.static_folder, 'index.html')
+
+
 @app.route('/<path:path>')
 def serve_static(path):
     """Serve static files or fall back to index.html for SPA routing."""
