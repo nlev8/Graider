@@ -497,33 +497,16 @@ export default function StudentPortal() {
                       </div>
                     )}
 
-                    {/* Short Answer */}
-                    {q.type === "short_answer" && (
+                    {/* Short Answer / Extended Response / Text Input Fallback */}
+                    {(q.type === "short_answer" || q.type === "extended_response" ||
+                      (!q.options && q.type !== "true_false" && q.type !== "matching" && !q.terms)) && (
                       <textarea
                         value={currentAnswer || ""}
                         onChange={(e) => setAnswer(answerKey, e.target.value)}
-                        placeholder="Type your answer here..."
-                        rows={3}
-                        style={{
-                          width: "100%",
-                          padding: "12px",
-                          borderRadius: "8px",
-                          border: "1px solid rgba(255,255,255,0.2)",
-                          background: "rgba(0,0,0,0.2)",
-                          color: "white",
-                          fontSize: "1rem",
-                          resize: "vertical",
-                        }}
-                      />
-                    )}
-
-                    {/* Extended Response */}
-                    {q.type === "extended_response" && (
-                      <textarea
-                        value={currentAnswer || ""}
-                        onChange={(e) => setAnswer(answerKey, e.target.value)}
-                        placeholder="Write your extended response here..."
-                        rows={6}
+                        placeholder={q.type === "extended_response"
+                          ? "Write your extended response here. Include evidence and analysis to support your answer..."
+                          : "Type your answer here..."}
+                        rows={q.type === "extended_response" || (q.points && q.points >= 4) ? 6 : 3}
                         style={{
                           width: "100%",
                           padding: "15px",
@@ -534,6 +517,7 @@ export default function StudentPortal() {
                           fontSize: "1rem",
                           resize: "vertical",
                           lineHeight: 1.6,
+                          fontFamily: "inherit",
                         }}
                       />
                     )}
