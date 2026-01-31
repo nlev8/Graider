@@ -670,6 +670,169 @@ Teacher's Computer
 
 ---
 
+# What Makes Graider Different
+
+## Not Just Another Quiz Platform
+
+**Wayground, Kahoot, Google Forms** — they all do the same thing: multiple choice quizzes with auto-scores.
+
+**Graider is fundamentally different.**
+
+---
+
+## The Graider Difference
+
+### 1. AI Feedback, Not Just Scores
+
+| Platform | What Students Get |
+|----------|-------------------|
+| Wayground/Kahoot | "7/10 - 70%" |
+| Google Forms | "Correct" / "Incorrect" |
+| **Graider** | "Your analysis of the Louisiana Purchase showed strong understanding of economic impact. For your answer about Jefferson's dilemma, consider how strict Constitutional interpretation conflicted with the opportunity..." |
+
+**Graider gives personalized, constructive feedback on every response** — the kind a great teacher writes, but in seconds instead of hours.
+
+---
+
+### 2. Grades Everything, Not Just Quizzes
+
+| Assignment Type | Wayground | Kahoot | Google Forms | **Graider** |
+|-----------------|-----------|--------|--------------|-------------|
+| Multiple Choice | ✅ | ✅ | ✅ | ✅ |
+| Short Answer | ❌ | ❌ | Manual | ✅ AI-graded |
+| Essays | ❌ | ❌ | ❌ | ✅ AI-graded |
+| Math Problems | ❌ | ❌ | ❌ | ✅ AI-graded |
+| Handwritten Work | ❌ | ❌ | ❌ | ✅ Photo → AI |
+| Lab Reports | ❌ | ❌ | ❌ | ✅ AI-graded |
+| Projects | ❌ | ❌ | ❌ | ✅ Rubric-based |
+
+**Graider handles the messy, real-world assignments** that other platforms can't touch.
+
+---
+
+### 3. Works With Your Existing Workflow
+
+Other platforms force you into their ecosystem:
+
+```
+❌ Wayground: Students must log in, take quiz in browser, data lives in their cloud
+❌ Kahoot: Live game format only, no async, limited question types
+❌ Google Forms: Manual grading for anything beyond MC, no real feedback
+```
+
+**Graider adapts to YOU:**
+
+```
+✅ Students submit however works for your class:
+   • Upload to folder (OneDrive, Google Drive, local)
+   • Turn in paper copies (scan/photo)
+   • Submit through Canvas/Schoology
+   • Take digital assessment (coming soon)
+
+✅ Graider grades it all the same way
+```
+
+---
+
+### 4. Accommodation-Aware (IEP/504 Built-In)
+
+| Platform | Accommodation Support |
+|----------|----------------------|
+| Wayground | Extended time only |
+| Kahoot | None |
+| Google Forms | Manual |
+| **Graider** | **Automatic feedback adjustment** — simplified language, extra encouragement, chunked responses, growth mindset framing |
+
+**Same assignment, personalized feedback** for every learner's needs.
+
+---
+
+### 5. Bilingual Feedback (ELL Support)
+
+| Platform | Language Support |
+|----------|------------------|
+| Wayground | English only |
+| Kahoot | English only |
+| Google Forms | English only |
+| **Graider** | **Automatic Spanish translation** of all feedback, with more languages coming |
+
+**30%+ of Florida students are ELLs.** Their parents can finally read their feedback.
+
+---
+
+### 6. Complete Teaching Loop
+
+Other platforms are isolated tools. Graider is an **integrated teaching assistant:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    THE GRAIDER LOOP                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   📚 PLAN          📝 CREATE         📤 ASSIGN              │
+│   Lesson Planner → Assessment Gen → Export to any format    │
+│         │                                                    │
+│         │         ┌──────────────────────────────┐          │
+│         │         │     STUDENTS COMPLETE        │          │
+│         │         │   (paper, digital, anywhere) │          │
+│         │         └──────────────────────────────┘          │
+│         │                      │                             │
+│         │              📥 COLLECT                            │
+│         │              File upload / scan / sync             │
+│         │                      │                             │
+│         │              🤖 GRADE                              │
+│         │              AI grades + feedback                  │
+│         │                      │                             │
+│         │              📊 ANALYZE                            │
+│         │              Progress tracking, trends             │
+│         │                      │                             │
+│         └──────────────────────┘                             │
+│              Insights inform next lesson                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**No other platform connects lesson planning → assessment → grading → analytics.**
+
+---
+
+### 7. Privacy-First Architecture
+
+| Platform | Where Data Lives |
+|----------|------------------|
+| Wayground | Their cloud servers |
+| Kahoot | Their cloud servers |
+| Google Forms | Google's cloud |
+| **Graider** | **Teacher's computer** — nothing uploaded, FERPA compliant by design |
+
+**Student PII never leaves the classroom.**
+
+---
+
+## The Bottom Line
+
+> **Wayground/Kahoot/Forms = Quiz tools with scores**
+>
+> **Graider = AI teaching assistant that handles everything**
+
+| Capability | Quiz Platforms | Graider |
+|------------|----------------|---------|
+| Auto-grade MC/TF | ✅ | ✅ |
+| Grade written responses | ❌ | ✅ |
+| Personalized feedback | ❌ | ✅ |
+| Handwriting recognition | ❌ | ✅ |
+| IEP/504 accommodations | ❌ | ✅ |
+| Bilingual feedback | ❌ | ✅ |
+| Lesson planning | ❌ | ✅ |
+| Progress tracking | Basic | ✅ Advanced |
+| Academic integrity | ❌ | ✅ |
+| Works offline | ❌ | ✅ |
+| Data stays local | ❌ | ✅ |
+
+**Graider isn't competing with quiz platforms. It's replacing the grading pile on your desk.**
+
+---
+
 # Competitive Advantage
 
 ## Why Graider?
