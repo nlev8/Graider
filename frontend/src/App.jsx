@@ -939,11 +939,14 @@ function App() {
   const [assessmentConfig, setAssessmentConfig] = useState({
     type: "quiz",
     title: "",
-    totalQuestions: 15,
+    totalQuestions: 20,
+    totalPoints: 30,
     questionTypes: {
       multiple_choice: 10,
-      short_answer: 3,
+      short_answer: 4,
       extended_response: 2,
+      true_false: 2,
+      matching: 2,
     },
     pointsPerType: {
       multiple_choice: 1,
@@ -953,14 +956,120 @@ function App() {
       extended_response: 4,
     },
     dokDistribution: {
-      "1": 3,
-      "2": 6,
-      "3": 4,
+      "1": 4,
+      "2": 8,
+      "3": 6,
       "4": 2,
     },
     includeAnswerKey: true,
     includeStandardsReference: true,
   });
+
+  // Helper function to distribute questions across types
+  const distributeQuestions = (total) => {
+    // Standard distribution: 50% MC, 15% SA, 10% ER, 15% TF, 10% Matching
+    const mc = Math.round(total * 0.50);
+    const sa = Math.round(total * 0.15);
+    const er = Math.round(total * 0.10);
+    const tf = Math.round(total * 0.15);
+    const matching = total - mc - sa - er - tf; // remainder
+    return {
+      multiple_choice: Math.max(0, mc),
+      short_answer: Math.max(0, sa),
+      extended_response: Math.max(0, er),
+      true_false: Math.max(0, tf),
+      matching: Math.max(0, matching),
+    };
+  };
+
+  // Helper function to distribute DOK levels
+  const distributeDOK = (total) => {
+    // Standard distribution: 20% DOK1, 40% DOK2, 30% DOK3, 10% DOK4
+    const dok1 = Math.round(total * 0.20);
+    const dok2 = Math.round(total * 0.40);
+    const dok3 = Math.round(total * 0.30);
+    const dok4 = total - dok1 - dok2 - dok3; // remainder
+    return {
+      "1": Math.max(0, dok1),
+      "2": Math.max(0, dok2),
+      "3": Math.max(0, dok3),
+      "4": Math.max(0, dok4),
+    };
+  };
+
+  // Helper function to distribute points per type to reach total
+  const distributePoints = (totalPoints, questionTypes) => {
+    // Base ratios: ER=4, SA=2, MC=TF=Matching=1
+    const baseRatios = {
+      multiple_choice: 1,
+      short_answer: 2,
+      true_false: 1,
+      matching: 1,
+      extended_response: 4,
+    };
+
+    // Get active types (count > 0)
+    const activeTypes = Object.entries(questionTypes).filter(([, count]) => count > 0);
+    if (activeTypes.length === 0) return { ...baseRatios };
+
+    // Calculate weighted sum with base ratios
+    let weightedSum = 0;
+    activeTypes.forEach(([type, count]) => {
+      weightedSum += count * (baseRatios[type] || 1);
+    });
+
+    if (weightedSum === 0) return { ...baseRatios };
+
+    // Scale factor to reach target total
+    const scale = totalPoints / weightedSum;
+
+    // Apply scale and floor (start low, then add)
+    const newPoints = { ...baseRatios };
+    activeTypes.forEach(([type]) => {
+      newPoints[type] = Math.max(1, Math.floor(baseRatios[type] * scale));
+    });
+
+    // Calculate current total
+    const calcTotal = () => {
+      let total = 0;
+      activeTypes.forEach(([type, count]) => {
+        total += count * newPoints[type];
+      });
+      return total;
+    };
+
+    // Iteratively adjust to hit target
+    // Sort by ratio (highest first) - prefer adding to complex question types
+    const sortedByRatio = [...activeTypes].sort((a, b) => (baseRatios[b[0]] || 1) - (baseRatios[a[0]] || 1));
+
+    let iterations = 0;
+    while (calcTotal() < totalPoints && iterations < 100) {
+      // Add 1 point to the type that gets us closest to target
+      let bestType = null;
+      let bestDiff = Infinity;
+
+      for (const [type, count] of sortedByRatio) {
+        const newTotal = calcTotal() + count;
+        const diff = Math.abs(totalPoints - newTotal);
+        if (diff < bestDiff && newTotal <= totalPoints) {
+          bestDiff = diff;
+          bestType = type;
+        }
+      }
+
+      if (bestType) {
+        newPoints[bestType]++;
+      } else {
+        // Can't get closer without overshooting, pick smallest increment
+        const [smallestType] = [...activeTypes].sort((a, b) => a[1] - b[1]);
+        if (smallestType) newPoints[smallestType[0]]++;
+        break;
+      }
+      iterations++;
+    }
+
+    return newPoints;
+  };
   const [generatedAssessment, setGeneratedAssessment] = useState(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
   const [assessmentAnswers, setAssessmentAnswers] = useState({}); // Track interactive answers for preview
@@ -972,6 +1081,12 @@ function App() {
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [showPlatformExport, setShowPlatformExport] = useState(false);
+
+  // Teacher Dashboard state (Student Portal)
+  const [publishedAssessments, setPublishedAssessments] = useState([]);
+  const [loadingPublished, setLoadingPublished] = useState(false);
+  const [selectedAssessmentResults, setSelectedAssessmentResults] = useState(null);
+  const [loadingResults, setLoadingResults] = useState(false);
 
   // File upload state
   const [rosters, setRosters] = useState([]);
@@ -2231,6 +2346,7 @@ ${signature}`;
           grade: config.grade_level,
           subject: config.subject,
           teacher_name: config.teacher_name,
+          globalAINotes: globalAINotes,
         },
         { ...assessmentConfig, title }
       );
@@ -2344,6 +2460,73 @@ ${signature}`;
       addToast("Error grading assessment: " + e.message, "error");
     } finally {
       setGradingAssessment(false);
+    }
+  };
+
+  // Fetch published assessments for teacher dashboard
+  const fetchPublishedAssessments = async () => {
+    setLoadingPublished(true);
+    try {
+      const data = await api.getPublishedAssessments();
+      if (data.assessments) {
+        setPublishedAssessments(data.assessments);
+      }
+    } catch (e) {
+      addToast("Error loading assessments: " + e.message, "error");
+    } finally {
+      setLoadingPublished(false);
+    }
+  };
+
+  // Fetch results for a specific assessment
+  const fetchAssessmentResults = async (joinCode) => {
+    setLoadingResults(true);
+    try {
+      const data = await api.getAssessmentResults(joinCode);
+      if (data.error) {
+        addToast("Error: " + data.error, "error");
+      } else {
+        setSelectedAssessmentResults({
+          joinCode,
+          title: data.title,
+          submissions: data.submissions || [],
+          stats: data.stats || {},
+        });
+      }
+    } catch (e) {
+      addToast("Error loading results: " + e.message, "error");
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
+  // Toggle assessment active status
+  const toggleAssessmentStatus = async (joinCode) => {
+    try {
+      const data = await api.toggleAssessmentStatus(joinCode);
+      if (data.success) {
+        addToast(data.is_active ? "Assessment activated" : "Assessment deactivated", "success");
+        fetchPublishedAssessments();
+      }
+    } catch (e) {
+      addToast("Error: " + e.message, "error");
+    }
+  };
+
+  // Delete published assessment
+  const deletePublishedAssessment = async (joinCode) => {
+    if (!confirm("Delete this assessment and all its submissions?")) return;
+    try {
+      const data = await api.deletePublishedAssessment(joinCode);
+      if (data.success) {
+        addToast("Assessment deleted", "success");
+        setPublishedAssessments(prev => prev.filter(a => a.join_code !== joinCode));
+        if (selectedAssessmentResults?.joinCode === joinCode) {
+          setSelectedAssessmentResults(null);
+        }
+      }
+    } catch (e) {
+      addToast("Error: " + e.message, "error");
     }
   };
 
@@ -12812,6 +12995,33 @@ ${signature}`;
                       <Icon name="ClipboardCheck" size={18} />
                       Assessment Generator
                     </button>
+                    <button
+                      onClick={() => {
+                        setPlannerMode("dashboard");
+                        fetchPublishedAssessments();
+                      }}
+                      className="btn"
+                      style={{
+                        padding: "10px 20px",
+                        background:
+                          plannerMode === "dashboard"
+                            ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                            : "var(--glass-bg)",
+                        border:
+                          plannerMode === "dashboard"
+                            ? "none"
+                            : "1px solid var(--glass-border)",
+                        color: plannerMode === "dashboard" ? "#fff" : "var(--text-secondary)",
+                        fontWeight: 600,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="Users" size={18} />
+                      Student Portal
+                    </button>
                   </div>
 
                   {/* Lesson Planning Mode */}
@@ -14380,77 +14590,51 @@ ${signature}`;
                                 placeholder="Auto-generated from standards"
                               />
                             </div>
-                            <div>
-                              <label className="label">Total Questions</label>
-                              <input
-                                type="number"
-                                className="input"
-                                value={assessmentConfig.totalQuestions}
-                                onChange={(e) => {
-                                  const newTotal = parseInt(e.target.value) || 10;
-                                  const currentTypes = assessmentConfig.questionTypes || {};
-                                  const currentTotal = Object.values(currentTypes).reduce((a, b) => a + b, 0);
+                            <div style={{ display: "flex", gap: "15px" }}>
+                              <div style={{ flex: 1 }}>
+                                <label className="label">Total Questions</label>
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={assessmentConfig.totalQuestions}
+                                  onChange={(e) => {
+                                    const newTotal = parseInt(e.target.value) || 10;
+                                    const newTypes = distributeQuestions(newTotal);
+                                    const newDok = distributeDOK(newTotal);
+                                    const newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
 
-                                  // Redistribute question types proportionately
-                                  let newTypes = { ...currentTypes };
-                                  if (currentTotal > 0) {
-                                    let remaining = newTotal;
-                                    const keys = Object.keys(currentTypes).filter(k => currentTypes[k] > 0);
-                                    keys.forEach((key, idx) => {
-                                      if (idx === keys.length - 1) {
-                                        newTypes[key] = Math.max(0, remaining);
-                                      } else {
-                                        const proportion = currentTypes[key] / currentTotal;
-                                        const newCount = Math.round(newTotal * proportion);
-                                        newTypes[key] = newCount;
-                                        remaining -= newCount;
-                                      }
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      totalQuestions: newTotal,
+                                      questionTypes: newTypes,
+                                      dokDistribution: newDok,
+                                      pointsPerType: newPointsPerType,
                                     });
-                                  } else {
-                                    newTypes = {
-                                      multiple_choice: Math.round(newTotal * 0.6),
-                                      short_answer: Math.round(newTotal * 0.2),
-                                      extended_response: newTotal - Math.round(newTotal * 0.6) - Math.round(newTotal * 0.2),
-                                    };
-                                  }
+                                  }}
+                                  min="5"
+                                  max="50"
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <label className="label">Total Points</label>
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={assessmentConfig.totalPoints || 30}
+                                  onChange={(e) => {
+                                    const newTotalPoints = parseInt(e.target.value) || 30;
+                                    const newPointsPerType = distributePoints(newTotalPoints, assessmentConfig.questionTypes);
 
-                                  // Redistribute DOK distribution proportionately
-                                  const currentDok = assessmentConfig.dokDistribution || {};
-                                  const currentDokTotal = Object.values(currentDok).reduce((a, b) => a + b, 0);
-                                  let newDok = { ...currentDok };
-                                  if (currentDokTotal > 0) {
-                                    let dokRemaining = newTotal;
-                                    const dokKeys = Object.keys(currentDok).filter(k => currentDok[k] > 0);
-                                    dokKeys.forEach((key, idx) => {
-                                      if (idx === dokKeys.length - 1) {
-                                        newDok[key] = Math.max(0, dokRemaining);
-                                      } else {
-                                        const proportion = currentDok[key] / currentDokTotal;
-                                        const newCount = Math.round(newTotal * proportion);
-                                        newDok[key] = newCount;
-                                        dokRemaining -= newCount;
-                                      }
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      totalPoints: newTotalPoints,
+                                      pointsPerType: newPointsPerType,
                                     });
-                                  } else {
-                                    // Default DOK distribution
-                                    newDok = {
-                                      "1": Math.round(newTotal * 0.2),
-                                      "2": Math.round(newTotal * 0.4),
-                                      "3": Math.round(newTotal * 0.27),
-                                      "4": newTotal - Math.round(newTotal * 0.2) - Math.round(newTotal * 0.4) - Math.round(newTotal * 0.27),
-                                    };
-                                  }
-
-                                  setAssessmentConfig({
-                                    ...assessmentConfig,
-                                    totalQuestions: newTotal,
-                                    questionTypes: newTypes,
-                                    dokDistribution: newDok,
-                                  });
-                                }}
-                                min="5"
-                                max="50"
-                              />
+                                  }}
+                                  min="10"
+                                  max="200"
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -14481,8 +14665,8 @@ ${signature}`;
                             }}
                           >
                             <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", flex: 1 }}>Type</span>
-                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", width: "60px", textAlign: "center" }}>Count</span>
-                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", width: "60px", textAlign: "center" }}>Points</span>
+                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", width: "70px", textAlign: "center" }}>Count</span>
+                            <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", width: "70px", textAlign: "center" }}>Points</span>
                           </div>
                           <div
                             style={{
@@ -14520,7 +14704,7 @@ ${signature}`;
                                       },
                                     })
                                   }
-                                  style={{ width: "60px", textAlign: "center" }}
+                                  style={{ width: "70px", textAlign: "center" }}
                                   min="0"
                                   max="30"
                                   title="Number of questions"
@@ -14538,7 +14722,7 @@ ${signature}`;
                                       },
                                     })
                                   }
-                                  style={{ width: "60px", textAlign: "center", marginLeft: "8px" }}
+                                  style={{ width: "70px", textAlign: "center", marginLeft: "8px" }}
                                   min="0"
                                   max="100"
                                   title="Points per question"
@@ -14546,24 +14730,60 @@ ${signature}`;
                               </div>
                             ))}
                           </div>
-                          {/* Total Points Display */}
+                          {/* Totals Display */}
                           <div
                             style={{
                               marginTop: "15px",
                               paddingTop: "12px",
                               borderTop: "1px solid rgba(255,255,255,0.1)",
                               display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
+                              flexDirection: "column",
+                              gap: "8px",
                             }}
                           >
-                            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Total Points:</span>
-                            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#7c3aed" }}>
-                              {Object.entries(assessmentConfig.questionTypes || {}).reduce((total, [key, count]) => {
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Total Questions:</span>
+                              {(() => {
+                                const calculated = Object.values(assessmentConfig.questionTypes || {}).reduce((a, b) => a + b, 0);
+                                const target = assessmentConfig.totalQuestions || 20;
+                                const matches = calculated === target;
+                                return (
+                                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontSize: "1rem", fontWeight: 700, color: matches ? "#22c55e" : "#f59e0b" }}>
+                                      {calculated}
+                                    </span>
+                                    {!matches && (
+                                      <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)" }}>
+                                        (target: {target})
+                                      </span>
+                                    )}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Total Points:</span>
+                            {(() => {
+                              const calculated = Object.entries(assessmentConfig.questionTypes || {}).reduce((total, [key, count]) => {
                                 const pts = assessmentConfig.pointsPerType?.[key] || { multiple_choice: 1, short_answer: 2, extended_response: 4, true_false: 1, matching: 1 }[key] || 1;
                                 return total + (count * pts);
-                              }, 0)}
-                            </span>
+                              }, 0);
+                              const target = assessmentConfig.totalPoints || 30;
+                              const matches = calculated === target;
+                              return (
+                                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ fontSize: "1.1rem", fontWeight: 700, color: matches ? "#22c55e" : "#f59e0b" }}>
+                                    {calculated}
+                                  </span>
+                                  {!matches && (
+                                    <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)" }}>
+                                      (target: {target})
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })()}
+                            </div>
                           </div>
                         </div>
 
@@ -14639,6 +14859,36 @@ ${signature}`;
                                 />
                               </div>
                             ))}
+                          </div>
+                          {/* DOK Total Display */}
+                          <div
+                            style={{
+                              marginTop: "12px",
+                              paddingTop: "12px",
+                              borderTop: "1px solid rgba(255,255,255,0.1)",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Total:</span>
+                            {(() => {
+                              const calculated = Object.values(assessmentConfig.dokDistribution || {}).reduce((a, b) => a + b, 0);
+                              const target = assessmentConfig.totalQuestions || 20;
+                              const matches = calculated === target;
+                              return (
+                                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ fontSize: "1rem", fontWeight: 700, color: matches ? "#22c55e" : "#f59e0b" }}>
+                                    {calculated}
+                                  </span>
+                                  {!matches && (
+                                    <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)" }}>
+                                      (target: {target})
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -15415,6 +15665,209 @@ ${signature}`;
                       </div>
                     </div>
                   )}
+
+                  {/* Student Portal Dashboard */}
+                  {plannerMode === "dashboard" && (
+                    <div className="fade-in">
+                      <div style={{ display: "grid", gridTemplateColumns: selectedAssessmentResults ? "1fr 1fr" : "1fr", gap: "25px" }}>
+                        {/* Published Assessments List */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
+                              <Icon name="ClipboardList" size={20} />
+                              Published Assessments
+                            </h3>
+                            <button
+                              onClick={fetchPublishedAssessments}
+                              className="btn"
+                              style={{ padding: "8px 12px", fontSize: "0.85rem" }}
+                              disabled={loadingPublished}
+                            >
+                              <Icon name={loadingPublished ? "Loader2" : "RefreshCw"} size={16} className={loadingPublished ? "spin" : ""} />
+                              Refresh
+                            </button>
+                          </div>
+
+                          {loadingPublished ? (
+                            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                              <Icon name="Loader2" size={32} className="spin" />
+                              <p style={{ marginTop: "10px" }}>Loading assessments...</p>
+                            </div>
+                          ) : publishedAssessments.length === 0 ? (
+                            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                              <Icon name="FileQuestion" size={48} style={{ opacity: 0.5, marginBottom: "15px" }} />
+                              <p>No published assessments yet.</p>
+                              <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>Generate an assessment and click "Publish to Portal" to get started.</p>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                              {publishedAssessments.map((assessment) => (
+                                <div
+                                  key={assessment.join_code}
+                                  style={{
+                                    padding: "15px",
+                                    background: selectedAssessmentResults?.joinCode === assessment.join_code
+                                      ? "rgba(139, 92, 246, 0.2)"
+                                      : "rgba(255,255,255,0.03)",
+                                    borderRadius: "10px",
+                                    border: selectedAssessmentResults?.joinCode === assessment.join_code
+                                      ? "1px solid var(--accent-primary)"
+                                      : "1px solid rgba(255,255,255,0.1)",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                  }}
+                                  onClick={() => fetchAssessmentResults(assessment.join_code)}
+                                >
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontWeight: 600, marginBottom: "5px" }}>{assessment.title}</div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "15px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                                        <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                          <Icon name="Hash" size={14} />
+                                          {assessment.join_code}
+                                        </span>
+                                        <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                          <Icon name="Users" size={14} />
+                                          {assessment.submission_count || 0} submissions
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span
+                                        style={{
+                                          padding: "4px 10px",
+                                          borderRadius: "12px",
+                                          fontSize: "0.75rem",
+                                          fontWeight: 600,
+                                          background: assessment.is_active ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)",
+                                          color: assessment.is_active ? "#22c55e" : "#ef4444",
+                                        }}
+                                      >
+                                        {assessment.is_active ? "Active" : "Closed"}
+                                      </span>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); toggleAssessmentStatus(assessment.join_code); }}
+                                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px" }}
+                                        title={assessment.is_active ? "Deactivate" : "Activate"}
+                                      >
+                                        <Icon name={assessment.is_active ? "Pause" : "Play"} size={16} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); deletePublishedAssessment(assessment.join_code); }}
+                                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", color: "#ef4444" }}
+                                        title="Delete"
+                                      >
+                                        <Icon name="Trash2" size={16} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div style={{ marginTop: "8px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                    Created: {new Date(assessment.created_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Submissions Detail Panel */}
+                        {selectedAssessmentResults && (
+                          <div className="glass-card" style={{ padding: "20px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
+                                <Icon name="BarChart3" size={20} />
+                                {selectedAssessmentResults.title}
+                              </h3>
+                              <button
+                                onClick={() => setSelectedAssessmentResults(null)}
+                                style={{ background: "none", border: "none", cursor: "pointer", padding: "5px" }}
+                              >
+                                <Icon name="X" size={20} />
+                              </button>
+                            </div>
+
+                            {/* Stats Summary */}
+                            {selectedAssessmentResults.submissions.length > 0 && (
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "15px", marginBottom: "20px" }}>
+                                <div style={{ padding: "15px", background: "rgba(34, 197, 94, 0.1)", borderRadius: "10px", textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#22c55e" }}>
+                                    {selectedAssessmentResults.submissions.length}
+                                  </div>
+                                  <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Submissions</div>
+                                </div>
+                                <div style={{ padding: "15px", background: "rgba(99, 102, 241, 0.1)", borderRadius: "10px", textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#6366f1" }}>
+                                    {Math.round(selectedAssessmentResults.submissions.reduce((sum, s) => sum + (s.percentage || 0), 0) / selectedAssessmentResults.submissions.length)}%
+                                  </div>
+                                  <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Avg Score</div>
+                                </div>
+                                <div style={{ padding: "15px", background: "rgba(245, 158, 11, 0.1)", borderRadius: "10px", textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#f59e0b" }}>
+                                    {Math.max(...selectedAssessmentResults.submissions.map(s => s.percentage || 0))}%
+                                  </div>
+                                  <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>High Score</div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Student Submissions List */}
+                            {loadingResults ? (
+                              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                                <Icon name="Loader2" size={32} className="spin" />
+                              </div>
+                            ) : selectedAssessmentResults.submissions.length === 0 ? (
+                              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                                <Icon name="UserX" size={48} style={{ opacity: 0.5, marginBottom: "15px" }} />
+                                <p>No submissions yet.</p>
+                                <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>
+                                  Share code <strong>{selectedAssessmentResults.joinCode}</strong> with students.
+                                </p>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "400px", overflowY: "auto" }}>
+                                {selectedAssessmentResults.submissions.map((submission, idx) => (
+                                  <div
+                                    key={idx}
+                                    style={{
+                                      padding: "12px 15px",
+                                      background: "rgba(255,255,255,0.03)",
+                                      borderRadius: "8px",
+                                      border: "1px solid rgba(255,255,255,0.1)",
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <div>
+                                      <div style={{ fontWeight: 600 }}>{submission.student_name}</div>
+                                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                        {new Date(submission.submitted_at).toLocaleString()}
+                                        {submission.time_taken_seconds && (
+                                          <span> · {Math.floor(submission.time_taken_seconds / 60)}m {submission.time_taken_seconds % 60}s</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div style={{ textAlign: "right" }}>
+                                      <div style={{
+                                        fontSize: "1.2rem",
+                                        fontWeight: 700,
+                                        color: submission.percentage >= 80 ? "#22c55e" : submission.percentage >= 60 ? "#f59e0b" : "#ef4444"
+                                      }}>
+                                        {submission.percentage?.toFixed(0) || 0}%
+                                      </div>
+                                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                        {submission.score}/{submission.total_points} pts
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -15441,11 +15894,13 @@ ${signature}`;
         >
           <div
             style={{
-              background: "var(--surface)",
+              background: "#1a1a2e",
               borderRadius: "12px",
               width: "100%",
               maxWidth: "500px",
               padding: "25px",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
             }}
           >
             <div
@@ -15757,12 +16212,14 @@ ${signature}`;
         >
           <div
             style={{
-              background: "var(--surface)",
+              background: "#1a1a2e",
               borderRadius: "12px",
               width: "100%",
               maxWidth: "900px",
               maxHeight: "90vh",
               overflow: "auto",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
             }}
           >
             <AssignmentPlayer
@@ -15813,12 +16270,14 @@ ${signature}`;
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "var(--surface)",
+              background: "#1a1a2e",
               borderRadius: "16px",
               padding: "30px",
               maxWidth: "500px",
               width: "100%",
               textAlign: "center",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
             }}
           >
             <div style={{ marginBottom: "20px" }}>

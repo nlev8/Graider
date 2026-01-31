@@ -86,8 +86,9 @@ def publish_assessment():
         if not result.data:
             return jsonify({"error": "Failed to publish assessment"}), 500
 
-        # Generate shareable link
-        join_link = f"https://graider.live/join/{join_code}"
+        # Generate shareable link (use request host for development)
+        host = request.host_url.rstrip('/')
+        join_link = f"{host}/join/{join_code}"
 
         return jsonify({
             "success": True,

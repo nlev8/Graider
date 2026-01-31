@@ -1584,16 +1584,29 @@ def generate_assessment():
         assessment_type = assessment_config.get('type', 'quiz')
         title = assessment_config.get('title', f'{config.get("subject", "Subject")} Assessment')
         total_questions = assessment_config.get('totalQuestions', 15)
+        total_points = assessment_config.get('totalPoints', 30)
         question_types = assessment_config.get('questionTypes', {
             'multiple_choice': 10,
             'short_answer': 3,
-            'extended_response': 2
+            'extended_response': 2,
+            'true_false': 0,
+            'matching': 0
+        })
+        points_per_type = assessment_config.get('pointsPerType', {
+            'multiple_choice': 1,
+            'short_answer': 2,
+            'extended_response': 4,
+            'true_false': 1,
+            'matching': 1
         })
         dok_distribution = assessment_config.get('dokDistribution', {
             '1': 3, '2': 6, '3': 4, '4': 2
         })
         include_answer_key = assessment_config.get('includeAnswerKey', True)
         include_standards_ref = assessment_config.get('includeStandardsReference', True)
+
+        # Get global AI notes from config
+        global_ai_notes = config.get('globalAINotes', '')
 
         # Build standards context
         standards_context = []
@@ -1711,9 +1724,10 @@ ASSESSMENT REQUIREMENTS:
 - Title: {title}
 - Type: {assessment_type.upper()}
 - Total Questions: {total_questions}
+- Target Total Points: {total_points}
 
-QUESTION TYPE DISTRIBUTION:
-{chr(10).join(f'- {qtype.replace("_", " ").title()}: {count} questions' for qtype, count in question_types.items())}
+QUESTION TYPE DISTRIBUTION (with point values per question):
+{chr(10).join(f'- {qtype.replace("_", " ").title()}: {count} questions @ {points_per_type.get(qtype, 1)} points each' for qtype, count in question_types.items() if count > 0)}
 
 DOK LEVEL DISTRIBUTION:
 - DOK 1 (Recall): {dok_distribution.get('1', 0)} questions
@@ -1725,14 +1739,19 @@ DOK LEVEL DISTRIBUTION:
 
 CRITICAL REQUIREMENTS:
 1. EVERY question MUST include: "dok" (1-4), "standard" (code), "points", and appropriate answer format
-2. Questions must DIRECTLY assess the benchmarks provided - not tangentially related content
-3. DOK levels must match the cognitive demand - DOK 1 = recall, DOK 3 = analysis with evidence
-4. Multiple choice distractors should be plausible but clearly incorrect
-5. Include varied question stems (What, How, Why, Analyze, Compare, Evaluate)
-6. Extended response questions need detailed rubrics with point breakdowns
-7. All questions must be answerable based on the standards content
-8. Use grade-appropriate vocabulary and complexity
-
+2. STRICTLY use the point values specified above for each question type - this is not optional
+3. Questions must DIRECTLY assess the benchmarks provided - not tangentially related content
+4. DOK levels must match the cognitive demand - DOK 1 = recall, DOK 3 = analysis with evidence
+5. Multiple choice distractors should be plausible but clearly incorrect
+6. Include varied question stems (What, How, Why, Analyze, Compare, Evaluate)
+7. Extended response questions need detailed rubrics with point breakdowns
+8. All questions must be answerable based on the standards content
+9. Use grade-appropriate vocabulary and complexity
+10. The total_points field MUST equal exactly {total_points}
+{f'''
+TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+{global_ai_notes}
+''' if global_ai_notes else ''}
 Generate a complete assessment in this JSON format:
 {{
     "title": "{title}",
@@ -1740,7 +1759,7 @@ Generate a complete assessment in this JSON format:
     "grade": "{config.get('grade', '8')}",
     "subject": "{config.get('subject', 'Subject')}",
     "standards_assessed": ["SS.8.A.1.1", "SS.8.A.1.2"],
-    "total_points": 25,
+    "total_points": {total_points},
     "time_estimate": "45 minutes",
     "instructions": "Clear student instructions...",
     "sections": [

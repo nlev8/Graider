@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(npm install)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd IEP/504 accommodations, fix scatter plot, clean up Grade UI\n\nFeatures:\n- Add FERPA-compliant IEP/504 accommodation system with 8 presets\n- Accommodation presets: Simplified Language, Effort-Focused, Extra\n  Encouragement, Chunked Feedback, Modified Expectations, Visual\n  Structure, Read-Aloud Friendly, Growth Mindset\n- Student accommodation management UI in Settings tab\n- CSV import/export for bulk accommodation assignments\n- Accommodation badge \\(heart icon\\) on results for IEP students\n- Only accommodation TYPE sent to AI, never student identity\n\nFixes:\n- Fix scatter plot legend overlapping with X-axis label\n- Fix scatter plot tooltip text color in dark mode \\(was black on dark\\)\n- Expand Y-axis domain to show high growth values \\(up to 100\\)\n\nUI Improvements:\n- Remove redundant Answer Markers section from Grade tab\n- Remove redundant Marker Library from Grade tab\n- Markers now managed exclusively in Assignment Builder\n\nDocumentation:\n- Add IEP/504 section to PITCH_DECK.md\n- Add IEP/504 section to User_Manual.md\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
