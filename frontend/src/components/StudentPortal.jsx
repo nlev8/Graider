@@ -38,6 +38,7 @@ export default function StudentPortal() {
   const [loading, setLoading] = useState(false);
   const [startTime, setStartTime] = useState(null);
   const [results, setResults] = useState(null);
+  const [studentAccommodation, setStudentAccommodation] = useState(null);
 
   // Load assessment if URL has code
   useEffect(() => {
@@ -80,6 +81,32 @@ export default function StudentPortal() {
       setError("Please enter your name");
       return;
     }
+
+    // Check if this is a restricted assessment (makeup exam)
+    const settings = assessment?.settings || {};
+    const isMakeup = settings.is_makeup || false;
+    const restrictedStudents = settings.restricted_students || [];
+
+    if (isMakeup && restrictedStudents.length > 0) {
+      const normalizedName = studentName.trim().toLowerCase();
+      const isAllowed = restrictedStudents.some(
+        (s) => s.toLowerCase() === normalizedName
+      );
+      if (!isAllowed) {
+        setError("This assessment is restricted to specific students. If you believe this is an error, please contact your teacher.");
+        return;
+      }
+    }
+
+    // Check if student has accommodations
+    if (assessment?.student_accommodations) {
+      const normalizedName = studentName.trim();
+      const accommodation = assessment.student_accommodations[normalizedName];
+      if (accommodation) {
+        setStudentAccommodation(accommodation);
+      }
+    }
+
     setStartTime(Date.now());
     setStage("assessment");
   };
@@ -247,6 +274,19 @@ export default function StudentPortal() {
               </div>
             </div>
 
+            {/* Restricted Assessment Notice */}
+            {assessment?.settings?.is_makeup && (
+              <div style={{ background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.5)", borderRadius: "8px", padding: "12px 15px", marginBottom: "20px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#fbbf24" }}>
+                  <Icon name="AlertCircle" size={18} />
+                  <strong>Makeup Exam</strong>
+                </div>
+                <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)", marginTop: "5px" }}>
+                  This assessment is only available to specific students. Please enter your full name exactly as it appears on your roster.
+                </p>
+              </div>
+            )}
+
             {assessment?.instructions && (
               <div style={{ background: "rgba(99, 102, 241, 0.1)", border: "1px solid rgba(99, 102, 241, 0.3)", borderRadius: "8px", padding: "15px", marginBottom: "25px" }}>
                 <strong>Instructions:</strong> {assessment.instructions}
@@ -261,7 +301,7 @@ export default function StudentPortal() {
                 type="text"
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
-                placeholder="Enter your name"
+                placeholder="Enter your full name"
                 style={{ ...inputStyle, textTransform: "none", textAlign: "left", letterSpacing: "normal" }}
                 autoFocus
               />
@@ -269,7 +309,7 @@ export default function StudentPortal() {
 
             {error && (
               <div style={{ background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "#fca5a5" }}>
-                {error}
+                <Icon name="AlertCircle" size={16} /> {error}
               </div>
             )}
 
@@ -320,6 +360,28 @@ export default function StudentPortal() {
 
         {/* Questions */}
         <div style={{ maxWidth: "800px", margin: "0 auto", padding: "30px 20px" }}>
+          {/* Accommodations Notice */}
+          {studentAccommodation && (
+            <div style={{ background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.4)", borderRadius: "10px", padding: "15px 20px", marginBottom: "25px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "1.2rem" }}>📋</span>
+                <strong style={{ color: "#60a5fa" }}>Your Accommodations</strong>
+              </div>
+              {studentAccommodation.presets && studentAccommodation.presets.length > 0 && (
+                <ul style={{ margin: "0 0 10px 20px", padding: 0, color: "rgba(255,255,255,0.8)", fontSize: "0.95rem" }}>
+                  {studentAccommodation.presets.map((preset, idx) => (
+                    <li key={idx} style={{ marginBottom: "5px" }}>{preset}</li>
+                  ))}
+                </ul>
+              )}
+              {studentAccommodation.custom_notes && (
+                <p style={{ margin: 0, color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", fontStyle: "italic" }}>
+                  {studentAccommodation.custom_notes}
+                </p>
+              )}
+            </div>
+          )}
+
           {error && (
             <div style={{ background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "#fca5a5" }}>
               {error}

@@ -1088,6 +1088,25 @@ function App() {
   const [selectedAssessmentResults, setSelectedAssessmentResults] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
 
+  // Saved Assessments state
+  const [savedAssessments, setSavedAssessments] = useState([]);
+  const [loadingSavedAssessments, setLoadingSavedAssessments] = useState(false);
+
+  // Publish Modal state (enhanced with period, student selection)
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishSettings, setPublishSettings] = useState({
+    period: '',
+    periodFilename: '',
+    isMakeup: false,
+    selectedStudents: [],
+    timeLimit: null,
+    applyAccommodations: true,
+  });
+  const [publishModalStudents, setPublishModalStudents] = useState([]);
+  const [loadingPublishStudents, setLoadingPublishStudents] = useState(false);
+  const [savingAssessment, setSavingAssessment] = useState(false);
+  const [saveAssessmentName, setSaveAssessmentName] = useState('');
+
   // File upload state
   const [rosters, setRosters] = useState([]);
   const [periods, setPeriods] = useState([]);
@@ -2409,34 +2428,173 @@ ${signature}`;
     }
   };
 
-  // Publish assessment to student portal
-  const publishAssessmentHandler = async () => {
+  // Open publish modal for assessment
+  const publishAssessmentHandler = () => {
     if (!generatedAssessment) {
       addToast("No assessment to publish", "warning");
       return;
     }
+    // Reset publish settings
+    setPublishSettings({
+      period: '',
+      periodFilename: '',
+      isMakeup: false,
+      selectedStudents: [],
+      timeLimit: null,
+      applyAccommodations: true,
+    });
+    setPublishModalStudents([]);
+    setShowPublishModal(true);
+  };
+
+  // Load students when period is selected in publish modal
+  const loadPublishModalStudents = async (periodFilename) => {
+    if (!periodFilename) {
+      setPublishModalStudents([]);
+      return;
+    }
+    setLoadingPublishStudents(true);
+    try {
+      const data = await api.getPeriodStudents(periodFilename);
+      if (data.students) {
+        setPublishModalStudents(data.students);
+      }
+    } catch (e) {
+      console.error("Failed to load period students:", e);
+      setPublishModalStudents([]);
+    } finally {
+      setLoadingPublishStudents(false);
+    }
+  };
+
+  // Confirm and publish assessment with settings
+  const confirmPublishAssessment = async () => {
+    if (!generatedAssessment) return;
+
     setPublishingAssessment(true);
     try {
+      // Build student accommodations map if applying accommodations
+      let studentAccommodationsMap = {};
+      if (publishSettings.applyAccommodations && publishModalStudents.length > 0) {
+        publishModalStudents.forEach(student => {
+          const studentId = student.id || student.email || (student.first + ' ' + student.last);
+          const accommodation = studentAccommodations[studentId];
+          if (accommodation) {
+            studentAccommodationsMap[student.first + ' ' + student.last] = accommodation;
+          }
+        });
+      }
+
+      // Build restricted students list for makeup exams
+      let restrictedStudents = null;
+      if (publishSettings.isMakeup && publishSettings.selectedStudents.length > 0) {
+        restrictedStudents = publishSettings.selectedStudents;
+      }
+
       const data = await api.publishAssessmentToPortal(generatedAssessment, {
         teacher_name: config.teacher_name || "Teacher",
         teacher_email: config.teacher_email,
         show_correct_answers: true,
         show_score_immediately: true,
+        period: publishSettings.period,
+        restricted_students: restrictedStudents,
+        student_accommodations: studentAccommodationsMap,
+        time_limit_minutes: publishSettings.timeLimit,
       });
+
       if (data.error) {
         addToast("Error publishing: " + data.error, "error");
       } else if (data.success) {
+        setShowPublishModal(false);
         setPublishedAssessmentModal({
           show: true,
           joinCode: data.join_code,
           joinLink: data.join_link,
         });
         addToast("Assessment published to student portal!", "success");
+        // Refresh published assessments list
+        fetchPublishedAssessments();
       }
     } catch (e) {
       addToast("Error publishing: " + e.message, "error");
     } finally {
       setPublishingAssessment(false);
+    }
+  };
+
+  // Save assessment locally for later use (makeup exams)
+  const saveAssessmentHandler = async () => {
+    if (!generatedAssessment) {
+      addToast("No assessment to save", "warning");
+      return;
+    }
+    if (!saveAssessmentName.trim()) {
+      addToast("Please enter a name for the assessment", "warning");
+      return;
+    }
+    setSavingAssessment(true);
+    try {
+      const data = await api.saveAssessmentLocally(generatedAssessment, saveAssessmentName.trim());
+      if (data.error) {
+        addToast("Error saving: " + data.error, "error");
+      } else if (data.success) {
+        addToast("Assessment saved successfully!", "success");
+        setSaveAssessmentName('');
+        // Refresh saved assessments list
+        fetchSavedAssessments();
+      }
+    } catch (e) {
+      addToast("Error saving assessment: " + e.message, "error");
+    } finally {
+      setSavingAssessment(false);
+    }
+  };
+
+  // Fetch saved assessments
+  const fetchSavedAssessments = async () => {
+    setLoadingSavedAssessments(true);
+    try {
+      const data = await api.listSavedAssessments();
+      if (data.assessments) {
+        setSavedAssessments(data.assessments);
+      }
+    } catch (e) {
+      console.error("Error loading saved assessments:", e);
+    } finally {
+      setLoadingSavedAssessments(false);
+    }
+  };
+
+  // Load a saved assessment
+  const loadSavedAssessment = async (filename) => {
+    try {
+      const data = await api.loadSavedAssessment(filename);
+      if (data.error) {
+        addToast("Error loading assessment: " + data.error, "error");
+      } else if (data.assessment) {
+        setGeneratedAssessment(data.assessment);
+        setAssessmentAnswers({});
+        setAssessmentGradingResults(null);
+        addToast("Assessment loaded!", "success");
+      }
+    } catch (e) {
+      addToast("Error loading assessment: " + e.message, "error");
+    }
+  };
+
+  // Delete a saved assessment
+  const deleteSavedAssessment = async (filename) => {
+    if (!confirm("Delete this saved assessment?")) return;
+    try {
+      const data = await api.deleteSavedAssessment(filename);
+      if (data.error) {
+        addToast("Error deleting: " + data.error, "error");
+      } else {
+        addToast("Assessment deleted", "success");
+        fetchSavedAssessments();
+      }
+    } catch (e) {
+      addToast("Error deleting assessment: " + e.message, "error");
     }
   };
 
@@ -12999,6 +13157,7 @@ ${signature}`;
                       onClick={() => {
                         setPlannerMode("dashboard");
                         fetchPublishedAssessments();
+                        fetchSavedAssessments();
                       }}
                       className="btn"
                       style={{
@@ -15237,6 +15396,45 @@ ${signature}`;
                               </div>
                             </div>
 
+                            {/* Save Assessment Section */}
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                marginBottom: "20px",
+                                padding: "15px",
+                                background: "var(--glass-bg)",
+                                borderRadius: "10px",
+                              }}
+                            >
+                              <Icon name="Save" size={20} style={{ color: "var(--accent-secondary)" }} />
+                              <input
+                                type="text"
+                                placeholder="Assessment name..."
+                                value={saveAssessmentName}
+                                onChange={(e) => setSaveAssessmentName(e.target.value)}
+                                style={{
+                                  flex: 1,
+                                  padding: "8px 12px",
+                                  borderRadius: "6px",
+                                  border: "1px solid var(--glass-border)",
+                                  background: "var(--surface)",
+                                  color: "var(--text-primary)",
+                                  fontSize: "0.9rem",
+                                }}
+                              />
+                              <button
+                                onClick={saveAssessmentHandler}
+                                disabled={savingAssessment || !saveAssessmentName.trim()}
+                                className="btn btn-secondary"
+                                style={{ padding: "8px 16px" }}
+                              >
+                                <Icon name={savingAssessment ? "Loader" : "Save"} size={16} />
+                                {savingAssessment ? "Saving..." : "Save for Later"}
+                              </button>
+                            </div>
+
                             {/* DOK Summary */}
                             {generatedAssessment.dok_summary && (
                               <div
@@ -15730,7 +15928,28 @@ ${signature}`;
                                           <Icon name="Users" size={14} />
                                           {assessment.submission_count || 0} submissions
                                         </span>
+                                        {assessment.period && (
+                                          <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                            <Icon name="Clock" size={14} />
+                                            {assessment.period}
+                                          </span>
+                                        )}
                                       </div>
+                                      {assessment.is_makeup && (
+                                        <span
+                                          style={{
+                                            marginTop: "8px",
+                                            padding: "3px 8px",
+                                            background: "rgba(245, 158, 11, 0.2)",
+                                            color: "#f59e0b",
+                                            borderRadius: "4px",
+                                            fontSize: "0.75rem",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          Makeup Exam
+                                        </span>
+                                      )}
                                     </div>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                       <span
@@ -15863,6 +16082,86 @@ ${signature}`;
                                 ))}
                               </div>
                             )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Saved Assessments Section */}
+                      <div className="glass-card" style={{ padding: "20px", marginTop: "25px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Icon name="Archive" size={20} />
+                            Saved Assessments
+                          </h3>
+                          <button
+                            onClick={fetchSavedAssessments}
+                            className="btn"
+                            style={{ padding: "8px 12px", fontSize: "0.85rem" }}
+                            disabled={loadingSavedAssessments}
+                          >
+                            <Icon name={loadingSavedAssessments ? "Loader2" : "RefreshCw"} size={16} className={loadingSavedAssessments ? "spin" : ""} />
+                            Refresh
+                          </button>
+                        </div>
+
+                        <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
+                          Load a saved assessment to view, modify, or publish it for makeup exams.
+                        </p>
+
+                        {loadingSavedAssessments ? (
+                          <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                            <Icon name="Loader2" size={32} className="spin" />
+                            <p style={{ marginTop: "10px" }}>Loading saved assessments...</p>
+                          </div>
+                        ) : savedAssessments.length === 0 ? (
+                          <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                            <Icon name="FolderOpen" size={48} style={{ opacity: 0.5, marginBottom: "15px" }} />
+                            <p>No saved assessments.</p>
+                            <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>Generate an assessment and use "Save for Later" to save it.</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px" }}>
+                            {savedAssessments.map((assessment) => (
+                              <div
+                                key={assessment.filename}
+                                style={{
+                                  padding: "15px",
+                                  background: "rgba(255,255,255,0.03)",
+                                  borderRadius: "10px",
+                                  border: "1px solid rgba(255,255,255,0.1)",
+                                }}
+                              >
+                                <div style={{ fontWeight: 600, marginBottom: "8px" }}>{assessment.name}</div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>
+                                  <Icon name="FileText" size={14} />
+                                  {assessment.question_count || '?'} questions
+                                  <span>·</span>
+                                  <Icon name="Target" size={14} />
+                                  {assessment.total_points || '?'} pts
+                                </div>
+                                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "12px" }}>
+                                  Saved: {new Date(assessment.saved_at).toLocaleDateString()}
+                                </div>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <button
+                                    onClick={() => loadSavedAssessment(assessment.filename)}
+                                    className="btn btn-primary"
+                                    style={{ padding: "6px 12px", fontSize: "0.85rem", flex: 1 }}
+                                  >
+                                    <Icon name="Download" size={14} />
+                                    Load
+                                  </button>
+                                  <button
+                                    onClick={() => deleteSavedAssessment(assessment.filename)}
+                                    className="btn"
+                                    style={{ padding: "6px 10px", fontSize: "0.85rem", background: "rgba(239, 68, 68, 0.2)", color: "#ef4444" }}
+                                    title="Delete"
+                                  >
+                                    <Icon name="Trash2" size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -16248,6 +16547,283 @@ ${signature}`;
               }}
               results={interactiveResults}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Publish Settings Modal - Period, Makeup, Student Selection */}
+      {showPublishModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowPublishModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#1a1a2e",
+              borderRadius: "16px",
+              padding: "30px",
+              maxWidth: "600px",
+              width: "100%",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <Icon name="Share2" size={24} style={{ color: "var(--accent-primary)" }} />
+              Publish Assessment
+            </h2>
+
+            {/* Period Selection */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "0.95rem" }}>
+                Period (Optional)
+              </label>
+              <select
+                value={publishSettings.periodFilename}
+                onChange={(e) => {
+                  const filename = e.target.value;
+                  const selectedPeriod = periods.find(p => p.filename === filename);
+                  setPublishSettings({
+                    ...publishSettings,
+                    periodFilename: filename,
+                    period: selectedPeriod ? selectedPeriod.name : '',
+                    selectedStudents: [],
+                  });
+                  loadPublishModalStudents(filename);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "var(--surface)",
+                  color: "var(--text-primary)",
+                  fontSize: "0.95rem",
+                }}
+              >
+                <option value="">-- No Period (Open to All) --</option>
+                {periods.map((p) => (
+                  <option key={p.filename} value={p.filename}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Makeup Exam Toggle */}
+            <div style={{ marginBottom: "20px" }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  cursor: "pointer",
+                  padding: "12px 15px",
+                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.2)" : "var(--glass-bg)",
+                  border: publishSettings.isMakeup ? "1px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                  borderRadius: "8px",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={publishSettings.isMakeup}
+                  onChange={(e) => setPublishSettings({ ...publishSettings, isMakeup: e.target.checked, selectedStudents: [] })}
+                  style={{ width: "18px", height: "18px", accentColor: "var(--accent-primary)" }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600 }}>Makeup Exam</div>
+                  <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    Restrict to selected students only
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Student Selection (only shown for makeup exams with a period selected) */}
+            {publishSettings.isMakeup && publishSettings.periodFilename && (
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "0.95rem" }}>
+                  Select Students ({publishSettings.selectedStudents.length} selected)
+                </label>
+                {loadingPublishStudents ? (
+                  <div style={{ padding: "20px", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <Icon name="Loader" size={24} className="spin" />
+                    <div style={{ marginTop: "10px" }}>Loading students...</div>
+                  </div>
+                ) : publishModalStudents.length === 0 ? (
+                  <div style={{ padding: "20px", textAlign: "center", color: "var(--text-secondary)" }}>
+                    No students in this period
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      maxHeight: "200px",
+                      overflowY: "auto",
+                      border: "1px solid var(--glass-border)",
+                      borderRadius: "8px",
+                      background: "var(--surface)",
+                    }}
+                  >
+                    {publishModalStudents.map((student, idx) => {
+                      const studentName = student.first + ' ' + student.last;
+                      const isSelected = publishSettings.selectedStudents.includes(studentName);
+                      const studentId = student.id || student.email || studentName;
+                      const hasAccommodation = studentAccommodations[studentId];
+                      return (
+                        <label
+                          key={idx}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            padding: "10px 12px",
+                            borderBottom: idx < publishModalStudents.length - 1 ? "1px solid var(--glass-border)" : "none",
+                            cursor: "pointer",
+                            background: isSelected ? "rgba(139, 92, 246, 0.1)" : "transparent",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setPublishSettings({ ...publishSettings, selectedStudents: [...publishSettings.selectedStudents, studentName] });
+                              } else {
+                                setPublishSettings({ ...publishSettings, selectedStudents: publishSettings.selectedStudents.filter(s => s !== studentName) });
+                              }
+                            }}
+                            style={{ width: "16px", height: "16px", accentColor: "var(--accent-primary)" }}
+                          />
+                          <span style={{ flex: 1 }}>{studentName}</span>
+                          {hasAccommodation && (
+                            <span
+                              style={{
+                                padding: "2px 8px",
+                                background: "rgba(59, 130, 246, 0.2)",
+                                color: "#3b82f6",
+                                borderRadius: "4px",
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                              }}
+                            >
+                              IEP/504
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {publishSettings.isMakeup && publishModalStudents.length > 0 && (
+                  <div style={{ marginTop: "8px", display: "flex", gap: "10px" }}>
+                    <button
+                      onClick={() => setPublishSettings({ ...publishSettings, selectedStudents: publishModalStudents.map(s => s.first + ' ' + s.last) })}
+                      className="btn btn-secondary"
+                      style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => setPublishSettings({ ...publishSettings, selectedStudents: [] })}
+                      className="btn btn-secondary"
+                      style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Apply Accommodations Toggle */}
+            {publishSettings.periodFilename && Object.keys(studentAccommodations).length > 0 && (
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    cursor: "pointer",
+                    padding: "12px 15px",
+                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.2)" : "var(--glass-bg)",
+                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid var(--glass-border)",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={publishSettings.applyAccommodations}
+                    onChange={(e) => setPublishSettings({ ...publishSettings, applyAccommodations: e.target.checked })}
+                    style={{ width: "18px", height: "18px", accentColor: "#3b82f6" }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Apply IEP/504 Accommodations</div>
+                    <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                      Students with accommodations will see modified instructions
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Time Limit */}
+            <div style={{ marginBottom: "25px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "0.95rem" }}>
+                Time Limit (Optional)
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <input
+                  type="number"
+                  min="0"
+                  value={publishSettings.timeLimit || ''}
+                  onChange={(e) => setPublishSettings({ ...publishSettings, timeLimit: e.target.value ? parseInt(e.target.value) : null })}
+                  placeholder="No limit"
+                  style={{
+                    width: "120px",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--glass-border)",
+                    background: "var(--surface)",
+                    color: "var(--text-primary)",
+                    fontSize: "0.95rem",
+                  }}
+                />
+                <span style={{ color: "var(--text-secondary)" }}>minutes</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowPublishModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: "10px 20px" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPublishAssessment}
+                disabled={publishingAssessment || (publishSettings.isMakeup && publishSettings.selectedStudents.length === 0)}
+                className="btn btn-primary"
+                style={{
+                  padding: "10px 24px",
+                  background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+                }}
+              >
+                <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
+                {publishingAssessment ? "Publishing..." : "Publish Assessment"}
+              </button>
+            </div>
           </div>
         </div>
       )}

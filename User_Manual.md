@@ -9,12 +9,15 @@
 6. [Assignment Builder](#assignment-builder)
 7. [Analytics Tab](#analytics-tab)
 8. [Lesson Planner](#lesson-planner)
-9. [Resources Tab](#resources-tab)
-10. [Settings](#settings)
-11. [IEP/504 Accommodations](#iep504-accommodations)
-12. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-13. [Student Progress Tracking](#student-progress-tracking)
-14. [Troubleshooting](#troubleshooting)
+9. [Assessment Generator](#assessment-generator)
+10. [Student Portal](#student-portal)
+11. [Teacher Dashboard](#teacher-dashboard)
+12. [Resources Tab](#resources-tab)
+13. [Settings](#settings)
+14. [IEP/504 Accommodations](#iep504-accommodations)
+15. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+16. [Student Progress Tracking](#student-progress-tracking)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -23,19 +26,28 @@
 ### Running Graider
 
 ```bash
-cd /Users/alexc/Downloads/Graider
-python graider_app.py
+cd /Users/alexc/Downloads/Graider/backend
+python app.py
 ```
 
 The app opens automatically at **http://localhost:3000**
 
-> **Note:** There is NO separate frontend to run. Everything is served by the single Python command.
+> **Note:** The frontend is pre-built and served by the Flask backend. No separate frontend process needed.
+
+### Live Version
+
+Access the live version at **[graider.live](https://graider.live)**
 
 ### First-Time Setup
 
-1. **API Key**: Add your OpenAI API key to `.env`:
+1. **API Keys**: Create a `.env` file in the `backend` folder:
    ```
    OPENAI_API_KEY=sk-your-key-here
+   ANTHROPIC_API_KEY=your-anthropic-key     # Optional, for Claude
+   RESEND_API_KEY=your-resend-key           # For email
+   SUPABASE_URL=your-supabase-url           # For Student Portal
+   SUPABASE_ANON_KEY=your-anon-key
+   SUPABASE_SERVICE_KEY=your-service-key
    ```
 
 2. **Folders**: In Settings, configure:
@@ -645,6 +657,169 @@ Click **Export** to download as a Word document ready for classroom use.
 
 ---
 
+## Assessment Generator
+
+Generate standards-aligned assessments with multiple question types.
+
+### Creating an Assessment
+
+1. Go to the **Planner** tab
+2. Click **Assessment Generator** mode
+3. Configure the assessment:
+   - **Total Questions**: How many questions to generate
+   - **Total Points**: Total point value for the assessment
+   - **Question Types**: Multiple Choice, Short Answer, Extended Response, True/False, Matching
+   - **DOK Levels**: Depth of Knowledge distribution (1-4)
+4. **Select Standards**: Check the standards to assess
+5. Add **AI Instructions** (optional): Special requirements
+6. Click **Generate Assessment**
+
+### Question Type Distribution
+
+When you set the total questions, types are automatically distributed:
+- **50%** Multiple Choice
+- **15%** Short Answer
+- **15%** True/False
+- **10%** Extended Response
+- **10%** Matching
+
+Adjust individual counts as needed - the total is enforced.
+
+### DOK Levels
+
+DOK (Depth of Knowledge) indicates cognitive complexity:
+
+| Level | Description | Example |
+|-------|-------------|---------|
+| DOK 1 | Recall | Define a term, identify a date |
+| DOK 2 | Skill/Concept | Compare two events, explain a process |
+| DOK 3 | Strategic Thinking | Analyze causes, evaluate arguments |
+| DOK 4 | Extended Thinking | Synthesize multiple sources, design a solution |
+
+Default distribution: 20% DOK 1, 40% DOK 2, 30% DOK 3, 10% DOK 4
+
+### Exporting Assessments
+
+Click **Export** to download in various formats:
+- **Word Document** - Editable .docx
+- **PDF** - Print-ready with answer key option
+- **Canvas (QTI)** - Import directly into Canvas LMS
+- **Kahoot** - Game-based learning format
+- **Quizlet** - Flashcard study format
+- **Google Forms** - Importable form
+
+### Saving Assessments
+
+Save assessments for later use (e.g., makeup exams):
+
+1. Enter a name in the "Assessment name..." field
+2. Click **Save for Later**
+3. Access saved assessments in the **Student Portal Dashboard**
+
+---
+
+## Student Portal
+
+Publish assessments online for students to take with automatic grading.
+
+### Publishing an Assessment
+
+1. Generate an assessment in **Assessment Generator**
+2. Click **Publish to Portal**
+3. Configure publish settings:
+   - **Period** (optional): Organize by class period
+   - **Makeup Exam**: Restrict to specific students
+   - **Apply Accommodations**: Include IEP/504 modifications
+   - **Time Limit** (optional): Set a time limit in minutes
+4. Click **Publish Assessment**
+5. Share the **Join Code** or **Link** with students
+
+### Join Codes
+
+Each published assessment gets a unique 6-character code (e.g., `ABC123`).
+
+Students access assessments at:
+- **Direct link**: `graider.live/join/ABC123`
+- **Or manually**: Go to `graider.live/join` and enter the code
+
+### Student Experience
+
+1. Student goes to `graider.live/join`
+2. Enters the join code
+3. Enters their name
+4. Takes the assessment (all question types supported)
+5. Submits and receives immediate feedback with score
+
+### Makeup Exams
+
+For students who missed the original assessment:
+
+1. **Save the assessment** when you first create it
+2. Go to **Student Portal Dashboard**
+3. Load the saved assessment
+4. Click **Publish to Portal**
+5. Enable **Makeup Exam** mode
+6. Select only the students who need the makeup
+7. Publish - only selected students can access
+
+### Accommodations
+
+When publishing with a period selected:
+
+1. Enable **Apply IEP/504 Accommodations**
+2. Students with accommodations (configured in Settings) will see:
+   - Their specific accommodations listed at the top
+   - Extended time settings (if configured)
+   - Modified instructions
+
+---
+
+## Teacher Dashboard
+
+Monitor published assessments and student submissions.
+
+### Accessing the Dashboard
+
+1. Go to **Planner** tab
+2. Click **Student Portal** mode
+
+### Published Assessments
+
+View all your published assessments:
+- **Title** and **Join Code**
+- **Submission count**
+- **Period** (if assigned)
+- **Status** (Active/Closed)
+- **Makeup Exam** indicator
+
+**Actions:**
+- Click an assessment to view submissions
+- **Pause/Play**: Toggle accepting new submissions
+- **Delete**: Remove the assessment
+
+### Viewing Submissions
+
+Click on an assessment to see student results:
+- **Total submissions**
+- **Average score**
+- **High score**
+- Individual student scores with:
+  - Student name
+  - Score and percentage
+  - Time taken
+  - Submission time
+
+### Saved Assessments
+
+Below the published assessments, view your saved assessments:
+- Name and question count
+- Total points
+- Save date
+- **Load**: Load into Assessment Generator for editing or publishing
+- **Delete**: Remove from saved assessments
+
+---
+
 ## Resources Tab
 
 Upload and manage supporting documents:
@@ -1014,6 +1189,15 @@ Each student's file contains:
 
 ### New Features
 
+- **Assessment Generator**: Create standards-aligned assessments with multiple question types (MC, Short Answer, Extended Response, True/False, Matching)
+- **Student Portal**: Publish assessments with join codes for students to take online
+- **Teacher Dashboard**: Monitor published assessments, view submissions, track scores
+- **Saved Assessments**: Save assessments locally for reuse (makeup exams)
+- **Makeup Exam Mode**: Restrict assessments to specific students only
+- **Period Organization**: Organize published assessments by class period
+- **Accommodation Integration**: Apply IEP/504 accommodations when publishing
+- **DOK Level Configuration**: Set Depth of Knowledge distribution for assessments
+- **Platform Export**: Export assessments to Canvas QTI, Kahoot, Quizlet, Google Forms
 - **Missing Assignments Tracker**: See which students haven't uploaded their work in Analytics
 - **Assignment Aliases**: Renamed assignments still match old student submissions
 - **Student Progress Tracking**: Personalized feedback based on historical performance
@@ -1032,6 +1216,7 @@ Each student's file contains:
 - **FERPA Compliance**: Full PII sanitization, audit logging, data management tools
 - **State Configuration**: Select your state for standards alignment
 - **World History Standards**: Added Florida World History standards (20 benchmarks)
+- **Cloud Deployment**: Railway + Supabase for production hosting
 
 ### UI Improvements
 
@@ -1040,7 +1225,10 @@ Each student's file contains:
 - Privacy & Data section in Settings
 - Handwritten indicator icon in Results table
 - AI model selector in Settings
+- Solid modal backgrounds (not transparent)
+- Matching question visual interface in Student Portal
+- Text input for written answer questions
 
 ---
 
-*Last updated: January 29, 2026*
+*Last updated: January 31, 2026*

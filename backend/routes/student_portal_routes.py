@@ -50,6 +50,11 @@ def publish_assessment():
     """
     Publish an assessment for students to take.
     Returns a unique join code and shareable link.
+
+    New features:
+    - period: Class period for organization
+    - restricted_students: List of student names (for makeup exams)
+    - accommodations: Applied accommodations per student
     """
     try:
         db = get_supabase()
@@ -63,6 +68,11 @@ def publish_assessment():
         # Generate unique join code
         join_code = generate_join_code()
 
+        # Get period and student restrictions
+        period = settings.get('period', '')
+        restricted_students = settings.get('restricted_students', [])  # Empty = open to all
+        student_accommodations = settings.get('student_accommodations', {})  # {student_name: accommodation_settings}
+
         # Prepare settings
         db_settings = {
             "time_limit_minutes": settings.get('time_limit_minutes'),
@@ -70,6 +80,10 @@ def publish_assessment():
             "show_correct_answers": settings.get('show_correct_answers', True),
             "show_score_immediately": settings.get('show_score_immediately', True),
             "require_name": settings.get('require_name', True),
+            "period": period,
+            "restricted_students": restricted_students,
+            "student_accommodations": student_accommodations,
+            "is_makeup": len(restricted_students) > 0,
         }
 
         # Insert into Supabase
@@ -94,6 +108,8 @@ def publish_assessment():
             "success": True,
             "join_code": join_code,
             "join_link": join_link,
+            "period": period,
+            "restricted_students": restricted_students,
             "message": f"Assessment published! Students can join with code: {join_code}"
         })
 
@@ -104,6 +120,127 @@ def publish_assessment():
         return jsonify({"error": str(e)}), 500
 
 
+# ============ Saved Assessments (Local Storage) ============
+
+SAVED_ASSESSMENTS_DIR = os.path.expanduser("~/.graider_saved_assessments")
+
+@student_portal_bp.route('/api/save-assessment', methods=['POST'])
+def save_assessment():
+    """Save a generated assessment locally for later use."""
+    try:
+        os.makedirs(SAVED_ASSESSMENTS_DIR, exist_ok=True)
+
+        data = request.json
+        assessment = data.get('assessment')
+        name = data.get('name', assessment.get('title', 'Untitled'))
+
+        if not assessment:
+            return jsonify({"error": "No assessment provided"}), 400
+
+        # Sanitize filename
+        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
+        filename = f"{safe_name}.json"
+        filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+
+        # Save with metadata
+        save_data = {
+            "name": name,
+            "assessment": assessment,
+            "saved_at": datetime.now().isoformat(),
+        }
+
+        with open(filepath, 'w') as f:
+            json.dump(save_data, f, indent=2)
+
+        return jsonify({"success": True, "filename": filename, "message": f"Assessment '{name}' saved"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@student_portal_bp.route('/api/list-saved-assessments', methods=['GET'])
+def list_saved_assessments():
+    """List all saved assessments."""
+    try:
+        os.makedirs(SAVED_ASSESSMENTS_DIR, exist_ok=True)
+
+        assessments = []
+        for filename in os.listdir(SAVED_ASSESSMENTS_DIR):
+            if filename.endswith('.json'):
+                filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+                try:
+                    with open(filepath, 'r') as f:
+                        data = json.load(f)
+                        assessment = data.get('assessment', {})
+                        # Count questions
+                        question_count = 0
+                        for section in assessment.get('sections', []):
+                            question_count += len(section.get('questions', []))
+                        assessments.append({
+                            "filename": filename,
+                            "name": data.get('name', filename.replace('.json', '')),
+                            "title": assessment.get('title', 'Untitled'),
+                            "saved_at": data.get('saved_at'),
+                            "total_points": assessment.get('total_points'),
+                            "question_count": question_count,
+                        })
+                except:
+                    pass
+
+        assessments.sort(key=lambda x: x.get('saved_at', ''), reverse=True)
+        return jsonify({"assessments": assessments})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@student_portal_bp.route('/api/load-saved-assessment', methods=['POST'])
+def load_saved_assessment():
+    """Load a saved assessment by filename."""
+    try:
+        data = request.json
+        filename = data.get('filename')
+
+        if not filename:
+            return jsonify({"error": "No filename provided"}), 400
+
+        filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+        if not os.path.exists(filepath):
+            return jsonify({"error": "Assessment not found"}), 404
+
+        with open(filepath, 'r') as f:
+            save_data = json.load(f)
+
+        return jsonify({
+            "success": True,
+            "assessment": save_data.get('assessment'),
+            "name": save_data.get('name'),
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@student_portal_bp.route('/api/delete-saved-assessment', methods=['POST'])
+def delete_saved_assessment():
+    """Delete a saved assessment."""
+    try:
+        data = request.json
+        filename = data.get('filename')
+
+        if not filename:
+            return jsonify({"error": "No filename provided"}), 400
+
+        filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @student_portal_bp.route('/api/teacher/assessments', methods=['GET'])
 def list_published_assessments():
     """List all published assessments for the teacher."""
@@ -111,7 +248,7 @@ def list_published_assessments():
         db = get_supabase()
 
         result = db.table('published_assessments').select(
-            'id, join_code, title, created_at, submission_count, is_active, teacher_name'
+            'id, join_code, title, created_at, submission_count, is_active, teacher_name, settings'
         ).order('created_at', desc=True).execute()
 
         assessments = [{
@@ -120,7 +257,10 @@ def list_published_assessments():
             "title": a.get('title'),
             "created_at": a.get('created_at'),
             "submission_count": a.get('submission_count', 0),
-            "active": a.get('is_active', True),
+            "is_active": a.get('is_active', True),
+            "period": a.get('settings', {}).get('period', ''),
+            "is_makeup": a.get('settings', {}).get('is_makeup', False),
+            "restricted_students": a.get('settings', {}).get('restricted_students', []),
         } for a in result.data]
 
         return jsonify({"assessments": assessments})
@@ -274,6 +414,11 @@ def get_assessment_for_student(code):
                 "questions": sanitized_questions,
             })
 
+        # Check for student restrictions (makeup exams)
+        restricted_students = settings.get('restricted_students', [])
+        student_accommodations = settings.get('student_accommodations', {})
+        is_makeup = settings.get('is_makeup', False)
+
         return jsonify({
             "title": assessment.get('title'),
             "instructions": assessment.get('instructions'),
@@ -283,7 +428,11 @@ def get_assessment_for_student(code):
             "settings": {
                 "time_limit_minutes": settings.get('time_limit_minutes'),
                 "require_name": settings.get('require_name', True),
+                "is_makeup": is_makeup,
+                "restricted_students": restricted_students,  # Frontend checks if student allowed
+                "period": settings.get('period', ''),
             },
+            "student_accommodations": student_accommodations,  # Accommodations per student
             "teacher": data.get('teacher_name', 'Teacher'),
         })
 

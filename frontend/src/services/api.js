@@ -509,6 +509,33 @@ export async function submitStudentAssessment(joinCode, studentName, answers, ti
   })
 }
 
+// ============ Saved Assessments (Local) ============
+
+export async function saveAssessmentLocally(assessment, name) {
+  return fetchApi('/api/save-assessment', {
+    method: 'POST',
+    body: JSON.stringify({ assessment, name }),
+  })
+}
+
+export async function listSavedAssessments() {
+  return fetchApi('/api/list-saved-assessments')
+}
+
+export async function loadSavedAssessment(filename) {
+  return fetchApi('/api/load-saved-assessment', {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  })
+}
+
+export async function deleteSavedAssessment(filename) {
+  return fetchApi('/api/delete-saved-assessment', {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -573,4 +600,9 @@ export default {
   deletePublishedAssessment,
   getStudentAssessment,
   submitStudentAssessment,
+  // Saved Assessments
+  saveAssessmentLocally,
+  listSavedAssessments,
+  loadSavedAssessment,
+  deleteSavedAssessment,
 }
