@@ -338,11 +338,11 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
         # Abbreviation detection (e.g., "Ch5" matches "Chapter 5")
         abbrev_patterns = [
-            (r'ch(?:ap(?:ter)?)?[\s\-_]*(\d+)', r'chapter\s*\1'),  # Ch5, Chap5, Chapter5
-            (r'q(?:uiz)?[\s\-_]*(\d+)', r'quiz\s*\1'),  # Q1, Quiz1
-            (r'hw[\s\-_]*(\d+)', r'homework\s*\1'),  # HW1
-            (r'test[\s\-_]*(\d+)', r'test\s*\1'),
-            (r'unit[\s\-_]*(\d+)', r'unit\s*\1'),
+            (r'ch(?:ap(?:ter)?)?[\s\-_]*(\d+)', r'chapter \1'),  # Ch5, Chap5, Chapter5
+            (r'q(?:uiz)?[\s\-_]*(\d+)', r'quiz \1'),  # Q1, Quiz1
+            (r'hw[\s\-_]*(\d+)', r'homework \1'),  # HW1
+            (r'test[\s\-_]*(\d+)', r'test \1'),
+            (r'unit[\s\-_]*(\d+)', r'unit \1'),
         ]
 
         for pattern, expansion in abbrev_patterns:
@@ -470,6 +470,42 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         support_docs_content = load_support_documents_for_grading(subject)
         if support_docs_content:
             grading_state["log"].append(f"Loaded reference documents for AI context")
+
+        # Load student-to-period mapping from period CSVs for per-student grading levels
+        student_period_map = {}
+        periods_dir = os.path.expanduser("~/.graider_data/periods")
+        if os.path.exists(periods_dir):
+            import csv
+            for period_file in os.listdir(periods_dir):
+                if period_file.endswith('.csv'):
+                    period_name = period_file.replace('.csv', '')
+                    try:
+                        with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as pf:
+                            reader = csv.DictReader(pf)
+                            for row in reader:
+                                # Try common column names for student name
+                                first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
+                                last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
+                                full_name = row.get('Name', row.get('Student Name', row.get('Student', row.get('name', '')))).strip()
+
+                                if first and last:
+                                    student_key = f"{first} {last}".lower()
+                                    student_period_map[student_key] = period_name
+                                elif full_name:
+                                    # Handle "LastName; FirstName" format
+                                    if '; ' in full_name:
+                                        parts = full_name.split('; ', 1)
+                                        if len(parts) == 2:
+                                            # Convert "LastName; FirstName" to "FirstName LastName"
+                                            student_key = f"{parts[1]} {parts[0]}".lower()
+                                            student_period_map[student_key] = period_name
+                                    else:
+                                        student_period_map[full_name.lower()] = period_name
+                    except Exception as e:
+                        grading_state["log"].append(f"Warning: Could not load period file {period_file}: {e}")
+
+            if student_period_map:
+                grading_state["log"].append(f"Loaded period data for {len(student_period_map)} students")
 
         os.makedirs(output_folder, exist_ok=True)
 
@@ -602,6 +638,11 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 file_sections = fallback_sections
                 is_completion_only = False
 
+            # Look up student's period from period CSVs, fall back to selected class_period
+            student_period = student_period_map.get(student_info['student_name'].lower(), class_period)
+            if student_period and student_period != class_period and student_period_map.get(student_info['student_name'].lower()):
+                grading_state["log"].append(f"  Student period: {student_period}")
+
             # Handle completion-only assignments (track submission without AI grading)
             if is_completion_only:
                 grading_state["log"].append(f"  Completion only - recording submission")
@@ -615,6 +656,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     "filename": filepath.name,
                     "filepath": str(filepath),
                     "assignment": assignment_title,
+                    "period": student_period,
                     "score": 100,
                     "letter_grade": "SUBMITTED",
                     "feedback": "Completion-only assignment - submitted successfully.",
@@ -638,6 +680,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     "feedback": "Completion-only assignment - submitted successfully.",
                     "filename": filepath.name,
                     "assignment": assignment_title,
+                    "period": student_period,
                     "grading_period": grading_period,
                     "has_markers": False
                 })
@@ -647,8 +690,11 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             file_ai_notes = ''
             if global_ai_notes:
                 file_ai_notes += f"GLOBAL GRADING INSTRUCTIONS:\n{global_ai_notes}\n\n"
-            if class_period:
-                file_ai_notes += f"CLASS PERIOD BEING GRADED: {class_period}\n(Apply any period-specific grading expectations from the instructions above)\n\n"
+
+            # Add student's period to AI context for period-specific grading
+            if student_period:
+                file_ai_notes += f"CLASS PERIOD BEING GRADED: {student_period}\n(Apply any period-specific grading expectations from the instructions above)\n\n"
+
             if file_notes:
                 file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}\n\n"
 
@@ -760,6 +806,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 **grade_result,
                 "filename": filepath.name,
                 "assignment": assignment_title,
+                "period": student_period,
                 "grading_period": grading_period,
                 "has_markers": len(markers_found) > 0
             }
@@ -801,6 +848,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 "filename": filepath.name,
                 "filepath": str(filepath),
                 "assignment": assignment_title,
+                "period": student_period,
                 "score": grade_result['score'],
                 "letter_grade": grade_result['letter_grade'],
                 "feedback": grade_result.get('feedback', ''),

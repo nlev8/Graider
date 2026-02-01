@@ -81,30 +81,34 @@ def parse_student_name(name):
 
 def get_students_from_period_file(filepath):
     """Extract student list from a period CSV/Excel file."""
-    import pandas as pd
-
     students = []
     try:
         if filepath.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(filepath)
-            name_cols = [c for c in df.columns if any(x in c.lower() for x in ['name', 'student', 'first', 'last'])]
-            if name_cols:
-                first_col = next((c for c in name_cols if 'first' in c.lower()), None)
-                last_col = next((c for c in name_cols if 'last' in c.lower()), None)
-                if first_col and last_col:
-                    for _, row in df.iterrows():
-                        first = str(row[first_col]).strip() if pd.notna(row[first_col]) else ''
-                        last = str(row[last_col]).strip() if pd.notna(row[last_col]) else ''
-                        if first or last:
-                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
-                else:
-                    name_col = name_cols[0]
-                    for _, row in df.iterrows():
-                        name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
-                        if name:
-                            first, last = parse_student_name(name)
-                            students.append({"first": first, "last": last, "full": name})
+            # Only import pandas for Excel files
+            try:
+                import pandas as pd
+                df = pd.read_excel(filepath)
+                name_cols = [c for c in df.columns if any(x in c.lower() for x in ['name', 'student', 'first', 'last'])]
+                if name_cols:
+                    first_col = next((c for c in name_cols if 'first' in c.lower()), None)
+                    last_col = next((c for c in name_cols if 'last' in c.lower()), None)
+                    if first_col and last_col:
+                        for _, row in df.iterrows():
+                            first = str(row[first_col]).strip() if pd.notna(row[first_col]) else ''
+                            last = str(row[last_col]).strip() if pd.notna(row[last_col]) else ''
+                            if first or last:
+                                students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
+                    else:
+                        name_col = name_cols[0]
+                        for _, row in df.iterrows():
+                            name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ''
+                            if name:
+                                first, last = parse_student_name(name)
+                                students.append({"first": first, "last": last, "full": name})
+            except ImportError:
+                print(f"Warning: pandas not installed, cannot read Excel file {filepath}")
         else:
+            # Use built-in csv module for CSV files
             with open(filepath, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 first_col = next((h for h in reader.fieldnames if 'first' in h.lower()), None)
@@ -122,8 +126,8 @@ def get_students_from_period_file(filepath):
                         if name:
                             first, last = parse_student_name(name)
                             students.append({"first": first, "last": last, "full": name})
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error reading period file {filepath}: {e}")
 
     return students
 
@@ -359,20 +363,21 @@ def upload_period():
 def list_periods():
     """List all uploaded period files with their students."""
     periods = []
-    for f in os.listdir(PERIODS_DIR):
-        if f.endswith('.meta.json'):
-            try:
-                with open(os.path.join(PERIODS_DIR, f), 'r') as mf:
-                    metadata = json.load(mf)
-                    # Load students for this period
-                    period_file = os.path.join(PERIODS_DIR, metadata.get('filename', ''))
-                    if os.path.exists(period_file):
-                        metadata['students'] = get_students_from_period_file(period_file)
-                    else:
-                        metadata['students'] = []
-                    periods.append(metadata)
-            except:
-                pass
+    if os.path.exists(PERIODS_DIR):
+        for f in os.listdir(PERIODS_DIR):
+            if f.endswith('.meta.json'):
+                try:
+                    with open(os.path.join(PERIODS_DIR, f), 'r') as mf:
+                        metadata = json.load(mf)
+                        # Load students for this period
+                        period_file = os.path.join(PERIODS_DIR, metadata.get('filename', ''))
+                        if os.path.exists(period_file):
+                            metadata['students'] = get_students_from_period_file(period_file)
+                        else:
+                            metadata['students'] = []
+                        periods.append(metadata)
+                except Exception as e:
+                    print(f"Error loading period metadata {f}: {e}")
     return jsonify({"periods": periods})
 
 

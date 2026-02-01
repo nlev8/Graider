@@ -818,6 +818,7 @@ function App() {
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
+  const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
   const [resultsSort, setResultsSort] = useState({
     field: "time",
     direction: "desc",
@@ -1357,7 +1358,7 @@ function App() {
     }, 1500); // Debounce 1.5 seconds (slightly longer for assignment changes)
 
     return () => clearTimeout(saveTimeout);
-  }, [assignment, importedDoc, settingsLoaded]);
+  }, [assignment, importedDoc, settingsLoaded, loadedAssignmentName, isLoadingAssignment]);
 
   // Poll status while grading
   useEffect(() => {
@@ -2055,10 +2056,12 @@ ${signature}`;
         addToast("Error parsing document: " + data.error, "error");
         setImportedDoc({ text: "", html: "", filename: "", loading: false });
       } else {
-        // Check for duplicate assignment name
-        const newTitle =
-          data.doc_title ||
-          file.name.replace(/\.(docx|pdf|doc)$/i, "").replace(/_/g, " ");
+        // Use filename as title (cleaner than document metadata which is often generic)
+        const newTitle = file.name
+          .replace(/\.(docx|pdf|doc|txt)$/i, "")
+          .replace(/_/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
 
         // Sanitize title the same way backend does for filename comparison
         const safeTitle = newTitle.replace(/[^a-zA-Z0-9 \-_]/g, "").trim();
@@ -6182,20 +6185,22 @@ ${signature}`;
                       >
                         <Icon name="FileText" size={24} />
                         Grading Results (
-                        {resultsFilter === "all"
+                        {resultsFilter === "all" && !resultsPeriodFilter
                           ? status.results.length
                           : status.results.filter((r) => {
-                              if (resultsFilter === "handwritten")
-                                return r.is_handwritten;
-                              if (resultsFilter === "typed")
-                                return !r.is_handwritten;
-                              if (resultsFilter === "verified")
-                                return r.marker_status === "verified";
-                              if (resultsFilter === "unverified")
-                                return r.marker_status !== "verified";
+                              if (resultsFilter === "handwritten" && !r.is_handwritten)
+                                return false;
+                              if (resultsFilter === "typed" && r.is_handwritten)
+                                return false;
+                              if (resultsFilter === "verified" && r.marker_status !== "verified")
+                                return false;
+                              if (resultsFilter === "unverified" && r.marker_status !== "verified")
+                                return false;
+                              if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
+                                return false;
                               return true;
                             }).length}
-                        {resultsFilter !== "all" &&
+                        {(resultsFilter !== "all" || resultsPeriodFilter) &&
                           ` of ${status.results.length}`}
                         )
                       </h2>
@@ -6258,6 +6263,26 @@ ${signature}`;
                             <option value="verified">Verified Only</option>
                             <option value="unverified">Unverified Only</option>
                           </select>
+                          {/* Period Filter Dropdown */}
+                          {sortedPeriods.length > 0 && (
+                            <select
+                              className="input"
+                              value={resultsPeriodFilter}
+                              onChange={(e) => setResultsPeriodFilter(e.target.value)}
+                              style={{
+                                width: "auto",
+                                padding: "8px 12px",
+                                fontSize: "0.85rem",
+                              }}
+                            >
+                              <option value="">All Periods</option>
+                              {sortedPeriods.map((p) => (
+                                <option key={p.filename} value={p.period_name}>
+                                  {p.period_name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <button
                             onClick={openResults}
                             className="btn btn-secondary"
@@ -6536,6 +6561,33 @@ ${signature}`;
                               gap: "10px",
                             }}
                           >
+                            {(resultsFilter !== "all" || resultsPeriodFilter) && (
+                              <button
+                                onClick={() => {
+                                  const approvals = { ...emailApprovals };
+                                  status.results.forEach((r, i) => {
+                                    // Apply same filters as the display
+                                    if (resultsFilter === "handwritten" && !r.is_handwritten) return;
+                                    if (resultsFilter === "typed" && r.is_handwritten) return;
+                                    if (resultsFilter === "verified" && r.marker_status !== "verified") return;
+                                    if (resultsFilter === "unverified" && r.marker_status !== "verified") return;
+                                    if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
+                                    approvals[i] = "approved";
+                                  });
+                                  setEmailApprovals(approvals);
+                                }}
+                                className="btn btn-secondary"
+                                style={{
+                                  fontSize: "0.85rem",
+                                  padding: "6px 12px",
+                                  background: "rgba(99,102,241,0.15)",
+                                  border: "1px solid rgba(99,102,241,0.3)",
+                                }}
+                              >
+                                <Icon name="Filter" size={14} />
+                                Approve Filtered
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 const approvals = {};
@@ -6677,6 +6729,9 @@ ${signature}`;
                                   resultsFilter === "unverified" &&
                                   r.marker_status !== "unverified"
                                 )
+                                  return false;
+                                // Apply period filter
+                                if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
                                   return false;
                                 // Apply search filter
                                 if (!resultsSearch.trim()) return true;
@@ -10829,14 +10884,20 @@ ${signature}`;
                                 Edit & Mark
                               </button>
                               <button
-                                onClick={() =>
+                                onClick={() => {
                                   setImportedDoc({
                                     text: "",
                                     html: "",
                                     filename: "",
                                     loading: false,
-                                  })
-                                }
+                                  });
+                                  setAssignment({
+                                    ...assignment,
+                                    title: "",
+                                    customMarkers: [],
+                                  });
+                                  setLoadedAssignmentName("");
+                                }}
                                 className="btn btn-secondary"
                                 style={{
                                   background: "rgba(239,68,68,0.2)",
@@ -12189,7 +12250,7 @@ ${signature}`;
                                         border: "1px solid var(--glass-border)",
                                         borderRadius: "8px",
                                       }}
-                                      formatter={(value, name) => [
+                                      formatter={(value) => [
                                         value + "%",
                                         "Score",
                                       ]}
