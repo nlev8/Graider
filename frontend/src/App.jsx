@@ -939,6 +939,7 @@ function App() {
   const [assessmentConfig, setAssessmentConfig] = useState({
     type: "quiz",
     title: "",
+    targetPeriod: "", // For differentiation based on Global AI Instructions
     totalQuestions: 20,
     totalPoints: 30,
     questionTypes: {
@@ -7473,13 +7474,16 @@ ${signature}`;
 
                     <div>
                       <label className="label">
-                        Global AI Grading Instructions
+                        Global AI Instructions
                       </label>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>
+                        These instructions apply to both grading AND assessment generation. Include differentiation rules for periods here.
+                      </p>
                       <textarea
                         className="input"
                         value={globalAINotes}
                         onChange={(e) => setGlobalAINotes(e.target.value)}
-                        placeholder="Instructions that apply to ALL assignments..."
+                        placeholder="Example: For assessment generation, Periods 1,2,5 are advanced (7th-8th grade level). Periods 4,6,7 should be 6th grade level only."
                         style={{ minHeight: "120px", resize: "vertical" }}
                       />
                     </div>
@@ -14734,20 +14738,44 @@ ${signature}`;
                                 <option value="formative">Formative Check</option>
                               </select>
                             </div>
-                            <div>
-                              <label className="label">Title (Optional)</label>
-                              <input
-                                type="text"
-                                className="input"
-                                value={assessmentConfig.title}
-                                onChange={(e) =>
-                                  setAssessmentConfig({
-                                    ...assessmentConfig,
-                                    title: e.target.value,
-                                  })
-                                }
-                                placeholder="Auto-generated from standards"
-                              />
+                            <div style={{ display: "flex", gap: "15px" }}>
+                              <div style={{ flex: 1 }}>
+                                <label className="label">Title (Optional)</label>
+                                <input
+                                  type="text"
+                                  className="input"
+                                  value={assessmentConfig.title}
+                                  onChange={(e) =>
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      title: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Auto-generated from standards"
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <label className="label">Target Period</label>
+                                <select
+                                  className="input"
+                                  value={assessmentConfig.targetPeriod}
+                                  onChange={(e) =>
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      targetPeriod: e.target.value,
+                                    })
+                                  }
+                                  style={{ width: "100%" }}
+                                >
+                                  <option value="">-- No specific period --</option>
+                                  {periods.map((p) => (
+                                    <option key={p.filename} value={p.name}>{p.name}</option>
+                                  ))}
+                                </select>
+                                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                                  For differentiation per Global AI Instructions
+                                </p>
+                              </div>
                             </div>
                             <div style={{ display: "flex", gap: "15px" }}>
                               <div style={{ flex: 1 }}>

@@ -869,10 +869,28 @@ Choose which OpenAI model to use for grading:
 
 ### Global AI Instructions
 
-Add instructions that apply to ALL grading sessions:
-- Specific grading criteria
-- Point allocations
+Add instructions that apply to ALL AI operations:
+
+**Applies to:**
+- Grading assignments
+- Generating assessments
+- Generating assignments from lessons
+- Creating lesson plans
+
+**Common uses:**
+- Specific grading criteria and point allocations
+- Period-based differentiation rules
 - Things to look for or ignore
+- Grade level adjustments per class
+
+**Example for differentiation:**
+```
+For assessment generation:
+- Periods 1, 2, and 5 are advanced and can be given questions at the 7th-8th grade level
+- Periods 4, 6, and 7 should only be given questions at the 6th grade level
+```
+
+When generating assessments, select the **Target Period** in the Assessment Generator to apply these differentiation rules.
 
 ### Notifications
 

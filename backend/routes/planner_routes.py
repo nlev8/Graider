@@ -544,7 +544,10 @@ Return JSON with this structure:
     }},
     "resources": ["Resource 1", "Resource 2"]
 }}
-
+{f'''
+TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+{config.get('globalAINotes', '')}
+''' if config.get('globalAINotes') else ''}
 Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         # If generating variations, create 3 different versions
@@ -902,7 +905,10 @@ SUBJECT-SPECIFIC GUIDANCE:
 - For MATH subjects: Include at least one "math_equation" section where students solve and write expressions
 - For SCIENCE subjects: Include a "data_table" section for lab data, measurements, or observations
 - For GEOGRAPHY subjects: Include a "coordinates" section for map/location questions
-
+{f'''
+TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+{config.get('globalAINotes', '')}
+''' if config.get('globalAINotes') else ''}
 Make the questions specific to the lesson content. Include a variety of question types appropriate for the assignment type."""
 
         completion = client.chat.completions.create(
@@ -1604,6 +1610,7 @@ def generate_assessment():
         })
         include_answer_key = assessment_config.get('includeAnswerKey', True)
         include_standards_ref = assessment_config.get('includeStandardsReference', True)
+        target_period = assessment_config.get('targetPeriod', '')
 
         # Get global AI notes from config
         global_ai_notes = config.get('globalAINotes', '')
@@ -1748,6 +1755,10 @@ CRITICAL REQUIREMENTS:
 8. All questions must be answerable based on the standards content
 9. Use grade-appropriate vocabulary and complexity
 10. The total_points field MUST equal exactly {total_points}
+{f'''
+TARGET PERIOD: {target_period}
+(Apply any period-specific differentiation rules from the teacher's instructions below)
+''' if target_period else ''}
 {f'''
 TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
 {global_ai_notes}
