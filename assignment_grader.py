@@ -1115,14 +1115,16 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
   * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
   * Summary sections at the end of notes/readings
   * Primary source analysis tasks
-- Written response sections (reflections, explanations, analysis tasks) are worth as much as fill-in-the-blanks!
-- STRICT GRADE CAPS FOR INCOMPLETE WORK:
-  * Skipping 1 major written section = maximum score 80 (B-)
-  * Skipping 2 major written sections = maximum score 70-75 (C)
-  * Skipping 3+ major written sections = maximum score 65 or lower (D)
-  * If student only did fill-in-the-blanks and skipped ALL written responses = maximum 70 (C)
+- Skipping written sections shows AVOIDANCE OF EFFORT and must be penalized heavily!
+- EACH SKIPPED SECTION LOWERS THE GRADE BY ONE FULL LETTER:
+  * 0 sections skipped = eligible for A (90-100)
+  * 1 section skipped = maximum B (80-89) - dropped one letter
+  * 2 sections skipped = maximum C (70-79) - dropped two letters
+  * 3 sections skipped = maximum D (60-69) - dropped three letters
+  * 4+ sections skipped = F (below 60) - shows no effort on written work
+- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum C (75)
 - An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses
-- Calculate the final score by considering what percentage of the assignment was actually completed
+- This applies to ALL assignments - skipping reflections, explanations, or analysis tasks is unacceptable
 - List ALL skipped/unanswered questions in the "unanswered_questions" field
 
 CRITICAL - AUTHENTICITY CHECKS (YOU MUST CHECK THIS CAREFULLY!):
@@ -1185,17 +1187,21 @@ In feedback for AI/plagiarism flags:
 - Recommend the student redo the assignment in their own words
 - Note this will be reviewed by the teacher
 
-THEN apply HARD CAPS FOR INCOMPLETE WORK:
-- 0 sections skipped = score based on quality (up to 100, unless AI/plagiarism capped)
-- 1 skipped = MAX score is 80
-- 2 skipped = MAX score is 72
-- 3+ skipped = MAX score is 65
+THEN apply HARD CAPS FOR INCOMPLETE WORK (MANDATORY - each skipped section = one letter grade drop):
+Count the number of skipped/unanswered written sections (Student Task, Reflection, Explain, etc.):
+- 0 skipped = eligible for A (up to 100)
+- 1 skipped = MAXIMUM 89 (B) - NO EXCEPTIONS
+- 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
+- 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
+- 4+ skipped = MAXIMUM 59 (F)
 
-The LOWEST cap wins. Example: AI "likely" (cap 50) + 1 section skipped (cap 80) = final cap is 50.
+YOU MUST APPLY THESE CAPS. If a student skipped 2 written sections, their score CANNOT be above 79 even if their fill-in-the-blanks were perfect.
+
+The LOWEST cap wins. Example: AI "likely" (cap 50) + 2 sections skipped (cap 79) = final cap is 50.
 
 Provide your response in the following JSON format ONLY (no other text):
 {{
-    "score": <number 0-100, but CAPPED per rules above - AI/plagiarism caps take priority>,
+    "score": <FIRST calculate raw score, THEN apply the caps above. If 2 sections skipped, max is 79>,
     "letter_grade": "<A, B, C, D, or F - must match the capped score>",
     "breakdown": {{
         "content_accuracy": <points out of 40 - correctness of answers>,
