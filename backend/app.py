@@ -604,7 +604,26 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             if lookup_key in roster:
                 student_info = roster[lookup_key].copy()
             else:
-                student_info = {"student_id": "UNKNOWN", "student_name": student_name, "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
+                # Try fuzzy matching for last name initials (e.g., "serenity_p" → "serenity petite")
+                student_info = None
+                first_name_lower = parsed['first_name'].lower()
+                last_name_lower = parsed['last_name'].lower()
+
+                # If last name is just 1-2 chars (initial), search for matching first name + last initial
+                if len(last_name_lower) <= 2:
+                    for roster_key, roster_data in roster.items():
+                        if isinstance(roster_data, dict):
+                            roster_first = roster_data.get('first_name', '').lower()
+                            roster_last = roster_data.get('last_name', '').lower()
+                            # Match: same first name AND last name starts with the initial
+                            if roster_first == first_name_lower and roster_last.startswith(last_name_lower):
+                                student_info = roster_data.copy()
+                                student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
+                                grading_state["log"].append(f"  Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
+                                break
+
+                if not student_info:
+                    student_info = {"student_id": "UNKNOWN", "student_name": student_name, "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
 
             grading_state["log"].append(f"[{i}/{len(new_files)}] {student_info['student_name']}")
 
