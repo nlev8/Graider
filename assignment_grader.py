@@ -681,7 +681,100 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
         return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "API not available"}
     
     client = OpenAI(api_key=OPENAI_API_KEY)
-    
+
+    # Check for empty/blank student submissions before sending to API
+    content = assignment_data.get("content", "")
+    if assignment_data.get("type") == "text" and content:
+        import re
+
+        # Method 1: Check for filled-in blanks (text between underscores like ___answer___)
+        filled_blanks = re.findall(r'_{2,}([^_\n]+)_{2,}', content)
+        filled_blanks = [b.strip() for b in filled_blanks if b.strip() and len(b.strip()) > 1]
+
+        # Method 2: Check for content after colons that isn't just blanks
+        # e.g., "Nationalism: the belief that..." vs "Nationalism: ___"
+        after_colons = re.findall(r':\s*([^_\n:]{10,})', content)
+        after_colons = [a.strip() for a in after_colons if a.strip() and not a.strip().startswith('_')]
+
+        # Method 3: Look for paragraph-length responses (likely written answers)
+        paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
+        # Filter out paragraphs that are mostly underscores
+        real_paragraphs = [p for p in paragraphs if p.count('_') < len(p) * 0.3]
+
+        # Method 4: Count lines that are JUST underscores (blank response lines)
+        blank_lines = len(re.findall(r'^[\s_]+$', content, re.MULTILINE))
+        total_lines = len([l for l in content.split('\n') if l.strip()])
+        blank_ratio = blank_lines / max(total_lines, 1)
+
+        # Method 5: Check for questions followed by no response
+        # Look for question patterns and check if there's content after them
+        lines = content.split('\n')
+        unanswered_questions = []
+        question_indices = []
+
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            # Check if line is a question (ends with ? or starts with number/bullet or is a vocab term with colon)
+            is_question = (
+                line_stripped.endswith('?') or
+                re.match(r'^\d+[\.\)]\s*\w', line_stripped) or  # "1. Question" or "1) Question"
+                re.match(r'^[a-zA-Z][\.\)]\s*\w', line_stripped) or  # "a. Question" or "a) Question"
+                (line_stripped.endswith(':') and len(line_stripped) > 5 and '_' not in line_stripped)  # "Nationalism:"
+            )
+            if is_question and len(line_stripped) > 5:
+                question_indices.append(i)
+
+        # Check content between consecutive questions
+        for idx, q_idx in enumerate(question_indices):
+            line_stripped = lines[q_idx].strip()
+            # Determine where the next question starts (or end of document)
+            next_q_idx = question_indices[idx + 1] if idx + 1 < len(question_indices) else len(lines)
+
+            # Get content between this question and the next
+            content_between = []
+            for j in range(q_idx + 1, min(next_q_idx, q_idx + 6)):  # Check up to 5 lines after
+                if j < len(lines):
+                    between_line = lines[j].strip()
+                    # Skip empty lines and lines that are just underscores
+                    if between_line and not re.match(r'^[_\s\-\.]+$', between_line):
+                        # Check if this line has actual content (not just template markers)
+                        if len(between_line) > 3 and between_line.count('_') < len(between_line) * 0.5:
+                            content_between.append(between_line)
+
+            # If no substantive content found after this question, mark as unanswered
+            if not content_between:
+                unanswered_questions.append(line_stripped[:60] + "..." if len(line_stripped) > 60 else line_stripped)
+
+        # Determine if submission is blank
+        has_filled_blanks = len(filled_blanks) >= 2
+        has_written_responses = len(after_colons) >= 2 or len(real_paragraphs) >= 1
+        mostly_blank_lines = blank_ratio > 0.4
+        many_unanswered = len(unanswered_questions) >= 3
+
+        is_blank = (not has_filled_blanks and not has_written_responses and mostly_blank_lines) or \
+                   (many_unanswered and not has_filled_blanks and not has_written_responses)
+
+        if is_blank:
+            print(f"  ⚠️  BLANK/EMPTY SUBMISSION DETECTED")
+            print(f"      Filled blanks: {len(filled_blanks)}, Written responses: {len(after_colons)}")
+            print(f"      Blank line ratio: {blank_ratio:.1%}, Unanswered questions: {len(unanswered_questions)}")
+            return {
+                "score": 0,
+                "letter_grade": "INCOMPLETE",
+                "breakdown": {
+                    "content_accuracy": 0,
+                    "completeness": 0,
+                    "critical_thinking": 0,
+                    "communication": 0
+                },
+                "feedback": f"This assignment appears to be incomplete or blank. {len(unanswered_questions)} question(s) were found without responses. Please complete the assignment and resubmit, or see your teacher if you need help.",
+                "student_responses": [],
+                "unanswered_questions": unanswered_questions[:10],  # Limit to first 10
+                "authenticity_flag": "clean",
+                "authenticity_reason": "",
+                "skills_demonstrated": {}
+            }
+
     # FERPA: Use anonymous placeholder instead of real student name
     anonymous_name = "Student"
     
