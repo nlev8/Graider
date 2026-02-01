@@ -51,6 +51,222 @@ app_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(app_dir, '.env'), override=True)
 
 # =============================================================================
+# PRE-EXTRACTION - Extract student responses BEFORE AI grading (prevents hallucination)
+# =============================================================================
+
+def extract_student_responses(document_text: str) -> dict:
+    """
+    Extract student responses from document BEFORE sending to AI.
+    This prevents AI hallucination by only grading verified responses.
+
+    Returns:
+        {
+            "extracted_responses": [{"question": "...", "answer": "...", "type": "..."}, ...],
+            "blank_questions": ["question text", ...],
+            "total_questions": int,
+            "answered_questions": int,
+            "extraction_summary": "string describing what was found"
+        }
+    """
+    import re
+
+    lines = document_text.split('\n')
+    extracted = []
+    blank_questions = []
+
+    # Patterns for questions/prompts
+    question_patterns = [
+        r'^\d+[\.\)]\s*(.+)',  # "1. Question" or "1) Question"
+        r'^[a-zA-Z][\.\)]\s*(.+)',  # "a. Question" or "a) Question"
+    ]
+
+    # Track current question for multi-line answers
+    current_question = None
+    current_question_idx = -1
+
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        # Pattern 1: Fill-in-the-blank with answer (text between underscores)
+        # e.g., "The year was ___1803___"
+        blank_matches = re.findall(r'_{2,}([^_\n]{1,50})_{2,}', line)
+        for match in blank_matches:
+            answer = match.strip()
+            if answer and len(answer) > 0:
+                # Try to find the question context
+                question_context = line_stripped[:50] + "..." if len(line_stripped) > 50 else line_stripped
+                extracted.append({
+                    "question": question_context,
+                    "answer": answer,
+                    "type": "fill_in_blank"
+                })
+
+        # Pattern 2: Vocabulary definitions (Term: answer)
+        # e.g., "Rebellion: going again"
+        if ':' in line_stripped:
+            parts = line_stripped.split(':', 1)
+            term = parts[0].strip()
+            answer = parts[1].strip() if len(parts) > 1 else ""
+
+            # Check if this looks like a vocabulary term (not a section header)
+            is_vocab = (
+                len(term) > 2 and
+                len(term) < 50 and
+                not any(kw in term.lower() for kw in ['question', 'task', 'summary', 'reflection', 'main idea', 'vocabulary', 'answer', 'notes', 'reading', 'section'])
+            )
+
+            if is_vocab:
+                # Check if answer is blank or just underscores
+                if answer and not re.match(r'^[_\s\-\.]+$', answer) and len(answer) > 1:
+                    extracted.append({
+                        "question": f"Define: {term}",
+                        "answer": answer,
+                        "type": "vocabulary"
+                    })
+                else:
+                    blank_questions.append(f"Define: {term}")
+
+        # Pattern 3: Numbered questions with answers on same line
+        # e.g., "1. Why was this important? It helped the country grow"
+        num_match = re.match(r'^(\d+)[\.\)]\s*(.+?)[\?:]\s*(.+)$', line_stripped)
+        if num_match:
+            q_num = num_match.group(1)
+            question = num_match.group(2).strip() + "?"
+            answer = num_match.group(3).strip()
+
+            if answer and not re.match(r'^[_\s\-\.]+$', answer) and len(answer) > 1:
+                extracted.append({
+                    "question": f"{q_num}. {question}",
+                    "answer": answer,
+                    "type": "short_answer"
+                })
+            else:
+                blank_questions.append(f"{q_num}. {question}")
+            continue
+
+        # Pattern 4: Questions ending with ? (track for next line answer)
+        if line_stripped.endswith('?'):
+            current_question = line_stripped
+            current_question_idx = i
+            continue
+
+        # Pattern 5: Numbered question without answer on same line
+        num_only = re.match(r'^(\d+)[\.\)]\s*(.+)$', line_stripped)
+        if num_only and '?' in line_stripped:
+            current_question = line_stripped
+            current_question_idx = i
+            continue
+
+        # Pattern 6: Check if this line is an answer to the previous question
+        if current_question and i == current_question_idx + 1:
+            # This might be an answer
+            potential_answer = line_stripped
+
+            # Filter out template text, headers, and blanks
+            is_template = any(kw in potential_answer.lower() for kw in [
+                'write your', 'explain', 'describe', 'answer', 'complete',
+                'section', 'chapter', 'reading', 'vocabulary', 'summary',
+                'reflection', 'task', 'question'
+            ])
+            is_blank = re.match(r'^[_\s\-\.]*$', potential_answer) or len(potential_answer) < 3
+
+            if not is_template and not is_blank:
+                extracted.append({
+                    "question": current_question,
+                    "answer": potential_answer,
+                    "type": "short_answer"
+                })
+            else:
+                blank_questions.append(current_question)
+
+            current_question = None
+
+    # Pattern 7: Check for section headers that expect responses
+    section_headers = [
+        (r'write your answer[:\s]*', 'Main Idea Response'),
+        (r'summary[:\s]*.*(?:sentences?|paragraph)', 'Summary'),
+        (r'reflection[:\s]*', 'Reflection'),
+        (r'student task[:\s]*', 'Student Task'),
+        (r'explain in your own words[:\s]*', 'Explanation'),
+    ]
+
+    full_text_lower = document_text.lower()
+    for pattern, section_name in section_headers:
+        if re.search(pattern, full_text_lower):
+            # Check if there's content after this section
+            match = re.search(pattern + r'(.{10,500}?)(?=\n\n|\n[A-Z🌱📓📝]|$)', full_text_lower, re.DOTALL)
+            if match:
+                content = match.group(1).strip()
+                # Filter out blanks, template text, and question prompts
+                is_template = any(kw in content.lower() for kw in [
+                    'vocabulary', 'question', 'answer each', 'explain how', 'write your',
+                    'describe', 'complete', 'enslaved people', 'reading', 'sentences'
+                ])
+                if content and not re.match(r'^[_\s\-\.\)]+$', content) and len(content) > 10 and not is_template:
+                    extracted.append({
+                        "question": section_name,
+                        "answer": content[:500],  # Limit length
+                        "type": "written_response"
+                    })
+                else:
+                    blank_questions.append(section_name)
+
+    # Build summary
+    total_q = len(extracted) + len(blank_questions)
+    answered_q = len(extracted)
+
+    summary = f"Found {answered_q} responses out of {total_q} detected questions/prompts."
+    if blank_questions:
+        summary += f" {len(blank_questions)} questions left blank."
+
+    return {
+        "extracted_responses": extracted,
+        "blank_questions": blank_questions,
+        "total_questions": total_q,
+        "answered_questions": answered_q,
+        "extraction_summary": summary
+    }
+
+
+def format_extracted_for_grading(extraction_result: dict) -> str:
+    """
+    Format extracted responses for the AI grading prompt.
+    Only includes verified responses - no hallucination possible.
+    """
+    if not extraction_result or not extraction_result.get("extracted_responses"):
+        return "NO STUDENT RESPONSES FOUND - Document appears to be blank or unfinished."
+
+    output = []
+    output.append("=" * 50)
+    output.append("VERIFIED STUDENT RESPONSES (extracted from document)")
+    output.append("=" * 50)
+    output.append("")
+
+    for i, item in enumerate(extraction_result["extracted_responses"], 1):
+        q_type = item.get("type", "unknown")
+        question = item.get("question", "Unknown question")
+        answer = item.get("answer", "")
+
+        output.append(f"[{i}] {question}")
+        output.append(f"    STUDENT ANSWER: \"{answer}\"")
+        output.append(f"    (Type: {q_type})")
+        output.append("")
+
+    if extraction_result.get("blank_questions"):
+        output.append("-" * 50)
+        output.append("UNANSWERED QUESTIONS (left blank by student):")
+        for q in extraction_result["blank_questions"]:
+            output.append(f"  • {q}")
+
+    output.append("")
+    output.append(f"SUMMARY: {extraction_result.get('extraction_summary', '')}")
+
+    return "\n".join(output)
+
+
+# =============================================================================
 # WRITING STYLE ANALYSIS - For AI Detection
 # =============================================================================
 
@@ -1019,6 +1235,38 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
         except Exception as e:
             print(f"  Note: Could not load accommodations: {e}")
 
+    # PRE-EXTRACT student responses to prevent AI hallucination
+    extraction_result = None
+    extracted_responses_text = ''
+    if assignment_data.get("type") == "text" and content:
+        extraction_result = extract_student_responses(content)
+        if extraction_result:
+            extracted_responses_text = format_extracted_for_grading(extraction_result)
+            answered = extraction_result.get("answered_questions", 0)
+            total = extraction_result.get("total_questions", 0)
+            print(f"  📋 Pre-extracted {answered}/{total} responses")
+
+            # If no responses found, return early with 0 score
+            if answered == 0:
+                print(f"  ⚠️  NO RESPONSES EXTRACTED - Document is blank")
+                return {
+                    "score": 0,
+                    "letter_grade": "INCOMPLETE",
+                    "breakdown": {
+                        "content_accuracy": 0,
+                        "completeness": 0,
+                        "critical_thinking": 0,
+                        "communication": 0
+                    },
+                    "feedback": "This assignment appears to be blank or incomplete. No student responses were found. Please complete the assignment and resubmit.",
+                    "student_responses": [],
+                    "unanswered_questions": extraction_result.get("blank_questions", []),
+                    "authenticity_flag": "clean",
+                    "authenticity_reason": "",
+                    "skills_demonstrated": {},
+                    "extraction_result": extraction_result
+                }
+
     # Analyze current submission's writing style for AI detection
     writing_style_context = ''
     current_writing_style = None
@@ -1063,6 +1311,15 @@ This suggests possible AI use - be extra vigilant in your authenticity check!
     }
     age_range = grade_age_map.get(str(grade_level), '11-12')
 
+    # Build extracted responses section for the prompt
+    extracted_responses_section = ""
+    if extracted_responses_text:
+        extracted_responses_section = f"""
+---
+{extracted_responses_text}
+---
+"""
+
     prompt_text = f"""
 {GRADING_RUBRIC}
 
@@ -1078,26 +1335,21 @@ STUDENT CONTEXT:
 - Subject: {subject}
 - Expected Age Range: {age_range} years old
 
-Please grade this student's work.
+{extracted_responses_section}
 
-IMPORTANT - IDENTIFY STUDENT RESPONSES:
-The document contains BOTH teacher-provided content (instructions, questions) AND student responses (answers).
+CRITICAL - PRE-EXTRACTED RESPONSES:
+The student responses have been PRE-EXTRACTED from the document and listed above.
+DO NOT invent or hallucinate any responses that are not in the VERIFIED STUDENT RESPONSES section.
+ONLY grade the responses that were explicitly extracted and shown to you.
+If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
 
-Student responses can be in many formats:
-- Fill-in-the-blank: text between underscores like ___1803___ or after blanks
-- Written answers: paragraphs or sentences after questions
-- MATCHING EXERCISES: Numbers written next to terms to match with numbered definitions
-  (e.g., if "Judicial Review" has "3" next to it, the student matched it to definition #3)
-- Multiple choice: letters or numbers indicating selected answers
-- Short answer: brief responses to questions
+Your "student_responses" field in the output MUST ONLY contain the answers shown in the VERIFIED section above.
+If no responses were extracted, the student gets a 0.
 
 For MATCHING exercises specifically:
-- Look for numbers placed next to vocabulary terms
+- Look for numbers placed next to vocabulary terms in the extracted responses
 - The number indicates which definition the student chose
 - Grade whether they matched correctly
-
-DO NOT grade the questions/prompts themselves - only grade the STUDENT'S ANSWERS.
-List each specific student response you found in the "student_responses" field.
 
 GRADING GUIDELINES:
 - Assess EVERY answer the student provided.
