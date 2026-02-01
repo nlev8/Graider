@@ -876,37 +876,59 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
 - Calculate the final score by considering what percentage of the assignment was actually completed
 - List ALL skipped/unanswered questions in the "unanswered_questions" field
 
-CRITICAL - AUTHENTICITY CHECKS (BE STRICT!):
+CRITICAL - AUTHENTICITY CHECKS (YOU MUST CHECK THIS CAREFULLY!):
 
-1. AI DETECTION - Grade {grade_level} students ({age_range} years old) write simply! Flag as "likely" AI if you see:
-- Academic phrases NO child would use: "fundamentally altered", "trajectory of history", "precedent for", "constitutional questions", "resonate through decades", "manifest destiny" (unless directly from reading)
-- Perfect grammar with complex sentence structures and no spelling errors
-- Abstract concepts explained with graduate-level vocabulary
-- Phrases like "spurred exploration", "fueling expansion", "triggered debates"
-- Content that sounds like a Wikipedia article or textbook
-- Suspiciously comprehensive answers covering multiple angles
-- ANY response that sounds more like a college essay than a 6th grader
-REMEMBER: Real {age_range} year olds write things like "it made the US bigger" NOT "it transformed the nation into a continental power"
+1. AI DETECTION - Compare the student's simple answers to their written paragraphs:
+STEP 1: Look at their short answers (fill-in-blanks, one-word responses). Note the vocabulary level.
+STEP 2: Look at their paragraph responses. Compare the vocabulary and complexity.
+STEP 3: If there's a MISMATCH (simple short answers but sophisticated paragraphs), flag as "likely" AI.
+
+AUTOMATIC "likely" AI FLAGS - if you see ANY of these phrases, it's AI:
+- "transformed the nation into a continental power"
+- "fueling westward expansion"
+- "triggered intense political debates"
+- "spurred exploration"
+- "fundamentally altered the trajectory"
+- "establishing the precedent for"
+- "constitutional questions regarding federal authority"
+- "resonate through subsequent decades"
+- Any phrase a {age_range} year old would NEVER write
+
+CRITICAL CONTRAST CHECK: If a student writes "idk" or "It doubled size" for some answers, but then writes college-level paragraphs elsewhere, that is 100% AI - flag as "likely".
+
+Real grade {grade_level} students write: "it made the US bigger", "they needed the river for boats"
+AI writes: "it transformed the nation into a continental power", "securing vital trade routes"
 
 2. PLAGIARISM DETECTION - Look for:
-- Sudden shifts in writing quality between simple fill-in-blanks and sophisticated paragraphs
-- Textbook-perfect definitions or explanations
+- SUDDEN SHIFTS in writing quality (simple answers + sophisticated paragraphs = copied/AI)
+- Textbook-perfect definitions that don't match the student's other answers
 - Phrases that sound memorized or copied verbatim
+- Statistics or specific numbers not in the reading (like "828,000 square miles")
 
-IF AI FLAG IS "likely":
-- Add warning in feedback that the work appears AI-generated
-- Note this affects the authenticity of the grade
+HARD CAPS FOR AI USE / PLAGIARISM (apply FIRST, before other caps):
+- AI flag "likely" = MAX score is 50 (F) - this is cheating
+- AI flag "possible" = MAX score is 65 (D) - suspicious, needs verification
+- Plagiarism flag "likely" = MAX score is 50 (F) - this is cheating
+- Plagiarism flag "possible" = MAX score is 65 (D) - suspicious
+- If BOTH AI and plagiarism are flagged = MAX score is 40 (F)
+
+In feedback for AI/plagiarism flags:
+- Clearly state the work appears to be AI-generated or copied
+- Explain that academic integrity is important
 - Recommend the student redo the assignment in their own words
+- Note this will be reviewed by the teacher
 
-BEFORE calculating the score, count how many major written sections were skipped (Student Tasks, Reflections, Explanations, Analysis tasks). Apply these HARD CAPS:
-- 0 skipped = score based on quality (up to 100)
+THEN apply HARD CAPS FOR INCOMPLETE WORK:
+- 0 sections skipped = score based on quality (up to 100, unless AI/plagiarism capped)
 - 1 skipped = MAX score is 80
 - 2 skipped = MAX score is 72
 - 3+ skipped = MAX score is 65
 
+The LOWEST cap wins. Example: AI "likely" (cap 50) + 1 section skipped (cap 80) = final cap is 50.
+
 Provide your response in the following JSON format ONLY (no other text):
 {{
-    "score": <number 0-100, but CAPPED based on skipped sections above>,
+    "score": <number 0-100, but CAPPED per rules above - AI/plagiarism caps take priority>,
     "letter_grade": "<A, B, C, D, or F - must match the capped score>",
     "breakdown": {{
         "content_accuracy": <points out of 40 - correctness of answers>,
