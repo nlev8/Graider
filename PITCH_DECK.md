@@ -136,20 +136,50 @@ After 3+ assignments, Graider tracks each student's:
 
 ## Academic Integrity Detection
 
-### Two-Layer Protection
+### Multi-Layer Protection System
 
-**AI Detection**
+**Layer 1: AI Phrase Detection**
 - Flags vocabulary too sophisticated for grade level
-- Detects unnaturally polished writing
+- Detects specific AI-generated phrases ("transformed the nation", "fueling expansion")
+- Catches academic language no child would use
 - Confidence score (0-100%)
 
-**Baseline Deviation Detection**
-- Compares submission to student's historical performance
-- Flags sudden 20+ point improvements
-- Identifies skills never previously demonstrated
+**Layer 2: Writing Style Profiling**
+Each student builds a unique writing fingerprint over time:
 
-### Example Alert:
-> *"Student with 73% average submitted 98% paper with advanced vocabulary - flagged for review"*
+| Metric Tracked | What It Catches |
+|----------------|-----------------|
+| **Complexity Score** | Sudden jump from 3/10 to 10/10 = AI |
+| **Sentence Length** | Student who writes 5-word sentences suddenly writes 20-word sentences |
+| **Academic Vocabulary** | Zero academic words → 5 academic words = flagged |
+| **Word Length** | Average 4-letter words → 7-letter words = suspicious |
+| **Spelling Patterns** | Student who misspells "Thomas" doesn't write "constitutional authority" |
+
+**Layer 3: Contrast Detection**
+Compares simple answers to written responses within the same assignment:
+- Student writes "idk" for one question
+- Then writes "transforming a limited mission into a historic deal" for another
+- **Automatic flag for AI use**
+
+**Layer 4: Historical Comparison**
+- Compares submission to student's historical writing profile
+- Flags significant deviations from established patterns
+- Gets smarter with each assignment graded
+
+### Penalty System
+| Detection Level | Maximum Score |
+|-----------------|---------------|
+| AI "likely" | 50 (F) |
+| AI "possible" | 65 (D) |
+| Plagiarism "likely" | 50 (F) |
+| Both flagged | 40 (F) |
+
+### Real Example Caught:
+> Student's typical writing: *"It doubled the land. Tomas Jefferson. idk"*
+>
+> Same student's suspicious answer: *"Transforming a limited mission to buy New Orleans into a historic deal that doubled the size of the United States."*
+>
+> **Result:** Flagged as "likely AI" (90% confidence), Score: 50 (F)
 
 ---
 

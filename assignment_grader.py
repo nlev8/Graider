@@ -51,6 +51,218 @@ app_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(app_dir, '.env'), override=True)
 
 # =============================================================================
+# WRITING STYLE ANALYSIS - For AI Detection
+# =============================================================================
+
+def analyze_writing_style(text: str) -> dict:
+    """
+    Analyze writing style metrics from student text.
+    Used to build a profile and detect AI-generated content.
+    """
+    if not text or len(text.strip()) < 20:
+        return None
+
+    # Clean text
+    clean_text = text.strip()
+
+    # Split into sentences (basic sentence detection)
+    sentences = re.split(r'[.!?]+', clean_text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 3]
+
+    # Split into words
+    words = re.findall(r'\b[a-zA-Z]+\b', clean_text)
+    if len(words) < 5:
+        return None
+
+    # Calculate metrics
+    avg_word_length = sum(len(w) for w in words) / len(words)
+    avg_sentence_length = len(words) / max(len(sentences), 1)
+
+    # Vocabulary complexity (based on word length distribution)
+    long_words = [w for w in words if len(w) > 7]
+    complex_word_ratio = len(long_words) / len(words)
+
+    # Detect common misspellings (lowercase words that might be proper nouns)
+    potential_misspellings = []
+    common_misspelled = re.findall(r'\b[a-z]+[A-Z][a-z]*\b|\b[a-z]{2,}\b', clean_text)
+
+    # Check for specific patterns
+    uses_contractions = bool(re.search(r"\b(don't|can't|won't|isn't|aren't|doesn't|didn't|wouldn't|couldn't|shouldn't|I'm|you're|they're|we're|it's|that's|what's|there's|here's)\b", clean_text, re.IGNORECASE))
+
+    # Capitalization habits
+    proper_caps = len(re.findall(r'\b[A-Z][a-z]+\b', clean_text))
+    all_caps = len(re.findall(r'\b[A-Z]{2,}\b', clean_text))
+
+    # Simple vs complex vocabulary indicators
+    simple_words = ['the', 'a', 'an', 'is', 'was', 'are', 'were', 'it', 'they', 'he', 'she', 'we', 'you', 'i', 'and', 'but', 'or', 'so', 'because', 'like', 'just', 'really', 'very', 'good', 'bad', 'big', 'small']
+    simple_count = sum(1 for w in words if w.lower() in simple_words)
+    simple_ratio = simple_count / len(words)
+
+    # Academic/AI indicator words
+    academic_words = ['furthermore', 'therefore', 'consequently', 'however', 'nevertheless', 'moreover', 'subsequently', 'fundamental', 'significant', 'essentially', 'particularly', 'specifically', 'transforming', 'establishing', 'securing', 'trajectory', 'precedent', 'constitutional', 'acquisition', 'vital', 'expansion']
+    academic_count = sum(1 for w in words if w.lower() in academic_words)
+
+    # Calculate complexity score (1-10 scale)
+    complexity_score = min(10, max(1,
+        (avg_word_length - 3) * 1.5 +  # Word length contribution
+        (avg_sentence_length / 5) +     # Sentence length contribution
+        (complex_word_ratio * 10) +     # Complex words contribution
+        (academic_count * 2) -          # Academic words add complexity
+        (simple_ratio * 3)              # Simple words reduce complexity
+    ))
+
+    return {
+        "avg_word_length": round(avg_word_length, 2),
+        "avg_sentence_length": round(avg_sentence_length, 2),
+        "word_count": len(words),
+        "sentence_count": len(sentences),
+        "complex_word_ratio": round(complex_word_ratio, 3),
+        "simple_word_ratio": round(simple_ratio, 3),
+        "academic_word_count": academic_count,
+        "uses_contractions": uses_contractions,
+        "complexity_score": round(complexity_score, 2)
+    }
+
+
+def compare_writing_styles(current_style: dict, historical_profile: dict) -> dict:
+    """
+    Compare current submission's writing style against student's historical profile.
+    Returns deviation analysis and AI likelihood.
+    """
+    if not current_style or not historical_profile:
+        return {"deviation": "unknown", "ai_likelihood": "unknown", "reason": "Insufficient data"}
+
+    deviations = []
+
+    # Check complexity score deviation
+    hist_complexity = historical_profile.get("avg_complexity_score", 3.0)
+    curr_complexity = current_style.get("complexity_score", 3.0)
+    complexity_diff = curr_complexity - hist_complexity
+
+    if complexity_diff > 3:
+        deviations.append(f"Complexity jumped from {hist_complexity:.1f} to {curr_complexity:.1f}")
+
+    # Check sentence length deviation
+    hist_sent_len = historical_profile.get("avg_sentence_length", 8.0)
+    curr_sent_len = current_style.get("avg_sentence_length", 8.0)
+    sent_len_diff = curr_sent_len - hist_sent_len
+
+    if sent_len_diff > 10:
+        deviations.append(f"Sentence length jumped from {hist_sent_len:.1f} to {curr_sent_len:.1f} words")
+
+    # Check for sudden academic vocabulary
+    hist_academic = historical_profile.get("avg_academic_words", 0)
+    curr_academic = current_style.get("academic_word_count", 0)
+
+    if curr_academic > hist_academic + 2:
+        deviations.append(f"Academic vocabulary increased significantly ({curr_academic} vs typical {hist_academic})")
+
+    # Check word length deviation
+    hist_word_len = historical_profile.get("avg_word_length", 4.0)
+    curr_word_len = current_style.get("avg_word_length", 4.0)
+
+    if curr_word_len - hist_word_len > 1.5:
+        deviations.append(f"Word length increased from {hist_word_len:.1f} to {curr_word_len:.1f}")
+
+    # Determine AI likelihood based on deviations
+    if len(deviations) >= 3:
+        ai_likelihood = "likely"
+    elif len(deviations) >= 2:
+        ai_likelihood = "possible"
+    elif len(deviations) == 1 and complexity_diff > 4:
+        ai_likelihood = "possible"
+    else:
+        ai_likelihood = "none"
+
+    return {
+        "deviation": "significant" if len(deviations) >= 2 else "minor" if len(deviations) == 1 else "none",
+        "ai_likelihood": ai_likelihood,
+        "deviations": deviations,
+        "reason": "; ".join(deviations) if deviations else "Writing style consistent with history"
+    }
+
+
+def update_writing_profile(student_id: str, current_style: dict):
+    """
+    Update student's writing profile with new submission data.
+    Maintains running averages across assignments.
+    """
+    if not current_style or not student_id:
+        return
+
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    history_file = os.path.join(history_dir, f"{student_id}.json")
+
+    try:
+        if os.path.exists(history_file):
+            with open(history_file, 'r') as f:
+                history = json.load(f)
+        else:
+            history = {"student_id": student_id, "assignments": []}
+
+        # Get or initialize writing profile
+        profile = history.get("writing_profile", {
+            "avg_word_length": 0,
+            "avg_sentence_length": 0,
+            "avg_complexity_score": 0,
+            "avg_academic_words": 0,
+            "uses_contractions": False,
+            "sample_count": 0
+        })
+
+        # Update running averages
+        n = profile.get("sample_count", 0)
+        if n > 0:
+            profile["avg_word_length"] = (profile["avg_word_length"] * n + current_style["avg_word_length"]) / (n + 1)
+            profile["avg_sentence_length"] = (profile["avg_sentence_length"] * n + current_style["avg_sentence_length"]) / (n + 1)
+            profile["avg_complexity_score"] = (profile["avg_complexity_score"] * n + current_style["complexity_score"]) / (n + 1)
+            profile["avg_academic_words"] = (profile["avg_academic_words"] * n + current_style["academic_word_count"]) / (n + 1)
+        else:
+            profile["avg_word_length"] = current_style["avg_word_length"]
+            profile["avg_sentence_length"] = current_style["avg_sentence_length"]
+            profile["avg_complexity_score"] = current_style["complexity_score"]
+            profile["avg_academic_words"] = current_style["academic_word_count"]
+
+        profile["uses_contractions"] = profile.get("uses_contractions", False) or current_style["uses_contractions"]
+        profile["sample_count"] = n + 1
+
+        # Round values
+        for key in ["avg_word_length", "avg_sentence_length", "avg_complexity_score", "avg_academic_words"]:
+            if key in profile:
+                profile[key] = round(profile[key], 2)
+
+        history["writing_profile"] = profile
+
+        # Save updated history
+        os.makedirs(history_dir, exist_ok=True)
+        with open(history_file, 'w') as f:
+            json.dump(history, f, indent=2)
+
+    except Exception as e:
+        print(f"  ⚠️ Could not update writing profile: {e}")
+
+
+def get_writing_profile(student_id: str) -> dict:
+    """
+    Retrieve student's historical writing profile.
+    """
+    if not student_id:
+        return None
+
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    history_file = os.path.join(history_dir, f"{student_id}.json")
+
+    try:
+        if os.path.exists(history_file):
+            with open(history_file, 'r') as f:
+                history = json.load(f)
+                return history.get("writing_profile")
+    except Exception:
+        pass
+
+    return None
+
+# =============================================================================
 # CONFIGURATION - UPDATE THESE FOR EACH GRADING SESSION
 # =============================================================================
 
@@ -807,6 +1019,42 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
         except Exception as e:
             print(f"  Note: Could not load accommodations: {e}")
 
+    # Analyze current submission's writing style for AI detection
+    writing_style_context = ''
+    current_writing_style = None
+    style_comparison = None
+    if assignment_data.get("type") == "text" and content:
+        current_writing_style = analyze_writing_style(content)
+        if current_writing_style:
+            # Get student's historical writing profile
+            historical_profile = get_writing_profile(student_id) if student_id and student_id != "UNKNOWN" else None
+
+            if historical_profile and historical_profile.get("sample_count", 0) >= 2:
+                # Compare current vs historical style
+                style_comparison = compare_writing_styles(current_writing_style, historical_profile)
+
+                if style_comparison.get("ai_likelihood") in ["likely", "possible"]:
+                    print(f"  ⚠️  Writing style deviation detected: {style_comparison.get('deviation')}")
+                    writing_style_context = f"""
+---
+WRITING STYLE ANALYSIS (COMPARE TO STUDENT'S HISTORY):
+This student's historical writing profile (based on {historical_profile.get('sample_count', 0)} previous assignments):
+- Average complexity score: {historical_profile.get('avg_complexity_score', 'N/A')}/10
+- Average sentence length: {historical_profile.get('avg_sentence_length', 'N/A')} words
+- Average word length: {historical_profile.get('avg_word_length', 'N/A')} characters
+- Typical academic vocabulary: {historical_profile.get('avg_academic_words', 0):.1f} words per submission
+
+Current submission analysis:
+- Complexity score: {current_writing_style.get('complexity_score', 'N/A')}/10
+- Sentence length: {current_writing_style.get('avg_sentence_length', 'N/A')} words
+- Word length: {current_writing_style.get('avg_word_length', 'N/A')} characters
+- Academic vocabulary count: {current_writing_style.get('academic_word_count', 0)}
+
+DEVIATION ALERT: {'; '.join(style_comparison.get('deviations', []))}
+This suggests possible AI use - be extra vigilant in your authenticity check!
+---
+"""
+
     # Map grade level to age range for context
     grade_age_map = {
         'K': '5-6', '1': '6-7', '2': '7-8', '3': '8-9', '4': '9-10', '5': '10-11',
@@ -822,6 +1070,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 {custom_section}
 {accommodation_context}
 {history_context}
+{writing_style_context}
 ---
 
 STUDENT CONTEXT:
@@ -1032,8 +1281,24 @@ Provide your response in the following JSON format ONLY (no other text):
         response_text = response_text.strip()
         
         result = json.loads(response_text)
+
+        # Update student's writing profile (only if not flagged as AI)
+        # This builds their baseline for future AI detection
+        if student_id and student_id != "UNKNOWN" and current_writing_style:
+            ai_flag = result.get("ai_detection", {}).get("flag", "none")
+            if ai_flag not in ["likely", "possible"]:
+                try:
+                    update_writing_profile(student_id, current_writing_style)
+                    print(f"  📊 Updated writing profile for student")
+                except Exception as e:
+                    print(f"  Note: Could not update writing profile: {e}")
+
+        # Add style comparison info to result for transparency
+        if style_comparison and style_comparison.get("ai_likelihood") in ["likely", "possible"]:
+            result["writing_style_deviation"] = style_comparison
+
         return result
-        
+
     except json.JSONDecodeError as e:
         print(f"  ⚠️  Error parsing AI response: {e}")
         return {
