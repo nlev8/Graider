@@ -876,21 +876,27 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
 - Calculate the final score by considering what percentage of the assignment was actually completed
 - List ALL skipped/unanswered questions in the "unanswered_questions" field
 
-IMPORTANT - AUTHENTICITY CHECKS:
+CRITICAL - AUTHENTICITY CHECKS (BE STRICT!):
 
-1. AI DETECTION - Analyze the writing for signs of AI-generated content:
-- Is the vocabulary and sentence structure too sophisticated for grade {grade_level}?
-- Does the writing sound overly formal, polished, or "adult" for a {age_range} year old?
-- Are there unusual phrases or technical jargon that a grade {grade_level} student wouldn't typically use?
-- Does the writing lack the natural errors and simplicity expected from this age group?
-- Is the content suspiciously comprehensive or professionally structured?
-- Are there repetitive sentence patterns or overly consistent paragraph lengths?
+1. AI DETECTION - Grade {grade_level} students ({age_range} years old) write simply! Flag as "likely" AI if you see:
+- Academic phrases NO child would use: "fundamentally altered", "trajectory of history", "precedent for", "constitutional questions", "resonate through decades", "manifest destiny" (unless directly from reading)
+- Perfect grammar with complex sentence structures and no spelling errors
+- Abstract concepts explained with graduate-level vocabulary
+- Phrases like "spurred exploration", "fueling expansion", "triggered debates"
+- Content that sounds like a Wikipedia article or textbook
+- Suspiciously comprehensive answers covering multiple angles
+- ANY response that sounds more like a college essay than a 6th grader
+REMEMBER: Real {age_range} year olds write things like "it made the US bigger" NOT "it transformed the nation into a continental power"
 
-2. PLAGIARISM DETECTION - Look for signs of copied content:
-- Are there sudden shifts in writing quality or voice within the work?
-- Does the writing style change noticeably between sections?
-- Are there phrases that seem memorized or out of context?
-- Does any content seem directly lifted from a textbook or reference material?
+2. PLAGIARISM DETECTION - Look for:
+- Sudden shifts in writing quality between simple fill-in-blanks and sophisticated paragraphs
+- Textbook-perfect definitions or explanations
+- Phrases that sound memorized or copied verbatim
+
+IF AI FLAG IS "likely":
+- Add warning in feedback that the work appears AI-generated
+- Note this affects the authenticity of the grade
+- Recommend the student redo the assignment in their own words
 
 BEFORE calculating the score, count how many major written sections were skipped (Student Tasks, Reflections, Explanations, Analysis tasks). Apply these HARD CAPS:
 - 0 skipped = score based on quality (up to 100)
