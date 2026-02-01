@@ -1194,10 +1194,19 @@ Count the number of skipped/unanswered written sections (Student Task, Reflectio
 - 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
 - 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
 - 4+ skipped = MAXIMUM 59 (F)
+- 5+ skipped = MAXIMUM 49 (F)
+- 6+ skipped = MAXIMUM 39 (F)
+
+NEARLY BLANK SUBMISSIONS - Score based on effort shown:
+- If student answered only 1-2 questions out of 5+ = score 10-25 (F)
+- If student answered only 3-4 questions out of 10+ = score 25-40 (F)
+- A single poor answer like "idk" or "going again" does NOT earn 50 points
+- The score should reflect ACTUAL WORK DONE, not a default minimum
+- Empty or nearly empty = score in the 0-30 range
 
 YOU MUST APPLY THESE CAPS. If a student skipped 2 written sections, their score CANNOT be above 79 even if their fill-in-the-blanks were perfect.
 
-The LOWEST cap wins. Example: AI "likely" (cap 50) + 2 sections skipped (cap 79) = final cap is 50.
+The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39) = final cap is 39.
 
 Provide your response in the following JSON format ONLY (no other text):
 {{
