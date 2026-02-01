@@ -255,7 +255,7 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period=''):
     """Run the grading process in a background thread.
 
     Args:
@@ -496,6 +496,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             file_ai_notes = ''
             if global_ai_notes:
                 file_ai_notes += f"GLOBAL GRADING INSTRUCTIONS:\n{global_ai_notes}\n\n"
+            if class_period:
+                file_ai_notes += f"CLASS PERIOD BEING GRADED: {class_period}\n(Apply any period-specific grading expectations from the instructions above)\n\n"
             if file_notes:
                 file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}\n\n"
 
@@ -752,6 +754,9 @@ def start_grading():
     # Skip verified grades on regrade (only regrade unverified assignments)
     skip_verified = data.get('skipVerified', False)
 
+    # Get class period for differentiated grading (e.g., "Period 4" for different expectations)
+    class_period = data.get('classPeriod', '')
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -766,7 +771,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period)
     )
     thread.start()
 
@@ -796,6 +801,7 @@ def grade_individual():
     student_info_str = request.form.get('studentInfo', '')
     teacher_name = request.form.get('teacher_name', '')
     school_name = request.form.get('school_name', '')
+    class_period = request.form.get('classPeriod', '')
 
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
@@ -818,6 +824,8 @@ def grade_individual():
 
     # Build AI notes from config
     file_ai_notes = global_ai_notes or ''
+    if class_period:
+        file_ai_notes += f"\nCLASS PERIOD BEING GRADED: {class_period}\n(Apply any period-specific grading expectations from the instructions above)\n"
     if assignment_config:
         if assignment_config.get('gradingNotes'):
             file_ai_notes = assignment_config['gradingNotes'] + '\n\n' + file_ai_notes

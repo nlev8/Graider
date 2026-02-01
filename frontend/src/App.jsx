@@ -1798,6 +1798,11 @@ function App() {
         }
       }
 
+      // Get the period name for differentiated grading
+      const selectedPeriodName = selectedPeriod
+        ? periods.find(p => p.filename === selectedPeriod)?.name || ''
+        : '';
+
       await api.startGrading({
         ...config,
         grade_level: config.grade_level,
@@ -1815,6 +1820,8 @@ function App() {
         selectedFiles: filesToGrade,
         // Skip verified grades on regrade (only regrade unverified)
         skipVerified: skipVerified,
+        // Pass the period name for differentiated grading expectations
+        classPeriod: selectedPeriodName,
       });
       setStatus((prev) => ({
         ...prev,
@@ -1871,6 +1878,11 @@ function App() {
       formData.append("globalAINotes", globalAINotes);
       formData.append("teacher_name", config.teacher_name || "");
       formData.append("school_name", config.school_name || "");
+      // Pass class period for differentiated grading
+      if (selectedPeriod) {
+        const periodName = periods.find(p => p.filename === selectedPeriod)?.name || '';
+        formData.append("classPeriod", periodName);
+      }
       // Pass student info from CSV if available
       if (individualUpload.studentInfo) {
         formData.append(
