@@ -862,13 +862,18 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
 - CAREFULLY check if the student answered ALL parts of the assignment, especially:
   * "Explain in your own words" sections - these require written responses, not blank
   * "Reflection" or "Final Reflection" questions - these MUST be answered
+  * "Student Task" sections - these are major components requiring written responses
   * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
   * Summary sections at the end of notes/readings
-- If a student skips ANY written response section (reflection, explanation, summary), they CANNOT receive an A.
-- Skipping 1 major written section = maximum grade is B (85)
-- Skipping 2+ major written sections = maximum grade is C (75) or lower
-- Fill-in-the-blank completeness is separate - skipping written responses is MORE serious
-- An "A" grade (90+) requires ALL sections completed with quality responses
+  * Primary source analysis tasks
+- Written response sections (reflections, explanations, analysis tasks) are worth as much as fill-in-the-blanks!
+- STRICT GRADE CAPS FOR INCOMPLETE WORK:
+  * Skipping 1 major written section = maximum score 80 (B-)
+  * Skipping 2 major written sections = maximum score 70-75 (C)
+  * Skipping 3+ major written sections = maximum score 65 or lower (D)
+  * If student only did fill-in-the-blanks and skipped ALL written responses = maximum 70 (C)
+- An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses
+- Calculate the final score by considering what percentage of the assignment was actually completed
 - List ALL skipped/unanswered questions in the "unanswered_questions" field
 
 IMPORTANT - AUTHENTICITY CHECKS:
@@ -887,13 +892,19 @@ IMPORTANT - AUTHENTICITY CHECKS:
 - Are there phrases that seem memorized or out of context?
 - Does any content seem directly lifted from a textbook or reference material?
 
+BEFORE calculating the score, count how many major written sections were skipped (Student Tasks, Reflections, Explanations, Analysis tasks). Apply these HARD CAPS:
+- 0 skipped = score based on quality (up to 100)
+- 1 skipped = MAX score is 80
+- 2 skipped = MAX score is 72
+- 3+ skipped = MAX score is 65
+
 Provide your response in the following JSON format ONLY (no other text):
 {{
-    "score": <number 0-100>,
-    "letter_grade": "<A, B, C, D, or F>",
+    "score": <number 0-100, but CAPPED based on skipped sections above>,
+    "letter_grade": "<A, B, C, D, or F - must match the capped score>",
     "breakdown": {{
         "content_accuracy": <points out of 40 - correctness of answers>,
-        "completeness": <points out of 25 - ALL sections must be attempted. Skipping written response sections (reflections, explanations, summaries) = major deduction. 0-10 if major sections skipped, 11-20 if minor gaps, 21-25 only if ALL parts completed>,
+        "completeness": <points out of 25 - ALL sections must be attempted. Written responses (reflections, explanations, Student Tasks) count heavily! 0-5 if 2+ major sections skipped, 6-12 if 1 major section skipped, 13-20 if minor gaps only, 21-25 only if ALL parts fully completed>,
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
