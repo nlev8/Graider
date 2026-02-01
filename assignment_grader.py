@@ -883,8 +883,10 @@ STEP 1: Look at their short answers (fill-in-blanks, one-word responses). Note t
 STEP 2: Look at their paragraph responses. Compare the vocabulary and complexity.
 STEP 3: If there's a MISMATCH (simple short answers but sophisticated paragraphs), flag as "likely" AI.
 
-AUTOMATIC "likely" AI FLAGS - if you see ANY of these phrases, it's AI:
+AUTOMATIC "likely" AI FLAGS - if you see ANY of these phrases, it's 100% AI:
 - "transformed the nation into a continental power"
+- "transforming a limited mission"
+- "historic deal that doubled"
 - "fueling westward expansion"
 - "triggered intense political debates"
 - "spurred exploration"
@@ -892,11 +894,27 @@ AUTOMATIC "likely" AI FLAGS - if you see ANY of these phrases, it's AI:
 - "establishing the precedent for"
 - "constitutional questions regarding federal authority"
 - "resonate through subsequent decades"
+- "vital for trade and growth"
+- "securing vital trade routes"
+- "manifest destiny"
+- "territorial expansion"
+- "abundant natural resources"
+- Any phrase starting with "Transforming...", "Establishing...", "Securing..."
 - Any phrase a {age_range} year old would NEVER write
 
-CRITICAL CONTRAST CHECK: If a student writes "idk" or "It doubled size" for some answers, but then writes college-level paragraphs elsewhere, that is 100% AI - flag as "likely".
+CRITICAL CONTRAST CHECK - THIS IS THE MOST IMPORTANT CHECK:
+Look at the student's spelling and grammar in simple answers. If they write:
+- Misspellings like "Tomas Jefferson", "the u's", "france" (lowercase)
+- Simple phrases like "It doubled in size", "idk"
+- Basic vocabulary and short sentences
 
-Real grade {grade_level} students write: "it made the US bigger", "they needed the river for boats"
+BUT THEN write sophisticated phrases like:
+- "Transforming a limited mission to buy New Orleans into a historic deal"
+- Any sentence with words like "vital", "securing", "expanding", "historic deal"
+
+That is 100% AI or copied - flag as "likely" IMMEDIATELY. A student who misspells "Thomas" does NOT write "transforming a limited mission into a historic deal."
+
+Real grade {grade_level} students write: "it made the US bigger", "they needed the river for boats", "so ships could go there"
 AI writes: "it transformed the nation into a continental power", "securing vital trade routes"
 
 2. PLAGIARISM DETECTION - Look for:
