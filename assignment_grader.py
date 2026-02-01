@@ -855,8 +855,21 @@ GRADING GUIDELINES:
 - For fill-in-the-blank: check if the answer is factually correct or close enough.
 - Accept multiple valid answers and synonyms.
 - DO NOT penalize spelling mistakes if the meaning is clear.
-- Be GENEROUS - these are grade {grade_level} students ({age_range} years old)! A student who completes all work and gets most answers right deserves an A or B.
+- Be age-appropriate - these are grade {grade_level} students ({age_range} years old).
 - IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
+
+CRITICAL - COMPLETENESS REQUIREMENTS:
+- CAREFULLY check if the student answered ALL parts of the assignment, especially:
+  * "Explain in your own words" sections - these require written responses, not blank
+  * "Reflection" or "Final Reflection" questions - these MUST be answered
+  * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
+  * Summary sections at the end of notes/readings
+- If a student skips ANY written response section (reflection, explanation, summary), they CANNOT receive an A.
+- Skipping 1 major written section = maximum grade is B (85)
+- Skipping 2+ major written sections = maximum grade is C (75) or lower
+- Fill-in-the-blank completeness is separate - skipping written responses is MORE serious
+- An "A" grade (90+) requires ALL sections completed with quality responses
+- List ALL skipped/unanswered questions in the "unanswered_questions" field
 
 IMPORTANT - AUTHENTICITY CHECKS:
 
@@ -879,13 +892,13 @@ Provide your response in the following JSON format ONLY (no other text):
     "score": <number 0-100>,
     "letter_grade": "<A, B, C, D, or F>",
     "breakdown": {{
-        "content_accuracy": <points out of 40>,
-        "completeness": <points out of 25>,
+        "content_accuracy": <points out of 40 - correctness of answers>,
+        "completeness": <points out of 25 - ALL sections must be attempted. Skipping written response sections (reflections, explanations, summaries) = major deduction. 0-10 if major sections skipped, 11-20 if minor gaps, 21-25 only if ALL parts completed>,
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
     "student_responses": ["<list each student answer you found, e.g. '1803', 'France', 'It helped trade...' etc>"],
-    "unanswered_questions": ["<list any questions the student left blank or didn't answer>"],
+    "unanswered_questions": ["<list ALL questions/sections the student left blank or didn't answer - especially written response sections like reflections, explanations, summaries>"],
     "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
     "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
     "skills_demonstrated": {{
