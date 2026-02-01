@@ -871,6 +871,7 @@ function App() {
     useState(false);
   const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
+  const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
   const [gradeAssignment, setGradeAssignment] = useState({
     title: "",
     customMarkers: [],
@@ -926,6 +927,15 @@ function App() {
   const [assignmentType, setAssignmentType] = useState("worksheet");
   const [showInteractivePreview, setShowInteractivePreview] = useState(false);
   const [interactiveResults, setInteractiveResults] = useState(null);
+
+  // Saved lessons for assessment generation
+  const [savedLessons, setSavedLessons] = useState({ units: {}, lessons: [] });
+  const [savedUnits, setSavedUnits] = useState([]);
+  const [selectedSources, setSelectedSources] = useState([]); // [{type, unit, filename, content}]
+  const [showSaveLesson, setShowSaveLesson] = useState(false);
+  const [saveLessonUnit, setSaveLessonUnit] = useState('');
+  const [newUnitName, setNewUnitName] = useState('');
+
   const [unitConfig, setUnitConfig] = useState({
     title: "",
     duration: 1,
@@ -1245,6 +1255,17 @@ function App() {
       })
       .catch(console.error);
 
+    // Load saved lessons for assessment generation
+    api
+      .listLessons()
+      .then((data) => {
+        if (data.units) {
+          setSavedLessons(data);
+          setSavedUnits(Object.keys(data.units));
+        }
+      })
+      .catch(console.error);
+
     // Check API keys status
     fetch("/api/check-api-keys")
       .then((res) => res.json())
@@ -1284,8 +1305,12 @@ function App() {
   useEffect(() => {
     if (!settingsLoaded) return;
     if (!assignment.title) return; // Don't save assignments without a title
+    if (isLoadingAssignment) return; // Don't save while loading an assignment
 
     const saveTimeout = setTimeout(async () => {
+      // Double-check we're not in the middle of loading
+      if (isLoadingAssignment) return;
+
       try {
         let dataToSave = { ...assignment, importedDoc };
         const isRename =
@@ -1301,19 +1326,31 @@ function App() {
           }
         }
 
-        await api.saveAssignmentConfig(dataToSave);
+        const saveResult = await api.saveAssignmentConfig(dataToSave);
 
-        // If renamed, delete the old assignment file (alias is preserved in new file)
-        if (isRename) {
-          await api.deleteAssignment(loadedAssignmentName);
+        // Only proceed if save was successful
+        if (saveResult.status === "saved") {
+          // If renamed, delete the old assignment file (alias is preserved in new file)
+          if (isRename) {
+            try {
+              await api.deleteAssignment(loadedAssignmentName);
+              console.log(`Renamed assignment: "${loadedAssignmentName}" → "${assignment.title}" (old name saved as alias)`);
+            } catch (deleteErr) {
+              console.error("Failed to delete old assignment file:", deleteErr);
+              // Don't fail the whole operation if delete fails
+            }
+          }
+
+          // Refresh saved assignments list
+          const list = await api.listAssignments();
+          if (list.assignments) setSavedAssignments(list.assignments);
+          if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
+          // Update loaded assignment name to reflect current title
+          setLoadedAssignmentName(assignment.title);
+        } else if (saveResult.error) {
+          console.error("Failed to save assignment:", saveResult.error);
+          addToast("Failed to save assignment: " + saveResult.error, "error");
         }
-
-        // Refresh saved assignments list
-        const list = await api.listAssignments();
-        if (list.assignments) setSavedAssignments(list.assignments);
-        if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
-        // Update loaded assignment name to reflect current title
-        setLoadedAssignmentName(assignment.title);
       } catch (error) {
         console.error("Failed to auto-save assignment:", error);
       }
@@ -1800,7 +1837,7 @@ function App() {
 
       // Get the period name for differentiated grading
       const selectedPeriodName = selectedPeriod
-        ? periods.find(p => p.filename === selectedPeriod)?.name || ''
+        ? periods.find(p => p.filename === selectedPeriod)?.period_name || ''
         : '';
 
       await api.startGrading({
@@ -1880,7 +1917,7 @@ function App() {
       formData.append("school_name", config.school_name || "");
       // Pass class period for differentiated grading
       if (selectedPeriod) {
-        const periodName = periods.find(p => p.filename === selectedPeriod)?.name || '';
+        const periodName = periods.find(p => p.filename === selectedPeriod)?.period_name || '';
         formData.append("classPeriod", periodName);
       }
       // Pass student info from CSV if available
@@ -2191,8 +2228,15 @@ ${signature}`;
 
   const loadAssignment = async (name) => {
     try {
+      setIsLoadingAssignment(true); // Prevent auto-save during load
       const data = await api.loadAssignment(name);
       if (data.assignment) {
+        // Set importedDoc FIRST to prevent race condition
+        if (data.assignment.importedDoc) {
+          setImportedDoc(data.assignment.importedDoc);
+        } else {
+          setImportedDoc({ text: "", html: "", filename: "", loading: false });
+        }
         setAssignment({
           title: data.assignment.title || "",
           subject: data.assignment.subject || "Social Studies",
@@ -2205,13 +2249,11 @@ ${signature}`;
           aliases: data.assignment.aliases || [],
         });
         setLoadedAssignmentName(name);
-        if (data.assignment.importedDoc) {
-          setImportedDoc(data.assignment.importedDoc);
-        } else {
-          setImportedDoc({ text: "", html: "", filename: "", loading: false });
-        }
       }
+      // Small delay before allowing auto-save again
+      setTimeout(() => setIsLoadingAssignment(false), 500);
     } catch (e) {
+      setIsLoadingAssignment(false);
       addToast("Error loading: " + e.message, "error");
     }
   };
@@ -2380,7 +2422,8 @@ ${signature}`;
           teacher_name: config.teacher_name,
           globalAINotes: globalAINotes,
         },
-        { ...assessmentConfig, title }
+        { ...assessmentConfig, title },
+        selectedSources
       );
 
       if (data.error) {
@@ -2560,6 +2603,19 @@ ${signature}`;
       addToast("Error saving assessment: " + e.message, "error");
     } finally {
       setSavingAssessment(false);
+    }
+  };
+
+  // Fetch saved lessons for assessment content sources
+  const fetchSavedLessons = async () => {
+    try {
+      const data = await api.listLessons();
+      if (data.units) {
+        setSavedLessons(data);
+        setSavedUnits(Object.keys(data.units));
+      }
+    } catch (e) {
+      console.error("Error loading saved lessons:", e);
     }
   };
 
@@ -4754,11 +4810,21 @@ ${signature}`;
                                         [name]: newData,
                                       }));
                                       try {
-                                        await api.saveAssignmentConfig({
-                                          ...newData,
-                                          title: name,
-                                          completionOnly: !isCompletionOnly,
-                                        });
+                                        // Load the full assignment first to preserve all data (including importedDoc)
+                                        const fullData = await api.loadAssignment(name);
+                                        if (fullData.assignment) {
+                                          await api.saveAssignmentConfig({
+                                            ...fullData.assignment,
+                                            completionOnly: !isCompletionOnly,
+                                          });
+                                        } else {
+                                          // Fallback if load fails
+                                          await api.saveAssignmentConfig({
+                                            ...newData,
+                                            title: name,
+                                            completionOnly: !isCompletionOnly,
+                                          });
+                                        }
                                         addToast(
                                           `"${name}" set to ${!isCompletionOnly ? "Completion Only" : "AI Grading"}`,
                                           "success"
@@ -10476,6 +10542,58 @@ ${signature}`;
                                   alignItems: "center",
                                 }}
                                 onClick={() => loadAssignment(name)}
+                                onDoubleClick={async () => {
+                                  setIsLoadingAssignment(true); // Prevent auto-save during load
+                                  const data = await api.loadAssignment(name);
+                                  if (data.assignment) {
+                                    // Set importedDoc FIRST to prevent race condition
+                                    if (data.assignment.importedDoc?.html || data.assignment.importedDoc?.text) {
+                                      setImportedDoc(data.assignment.importedDoc);
+                                    } else {
+                                      setImportedDoc({ text: "", html: "", filename: "", loading: false });
+                                    }
+
+                                    // Load the assignment
+                                    setAssignment({
+                                      title: data.assignment.title || "",
+                                      subject: data.assignment.subject || "Social Studies",
+                                      totalPoints: data.assignment.totalPoints || 100,
+                                      instructions: data.assignment.instructions || "",
+                                      questions: data.assignment.questions || [],
+                                      customMarkers: data.assignment.customMarkers || [],
+                                      gradingNotes: data.assignment.gradingNotes || "",
+                                      responseSections: data.assignment.responseSections || [],
+                                      aliases: data.assignment.aliases || [],
+                                    });
+                                    setLoadedAssignmentName(name);
+                                    setTimeout(() => setIsLoadingAssignment(false), 500);
+
+                                    // If there's an imported doc, open the editor modal
+                                    if (data.assignment.importedDoc?.html || data.assignment.importedDoc?.text) {
+                                      setDocEditorModal({
+                                        show: true,
+                                        editedHtml: data.assignment.importedDoc.html || '',
+                                        viewMode: 'formatted'
+                                      });
+                                      const markerCount = (data.assignment.questions?.length || 0) + (data.assignment.customMarkers?.length || 0);
+                                      addToast(
+                                        `Loaded "${name}" with ${markerCount} marker${markerCount !== 1 ? 's' : ''}`,
+                                        'success'
+                                      );
+                                    } else {
+                                      // No document - check if it has markers
+                                      const markerCount = (data.assignment.questions?.length || 0) + (data.assignment.customMarkers?.length || 0);
+                                      if (markerCount > 0) {
+                                        addToast(`"${name}" has ${markerCount} marker${markerCount !== 1 ? 's' : ''} but no document. Re-import the document to view.`, 'warning');
+                                      } else {
+                                        addToast(`"${name}" has no document or markers. Import a document to get started.`, 'info');
+                                      }
+                                    }
+                                  } else {
+                                    setIsLoadingAssignment(false);
+                                  }
+                                }}
+                                title="Double-click to open document with markers"
                               >
                                 <div
                                   style={{
@@ -10621,12 +10739,20 @@ ${signature}`;
                           type="number"
                           className="input"
                           value={assignment.totalPoints}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const val = e.target.value;
                             setAssignment({
                               ...assignment,
-                              totalPoints: parseInt(e.target.value) || 100,
-                            })
-                          }
+                              totalPoints: val === '' ? '' : parseInt(val),
+                            });
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value) || 100;
+                            setAssignment({
+                              ...assignment,
+                              totalPoints: val,
+                            });
+                          }}
                           disabled={assignment.completionOnly}
                           style={
                             assignment.completionOnly ? { opacity: 0.5 } : {}
@@ -13879,6 +14005,13 @@ ${signature}`;
                               >
                                 <Icon name="Download" size={16} /> Export
                               </button>
+                              <button
+                                onClick={() => setShowSaveLesson(true)}
+                                className="btn btn-secondary"
+                                title="Save for use in assessment generation"
+                              >
+                                <Icon name="FolderPlus" size={16} /> Save to Unit
+                              </button>
                               <div
                                 style={{
                                   display: "flex",
@@ -14750,24 +14883,24 @@ ${signature}`;
                                 <option value="formative">Formative Check</option>
                               </select>
                             </div>
-                            <div style={{ display: "flex", gap: "15px" }}>
-                              <div style={{ flex: 1 }}>
-                                <label className="label">Title (Optional)</label>
-                                <input
-                                  type="text"
-                                  className="input"
-                                  value={assessmentConfig.title}
-                                  onChange={(e) =>
-                                    setAssessmentConfig({
-                                      ...assessmentConfig,
-                                      title: e.target.value,
-                                    })
-                                  }
-                                  placeholder="Auto-generated from standards"
-                                />
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <label className="label">Target Period</label>
+                            <div>
+                              <label className="label">Title (Optional)</label>
+                              <input
+                                type="text"
+                                className="input"
+                                value={assessmentConfig.title}
+                                onChange={(e) =>
+                                  setAssessmentConfig({
+                                    ...assessmentConfig,
+                                    title: e.target.value,
+                                  })
+                                }
+                                placeholder="Auto-generated from standards"
+                              />
+                            </div>
+                            <div>
+                              <label className="label">Target Period</label>
+                              {periods.length > 0 ? (
                                 <select
                                   className="input"
                                   value={assessmentConfig.targetPeriod}
@@ -14781,13 +14914,27 @@ ${signature}`;
                                 >
                                   <option value="">-- No specific period --</option>
                                   {periods.map((p) => (
-                                    <option key={p.filename} value={p.name}>{p.name}</option>
+                                    <option key={p.filename} value={p.period_name}>{p.period_name}</option>
                                   ))}
                                 </select>
-                                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                                  For differentiation per Global AI Instructions
-                                </p>
-                              </div>
+                              ) : (
+                                <input
+                                  type="text"
+                                  className="input"
+                                  value={assessmentConfig.targetPeriod}
+                                  onChange={(e) =>
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      targetPeriod: e.target.value,
+                                    })
+                                  }
+                                  placeholder="e.g., Period 1, Advanced, Standard"
+                                  style={{ width: "100%" }}
+                                />
+                              )}
+                              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                                Match to your Global AI Instructions
+                              </p>
                             </div>
                             <div style={{ display: "flex", gap: "15px" }}>
                               <div style={{ flex: 1 }}>
@@ -14797,14 +14944,23 @@ ${signature}`;
                                   className="input"
                                   value={assessmentConfig.totalQuestions}
                                   onChange={(e) => {
-                                    const newTotal = parseInt(e.target.value) || 10;
-                                    const newTypes = distributeQuestions(newTotal);
-                                    const newDok = distributeDOK(newTotal);
+                                    const val = e.target.value;
+                                    const newTotal = val === '' ? '' : parseInt(val);
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      totalQuestions: newTotal,
+                                    });
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = parseInt(e.target.value) || 10;
+                                    const clamped = Math.max(5, Math.min(50, val));
+                                    const newTypes = distributeQuestions(clamped);
+                                    const newDok = distributeDOK(clamped);
                                     const newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
 
                                     setAssessmentConfig({
                                       ...assessmentConfig,
-                                      totalQuestions: newTotal,
+                                      totalQuestions: clamped,
                                       questionTypes: newTypes,
                                       dokDistribution: newDok,
                                       pointsPerType: newPointsPerType,
@@ -14819,14 +14975,24 @@ ${signature}`;
                                 <input
                                   type="number"
                                   className="input"
-                                  value={assessmentConfig.totalPoints || 30}
+                                  value={assessmentConfig.totalPoints}
                                   onChange={(e) => {
-                                    const newTotalPoints = parseInt(e.target.value) || 30;
-                                    const newPointsPerType = distributePoints(newTotalPoints, assessmentConfig.questionTypes);
-
+                                    const val = e.target.value;
+                                    // Allow empty while typing, parse as number
+                                    const newTotalPoints = val === '' ? '' : parseInt(val);
                                     setAssessmentConfig({
                                       ...assessmentConfig,
                                       totalPoints: newTotalPoints,
+                                    });
+                                  }}
+                                  onBlur={(e) => {
+                                    // On blur, ensure valid value and recalculate points
+                                    const val = parseInt(e.target.value) || 30;
+                                    const clamped = Math.max(10, Math.min(200, val));
+                                    const newPointsPerType = distributePoints(clamped, assessmentConfig.questionTypes);
+                                    setAssessmentConfig({
+                                      ...assessmentConfig,
+                                      totalPoints: clamped,
                                       pointsPerType: newPointsPerType,
                                     });
                                   }}
@@ -15124,6 +15290,198 @@ ${signature}`;
                           gap: "20px",
                         }}
                       >
+                        {/* Content Sources Panel */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                            <div>
+                              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "5px", display: "flex", alignItems: "center", gap: "10px" }}>
+                                <Icon name="BookOpen" size={20} />
+                                Content Sources
+                              </h3>
+                              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                                Select lessons and assignments to generate questions from your actual instruction
+                              </p>
+                            </div>
+                            <button
+                              onClick={fetchSavedLessons}
+                              className="btn btn-secondary"
+                              style={{ padding: "6px 12px" }}
+                            >
+                              <Icon name="RefreshCw" size={14} />
+                            </button>
+                          </div>
+
+                          {Object.keys(savedLessons.units || {}).length === 0 ? (
+                            <div style={{
+                              padding: "20px",
+                              background: "rgba(255,255,255,0.03)",
+                              borderRadius: "10px",
+                              textAlign: "center"
+                            }}>
+                              <Icon name="FolderOpen" size={24} style={{ color: "var(--text-muted)", marginBottom: "10px" }} />
+                              <p style={{ color: "var(--text-secondary)", marginBottom: "10px" }}>
+                                No saved lessons yet
+                              </p>
+                              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                                Save lessons from the Lesson Planner to use them here. Saved assignments from the Assignment Builder will also appear below.
+                              </p>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                              {Object.entries(savedLessons.units).map(([unitName, lessons]) => (
+                                <div key={unitName}>
+                                  <h4 style={{
+                                    fontSize: "0.9rem",
+                                    fontWeight: 600,
+                                    marginBottom: "10px",
+                                    color: "var(--primary)"
+                                  }}>
+                                    {unitName}
+                                  </h4>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                    {lessons.map((lesson) => {
+                                      const isSelected = selectedSources.some(
+                                        s => s.type === 'lesson' && s.unit === unitName && s.filename === lesson.filename
+                                      );
+                                      return (
+                                        <button
+                                          key={lesson.filename}
+                                          onClick={async () => {
+                                            if (isSelected) {
+                                              setSelectedSources(selectedSources.filter(
+                                                s => !(s.type === 'lesson' && s.unit === unitName && s.filename === lesson.filename)
+                                              ));
+                                            } else {
+                                              // Load full lesson content
+                                              const data = await api.loadLesson(unitName, lesson.filename);
+                                              if (data.lesson) {
+                                                setSelectedSources([...selectedSources, {
+                                                  type: 'lesson',
+                                                  unit: unitName,
+                                                  filename: lesson.filename,
+                                                  title: lesson.title,
+                                                  content: data.lesson
+                                                }]);
+                                              }
+                                            }
+                                          }}
+                                          style={{
+                                            padding: "8px 14px",
+                                            borderRadius: "8px",
+                                            border: isSelected ? "2px solid var(--primary)" : "1px solid var(--glass-border)",
+                                            background: isSelected ? "rgba(99, 102, 241, 0.2)" : "rgba(255,255,255,0.05)",
+                                            color: isSelected ? "var(--primary)" : "var(--text-primary)",
+                                            cursor: "pointer",
+                                            fontSize: "0.85rem",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "6px"
+                                          }}
+                                        >
+                                          <Icon name={isSelected ? "CheckCircle" : "FileText"} size={14} />
+                                          {lesson.title}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Saved Assignments Section */}
+                          {savedAssignments.length > 0 && (
+                            <div style={{ marginTop: "20px", paddingTop: "15px", borderTop: "1px solid var(--glass-border)" }}>
+                              <h4 style={{
+                                fontSize: "0.9rem",
+                                fontWeight: 600,
+                                marginBottom: "10px",
+                                color: "var(--accent-primary)",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px"
+                              }}>
+                                <Icon name="ClipboardList" size={16} />
+                                Saved Assignments
+                              </h4>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                {savedAssignments.map((assignmentName) => {
+                                  const isSelected = selectedSources.some(
+                                    s => s.type === 'assignment' && s.filename === assignmentName
+                                  );
+                                  return (
+                                    <button
+                                      key={assignmentName}
+                                      onClick={async () => {
+                                        if (isSelected) {
+                                          setSelectedSources(selectedSources.filter(
+                                            s => !(s.type === 'assignment' && s.filename === assignmentName)
+                                          ));
+                                        } else {
+                                          // Load full assignment content
+                                          const data = await api.loadAssignment(assignmentName);
+                                          if (data.assignment) {
+                                            setSelectedSources([...selectedSources, {
+                                              type: 'assignment',
+                                              filename: assignmentName,
+                                              title: data.assignment.title || assignmentName,
+                                              content: data.assignment
+                                            }]);
+                                          }
+                                        }
+                                      }}
+                                      style={{
+                                        padding: "8px 14px",
+                                        borderRadius: "8px",
+                                        border: isSelected ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                                        background: isSelected ? "rgba(251, 191, 36, 0.2)" : "rgba(255,255,255,0.05)",
+                                        color: isSelected ? "var(--accent-primary)" : "var(--text-primary)",
+                                        cursor: "pointer",
+                                        fontSize: "0.85rem",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "6px"
+                                      }}
+                                    >
+                                      <Icon name={isSelected ? "CheckCircle" : "FileText"} size={14} />
+                                      {savedAssignmentData[assignmentName]?.title || assignmentName}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedSources.length > 0 && (
+                            <div style={{
+                              marginTop: "15px",
+                              padding: "10px 15px",
+                              background: "rgba(34, 197, 94, 0.1)",
+                              borderRadius: "8px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between"
+                            }}>
+                              <span style={{ color: "#22c55e", fontSize: "0.9rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <Icon name="Check" size={16} />
+                                {selectedSources.length} source{selectedSources.length > 1 ? 's' : ''} selected - questions will be based on this content
+                              </span>
+                              <button
+                                onClick={() => setSelectedSources([])}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem"
+                                }}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Standards Selection */}
                         <div className="glass-card" style={{ padding: "20px" }}>
                           <div
@@ -15328,6 +15686,23 @@ ${signature}`;
                                 </div>
                               </div>
                               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                                <button
+                                  onClick={() => {
+                                    setGeneratedAssessment(null);
+                                    setAssessmentAnswers({});
+                                    setSelectedSources([]);
+                                  }}
+                                  className="btn"
+                                  style={{
+                                    padding: "8px 16px",
+                                    background: "rgba(239, 68, 68, 0.2)",
+                                    border: "1px solid rgba(239, 68, 68, 0.3)"
+                                  }}
+                                  title="Clear assessment and start over"
+                                >
+                                  <Icon name="X" size={16} />
+                                  Clear
+                                </button>
                                 <button
                                   onClick={() => exportAssessmentHandler(false)}
                                   className="btn btn-secondary"
@@ -16591,6 +16966,111 @@ ${signature}`;
         </div>
       )}
 
+      {/* Save Lesson Modal */}
+      {showSaveLesson && lessonPlan && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowSaveLesson(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-card"
+            style={{ padding: "30px", width: "400px", maxWidth: "90vw" }}
+          >
+            <h3 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <Icon name="FolderPlus" size={24} style={{ color: "var(--primary)" }} />
+              Save Lesson to Unit
+            </h3>
+
+            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
+              Save this lesson to use it as a content source when generating assessments.
+            </p>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label className="label">Select Existing Unit</label>
+              <select
+                className="input"
+                value={saveLessonUnit}
+                onChange={(e) => {
+                  setSaveLessonUnit(e.target.value);
+                  if (e.target.value) setNewUnitName('');
+                }}
+                style={{ width: "100%" }}
+              >
+                <option value="">-- Select or create new --</option>
+                {savedUnits.map((unit) => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
+              </select>
+            </div>
+
+            {!saveLessonUnit && (
+              <div style={{ marginBottom: "20px" }}>
+                <label className="label">Or Create New Unit</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g., Unit 3 - Fractions"
+                  value={newUnitName}
+                  onChange={(e) => setNewUnitName(e.target.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setShowSaveLesson(false);
+                  setSaveLessonUnit('');
+                  setNewUnitName('');
+                }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const unitName = saveLessonUnit || newUnitName;
+                  if (!unitName) {
+                    addToast('Please select or enter a unit name', 'error');
+                    return;
+                  }
+                  try {
+                    const result = await api.saveLessonPlan(lessonPlan, unitName);
+                    if (result.error) {
+                      addToast('Error: ' + result.error, 'error');
+                    } else {
+                      setShowSaveLesson(false);
+                      setSaveLessonUnit('');
+                      setNewUnitName('');
+                      fetchSavedLessons();
+                      addToast('Lesson saved to ' + unitName + '!', 'success');
+                    }
+                  } catch (err) {
+                    addToast('Failed to save: ' + err.message, 'error');
+                  }
+                }}
+                className="btn btn-primary"
+                disabled={!saveLessonUnit && !newUnitName}
+              >
+                <Icon name="Save" size={16} />
+                Save Lesson
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Publish Settings Modal - Period, Makeup, Student Selection */}
       {showPublishModal && (
         <div
@@ -16638,7 +17118,7 @@ ${signature}`;
                   setPublishSettings({
                     ...publishSettings,
                     periodFilename: filename,
-                    period: selectedPeriod ? selectedPeriod.name : '',
+                    period: selectedPeriod ? selectedPeriod.period_name : '',
                     selectedStudents: [],
                   });
                   loadPublishModalStudents(filename);

@@ -278,9 +278,86 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 except:
                     pass
 
-    def find_matching_config(filename):
-        """Find matching config for a filename."""
+    def extract_content_fingerprints(config_data):
+        """Extract unique phrases from assignment's imported document for content matching."""
+        fingerprints = set()
+        imported_doc = config_data.get('importedDoc', {})
+        doc_text = imported_doc.get('text', '')
+
+        if doc_text:
+            # Extract significant phrases (questions, numbered items, unique sentences)
+            import re
+            # Get numbered questions/items (e.g., "1.", "1)", "Question 1")
+            numbered = re.findall(r'(?:^|\n)\s*(?:\d+[\.\)]\s*|Question\s*\d+[:\.]?\s*)(.{20,100})', doc_text, re.IGNORECASE)
+            for item in numbered[:10]:  # Limit to first 10
+                clean = re.sub(r'\s+', ' ', item.strip().lower())
+                if len(clean) > 20:
+                    fingerprints.add(clean[:50])  # First 50 chars of each
+
+            # Get marker texts as fingerprints
+            for marker in config_data.get('customMarkers', []):
+                if len(marker) > 10:
+                    fingerprints.add(marker.lower()[:50])
+
+            # Get unique sentences (not too short, not too long)
+            sentences = re.split(r'[.!?]\s+', doc_text)
+            for sent in sentences[:20]:
+                clean = re.sub(r'\s+', ' ', sent.strip().lower())
+                if 30 < len(clean) < 150:
+                    fingerprints.add(clean[:50])
+
+        return fingerprints
+
+    def fuzzy_match_score(text1, text2):
+        """Calculate fuzzy match score between two strings."""
+        if not text1 or not text2:
+            return 0
+
+        t1 = text1.lower().strip()
+        t2 = text2.lower().strip()
+
+        # Exact match
+        if t1 == t2:
+            return 100
+
+        # One contains the other
+        if t1 in t2 or t2 in t1:
+            return 80
+
+        # Word overlap matching
+        import re
+        words1 = set(re.findall(r'\b\w{3,}\b', t1))  # Words 3+ chars
+        words2 = set(re.findall(r'\b\w{3,}\b', t2))
+
+        if not words1 or not words2:
+            return 0
+
+        overlap = len(words1 & words2)
+        total = max(len(words1), len(words2))
+        word_score = (overlap / total) * 60 if total > 0 else 0
+
+        # Abbreviation detection (e.g., "Ch5" matches "Chapter 5")
+        abbrev_patterns = [
+            (r'ch(?:ap(?:ter)?)?[\s\-_]*(\d+)', r'chapter\s*\1'),  # Ch5, Chap5, Chapter5
+            (r'q(?:uiz)?[\s\-_]*(\d+)', r'quiz\s*\1'),  # Q1, Quiz1
+            (r'hw[\s\-_]*(\d+)', r'homework\s*\1'),  # HW1
+            (r'test[\s\-_]*(\d+)', r'test\s*\1'),
+            (r'unit[\s\-_]*(\d+)', r'unit\s*\1'),
+        ]
+
+        for pattern, expansion in abbrev_patterns:
+            t1_expanded = re.sub(pattern, expansion, t1, flags=re.IGNORECASE)
+            t2_expanded = re.sub(pattern, expansion, t2, flags=re.IGNORECASE)
+            if t1_expanded in t2_expanded or t2_expanded in t1_expanded:
+                return 70
+
+        return word_score
+
+    def find_matching_config(filename, file_content=None):
+        """Find matching config for a filename, with alias and fuzzy matching."""
         filename_lower = filename.lower()
+
+        # Extract assignment part from filename
         if ' - ' in filename_lower:
             assignment_part = filename_lower.split(' - ', 1)[1]
         elif '_' in filename_lower:
@@ -293,18 +370,77 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
         best_match = None
         best_score = 0
+        match_reason = ""
+
         for config_name, config_data in all_configs.items():
-            if config_name in assignment_part or assignment_part in config_name:
-                score = len(config_name)
-                if score > best_score:
-                    best_score = score
-                    best_match = config_data
             config_title = config_data.get('title', '').lower()
-            if config_title and (config_title in assignment_part or assignment_part in config_title):
-                score = len(config_title)
+            aliases = [a.lower() for a in config_data.get('aliases', [])]
+
+            # 1. Exact name/title match (highest priority)
+            if config_name == assignment_part or config_title == assignment_part:
+                return config_data  # Perfect match, return immediately
+
+            # 2. Substring match on name/title
+            if config_name in assignment_part or assignment_part in config_name:
+                score = len(config_name) + 50
                 if score > best_score:
                     best_score = score
                     best_match = config_data
+                    match_reason = f"name match: {config_name}"
+
+            if config_title and (config_title in assignment_part or assignment_part in config_title):
+                score = len(config_title) + 50
+                if score > best_score:
+                    best_score = score
+                    best_match = config_data
+                    match_reason = f"title match: {config_title}"
+
+            # 3. Alias matching (check all aliases)
+            for alias in aliases:
+                if alias in assignment_part or assignment_part in alias:
+                    score = len(alias) + 40
+                    if score > best_score:
+                        best_score = score
+                        best_match = config_data
+                        match_reason = f"alias match: {alias}"
+
+                # Fuzzy match on alias
+                fuzzy = fuzzy_match_score(alias, assignment_part)
+                if fuzzy > 50 and fuzzy + 20 > best_score:
+                    best_score = fuzzy + 20
+                    best_match = config_data
+                    match_reason = f"fuzzy alias: {alias}"
+
+            # 4. Fuzzy matching on name/title
+            fuzzy_name = fuzzy_match_score(config_name, assignment_part)
+            if fuzzy_name > 50 and fuzzy_name > best_score:
+                best_score = fuzzy_name
+                best_match = config_data
+                match_reason = f"fuzzy name: {config_name}"
+
+            fuzzy_title = fuzzy_match_score(config_title, assignment_part)
+            if fuzzy_title > 50 and fuzzy_title > best_score:
+                best_score = fuzzy_title
+                best_match = config_data
+                match_reason = f"fuzzy title: {config_title}"
+
+        # 5. Content fingerprinting (if no good match found and file content provided)
+        if best_score < 50 and file_content:
+            file_content_lower = file_content.lower()
+            for config_name, config_data in all_configs.items():
+                fingerprints = extract_content_fingerprints(config_data)
+                if fingerprints:
+                    matches = sum(1 for fp in fingerprints if fp in file_content_lower)
+                    if matches >= 2:  # At least 2 fingerprint matches
+                        content_score = min(matches * 15, 80)  # Cap at 80
+                        if content_score > best_score:
+                            best_score = content_score
+                            best_match = config_data
+                            match_reason = f"content fingerprint: {matches} matches"
+
+        if best_match and match_reason:
+            grading_state["log"].append(f"Auto-matched via {match_reason}")
+
         return best_match
 
     # Extract custom markers, notes, and response sections from selected config (fallback)
@@ -436,8 +572,23 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
             grading_state["log"].append(f"[{i}/{len(new_files)}] {student_info['student_name']}")
 
-            # Try to auto-match assignment config based on filename
+            # Try to auto-match assignment config based on filename first
             matched_config = find_matching_config(filepath.name)
+
+            # If no good filename match, try content fingerprinting
+            if not matched_config:
+                try:
+                    # Read file content for fingerprint matching
+                    temp_file_data = read_assignment_file(filepath)
+                    if temp_file_data and temp_file_data.get("type") == "text":
+                        file_text = temp_file_data.get("content", "")
+                        if file_text:
+                            matched_config = find_matching_config(filepath.name, file_text)
+                            if matched_config:
+                                grading_state["log"].append(f"  Matched by document content")
+                except Exception as e:
+                    pass  # Fall back to no match
+
             if matched_config:
                 file_markers = matched_config.get('customMarkers', [])
                 file_notes = matched_config.get('gradingNotes', '')

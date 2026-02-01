@@ -1615,6 +1615,48 @@ def generate_assessment():
         # Get global AI notes from config
         global_ai_notes = config.get('globalAINotes', '')
 
+        # Get content sources (lessons/assignments to base questions on)
+        content_sources = data.get('contentSources', [])
+
+        # Build content sources context
+        source_content = ""
+        if content_sources:
+            source_content = "\n=== INSTRUCTIONAL CONTENT TO BASE QUESTIONS ON ===\n"
+            source_content += "Generate questions that test the specific content, vocabulary, examples, and activities from these lessons/assignments:\n\n"
+
+            for source in content_sources:
+                if source.get('type') == 'lesson':
+                    lesson = source.get('content', {})
+                    source_content += f"--- LESSON: {lesson.get('title', 'Untitled')} ---\n"
+                    source_content += f"Overview: {lesson.get('overview', '')}\n"
+
+                    objectives = lesson.get('learning_objectives', [])
+                    if objectives:
+                        source_content += f"Learning Objectives: {', '.join(objectives)}\n"
+
+                    questions = lesson.get('essential_questions', [])
+                    if questions:
+                        source_content += f"Essential Questions: {', '.join(questions)}\n"
+
+                    # Include activities from each day
+                    for day in lesson.get('days', []):
+                        source_content += f"\nDay {day.get('day', '?')}: {day.get('focus', '')}\n"
+                        for activity in day.get('activities', []):
+                            source_content += f"  - {activity.get('name', '')}: {activity.get('description', '')}\n"
+
+                    source_content += "\n"
+
+                elif source.get('type') == 'assignment':
+                    assignment = source.get('content', {})
+                    source_content += f"--- ASSIGNMENT: {assignment.get('title', 'Untitled')} ---\n"
+                    source_content += f"Instructions: {assignment.get('instructions', '')}\n"
+                    for q in assignment.get('questions', []):
+                        source_content += f"  - {q.get('marker', '')}: {q.get('prompt', '')}\n"
+                    source_content += "\n"
+
+            source_content += "=== END INSTRUCTIONAL CONTENT ===\n\n"
+            source_content += "IMPORTANT: Questions must directly relate to the content above. Reference specific vocabulary, examples, and concepts from the lessons.\n\n"
+
         # Build standards context
         standards_context = []
         for std in standards:
@@ -1723,7 +1765,7 @@ MATCHING (type: "matching"):
         prompt = f"""You are an expert assessment developer creating a standards-aligned {assessment_type} for grade {config.get('grade', '8')} {config.get('subject', 'students')}.
 
 {dok_descriptions}
-
+{source_content}
 STANDARDS TO ASSESS:
 {''.join(standards_context)}
 
@@ -1756,13 +1798,16 @@ CRITICAL REQUIREMENTS:
 9. Use grade-appropriate vocabulary and complexity
 10. The total_points field MUST equal exactly {total_points}
 {f'''
-TARGET PERIOD: {target_period}
-(Apply any period-specific differentiation rules from the teacher's instructions below)
-''' if target_period else ''}
-{f'''
-TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+TEACHER'S GLOBAL INSTRUCTIONS (MUST FOLLOW):
 {global_ai_notes}
 ''' if global_ai_notes else ''}
+{f'''
+TARGET PERIOD FOR THIS ASSESSMENT: {target_period}
+CRITICAL: You MUST apply any period-specific differentiation rules from the teacher's instructions above to this period.
+- If the instructions indicate this period is "advanced", use more challenging vocabulary, higher-level thinking, and complex scenarios
+- If the instructions indicate this period is "standard" or lower level, use simpler vocabulary, more scaffolding, and clearer examples
+- Adjust question complexity, reading level, and depth of knowledge based on the period's designation
+''' if target_period else ''}
 Generate a complete assessment in this JSON format:
 {{
     "title": "{title}",

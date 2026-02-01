@@ -202,6 +202,31 @@ export async function exportLessonPlan(plan) {
   })
 }
 
+export async function saveLessonPlan(lesson, unitName) {
+  return fetchApi('/api/save-lesson', {
+    method: 'POST',
+    body: JSON.stringify({ lesson, unitName }),
+  })
+}
+
+export async function listLessons() {
+  return fetchApi('/api/list-lessons')
+}
+
+export async function loadLesson(unit, filename) {
+  return fetchApi(`/api/load-lesson?unit=${encodeURIComponent(unit)}&filename=${encodeURIComponent(filename)}`)
+}
+
+export async function deleteLesson(unit, filename) {
+  return fetchApi(`/api/delete-lesson?unit=${encodeURIComponent(unit)}&filename=${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function listUnits() {
+  return fetchApi('/api/list-units')
+}
+
 export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'worksheet') {
   return fetchApi('/api/generate-assignment-from-lesson', {
     method: 'POST',
@@ -218,10 +243,10 @@ export async function exportGeneratedAssignment(assignment, format = 'docx', inc
 
 // ============ Assessment Generation ============
 
-export async function generateAssessment(standards, config, assessmentConfig) {
+export async function generateAssessment(standards, config, assessmentConfig, contentSources = []) {
   return fetchApi('/api/generate-assessment', {
     method: 'POST',
-    body: JSON.stringify({ standards, config, assessmentConfig }),
+    body: JSON.stringify({ standards, config, assessmentConfig, contentSources }),
   })
 }
 
@@ -562,6 +587,11 @@ export default {
   brainstormLessonIdeas,
   generateLessonPlan,
   exportLessonPlan,
+  saveLessonPlan,
+  listLessons,
+  loadLesson,
+  deleteLesson,
+  listUnits,
   generateAssignmentFromLesson,
   exportGeneratedAssignment,
   publishAssignment,
