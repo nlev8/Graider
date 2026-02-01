@@ -54,7 +54,9 @@ def send_emails():
                     assignment = grades[0].get('assignment', 'Assignment')
                     subject = f"Grade for {assignment}: {grades[0].get('letter_grade', '')}"
                 else:
-                    subject = f"Grades for {len(grades)} Assignments"
+                    # Use grading period from first result for combined emails
+                    grading_period = grades[0].get('grading_period', 'Q3')
+                    subject = f"Your Assignment Grades - {grading_period} Progress Report"
 
                 # Build default body
                 body = f"Hi {first_name},\n\n"
@@ -67,10 +69,11 @@ def send_emails():
                     body += f"{'=' * 40}\n\n"
                     body += f"FEEDBACK:\n{g.get('feedback', 'No feedback available.')}\n"
                 else:
-                    body += "Here are your grades and feedback:\n\n"
+                    grading_period = grades[0].get('grading_period', 'this quarter')
+                    body += f"Here are your grades and feedback for {grading_period} so far:\n\n"
                     for g in grades:
                         body += f"{'=' * 40}\n"
-                        body += f"{g.get('assignment', 'Assignment')}\n"
+                        body += f"📚 {g.get('assignment', 'Assignment')}\n"
                         body += f"GRADE: {g.get('score', 0)}/100 ({g.get('letter_grade', '')})\n\n"
                         body += f"FEEDBACK:\n{g.get('feedback', 'No feedback available.')}\n\n"
 
