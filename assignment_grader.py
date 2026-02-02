@@ -25,6 +25,7 @@ import csv
 import json
 import re
 import random
+import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -54,10 +55,71 @@ load_dotenv(os.path.join(app_dir, '.env'), override=True)
 # PRE-EXTRACTION - Extract student responses BEFORE AI grading (prevents hallucination)
 # =============================================================================
 
-def extract_student_responses(document_text: str) -> dict:
+def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int:
     """
-    Extract student responses from document BEFORE sending to AI.
-    This prevents AI hallucination by only grading verified responses.
+    Find a marker in document using fuzzy matching.
+    Handles cases where students slightly edit formatting.
+
+    Returns position if found with confidence >= threshold, else -1.
+    Processing time: ~1-2ms per marker.
+    """
+    doc_lower = doc_text.lower()
+    marker_lower = marker.lower().strip()
+
+    # First try exact match
+    exact_pos = doc_lower.find(marker_lower)
+    if exact_pos != -1:
+        return exact_pos
+
+    # Try matching without extra whitespace/punctuation
+    marker_normalized = ' '.join(marker_lower.split())  # Collapse whitespace
+    marker_words = marker_normalized.split()
+
+    if len(marker_words) < 2:
+        return -1  # Too short for fuzzy matching
+
+    # Try finding first 3-4 significant words (skip common words)
+    skip_words = {'the', 'a', 'an', 'of', 'to', 'in', 'for', 'on', 'with', 'is', 'are'}
+    sig_words = [w for w in marker_words if w not in skip_words and len(w) > 2][:4]
+
+    if len(sig_words) >= 2:
+        # Build a pattern: first word.*second word.*third word (with flexibility)
+        pattern_parts = [re.escape(w) for w in sig_words]
+        pattern = r'.{0,20}'.join(pattern_parts)
+
+        try:
+            match = re.search(pattern, doc_lower)
+            if match:
+                return match.start()
+        except re.error:
+            pass
+
+    # Try first significant phrase (first 5 words)
+    first_phrase = ' '.join(marker_words[:5])
+    # Allow for inserted spaces/chars
+    flexible_pattern = r'\s*'.join([re.escape(c) for c in first_phrase if c.strip()])
+    try:
+        match = re.search(flexible_pattern[:100], doc_lower)  # Limit pattern length
+        if match:
+            return match.start()
+    except re.error:
+        pass
+
+    return -1
+
+
+def extract_student_responses(document_text: str, custom_markers: list = None) -> dict:
+    """
+    Extract student responses from document using customMarkers from Builder.
+
+    APPROACH (with fallbacks):
+    1. EXACT MATCH: Find markers exactly in document
+    2. FUZZY MATCH: If exact fails, try fuzzy matching (~1-2ms)
+    3. PATTERN MATCH: If all else fails, use regex patterns
+
+    Args:
+        document_text: The full document text
+        custom_markers: List of marker strings from Builder (the template/prompt text)
 
     Returns:
         {
@@ -70,9 +132,362 @@ def extract_student_responses(document_text: str) -> dict:
     """
     import re
 
+    extracted = []
+    blank_questions = []
+    doc_lower = document_text.lower()
+
+    # PRIORITY 1: Use customMarkers from Builder (most reliable)
+    # Markers can be:
+    #   - String: "Summary (Bottom Section)" - extracts until next marker
+    #   - Object: {"start": "Summary", "end": "📖"} - extracts until end marker
+    if custom_markers and len(custom_markers) > 0:
+        # Find positions of all markers in the document (exact + fuzzy)
+        marker_positions = []
+        exact_matches = 0
+        fuzzy_matches = 0
+
+        for marker in custom_markers:
+            # Handle both string and object markers
+            if isinstance(marker, dict):
+                marker_clean = marker.get('start', '').strip()
+                end_marker = marker.get('end', '').strip()
+            else:
+                marker_clean = str(marker).strip()
+                end_marker = None
+
+            if not marker_clean:
+                continue
+
+            # Try exact match first
+            pos = doc_lower.find(marker_clean.lower())
+            if pos != -1:
+                exact_matches += 1
+                marker_positions.append({
+                    'marker': marker_clean,
+                    'start': pos,
+                    'end': pos + len(marker_clean),
+                    'end_marker': end_marker,
+                    'match_type': 'exact'
+                })
+            else:
+                # Try fuzzy match
+                pos = fuzzy_find_marker(document_text, marker_clean)
+                if pos != -1:
+                    fuzzy_matches += 1
+                    # Estimate end position based on marker length
+                    marker_positions.append({
+                        'marker': marker_clean,
+                        'start': pos,
+                        'end': pos + min(len(marker_clean), 100),
+                        'end_marker': end_marker,
+                        'match_type': 'fuzzy'
+                    })
+
+        # Sort by position in document
+        marker_positions.sort(key=lambda x: x['start'])
+
+        # Extract response after each marker
+        for i, mp in enumerate(marker_positions):
+            marker_text = mp['marker']
+            content_start = mp['end']
+            end_marker = mp.get('end_marker')
+
+            # Determine where content ends (in priority order):
+            # 1. Explicit end marker (if defined)
+            # 2. Next start marker
+            # 3. Section delimiters
+            # 4. Document end (capped at 1500 chars)
+
+            if end_marker:
+                # Use explicit end marker with fallback for suspiciously short content
+                MIN_CONTENT_LENGTH = 50  # If content is shorter, end marker may have been found too early
+
+                end_pos = doc_lower.find(end_marker.lower(), content_start)
+                if end_pos != -1:
+                    # Check if content is suspiciously short
+                    potential_content = document_text[content_start:end_pos].strip()
+
+                    # If too short, look for NEXT occurrence of end marker
+                    search_pos = end_pos + 1
+                    while len(potential_content) < MIN_CONTENT_LENGTH and search_pos < len(document_text):
+                        next_end_pos = doc_lower.find(end_marker.lower(), search_pos)
+                        if next_end_pos == -1:
+                            break  # No more occurrences
+                        potential_content = document_text[content_start:next_end_pos].strip()
+                        if len(potential_content) >= MIN_CONTENT_LENGTH:
+                            end_pos = next_end_pos
+                            break
+                        search_pos = next_end_pos + 1
+
+                    content_end = end_pos
+                else:
+                    # End marker not found, fall back to next marker or cap
+                    if i + 1 < len(marker_positions):
+                        content_end = marker_positions[i + 1]['start']
+                    else:
+                        content_end = min(content_start + 1500, len(document_text))
+            elif i + 1 < len(marker_positions):
+                # End at next marker
+                content_end = marker_positions[i + 1]['start']
+            else:
+                # Last marker - cap at 1500 chars
+                content_end = min(content_start + 1500, len(document_text))
+
+            # Also stop at known section delimiters (reading material, etc.)
+            # BUT skip this if we already have an explicit end marker (to avoid re-truncating)
+            # NOTE: Removed '___' from delimiters - it conflicts with fill-in-the-blank notation
+            if not end_marker:
+                section_delimiters = ['📖', '📚', '🔍', '--- ', '***', '===']
+                for delim in section_delimiters:
+                    delim_pos = document_text.find(delim, content_start, content_end)
+                    if delim_pos != -1 and delim_pos > content_start:
+                        content_end = delim_pos
+
+            # Extract the response
+            response = document_text[content_start:content_end].strip()
+
+            # Clean up: remove leading colons, newlines
+            response = re.sub(r'^[:\s\n]+', '', response).strip()
+
+            # Get a short label for the question (first 50 chars of marker)
+            question_label = marker_text[:80] + '...' if len(marker_text) > 80 else marker_text
+            # Clean up newlines in label
+            question_label = ' '.join(question_label.split())
+
+            # Check if response is actually blank (just whitespace, or only template/boilerplate)
+            is_blank = False
+            if not response or len(response) <= 5:
+                is_blank = True
+            else:
+                # Filter out common template patterns that aren't student answers
+                response_clean = response.strip()
+
+                # Remove lines that start with instructions/prompts
+                lines = [l.strip() for l in response_clean.split('\n') if l.strip()]
+                # Filter out instruction lines (start with "Write", "Explain", emoji headers, etc.)
+                student_lines = []
+                for line in lines:
+                    # Skip instruction lines
+                    if line.startswith(('Write ', 'Explain ', 'Describe ', 'List ', 'Answer ', '📖', '📘', '📓', '🌟')):
+                        continue
+                    # Skip lines that are just underscores (blank lines)
+                    if line.replace('_', '').replace(' ', '') == '':
+                        continue
+                    student_lines.append(line)
+
+                # If no student content remains, it's blank
+                if not student_lines or sum(len(l) for l in student_lines) < 10:
+                    is_blank = True
+                else:
+                    # Use filtered response
+                    response = '\n'.join(student_lines)
+
+            if not is_blank:
+                extracted.append({
+                    "question": question_label,
+                    "answer": response[:1000],
+                    "type": "marker_response"
+                })
+            else:
+                blank_questions.append(question_label)
+
+        # If we found markers, return results (skip pattern matching)
+        if marker_positions:
+            total_q = len(extracted) + len(blank_questions)
+            match_summary = f"{exact_matches} exact"
+            if fuzzy_matches > 0:
+                match_summary += f", {fuzzy_matches} fuzzy"
+            return {
+                "extracted_responses": extracted,
+                "blank_questions": blank_questions,
+                "total_questions": total_q,
+                "answered_questions": len(extracted),
+                "extraction_summary": f"Extracted {len(extracted)} responses using {len(marker_positions)} markers ({match_summary})."
+            }
+
+    # FALLBACK: If no markers provided, use simple pattern matching
+    lines = document_text.split('\n')
+
+    # Look for numbered questions with answers
+    current_question = None
+    current_answer_lines = []
+
+    for line in lines:
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        # Check for numbered question (1. or 1))
+        num_match = re.match(r'^(\d+)[\.\)]\s*(.+)', line_stripped)
+        if num_match:
+            # Save previous Q&A if exists
+            if current_question and current_answer_lines:
+                answer = ' '.join(current_answer_lines).strip()
+                if answer and len(answer) > 3:
+                    extracted.append({
+                        "question": current_question,
+                        "answer": answer[:500],
+                        "type": "numbered_qa"
+                    })
+
+            # Start new question
+            question_text = num_match.group(2).strip()
+            # Check if answer is on same line (after ? or :)
+            if '?' in question_text:
+                parts = question_text.split('?', 1)
+                current_question = parts[0].strip() + '?'
+                if len(parts) > 1 and parts[1].strip():
+                    current_answer_lines = [parts[1].strip()]
+                else:
+                    current_answer_lines = []
+            else:
+                current_question = question_text
+                current_answer_lines = []
+        elif current_question:
+            # This might be part of the answer
+            current_answer_lines.append(line_stripped)
+
+    # Don't forget last Q&A
+    if current_question and current_answer_lines:
+        answer = ' '.join(current_answer_lines).strip()
+        if answer and len(answer) > 3:
+            extracted.append({
+                "question": current_question,
+                "answer": answer[:500],
+                "type": "numbered_qa"
+            })
+
+    # Fill-in-the-blank pattern 1: ___answer___ (wrapped in underscores)
+    blank_matches = re.findall(r'_{2,}([^_\n]{1,100})_{2,}', document_text)
+    for match in blank_matches:
+        answer = match.strip()
+        if answer and len(answer) > 0:
+            extracted.append({
+                "question": "Fill-in-blank",
+                "answer": answer,
+                "type": "fill_in_blank"
+            })
+
+    # Fill-in-the-blank pattern 2: Numbered blanks where student replaced underscores
+    # e.g., "1. Clark" or "5. Louisiana Purchase" (student replaced _____ with answer)
+    for line in lines:
+        line_stripped = line.strip()
+        # Match numbered items that have short answers (likely FITB)
+        num_short = re.match(r'^(\d+)[\.\)]\s*([A-Za-z][^?]{1,60})$', line_stripped)
+        if num_short:
+            q_num = num_short.group(1)
+            answer = num_short.group(2).strip()
+            # Skip if it's a question (ends with ?) or instruction
+            if answer and not answer.endswith('?') and not any(kw in answer.lower() for kw in ['write', 'explain', 'describe', 'answer', 'complete', 'fill in']):
+                # Check if this looks like a student answer (not a question prompt)
+                if len(answer) < 50 and not re.match(r'^[_\s\-\.]+$', answer):
+                    extracted.append({
+                        "question": f"Question {q_num}",
+                        "answer": answer,
+                        "type": "fill_in_blank"
+                    })
+
+    # Fill-in-the-blank pattern 3: Lines with blanks followed by text
+    # e.g., "_____ led the expedition" where student wrote "Clark led the expedition"
+    # Look for lines that start with a word (potential answer) followed by context
+    for line in lines:
+        line_stripped = line.strip()
+        # Skip if empty, a question, or already processed
+        if not line_stripped or line_stripped.endswith('?'):
+            continue
+        # Check if line has a short leading phrase that could be an answer
+        # Pattern: starts with 1-3 words, followed by more context
+        leading_match = re.match(r'^([A-Z][a-z]+(?:\s+[A-Za-z]+){0,2})\s+(.{10,})$', line_stripped)
+        if leading_match:
+            potential_answer = leading_match.group(1)
+            context = leading_match.group(2)
+            # If context mentions blanks or has fill-in structure, this might be an answer
+            if '___' in context or 'was' in context.lower()[:20] or 'the' in context.lower()[:10]:
+                # Skip if it's template text
+                if not any(kw in potential_answer.lower() for kw in ['name', 'date', 'period', 'class', 'write', 'answer']):
+                    extracted.append({
+                        "question": f"Fill-in: {context[:40]}...",
+                        "answer": potential_answer,
+                        "type": "fill_in_blank"
+                    })
+
+    total_q = len(extracted) + len(blank_questions)
+    return {
+        "extracted_responses": extracted,
+        "blank_questions": blank_questions,
+        "total_questions": max(total_q, 1),
+        "answered_questions": len(extracted),
+        "extraction_summary": f"Found {len(extracted)} responses via pattern matching."
+    }
+
+
+def extract_student_responses_legacy(document_text: str, custom_markers: list = None) -> dict:
+    """LEGACY: Old complex extraction - kept for reference but not used."""
+    import re
+
     lines = document_text.split('\n')
     extracted = []
     blank_questions = []
+
+    if response_sections:
+        for section in response_sections:
+            start_marker = section.get('start', '').strip()
+            end_marker = section.get('end', '').strip() if section.get('end') else None
+
+            if not start_marker:
+                continue
+
+            start_lower = start_marker.lower()
+            doc_lower = document_text.lower()
+            start_pos = doc_lower.find(start_lower)
+
+            if start_pos == -1:
+                blank_questions.append(start_marker)
+                continue
+
+            content_start = start_pos + len(start_marker)
+
+            if end_marker:
+                end_pos = doc_lower.find(end_marker.lower(), content_start)
+                if end_pos == -1:
+                    end_pos = min(content_start + 1000, len(document_text))  # Cap at 1000 chars
+            else:
+                # No end marker - find next likely section or cap at 800 chars
+                # Look for common section boundaries
+                next_section = len(document_text)
+                for boundary in ['\n\n\n', '📝', '✏️', '🌱', '\nVocabulary', '\nQuestions', '\nReflection', '\nMain Idea']:
+                    pos = doc_lower.find(boundary.lower(), content_start + 20)  # Skip a bit to avoid finding ourselves
+                    if pos != -1 and pos < next_section:
+                        next_section = pos
+                end_pos = min(next_section, content_start + 800)
+
+            # Extract the content
+            content = document_text[content_start:end_pos].strip()
+
+            # Clean up: remove leading colons, newlines, and prompt fragments
+            content = re.sub(r'^[:\s\n]+', '', content)
+            content = re.sub(r'^\s*of\s+(?:today.?s?\s+)?(?:the\s+)?(?:reading|lesson|section|article)[:\s]*\n*', '', content, flags=re.IGNORECASE).strip()
+            content = re.sub(r'^\s*(?:today.?s?\s+)?(?:the\s+)?(?:reading|lesson|article)[:\s]*\n*', '', content, flags=re.IGNORECASE).strip()
+
+            # Check if there's actual student content (not just template text)
+            if content and len(content) > 10:
+                # Filter out template text
+                is_template = any(kw in content.lower() for kw in [
+                    'write your', 'answer each', 'explain how', 'describe how',
+                    'complete the', 'using the reading', 'type your answer',
+                    '[your answer here]', '[type here]'
+                ])
+
+                if not is_template:
+                    extracted.append({
+                        "question": start_marker,
+                        "answer": content[:800],
+                        "type": "highlighted_section"
+                    })
+                else:
+                    blank_questions.append(start_marker)
+            else:
+                blank_questions.append(start_marker)
 
     # Patterns for questions/prompts
     question_patterns = [
@@ -183,35 +598,92 @@ def extract_student_responses(document_text: str) -> dict:
 
             current_question = None
 
-    # Pattern 7: Check for section headers that expect responses
+    # Pattern 7: Check for section headers that expect written responses
+    # These are headers like "Summary:", "📝 SUMMARY", "Reflection:", etc. followed by student paragraphs
+    # Using (?:📝|✏️|✍️|🖊️|🌟)? to optionally match common emojis
     section_headers = [
-        (r'write your answer[:\s]*', 'Main Idea Response'),
-        (r'summary[:\s]*.*(?:sentences?|paragraph)', 'Summary'),
-        (r'reflection[:\s]*', 'Reflection'),
-        (r'student task[:\s]*', 'Student Task'),
+        # Summary patterns - be specific to avoid matching "Questions / Summary" headers
+        (r'write\s+(?:a\s+)?(?:\d+[–-]\d+\s+)?(?:sentence\s+)?summary[:\s]+', 'Summary'),  # "Write a 2-3 sentence summary:"
+        (r'(?:📝|✏️|✍️|🖊️)\s*summary\s*(?:\([^)]*\))?\s*[:\.\n]', 'Summary'),  # 📝 SUMMARY (3-4 sentences):
+        (r'\bsummary\s*of\s+(?:today\'?s?\s+)?(?:reading|lesson|section)[:\s]+', 'Summary'),  # "Summary of today's reading:"
+        (r'(?:^|\n)\s*summary[:\s]*(?=\n)', 'Summary'),  # "Summary:" on its own line
+        # Reflection patterns
+        (r'(?:📝|✏️|✍️)?\s*reflection\s*[^\.]*[:\.]', 'Reflection'),
+        (r'(?:^|\n)\s*reflection[:\s]+', 'Reflection'),
+        (r'final reflection[:\s]*', 'Final Reflection'),
+        # Task patterns
+        (r'(?:📝|✏️|✍️)?\s*student task\s*[^\.]*[:\.]', 'Student Task'),
+        (r'student task[:\s]+', 'Student Task'),
+        # Other patterns
+        (r'main idea[:\s]+', 'Main Idea'),
         (r'explain in your own words[:\s]*', 'Explanation'),
+        (r'write your answer[:\s]*', 'Written Response'),
+        (r'your response[:\s]*', 'Response'),
     ]
 
     full_text_lower = document_text.lower()
+    full_text = document_text  # Keep original case for answer extraction
+
     for pattern, section_name in section_headers:
-        if re.search(pattern, full_text_lower):
-            # Check if there's content after this section
-            match = re.search(pattern + r'(.{10,500}?)(?=\n\n|\n[A-Z🌱📓📝]|$)', full_text_lower, re.DOTALL)
-            if match:
-                content = match.group(1).strip()
-                # Filter out blanks, template text, and question prompts
-                is_template = any(kw in content.lower() for kw in [
-                    'vocabulary', 'question', 'answer each', 'explain how', 'write your',
-                    'describe', 'complete', 'enslaved people', 'reading', 'sentences'
-                ])
-                if content and not re.match(r'^[_\s\-\.\)]+$', content) and len(content) > 10 and not is_template:
+        match = re.search(pattern, full_text_lower)
+        if match:
+            # Find the position of the header
+            header_end = match.end()
+
+            # Look for paragraph content after the header
+            # Skip blank lines and find the next substantial text
+            remaining_text = full_text[header_end:]
+
+            # Split into lines/paragraphs to find student response
+            # Skip instruction lines that start with prompt words
+            instruction_starters = [
+                'explain how', 'describe how', 'write a', 'write your', 'answer each',
+                'complete the', 'using the reading', 'in a few sentences', 'in your own words',
+                'what is', 'what are', 'what was', 'what were', 'how did', 'how do', 'why did', 'why do',
+                'summarize', 'identify', 'list the', 'define the'
+            ]
+
+            # Find paragraphs (split by double newline or single newline)
+            paragraphs = re.split(r'\n\s*\n|\n', remaining_text)
+            student_response = None
+
+            for para in paragraphs:
+                para = para.strip()
+                if not para or len(para) < 15:
+                    continue
+
+                # Check if this looks like an instruction line
+                para_lower = para.lower()
+                is_instruction = any(para_lower.startswith(starter) for starter in instruction_starters)
+
+                # Also check for question marks at the end (likely a prompt, not answer)
+                if para.rstrip().endswith('?'):
+                    is_instruction = True
+
+                if not is_instruction:
+                    # This looks like a student response
+                    # Clean up any remaining prompt fragments
+                    content = para
+                    content = re.sub(r'^\s*of\s+(?:today.?s?\s+)?(?:the\s+)?(?:reading|lesson|section|article)[:\s]*', '', content, flags=re.IGNORECASE).strip()
+                    content = re.sub(r'^\s*(?:today.?s?\s+)?(?:the\s+)?(?:reading|lesson|article)[:\s]*', '', content, flags=re.IGNORECASE).strip()
+
+                    # Check it has substance
+                    if len(content) > 20 and any(c.isalpha() for c in content):
+                        student_response = content
+                        break
+
+            if student_response:
+                # Check if we already captured this (avoid duplicates)
+                already_captured = any(student_response[:50] in r.get('answer', '')[:50] for r in extracted)
+                if not already_captured:
                     extracted.append({
                         "question": section_name,
-                        "answer": content[:500],  # Limit length
+                        "answer": student_response[:800],  # Allow longer responses
                         "type": "written_response"
                     })
-                else:
-                    blank_questions.append(section_name)
+            else:
+                # Section appears to be blank or only has instructions
+                blank_questions.append(section_name)
 
     # Build summary
     total_q = len(extracted) + len(blank_questions)
@@ -398,7 +870,7 @@ def compare_writing_styles(current_style: dict, historical_profile: dict) -> dic
     }
 
 
-def update_writing_profile(student_id: str, current_style: dict):
+def update_writing_profile(student_id: str, current_style: dict, student_name: str = None):
     """
     Update student's writing profile with new submission data.
     Maintains running averages across assignments.
@@ -415,6 +887,10 @@ def update_writing_profile(student_id: str, current_style: dict):
                 history = json.load(f)
         else:
             history = {"student_id": student_id, "assignments": []}
+
+        # Always update the student name if provided
+        if student_name:
+            history["name"] = student_name
 
         # Get or initialize writing profile
         profile = history.get("writing_profile", {
@@ -448,6 +924,7 @@ def update_writing_profile(student_id: str, current_style: dict):
                 profile[key] = round(profile[key], 2)
 
         history["writing_profile"] = profile
+        history["last_updated"] = datetime.now().isoformat()
 
         # Save updated history
         os.makedirs(history_dir, exist_ok=True)
@@ -638,20 +1115,11 @@ REMEMBER: These are 6th graders. Be kind, encouraging, and generous with grading
 A student who attempts all questions and gets most right should get an A or B.
 """
 
-# UPDATE THIS FOR EACH ASSIGNMENT
+# DEFAULT ASSIGNMENT INSTRUCTIONS - Only used if no assignment-specific config provided
+# This should be empty or generic - assignment-specific instructions come from Builder configs
 ASSIGNMENT_INSTRUCTIONS = """
-CURRENT ASSIGNMENT: Cornell Notes - Political Parties
-
-This is a Cornell Notes assignment about Political Parties in early American history.
-
-Requirements:
-1. Main notes section should contain key information about political parties
-2. Questions/cue column should have relevant questions
-3. Summary at bottom should synthesize the main ideas
-4. Content should demonstrate understanding of:
-   - Federalists vs Democratic-Republicans
-   - Key figures (Hamilton, Jefferson, etc.)
-   - Main beliefs and positions of each party
+Grade the student's work based on what they were asked to do.
+Focus on the content they provided, not on sections that may not apply to this assignment type.
 """
 
 
@@ -1074,10 +1542,348 @@ def log_pii_sanitization(student_name: str, original_len: int, sanitized_len: in
 
 
 # =============================================================================
+# AI/PLAGIARISM DETECTION (Parallel Agent using GPT-4o-mini)
+# =============================================================================
+
+def preprocess_for_ai_detection(text: str) -> str:
+    """
+    Preprocess extracted text to focus on student-written content for AI detection.
+
+    - Extracts fill-in-the-blank answers (text between underscores)
+    - Removes template/instructional text
+    - Focuses on longer written responses, not factual answers
+
+    Returns cleaned text suitable for AI detection analysis.
+    Short fill-in-blank answers (dates, names, single words) are excluded since
+    they're factual answers, not writing that can be AI-detected.
+    """
+    import re
+
+    lines = text.split('\n')
+    student_written = []
+    fill_in_answers = []
+
+    # Patterns that indicate template/instructional text (not student writing)
+    template_patterns = [
+        r'^Q:\s*',  # Question prefix
+        r'^A:\s*$',  # Empty answer prefix
+        r'^The .+ happened in the year',
+        r'^The U\.S\. bought',
+        r'^The purchase doubled',
+        r'^The price paid',
+        r'^This purchase helped',
+        r'^Explain in your own words',
+        r'^Write a \d+',
+        r'^How do you think .+\?$',  # Questions ending with ?
+        r'^Why was the .+\?$',
+        r'^Who was the .+\?$',
+        r'^What role did .+\?$',
+        r'^How did .+\?$',
+        r'^\d+\.\s*(Why|What|Who|How|Where|When)\s+.+\?$',  # Numbered questions
+        r'^Primary Source Quote',
+        r'^Quote from',
+        r'^"The acquisition of',  # Known quote text
+        r'^Student Task:',
+        r'^Final Reflection Question',
+        r'^Questions to Check Understanding',
+        r'^Guided Notes',
+        r'^Cornell Notes',
+        r'^Essential Question',
+        r'^Vocabulary',
+    ]
+
+    for line in lines:
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        # Extract fill-in-the-blank answers (text between underscores)
+        blank_matches = re.findall(r'_{2,}([^_\n]{1,100})_{2,}', line)
+        if blank_matches:
+            for match in blank_matches:
+                answer = match.strip()
+                if answer:
+                    fill_in_answers.append(answer)
+            continue  # Rest of line is template
+
+        # Check if this line matches a template pattern
+        is_template = False
+        for pattern in template_patterns:
+            if re.match(pattern, line_stripped, re.IGNORECASE):
+                is_template = True
+                break
+
+        if is_template:
+            continue
+
+        # Skip lines that are just "A: " followed by a question (unanswered)
+        if line_stripped.startswith('A: ') and line_stripped.endswith('?'):
+            continue
+
+        # Skip Q: labels
+        if line_stripped.startswith('Q: '):
+            continue
+
+        # Keep substantive student-written content (paragraphs, explanations)
+        # Must be more than 30 chars to be considered "writing" vs labels
+        # Exclude lines that are questions (end with ?) or instruction text
+        if len(line_stripped) > 30 and not line_stripped.endswith('?'):
+            # Skip lines that look like unanswered template text
+            instruction_keywords = ['write a few sentences', 'explain in your own words',
+                                   'how do you think', 'why do you think', 'what do you think',
+                                   'describe how', 'explain how', 'explain why']
+            is_instruction = any(kw in line_stripped.lower() for kw in instruction_keywords)
+            if not is_instruction:
+                student_written.append(line_stripped)
+
+    # Build result
+    result_parts = []
+
+    # Only flag fill-in answers if they're suspiciously long (might be copied text)
+    # Short answers like "1803", "France", "15 million" are factual, not AI-detectable
+    suspicious_fill_ins = [a for a in fill_in_answers if len(a) > 40]
+    if suspicious_fill_ins:
+        result_parts.append("Suspiciously long fill-in answers:\n" + "\n".join(suspicious_fill_ins))
+
+    # Student written content (main focus for AI detection)
+    if student_written:
+        result_parts.append("Student written content:\n" + "\n".join(student_written))
+
+    # If no substantial content to analyze, return empty (skip AI detection)
+    if not result_parts:
+        return ""
+
+    return "\n\n".join(result_parts)
+
+
+def detect_ai_plagiarism(student_responses: str, grade_level: str = '6') -> dict:
+    """
+    Dedicated AI/Plagiarism detection using GPT-4o-mini.
+    Runs in parallel with grading for speed.
+
+    Returns:
+        {
+            "ai_detection": {"flag": "none/unlikely/possible/likely", "confidence": 0-100, "reason": "..."},
+            "plagiarism_detection": {"flag": "none/possible/likely", "reason": "..."}
+        }
+    """
+    # Skip detection if no substantial content to analyze
+    # (e.g., fill-in-the-blank only assignments with short factual answers)
+    if not student_responses or len(student_responses.strip()) < 50:
+        return {
+            "ai_detection": {"flag": "none", "confidence": 0, "reason": "Fill-in-the-blank or short-answer only - exempt from AI detection"},
+            "plagiarism_detection": {"flag": "none", "reason": "Fill-in-the-blank or short-answer only - exempt from plagiarism detection"}
+        }
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return {"ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+                "plagiarism_detection": {"flag": "none", "reason": ""}}
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    age_range = "11-12" if grade_level == "6" else "12-13" if grade_level == "7" else "13-14"
+
+    detection_prompt = f"""You are an expert at detecting AI-generated content and plagiarism in student work.
+Analyze this grade {grade_level} student's responses ({age_range} years old) for signs of AI use or copy-paste.
+
+DETECTION CRITERIA:
+
+1. AI-GENERATED CONTENT - Flag as "likely" if you see:
+- Sophisticated vocabulary a {age_range} year old wouldn't use: "ideology", "emphasizing", "implementing", "interconnected", "fostering", "trajectory"
+- Perfect grammar and sentence structure throughout
+- Academic/formal tone: "This demonstrates...", "It is important to note...", "Furthermore..."
+- Phrases like: "transforming a limited mission", "securing vital trade routes", "fundamentally altered"
+
+2. PLAGIARISM/COPY-PASTE - Flag as "likely" if you see:
+- Dictionary-perfect definitions (e.g., "exclusive possession or control of the supply of or trade in a commodity or service" for monopoly)
+- Wikipedia-style language that doesn't match a child's writing
+- Textbook phrases copied verbatim
+- Sudden shifts between simple spelling errors and sophisticated paragraphs
+
+3. CONTRAST CHECK (MOST IMPORTANT):
+- If student writes simple answers like "it made the US bigger", "idk", misspells words
+- BUT also writes "an ideology emphasizing intense loyalty to one's nation"
+- That is 100% copy-paste - flag PLAGIARISM as "likely"
+
+REAL {age_range} YEAR OLD WRITES:
+- "when one company controls everything" (for monopoly)
+- "it helped them trade stuff"
+- "so boats could go there"
+
+AI/COPIED TEXT LOOKS LIKE:
+- "exclusive possession or control of the supply of or trade in a commodity or service"
+- "government-provided financial incentives"
+- "implementing three interconnected policies"
+
+STUDENT RESPONSES TO ANALYZE:
+{student_responses}
+
+Respond ONLY with this JSON (no other text):
+{{
+    "ai_detection": {{
+        "flag": "<none, unlikely, possible, or likely>",
+        "confidence": <0-100>,
+        "reason": "<specific phrases that triggered the flag, or empty string if none>"
+    }},
+    "plagiarism_detection": {{
+        "flag": "<none, possible, or likely>",
+        "reason": "<specific copied phrases found, or empty string if none>"
+    }}
+}}"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Fast and cheap for detection
+            messages=[{"role": "user", "content": detection_prompt}],
+            max_tokens=500,
+            temperature=0.1  # Low temperature for consistent detection
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Clean markdown if present
+        if response_text.startswith("```"):
+            lines = response_text.split('\n')
+            start = 1 if lines[0].startswith("```") else 0
+            end = len(lines)
+            for i in range(len(lines)-1, -1, -1):
+                if lines[i].strip() == "```":
+                    end = i
+                    break
+            response_text = '\n'.join(lines[start:end])
+
+        result = json.loads(response_text)
+        return result
+
+    except Exception as e:
+        print(f"  ⚠️  Detection error: {e}")
+        return {
+            "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+            "plagiarism_detection": {"flag": "none", "reason": ""}
+        }
+
+
+def grade_with_parallel_detection(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
+                                   grade_level: str = '6', subject: str = 'Social Studies',
+                                   ai_model: str = 'gpt-4o-mini', student_id: str = None,
+                                   assignment_template: str = None, rubric_prompt: str = None,
+                                   custom_markers: list = None) -> dict:
+    """
+    Grade assignment with parallel AI/plagiarism detection.
+    Runs detection (GPT-4o-mini) and grading simultaneously for speed.
+
+    Args:
+        rubric_prompt: Custom rubric prompt string from Settings (overrides default)
+    """
+    # Extract responses first (needed for both detection and grading context)
+    content = assignment_data.get("content", "")
+    extracted_text = ""
+
+    if assignment_data.get("type") == "text" and content:
+        extraction_result = extract_student_responses(content, custom_markers)
+        if extraction_result.get("extracted_responses"):
+            extracted_text = "\n".join([
+                f"Q: {r.get('question', 'Unknown')}\nA: {r.get('answer', '')}"
+                for r in extraction_result["extracted_responses"]
+            ])
+
+    # If no extracted text, can't do parallel detection
+    if not extracted_text:
+        return grade_assignment(student_name, assignment_data, custom_ai_instructions,
+                               grade_level, subject, ai_model, student_id, assignment_template, rubric_prompt,
+                               custom_markers)
+
+    print(f"  🔄 Running parallel detection + grading...")
+
+    # Preprocess text for AI detection (removes template text, focuses on student writing)
+    detection_text = preprocess_for_ai_detection(extracted_text)
+
+    # Run detection and grading in parallel using ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit both tasks
+        detection_future = executor.submit(detect_ai_plagiarism, detection_text, grade_level)
+        grading_future = executor.submit(grade_assignment, student_name, assignment_data,
+                                         custom_ai_instructions, grade_level, subject,
+                                         ai_model, student_id, assignment_template, rubric_prompt,
+                                         custom_markers)
+
+        # Wait for both to complete
+        detection_result = detection_future.result()
+        grading_result = grading_future.result()
+
+    # Merge detection results into grading results
+    # Detection agent's flags override grading agent's (more specialized)
+    detection_ai = detection_result.get("ai_detection", {})
+    detection_plag = detection_result.get("plagiarism_detection", {})
+
+    grading_ai = grading_result.get("ai_detection", {})
+    grading_plag = grading_result.get("plagiarism_detection", {})
+
+    # Use the more severe flag from either source
+    flag_severity = {"none": 0, "unlikely": 1, "possible": 2, "likely": 3}
+
+    # AI detection - take the higher severity
+    if flag_severity.get(detection_ai.get("flag", "none"), 0) >= flag_severity.get(grading_ai.get("flag", "none"), 0):
+        grading_result["ai_detection"] = detection_ai
+        if detection_ai.get("flag") in ["possible", "likely"]:
+            print(f"  🤖 Detection agent flagged AI: {detection_ai.get('flag')} - {detection_ai.get('reason', '')[:100]}")
+
+    # Plagiarism detection - take the higher severity
+    if flag_severity.get(detection_plag.get("flag", "none"), 0) >= flag_severity.get(grading_plag.get("flag", "none"), 0):
+        grading_result["plagiarism_detection"] = detection_plag
+        if detection_plag.get("flag") in ["possible", "likely"]:
+            print(f"  📋 Detection agent flagged plagiarism: {detection_plag.get('flag')} - {detection_plag.get('reason', '')[:100]}")
+
+    # Apply score caps based on detection flags
+    ai_flag = grading_result.get("ai_detection", {}).get("flag", "none")
+    plag_flag = grading_result.get("plagiarism_detection", {}).get("flag", "none")
+    original_score = grading_result.get("score", 0)
+
+    # Determine cap based on flags
+    cap = 100
+    cap_reason = ""
+
+    if ai_flag == "likely" and plag_flag == "likely":
+        cap = 40
+        cap_reason = "AI + Plagiarism detected"
+    elif ai_flag == "likely":
+        cap = 50
+        cap_reason = "Likely AI-generated"
+    elif plag_flag == "likely":
+        cap = 50
+        cap_reason = "Likely plagiarized"
+    elif ai_flag == "possible":
+        cap = 65
+        cap_reason = "Possible AI use"
+    elif plag_flag == "possible":
+        cap = 65
+        cap_reason = "Possible plagiarism"
+
+    # Apply cap if needed
+    if original_score > cap:
+        grading_result["score"] = cap
+        grading_result["score_capped"] = True
+        grading_result["original_score"] = original_score
+        grading_result["cap_reason"] = cap_reason
+        # Update letter grade
+        if cap <= 59:
+            grading_result["letter_grade"] = "F"
+        elif cap <= 69:
+            grading_result["letter_grade"] = "D"
+        elif cap <= 79:
+            grading_result["letter_grade"] = "C"
+        print(f"  ⚠️  Score capped: {original_score} → {cap} ({cap_reason})")
+
+    return grading_result
+
+
+# =============================================================================
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -1093,6 +1899,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - grade_level: The student's grade level (e.g., '6', '7', '8')
     - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
     - ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
+    - assignment_template: The original assignment template with all questions (for context)
 
     Returns dict with:
     - score: numeric grade (0-100)
@@ -1239,7 +2046,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     extraction_result = None
     extracted_responses_text = ''
     if assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content)
+        extraction_result = extract_student_responses(content, custom_markers)
         if extraction_result:
             extracted_responses_text = format_extracted_for_grading(extraction_result)
             answered = extraction_result.get("answered_questions", 0)
@@ -1320,14 +2127,30 @@ This suggests possible AI use - be extra vigilant in your authenticity check!
 ---
 """
 
+    # Build assignment template section (provides question context)
+    assignment_template_section = ""
+    if assignment_template:
+        # Truncate if very long to save tokens
+        template_text = assignment_template[:8000] if len(assignment_template) > 8000 else assignment_template
+        assignment_template_section = f"""
+---
+ASSIGNMENT TEMPLATE (The questions/prompts the student was asked to answer):
+{template_text}
+---
+"""
+
+    # Use custom rubric if provided, otherwise use default
+    effective_rubric = rubric_prompt if rubric_prompt else GRADING_RUBRIC
+
     prompt_text = f"""
-{GRADING_RUBRIC}
+{effective_rubric}
 
 {ASSIGNMENT_INSTRUCTIONS}
 {custom_section}
 {accommodation_context}
 {history_context}
 {writing_style_context}
+{assignment_template_section}
 ---
 
 STUDENT CONTEXT:
@@ -1342,6 +2165,11 @@ The student responses have been PRE-EXTRACTED from the document and listed above
 DO NOT invent or hallucinate any responses that are not in the VERIFIED STUDENT RESPONSES section.
 ONLY grade the responses that were explicitly extracted and shown to you.
 If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
+
+IMPORTANT: Only assess sections that appear in the extracted responses above.
+If a section (like "Notes Section") was NOT extracted, it means the teacher did NOT require it for grading.
+Do NOT penalize students for sections that were not marked for grading by the teacher.
+Only the extracted/marked sections count toward the grade.
 
 Your "student_responses" field in the output MUST ONLY contain the answers shown in the VERIFIED section above.
 If no responses were extracted, the student gets a 0.
@@ -1360,14 +2188,16 @@ GRADING GUIDELINES:
 - IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
 
 CRITICAL - COMPLETENESS REQUIREMENTS:
-- CAREFULLY check if the student answered ALL parts of the assignment, especially:
+- ONLY check completeness for sections that appear in the EXTRACTED RESPONSES above.
+- If a section was NOT extracted (not listed above), the teacher did NOT require it - do NOT penalize for it.
+- For the sections that WERE extracted, check if the student answered them, especially:
   * "Explain in your own words" sections - these require written responses, not blank
   * "Reflection" or "Final Reflection" questions - these MUST be answered
   * "Student Task" sections - these are major components requiring written responses
   * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
-  * Summary sections at the end of notes/readings
-  * Primary source analysis tasks
-- Skipping written sections shows AVOIDANCE OF EFFORT and must be penalized heavily!
+  * Summary sections (only if they were extracted/marked)
+  * Primary source analysis tasks (only if they were extracted/marked)
+- Skipping EXTRACTED/MARKED written sections shows AVOIDANCE OF EFFORT and must be penalized!
 - EACH SKIPPED SECTION LOWERS THE GRADE BY ONE FULL LETTER:
   * 0 sections skipped = eligible for A (90-100)
   * 1 section skipped = maximum B (80-89) - dropped one letter
@@ -1420,11 +2250,26 @@ That is 100% AI or copied - flag as "likely" IMMEDIATELY. A student who misspell
 Real grade {grade_level} students write: "it made the US bigger", "they needed the river for boats", "so ships could go there"
 AI writes: "it transformed the nation into a continental power", "securing vital trade routes"
 
+OBVIOUS COPY-PASTE DEFINITIONS (flag as PLAGIARISM "likely" IMMEDIATELY):
+- "exclusive possession or control of the supply of or trade in a commodity or service" = Google definition of monopoly
+- "an ideology emphasizing intense loyalty to one's nation" = textbook definition
+- "government-provided financial incentives" = too sophisticated
+- "implementing three interconnected policies" = not student language
+- "authority not explicitly stated in the U.S. Constitution but deemed necessary" = textbook definition of implied powers
+- ANY definition that sounds like it was copied from a dictionary or Wikipedia = PLAGIARISM
+
+A real {age_range} year old defines monopoly as: "when one company controls everything" or "only one person sells something"
+NOT: "exclusive possession or control of the supply of or trade in a commodity or service"
+
 2. PLAGIARISM DETECTION - Look for:
 - SUDDEN SHIFTS in writing quality (simple answers + sophisticated paragraphs = copied/AI)
 - Textbook-perfect definitions that don't match the student's other answers
 - Phrases that sound memorized or copied verbatim
 - Statistics or specific numbers not in the reading (like "828,000 square miles")
+- DICTIONARY DEFINITIONS - If a vocabulary definition sounds like it was copied from Google/dictionary (e.g., "exclusive possession or control of the supply of or trade in a commodity or service" for monopoly), flag as PLAGIARISM "likely"
+- SOPHISTICATED VOCABULARY MISMATCH - Words like "ideology", "emphasizing", "fostering", "interconnected", "implementing" are NOT how grade {grade_level} students write definitions
+- FRAGMENT ANSWERS that are clearly pasted (no complete sentence, just a definition dump)
+- If student writes simple answers for some questions but sophisticated definitions for vocabulary = COPY/PASTE from Google
 
 HARD CAPS FOR AI USE / PLAGIARISM (apply FIRST, before other caps):
 - AI flag "likely" = MAX score is 50 (F) - this is cheating
@@ -1504,17 +2349,42 @@ Provide your response in the following JSON format ONLY (no other text):
             if sanitized_content != original_content:
                 print(f"  🔒 PII sanitized from submission before AI processing")
 
-            # Build the message content based on input type
-            full_prompt = prompt_text + f"\n\nSTUDENT'S RESPONSES/WORK:\n{sanitized_content}"
+            # HARD BLOCK: Only send extracted responses to prevent hallucination
+            # If extraction succeeded, use ONLY extracted responses (not raw content)
+            if extracted_responses_text:
+                # Send only the pre-extracted verified responses
+                print(f"  ✅ Using ONLY pre-extracted responses (hallucination prevention)")
+                full_prompt = prompt_text + f"\n\nSTUDENT'S VERIFIED RESPONSES (extracted from document):\n{extracted_responses_text}"
+            else:
+                # Extraction failed or found nothing - REQUIRES MANUAL REVIEW
+                print(f"  ⚠️  HARD BLOCK: No responses extracted - flagging for manual review")
+                return {
+                    "score": 0,
+                    "letter_grade": "MANUAL REVIEW",
+                    "breakdown": {
+                        "content_accuracy": 0,
+                        "completeness": 0,
+                        "critical_thinking": 0,
+                        "communication": 0
+                    },
+                    "feedback": "⚠️ MANUAL REVIEW REQUIRED: The automated extraction could not find student responses in this document. This could mean:\n\n1. The document is blank or nearly blank\n2. The formatting is unusual\n3. The student wrote in unexpected locations\n\nPlease open the original document and grade manually to prevent AI hallucination.",
+                    "student_responses": [],
+                    "unanswered_questions": [],
+                    "authenticity_flag": "manual_review",
+                    "authenticity_reason": "Extraction failed - cannot verify responses",
+                    "skills_demonstrated": {},
+                    "requires_manual_review": True
+                }
             messages = [{"role": "user", "content": full_prompt}]
 
         elif assignment_data["type"] == "image":
             # Image-based assignment - use vision
-            # Note: Cannot sanitize PII from images, but names are not sent in prompt
+            # WARNING: Cannot extract/verify responses from images - higher hallucination risk
+            print(f"  ⚠️  IMAGE SUBMISSION: Cannot pre-extract responses - recommend spot-checking")
             messages = [{
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": prompt_text + "\n\nSTUDENT'S WORK (see attached image):"},
+                    {"type": "text", "text": prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."},
                     {
                         "type": "image_url",
                         "image_url": {
@@ -1523,6 +2393,8 @@ Provide your response in the following JSON format ONLY (no other text):
                     }
                 ]
             }]
+            # Flag that this is an unverified image submission
+            extraction_result = {"type": "image", "verified": False}
         else:
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Unknown content type"}
         
@@ -1534,7 +2406,7 @@ Provide your response in the following JSON format ONLY (no other text):
         )
         
         response_text = response.choices[0].message.content.strip()
-        
+
         # Clean up response (remove markdown code blocks if present)
         if response_text.startswith("```"):
             lines = response_text.split('\n')
@@ -1546,8 +2418,39 @@ Provide your response in the following JSON format ONLY (no other text):
                     break
             response_text = '\n'.join(lines[start:end])
         response_text = response_text.strip()
-        
-        result = json.loads(response_text)
+
+        # Fix common JSON issues from AI responses
+        # Replace control characters that break JSON parsing
+        import re
+        # Fix unescaped newlines inside strings (common AI mistake)
+        # This regex finds strings and escapes newlines within them
+        def fix_json_strings(text):
+            # Replace literal newlines/tabs in the middle of JSON strings
+            # First try to parse as-is
+            try:
+                json.loads(text)
+                return text  # Already valid
+            except:
+                pass
+            # Replace problematic control chars
+            text = text.replace('\r\n', '\\n').replace('\r', '\\n')
+            # Fix unescaped newlines in string values (between quotes)
+            text = re.sub(r'(?<!\\)\n(?=[^"]*"[,\}\]])', '\\n', text)
+            return text
+
+        response_text = fix_json_strings(response_text)
+
+        # Try parsing JSON with fallbacks
+        try:
+            result = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Fallback: try with strict=False (allows control chars)
+            try:
+                result = json.loads(response_text, strict=False)
+            except json.JSONDecodeError:
+                # Last resort: strip all control chars except newlines
+                cleaned = re.sub(r'[\x00-\x09\x0b\x0c\x0e-\x1f]', '', response_text)
+                result = json.loads(cleaned)
 
         # Update student's writing profile (only if not flagged as AI)
         # This builds their baseline for future AI detection
@@ -1555,8 +2458,8 @@ Provide your response in the following JSON format ONLY (no other text):
             ai_flag = result.get("ai_detection", {}).get("flag", "none")
             if ai_flag not in ["likely", "possible"]:
                 try:
-                    update_writing_profile(student_id, current_writing_style)
-                    print(f"  📊 Updated writing profile for student")
+                    update_writing_profile(student_id, current_writing_style, student_name)
+                    print(f"  📊 Updated writing profile for {student_name}")
                 except Exception as e:
                     print(f"  Note: Could not update writing profile: {e}")
 

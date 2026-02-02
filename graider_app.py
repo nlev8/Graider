@@ -2873,6 +2873,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
     # Function to find matching config for a filename
     def find_matching_config(filename):
+        import re
         filename_lower = filename.lower()
         # Remove student name prefix (everything before " - " or "_")
         if ' - ' in filename_lower:
@@ -2886,23 +2887,69 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         # Remove extension
         assignment_part = os.path.splitext(assignment_part)[0]
 
+        # Normalize for comparison: replace & with "and", remove special chars
+        def normalize(s):
+            s = s.replace('&', 'and').replace('–', '-').replace('—', '-')
+            s = re.sub(r'[^\w\s]', ' ', s)  # Remove special chars except spaces
+            s = re.sub(r'\s+', ' ', s).strip()  # Normalize whitespace
+            return s
+
+        assignment_normalized = normalize(assignment_part)
+        assignment_words = set(assignment_normalized.split())
+
         # Try to match against saved config names
         best_match = None
         best_score = 0
         for config_name, config_data in all_configs.items():
+            config_normalized = normalize(config_name)
+            config_words = set(config_normalized.split())
+
             # Check if config name appears in assignment part or vice versa
-            if config_name in assignment_part or assignment_part in config_name:
-                score = len(config_name)
+            if config_normalized in assignment_normalized or assignment_normalized in config_normalized:
+                score = len(config_normalized)
                 if score > best_score:
                     best_score = score
                     best_match = config_data
+
+            # Word overlap scoring - count matching words
+            common_words = assignment_words & config_words
+            # Filter out common words
+            common_words -= {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'to', 'for', 'on', 'pp', 'notes', 'cornell'}
+            if len(common_words) >= 2:  # At least 2 meaningful words match
+                word_score = len(common_words) * 10  # Weight word matches heavily
+                if word_score > best_score:
+                    best_score = word_score
+                    best_match = config_data
+
             # Also check the title field inside the config
             config_title = config_data.get('title', '').lower()
-            if config_title and (config_title in assignment_part or assignment_part in config_title):
-                score = len(config_title)
-                if score > best_score:
-                    best_score = score
-                    best_match = config_data
+            if config_title:
+                title_normalized = normalize(config_title)
+                title_words = set(title_normalized.split())
+                if title_normalized in assignment_normalized or assignment_normalized in title_normalized:
+                    score = len(title_normalized)
+                    if score > best_score:
+                        best_score = score
+                        best_match = config_data
+                # Word overlap with title
+                common_title_words = assignment_words & title_words
+                common_title_words -= {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'to', 'for', 'on', 'pp', 'notes', 'cornell'}
+                if len(common_title_words) >= 2:
+                    word_score = len(common_title_words) * 10
+                    if word_score > best_score:
+                        best_score = word_score
+                        best_match = config_data
+
+            # Check aliases
+            aliases = config_data.get('aliases', [])
+            for alias in aliases:
+                alias_normalized = normalize(alias.lower())
+                if alias_normalized in assignment_normalized or assignment_normalized in alias_normalized:
+                    score = len(alias_normalized) + 5  # Bonus for alias match
+                    if score > best_score:
+                        best_score = score
+                        best_match = config_data
+
         return best_match
 
     # Extract custom markers and notes from selected config (fallback)
@@ -3134,53 +3181,63 @@ def open_folder():
 
 @app.route('/api/send-emails', methods=['POST'])
 def send_emails():
-    """Send grade emails to students."""
+    """Send grade emails to students via Resend."""
     try:
-        from email_sender import GraiderEmailer
-        
-        emailer = GraiderEmailer()
-        if not emailer.config.get('gmail_address'):
-            return jsonify({"error": "Email not configured. Run: python3 email_sender.py --setup"})
-        
+        import resend
+        from collections import defaultdict
+
+        # Get Resend API key from environment
+        resend_api_key = os.getenv('RESEND_API_KEY')
+        if not resend_api_key:
+            return jsonify({"error": "RESEND_API_KEY not found in .env file"})
+
+        resend.api_key = resend_api_key
+        from_email = os.getenv('RESEND_FROM_EMAIL', 'Graider <noreply@graider.live>')
+
         data = request.json
         results = data.get('results', [])
-        
+        teacher_name = data.get('teacher_name', 'Your Teacher')
+        teacher_email = data.get('teacher_email', '')  # For reply-to
+        email_signature = data.get('email_signature', '')
+
         if not results:
             return jsonify({"error": "No results to email"})
-        
+
         # Group by student email for combined emails
-        from collections import defaultdict
         students = defaultdict(list)
-        
+
         for r in results:
-            email = r.get('email', '')
+            email = r.get('student_email') or r.get('email', '')
             if email and '@' in email and r.get('student_id') != 'UNKNOWN':
                 students[email].append(r)
-        
+
         sent = 0
         failed = 0
-        
+
         for email, grades in students.items():
             first_name = grades[0].get('student_name', 'Student').split()[0]
-            teacher = emailer.config.get('teacher_name', 'Your Teacher')
-            
+
             # Build subject
             if len(grades) == 1:
                 assignment = grades[0].get('assignment', 'Assignment')
                 subject = f"Grade for {assignment}: {grades[0].get('letter_grade', '')}"
             else:
                 subject = f"Grades for {len(grades)} Assignments"
-            
+
             # Build body
             body = f"Hi {first_name},\n\n"
-            
+
             if len(grades) == 1:
                 g = grades[0]
-                body += f"Here is your grade and feedback for {g.get('assignment', 'your assignment')}:\n\n"
-                body += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                body += f"GRADE: {g.get('score', 0)}/100 ({g.get('letter_grade', '')})\n"
-                body += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                body += f"FEEDBACK:\n{g.get('feedback', 'No feedback available.')}\n"
+                # Use custom email body if provided
+                if g.get('custom_email_body'):
+                    body = g.get('custom_email_body')
+                else:
+                    body += f"Here is your grade and feedback for {g.get('assignment', 'your assignment')}:\n\n"
+                    body += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    body += f"GRADE: {g.get('score', 0)}/100 ({g.get('letter_grade', '')})\n"
+                    body += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    body += f"FEEDBACK:\n{g.get('feedback', 'No feedback available.')}\n"
             else:
                 body += "Here are your grades and feedback:\n\n"
                 for g in grades:
@@ -3188,19 +3245,51 @@ def send_emails():
                     body += f"📝 {g.get('assignment', 'Assignment')}\n"
                     body += f"GRADE: {g.get('score', 0)}/100 ({g.get('letter_grade', '')})\n\n"
                     body += f"FEEDBACK:\n{g.get('feedback', 'No feedback available.')}\n\n"
-            
+
             body += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            body += f"\nIf you have any questions, please see me during class.\n\n{teacher}"
-            
-            if emailer.send_email(email, first_name, subject, body):
-                sent += 1
-            else:
+            body += f"\nIf you have any questions, please see me during class.\n\n{teacher_name}"
+
+            if email_signature:
+                body += f"\n\n{email_signature}"
+
+            # Save email to file for logging
+            safe_name = grades[0].get('student_name', 'Unknown').replace(' ', '_').replace('/', '_')
+            email_log_dir = os.path.join(app_dir, 'Results', 'emails')
+            os.makedirs(email_log_dir, exist_ok=True)
+            email_log_path = os.path.join(email_log_dir, f"{safe_name}_email.txt")
+            with open(email_log_path, 'w') as f:
+                f.write(f"TO: {email}\n")
+                f.write(f"SUBJECT: {subject}\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(body)
+
+            # Send via Resend
+            try:
+                params = {
+                    "from": from_email,
+                    "to": [email],
+                    "subject": subject,
+                    "text": body,
+                }
+                if teacher_email:
+                    params["reply_to"] = teacher_email
+
+                response = resend.Emails.send(params)
+
+                if response and response.get('id'):
+                    print(f"  ✅ Sent to {first_name} ({email}) - ID: {response.get('id')}")
+                    sent += 1
+                else:
+                    print(f"  ❌ Failed to send to {email}: No response ID")
+                    failed += 1
+            except Exception as e:
+                print(f"  ❌ Failed to send to {email}: {e}")
                 failed += 1
-        
+
         return jsonify({"sent": sent, "failed": failed, "total": len(students)})
-        
+
     except ImportError:
-        return jsonify({"error": "email_sender.py not found. Make sure it's in the same folder."})
+        return jsonify({"error": "resend package not installed. Run: pip install resend"})
     except Exception as e:
         return jsonify({"error": str(e)})
 

@@ -829,6 +829,7 @@ function App() {
   const [missingUploadedFiles, setMissingUploadedFiles] = useState([]); // Files in folder for missing check
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
   const [skipVerified, setSkipVerified] = useState(false); // Skip verified grades on regrade
+  const [excludeGradedStudents, setExcludeGradedStudents] = useState(false); // Exclude students already in results
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
@@ -841,13 +842,18 @@ function App() {
   // Toast notifications
   const [toasts, setToasts] = useState([]);
   const lastResultCount = useRef(0);
+  const toastIdCounter = useRef(0);
 
   const addToast = (message, type = "success", duration = 4000) => {
-    const id = Date.now();
+    const id = ++toastIdCounter.current;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, duration);
+  };
+
+  const removeToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
   // Sidebar state
@@ -865,6 +871,8 @@ function App() {
     responseSections: [],
     aliases: [], // Previous names for matching renamed assignments
     completionOnly: false, // If true, track submission but don't AI grade
+    rubricType: "standard", // standard, fill-in-blank, essay, cornell-notes, completion-only, custom
+    customRubric: null, // Custom rubric categories if rubricType is "custom"
   });
   const [savedAssignments, setSavedAssignments] = useState([]);
   const [savedAssignmentData, setSavedAssignmentData] = useState({}); // Map of name -> {aliases: [], title: ""}
@@ -896,6 +904,15 @@ function App() {
     viewMode: "formatted",
   });
 
+  // Highlighter mode: "start" (green) or "end" (red)
+  const [highlighterMode, setHighlighterMode] = useState("start");
+
+  // Highlight colors
+  const HIGHLIGHT_COLORS = {
+    start: { bg: "rgba(34, 197, 94, 0.4)", border: "#22c55e", label: "Start" },
+    end: { bg: "rgba(239, 68, 68, 0.4)", border: "#ef4444", label: "End" },
+  };
+
   // Results state
   const [editedResults, setEditedResults] = useState([]);
   const [reviewModal, setReviewModal] = useState({ show: false, index: -1 });
@@ -909,6 +926,7 @@ function App() {
     message: "",
   });
   const [emailApprovals, setEmailApprovals] = useState({}); // { index: 'approved' | 'rejected' | 'pending' }
+  const [sentEmails, setSentEmails] = useState({}); // { index: true } - tracks which emails have been sent
   const [autoApproveEmails, setAutoApproveEmails] = useState(false);
   const [editedEmails, setEditedEmails] = useState({}); // { index: { subject, body } }
   const [resultsSearch, setResultsSearch] = useState("");
@@ -1144,6 +1162,11 @@ function App() {
   const [selectedAccommodationPresets, setSelectedAccommodationPresets] =
     useState([]);
   const [accommodationCustomNotes, setAccommodationCustomNotes] = useState("");
+
+  // Student writing profiles/history state
+  const [studentHistoryList, setStudentHistoryList] = useState([]);
+  const [studentHistoryLoading, setStudentHistoryLoading] = useState(false);
+  const [selectedStudentHistory, setSelectedStudentHistory] = useState(null);
 
   // Rubric state
   const [rubric, setRubric] = useState({
@@ -1534,15 +1557,67 @@ function App() {
     }
   }, [status.error]);
 
-  // Sync editedResults with status.results
+  // Sync editedResults with status.results (preserve user edits)
   useEffect(() => {
-    if (
-      status.results.length > 0 &&
-      editedResults.length !== status.results.length
-    ) {
-      setEditedResults(status.results.map((r) => ({ ...r, edited: false })));
+    if (status.results.length > 0) {
+      setEditedResults((prev) => {
+        // If we have fewer edited results than status results, add new ones
+        if (prev.length < status.results.length) {
+          const newResults = status.results.slice(prev.length).map((r) => ({
+            ...r,
+            edited: false,
+          }));
+          return [...prev, ...newResults];
+        }
+        // If same length, merge new data but preserve edits
+        if (prev.length === status.results.length) {
+          return prev.map((edited, i) => {
+            if (edited.edited) {
+              // Preserve user edits, only update non-edited fields
+              return { ...status.results[i], ...edited, edited: true };
+            }
+            return { ...status.results[i], edited: false };
+          });
+        }
+        // If status was cleared, reset
+        if (status.results.length === 0) {
+          return [];
+        }
+        return prev;
+      });
     }
   }, [status.results]);
+
+  // Auto-save edited results to backend (debounced)
+  useEffect(() => {
+    if (!editedResults.length) return;
+
+    // Find results that have been edited
+    const editedItems = editedResults.filter((r) => r.edited && r.filename);
+    if (!editedItems.length) return;
+
+    const saveTimeout = setTimeout(async () => {
+      for (const item of editedItems) {
+        try {
+          await api.updateResult(item.filename, {
+            score: item.score,
+            letter_grade: item.letter_grade,
+            feedback: item.feedback,
+          });
+          // Mark as saved by clearing the edited flag
+          setEditedResults((prev) =>
+            prev.map((r) =>
+              r.filename === item.filename ? { ...r, edited: false } : r
+            )
+          );
+        } catch (error) {
+          console.error("Failed to save result:", error);
+        }
+      }
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(saveTimeout);
+  }, [editedResults]);
 
   // Show toast when new assignments are graded
   useEffect(() => {
@@ -1766,13 +1841,12 @@ function App() {
       }
 
       // Determine which files to grade
-      let filesToGrade = selectedFiles.length > 0 ? selectedFiles : null;
+      // If filters are active, ALWAYS use filtered files (not the selectedFiles state which may be stale)
+      let filesToGrade = null;
+      const hasActiveFilter = selectedPeriod || gradeFilterStudent || gradeFilterAssignment;
 
-      // If no files selected but filters are active, load and filter files
-      if (
-        !filesToGrade &&
-        (selectedPeriod || gradeFilterStudent || gradeFilterAssignment)
-      ) {
+      // If filters are active, load and filter files (takes precedence over checkbox selection)
+      if (hasActiveFilter) {
         try {
           const filesData = await api.listFiles(config.assignments_folder);
           if (filesData.files) {
@@ -1789,7 +1863,16 @@ function App() {
             if (gradeFilterStudent) {
               filtered = filtered.filter((f) => {
                 const fileName = f.name.toLowerCase();
-                const studentName = gradeFilterStudent.toLowerCase();
+                let studentName = gradeFilterStudent.toLowerCase();
+                // Handle "Last; First" or "Last, First" roster format - convert to "first last"
+                if (studentName.includes(';') || studentName.includes(',')) {
+                  const parts = studentName.split(/[;,]/).map(p => p.trim());
+                  if (parts.length >= 2) {
+                    const lastName = parts[0];
+                    const firstName = parts[1].split(' ')[0]; // Take first word of first name
+                    studentName = firstName + ' ' + lastName;
+                  }
+                }
                 // Check if filename contains student name (handles various naming formats)
                 return (
                   fileName.includes(studentName.replace(/\s+/g, "")) ||
@@ -1815,8 +1898,30 @@ function App() {
               });
             }
 
+            // Exclude students who already have results in this session
+            if (excludeGradedStudents && status.results.length > 0) {
+              const gradedStudentNames = status.results.map((r) =>
+                (r.student_name || "").toLowerCase().replace(/\s+/g, "")
+              );
+              filtered = filtered.filter((f) => {
+                const fileName = f.name.toLowerCase().replace(/\s+/g, "");
+                // Check if any graded student name appears in the filename
+                return !gradedStudentNames.some((name) =>
+                  name && fileName.includes(name)
+                );
+              });
+            }
+
             if (filtered.length > 0) {
               filesToGrade = filtered.map((f) => f.name);
+              // Log which files will be graded based on filter
+              const filterDesc = [
+                gradeFilterStudent ? `student "${gradeFilterStudent}"` : null,
+                gradeFilterAssignment ? `assignment "${gradeFilterAssignment}"` : null,
+                selectedPeriod ? "selected period" : null,
+              ].filter(Boolean).join(" and ");
+              console.log(`Grading ${filtered.length} files for ${filterDesc}:`, filesToGrade);
+              addToast(`Grading ${filtered.length} files for ${filterDesc}`, "info");
             } else {
               const filterDesc = [
                 gradeFilterStudent ? `student "${gradeFilterStudent}"` : null,
@@ -1834,7 +1939,11 @@ function App() {
         } catch (e) {
           console.error("Failed to load files for filter:", e);
         }
+      } else if (selectedFiles.length > 0) {
+        // No filter active, but user has manually selected files via checkboxes
+        filesToGrade = selectedFiles;
       }
+      // If no filter and no selection, filesToGrade stays null (grade all new files)
 
       // Get the period name for differentiated grading
       const selectedPeriodName = selectedPeriod
@@ -1854,6 +1963,8 @@ function App() {
             ? gradeAssignment
             : null,
         globalAINotes,
+        // Pass the custom rubric from Settings
+        rubric: rubric,
         // Pass selected files (null means grade all new files)
         selectedFiles: filesToGrade,
         // Skip verified grades on regrade (only regrade unverified)
@@ -2136,9 +2247,21 @@ ${signature}`;
 
   const openDocEditor = () => {
     if (importedDoc.text || importedDoc.html) {
+      let html = importedDoc.html;
+
+      // If no markers but HTML has highlights, clean orphaned highlights
+      const hasHighlights = html && html.includes('data-marker-id=');
+      const hasMarkers = (assignment.customMarkers || []).length > 0;
+
+      if (hasHighlights && !hasMarkers) {
+        html = removeAllHighlightsFromHtml(html);
+        // Also update importedDoc to persist the cleanup
+        setImportedDoc({ ...importedDoc, html });
+      }
+
       setDocEditorModal({
         show: true,
-        editedHtml: importedDoc.html,
+        editedHtml: html,
         viewMode: "formatted",
       });
     }
@@ -2157,11 +2280,53 @@ ${signature}`;
       text = sel ? sel.toString().trim() : "";
     }
     if (text && text.length > 2 && text.length < 2000) {
-      if (!(assignment.customMarkers || []).includes(text)) {
-        setAssignment({
-          ...assignment,
-          customMarkers: [...(assignment.customMarkers || []), text],
+      if (highlighterMode === "start") {
+        // Adding a new start marker
+        const exists = (assignment.customMarkers || []).some(m =>
+          typeof m === 'string' ? m === text : m.start === text
+        );
+        if (!exists) {
+          const newMarkers = [...(assignment.customMarkers || []), text];
+          const markerIndex = newMarkers.length - 1;
+
+          // Apply highlight to HTML
+          const newHtml = highlightTextInHtml(
+            docEditorModal.editedHtml,
+            text,
+            HIGHLIGHT_COLORS.start,
+            `start-${markerIndex}`
+          );
+
+          setAssignment({ ...assignment, customMarkers: newMarkers });
+          setDocEditorModal({ ...docEditorModal, editedHtml: newHtml });
+          addToast("Start marker added (green)", "success");
+        }
+      } else {
+        // Adding an end marker - attach to the last marker that doesn't have one
+        const markers = [...(assignment.customMarkers || [])];
+        const lastWithoutEnd = markers.findIndex((m, i) => {
+          // Find first marker without an end marker
+          return typeof m === 'string' || !m.end;
         });
+
+        if (lastWithoutEnd >= 0) {
+          const startText = getMarkerText(markers[lastWithoutEnd]);
+          markers[lastWithoutEnd] = { start: startText, end: text };
+
+          // Apply highlight to HTML
+          const newHtml = highlightTextInHtml(
+            docEditorModal.editedHtml,
+            text,
+            HIGHLIGHT_COLORS.end,
+            `end-${lastWithoutEnd}`
+          );
+
+          setAssignment({ ...assignment, customMarkers: markers });
+          setDocEditorModal({ ...docEditorModal, editedHtml: newHtml });
+          addToast("End marker added (red)", "success");
+        } else {
+          addToast("Add a start marker first", "warning");
+        }
       }
     } else if (text.length <= 2) {
       addToast("Please select more text (at least 3 characters)", "warning");
@@ -2173,13 +2338,108 @@ ${signature}`;
     }
   };
 
-  const removeMarker = (marker) => {
+  // Helper to get marker text (handles both string and object formats)
+  const getMarkerText = (marker) => {
+    return typeof marker === 'string' ? marker : marker.start;
+  };
+
+  // Helper to get end marker (if exists)
+  const getEndMarker = (marker) => {
+    return typeof marker === 'object' ? marker.end : null;
+  };
+
+  const removeMarker = (marker, markerIndex) => {
+    const markerText = getMarkerText(marker);
+
+    // Remove ALL highlights and re-apply remaining ones (avoids index mismatch issues)
+    let cleanHtml = removeAllHighlightsFromHtml(docEditorModal.editedHtml);
+
+    // Filter out the removed marker
+    const remainingMarkers = (assignment.customMarkers || []).filter(
+      (m) => getMarkerText(m) !== markerText,
+    );
+
+    // Re-apply highlights for remaining markers
+    const newHtml = applyAllHighlights(cleanHtml, remainingMarkers);
+
     setAssignment({
       ...assignment,
-      customMarkers: (assignment.customMarkers || []).filter(
-        (m) => m !== marker,
-      ),
+      customMarkers: remainingMarkers,
     });
+
+    // Update BOTH docEditorModal AND importedDoc
+    setDocEditorModal({ ...docEditorModal, editedHtml: newHtml });
+    setImportedDoc({ ...importedDoc, html: newHtml });
+  };
+
+  // Add or update end marker for a given start marker
+  const setEndMarker = (markerIndex, endText) => {
+    const updated = [...(assignment.customMarkers || [])];
+    const current = updated[markerIndex];
+    const startText = getMarkerText(current);
+
+    if (endText && endText.trim()) {
+      // Convert to object with end marker
+      updated[markerIndex] = { start: startText, end: endText.trim() };
+    } else {
+      // Remove end marker, convert back to string
+      updated[markerIndex] = startText;
+    }
+    setAssignment({ ...assignment, customMarkers: updated });
+  };
+
+  // Highlight text in HTML with a colored span
+  const highlightTextInHtml = (html, text, color, markerId) => {
+    if (!text || !html) return html;
+
+    // Escape special regex characters
+    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match the text (case-insensitive, first occurrence only)
+    const regex = new RegExp(`(${escaped})`, 'i');
+
+    // Check if already highlighted
+    if (html.includes(`data-marker-id="${markerId}"`)) {
+      return html; // Already highlighted
+    }
+
+    // Replace first occurrence with highlighted span
+    return html.replace(regex, `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">$1</span>`);
+  };
+
+  // Remove highlight from HTML by marker ID
+  const removeHighlightFromHtml = (html, markerId) => {
+    if (!html) return html;
+    // Remove the span but keep the inner content (handles nested tags)
+    // Match opening span with marker ID, then capture everything until closing span
+    const regex = new RegExp(`<span[^>]*data-marker-id="${markerId}"[^>]*>(.*?)</span>`, 'gis');
+    return html.replace(regex, '$1');
+  };
+
+  // Remove ALL marker highlights from HTML (for clean reset)
+  const removeAllHighlightsFromHtml = (html) => {
+    if (!html) return html;
+    // Remove all spans with data-marker-id attribute
+    return html.replace(/<span[^>]*data-marker-id="[^"]*"[^>]*>(.*?)<\/span>/gis, '$1');
+  };
+
+  // Apply all marker highlights to HTML
+  const applyAllHighlights = (html, markers) => {
+    if (!html || !markers) return html;
+
+    let result = html;
+    markers.forEach((marker, i) => {
+      const startText = getMarkerText(marker);
+      const endText = getEndMarker(marker);
+
+      // Highlight start marker in green
+      result = highlightTextInHtml(result, startText, HIGHLIGHT_COLORS.start, `start-${i}`);
+
+      // Highlight end marker in red (if exists)
+      if (endText) {
+        result = highlightTextInHtml(result, endText, HIGHLIGHT_COLORS.end, `end-${i}`);
+      }
+    });
+    return result;
   };
 
   const addQuestion = () => {
@@ -2237,6 +2497,13 @@ ${signature}`;
         // Set importedDoc FIRST to prevent race condition
         if (data.assignment.importedDoc) {
           setImportedDoc(data.assignment.importedDoc);
+          // Also restore the highlighted HTML to the editor
+          if (data.assignment.importedDoc.html) {
+            setDocEditorModal(prev => ({
+              ...prev,
+              editedHtml: data.assignment.importedDoc.html
+            }));
+          }
         } else {
           setImportedDoc({ text: "", html: "", filename: "", loading: false });
         }
@@ -2250,6 +2517,8 @@ ${signature}`;
           gradingNotes: data.assignment.gradingNotes || "",
           responseSections: data.assignment.responseSections || [],
           aliases: data.assignment.aliases || [],
+          rubricType: data.assignment.rubricType || "standard",
+          customRubric: data.assignment.customRubric || null,
         });
         setLoadedAssignmentName(name);
       }
@@ -2277,6 +2546,8 @@ ${signature}`;
           customMarkers: [],
           gradingNotes: "",
           responseSections: [],
+          rubricType: "standard",
+          customRubric: null,
         });
         setLoadedAssignmentName("");
       }
@@ -2815,6 +3086,18 @@ ${signature}`;
                 : "F";
     }
     setEditedResults(updated);
+
+    // Also sync to status.results so the table updates immediately
+    setStatus((prev) => {
+      const updatedResults = [...prev.results];
+      updatedResults[index] = { ...updatedResults[index], [field]: value, edited: true };
+      if (field === "score") {
+        const score = parseInt(value) || 0;
+        updatedResults[index].letter_grade =
+          score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F";
+      }
+      return { ...prev, results: updatedResults };
+    });
   };
 
   const sendEmails = async () => {
@@ -2844,6 +3127,30 @@ ${signature}`;
         failed: 0,
         message: `Error: ${e.message}`,
       });
+    }
+  };
+
+  // Send email for a single student
+  const sendSingleEmail = async (result, index) => {
+    if (!result.student_email) {
+      addToast("No email address for " + result.student_name, "error");
+      return;
+    }
+    try {
+      const edited = editedEmails[index];
+      const emailResult = {
+        ...result,
+        custom_email_subject: edited?.subject || `Grade Report: ${result.assignment}`,
+        custom_email_body: edited?.body || getDefaultEmailBody(index),
+      };
+      const response = await api.sendEmails([emailResult], config.teacher_email, config.teacher_name, config.email_signature);
+      if (response.sent > 0) {
+        addToast(`Email sent to ${result.student_name}`, "success");
+      } else {
+        addToast(`Failed to send email to ${result.student_name}`, "error");
+      }
+    } catch (e) {
+      addToast("Error sending email: " + e.message, "error");
     }
   };
 
@@ -3038,15 +3345,29 @@ ${signature}`;
               alignItems: "center",
             }}
           >
-            <h2 style={{ fontSize: "1.4rem", fontWeight: 700 }}>
-              Review:{" "}
-              {
-                (
-                  editedResults[reviewModal.index] ||
-                  status.results[reviewModal.index]
-                )?.student_name
-              }
-            </h2>
+            <div>
+              <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0 }}>
+                Review:{" "}
+                {
+                  (
+                    editedResults[reviewModal.index] ||
+                    status.results[reviewModal.index]
+                  )?.student_name
+                }
+              </h2>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
+                {
+                  (
+                    editedResults[reviewModal.index] ||
+                    status.results[reviewModal.index]
+                  )?.assignment ||
+                  (
+                    editedResults[reviewModal.index] ||
+                    status.results[reviewModal.index]
+                  )?.filename
+                }
+              </p>
+            </div>
             <button
               onClick={() => setReviewModal({ show: false, index: -1 })}
               style={{
@@ -3827,6 +4148,37 @@ ${signature}`;
                                 ? "Rejected"
                                 : "Reject"}
                             </button>
+                            <button
+                              onClick={() => {
+                                setEmailApprovals((prev) => ({
+                                  ...prev,
+                                  [reviewModal.index]: "approved",
+                                }));
+                                setSentEmails((prev) => ({
+                                  ...prev,
+                                  [reviewModal.index]: true,
+                                }));
+                                addToast("Marked as sent (no email sent)", "info");
+                              }}
+                              className="btn"
+                              style={{
+                                padding: "10px 24px",
+                                background: sentEmails[reviewModal.index]
+                                  ? "rgba(59,130,246,0.25)"
+                                  : "var(--glass-bg)",
+                                border: sentEmails[reviewModal.index]
+                                  ? "1px solid rgba(59,130,246,0.4)"
+                                  : "1px solid var(--glass-border)",
+                                color: sentEmails[reviewModal.index]
+                                  ? "#3b82f6"
+                                  : "var(--text-secondary)",
+                              }}
+                            >
+                              <Icon name="Send" size={18} />
+                              {sentEmails[reviewModal.index]
+                                ? "Sent"
+                                : "Mark as Sent"}
+                            </button>
                           </div>
                         )}
                         <p
@@ -3938,12 +4290,56 @@ ${signature}`;
               >
                 <Icon name="X" size={18} />
               </button>
+              {/* Highlighter Mode Toggle */}
+              <div style={{ display: "flex", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--glass-border)" }}>
+                <button
+                  onClick={() => setHighlighterMode("start")}
+                  style={{
+                    padding: "8px 12px",
+                    background: highlighterMode === "start" ? HIGHLIGHT_COLORS.start.bg : "transparent",
+                    border: "none",
+                    borderRight: "1px solid var(--glass-border)",
+                    color: highlighterMode === "start" ? HIGHLIGHT_COLORS.start.border : "var(--text-muted)",
+                    fontWeight: highlighterMode === "start" ? 600 : 400,
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: HIGHLIGHT_COLORS.start.border }} />
+                  Start
+                </button>
+                <button
+                  onClick={() => setHighlighterMode("end")}
+                  style={{
+                    padding: "8px 12px",
+                    background: highlighterMode === "end" ? HIGHLIGHT_COLORS.end.bg : "transparent",
+                    border: "none",
+                    color: highlighterMode === "end" ? HIGHLIGHT_COLORS.end.border : "var(--text-muted)",
+                    fontWeight: highlighterMode === "end" ? 600 : 400,
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: HIGHLIGHT_COLORS.end.border }} />
+                  End
+                </button>
+              </div>
               <button
                 onClick={addSelectedAsMarker}
                 className="btn btn-secondary"
+                style={{
+                  background: highlighterMode === "start" ? HIGHLIGHT_COLORS.start.bg : HIGHLIGHT_COLORS.end.bg,
+                  borderColor: highlighterMode === "start" ? HIGHLIGHT_COLORS.start.border : HIGHLIGHT_COLORS.end.border,
+                }}
               >
                 <Icon name="Target" size={16} />
-                Mark Selection
+                Mark {highlighterMode === "start" ? "Start" : "End"}
               </button>
               <button
                 onClick={async () => {
@@ -3953,7 +4349,9 @@ ${signature}`;
                     (assignment.customMarkers || []).length > 0
                   ) {
                     try {
-                      const dataToSave = { ...assignment, importedDoc };
+                      // Include highlighted HTML in the saved data
+                      const docToSave = { ...importedDoc, html: docEditorModal.editedHtml };
+                      const dataToSave = { ...assignment, importedDoc: docToSave };
                       await api.saveAssignmentConfig(dataToSave);
                       // Refresh saved assignments list
                       const list = await api.listAssignments();
@@ -4020,9 +4418,34 @@ ${signature}`;
                 background: "var(--sidebar-bg)",
               }}
             >
-              <h3 style={{ fontSize: "1rem", marginBottom: "15px" }}>
-                Marked Sections ({(assignment.customMarkers || []).length})
-              </h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                <h3 style={{ fontSize: "1rem", margin: 0 }}>
+                  Marked Sections ({(assignment.customMarkers || []).length})
+                </h3>
+                {(assignment.customMarkers || []).length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (!confirm("Remove all markers and highlights?")) return;
+                      const cleanHtml = removeAllHighlightsFromHtml(docEditorModal.editedHtml);
+                      setAssignment({ ...assignment, customMarkers: [] });
+                      setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
+                      setImportedDoc({ ...importedDoc, html: cleanHtml });
+                      addToast("All markers cleared", "success");
+                    }}
+                    style={{
+                      background: "none",
+                      border: "1px solid rgba(239,68,68,0.3)",
+                      color: "#ef4444",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      fontSize: "0.75rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
               <p
                 style={{
                   fontSize: "0.85rem",
@@ -4030,12 +4453,35 @@ ${signature}`;
                   marginBottom: "15px",
                 }}
               >
-                Select text in the document and click "Mark Selection"
+                Select text and use <span style={{color: HIGHLIGHT_COLORS.start.border, fontWeight: 600}}>Start</span> (green) to mark section beginnings, <span style={{color: HIGHLIGHT_COLORS.end.border, fontWeight: 600}}>End</span> (red) to mark where they stop
               </p>
               {(assignment.customMarkers || []).length === 0 ? (
-                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                  No markers yet
-                </p>
+                <div>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "10px" }}>
+                    No markers yet
+                  </p>
+                  {docEditorModal.editedHtml && docEditorModal.editedHtml.includes('data-marker-id=') && (
+                    <button
+                      onClick={() => {
+                        const cleanHtml = removeAllHighlightsFromHtml(docEditorModal.editedHtml);
+                        setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
+                        setImportedDoc({ ...importedDoc, html: cleanHtml });
+                        addToast("Orphaned highlights removed", "success");
+                      }}
+                      className="btn btn-secondary"
+                      style={{
+                        fontSize: "0.8rem",
+                        padding: "6px 12px",
+                        background: "rgba(239,68,68,0.15)",
+                        border: "1px solid rgba(239,68,68,0.3)",
+                        color: "#ef4444",
+                      }}
+                    >
+                      <Icon name="Trash2" size={14} />
+                      Remove Orphaned Highlights
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div
                   style={{
@@ -4049,287 +4495,57 @@ ${signature}`;
                       key={i}
                       style={{
                         display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
+                        flexDirection: "column",
+                        gap: "4px",
                         padding: "8px 12px",
                         background: "rgba(251,191,36,0.2)",
                         borderRadius: "6px",
                         border: "1px solid rgba(251,191,36,0.3)",
                       }}
                     >
-                      <Icon
-                        name="Target"
-                        size={12}
-                        style={{ color: "var(--warning)", flexShrink: 0 }}
-                      />
-                      <span
-                        style={{
-                          fontSize: "0.8rem",
-                          flex: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {marker}
-                      </span>
-                      <button
-                        onClick={() => removeMarker(marker)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--text-muted)",
-                          cursor: "pointer",
-                          padding: "0",
-                        }}
-                      >
-                        <Icon name="X" size={12} />
-                      </button>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon
+                          name="Target"
+                          size={12}
+                          style={{ color: "#22c55e", flexShrink: 0 }}
+                        />
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            flex: 1,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {getMarkerText(marker).substring(0, 60)}{getMarkerText(marker).length > 60 ? '...' : ''}
+                        </span>
+                        <button
+                          onClick={() => removeMarker(marker, i)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--text-muted)",
+                            cursor: "pointer",
+                            padding: "0",
+                          }}
+                        >
+                          <Icon name="X" size={12} />
+                        </button>
+                      </div>
+                      {/* End marker display */}
+                      {getEndMarker(marker) && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "20px" }}>
+                          <Icon name="Flag" size={10} style={{ color: HIGHLIGHT_COLORS.end.border, flexShrink: 0 }} />
+                          <span style={{ fontSize: "0.75rem", color: HIGHLIGHT_COLORS.end.border }}>
+                            End: {getEndMarker(marker).substring(0, 40)}{getEndMarker(marker).length > 40 ? '...' : ''}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Response Sections - Highlighter */}
-              <div
-                style={{
-                  marginTop: "25px",
-                  padding: "15px",
-                  background:
-                    "linear-gradient(135deg, rgba(74,222,128,0.08), rgba(250,204,21,0.08))",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(74,222,128,0.25)",
-                  boxShadow: "0 0 15px rgba(74,222,128,0.1)",
-                }}
-              >
-                <h3
-                  style={{
-                    fontSize: "0.95rem",
-                    marginBottom: "10px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "6px",
-                      background: "linear-gradient(135deg, #4ade80, #facc15)",
-                      boxShadow: "0 0 10px rgba(74,222,128,0.4)",
-                    }}
-                  >
-                    <Icon
-                      name="Highlighter"
-                      size={14}
-                      style={{ color: "#000" }}
-                    />
-                  </span>
-                  Highlighter ({(assignment.responseSections || []).length})
-                </h3>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-muted)",
-                    marginBottom: "12px",
-                  }}
-                >
-                  Mark sections where student answers are located
-                </p>
-
-                {/* Add new section */}
-                <div style={{ marginBottom: "12px" }}>
-                  <input
-                    type="text"
-                    placeholder="Start header (e.g., Part 1:)"
-                    id="builder-section-start"
-                    style={{
-                      width: "100%",
-                      padding: "8px 10px",
-                      marginBottom: "6px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--glass-border)",
-                      background: "var(--input-bg)",
-                      color: "var(--text-primary)",
-                      fontSize: "0.8rem",
-                    }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="End header (optional)"
-                    id="builder-section-end"
-                    style={{
-                      width: "100%",
-                      padding: "8px 10px",
-                      marginBottom: "8px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--glass-border)",
-                      background: "var(--input-bg)",
-                      color: "var(--text-primary)",
-                      fontSize: "0.8rem",
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const startEl = document.getElementById(
-                        "builder-section-start",
-                      );
-                      const endEl = document.getElementById(
-                        "builder-section-end",
-                      );
-                      const start = startEl?.value?.trim();
-                      const end = endEl?.value?.trim();
-                      if (start) {
-                        setAssignment((prev) => ({
-                          ...prev,
-                          responseSections: [
-                            ...(prev.responseSections || []),
-                            { start, end: end || null },
-                          ],
-                        }));
-                        if (startEl) startEl.value = "";
-                        if (endEl) endEl.value = "";
-                      }
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "6px",
-                      border: "none",
-                      background: "linear-gradient(135deg, #4ade80, #22c55e)",
-                      color: "#000",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      fontSize: "0.8rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px",
-                      boxShadow: "0 3px 10px rgba(74,222,128,0.3)",
-                    }}
-                  >
-                    <Icon name="Plus" size={14} /> Add Section
-                  </button>
-                </div>
-
-                {/* Section list */}
-                {(assignment.responseSections || []).length > 0 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                    }}
-                  >
-                    {(assignment.responseSections || []).map((section, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          padding: "10px 12px",
-                          background:
-                            "linear-gradient(90deg, rgba(250,204,21,0.2), rgba(74,222,128,0.12))",
-                          borderRadius: "6px",
-                          border: "1px solid rgba(250,204,21,0.35)",
-                          boxShadow: "0 0 8px rgba(250,204,21,0.15)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                          }}
-                        >
-                          <div style={{ flex: 1 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                              }}
-                            >
-                              <Icon
-                                name="ArrowRight"
-                                size={12}
-                                style={{ color: "#facc15" }}
-                              />
-                              <span
-                                style={{
-                                  fontSize: "0.8rem",
-                                  fontWeight: 600,
-                                  color: "#facc15",
-                                }}
-                              >
-                                "{section.start}"
-                              </span>
-                            </div>
-                            {section.end ? (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  marginTop: "4px",
-                                  marginLeft: "18px",
-                                }}
-                              >
-                                <Icon
-                                  name="ArrowRight"
-                                  size={12}
-                                  style={{ color: "#4ade80" }}
-                                />
-                                <span
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    fontWeight: 600,
-                                    color: "#4ade80",
-                                  }}
-                                >
-                                  "{section.end}"
-                                </span>
-                              </div>
-                            ) : (
-                              <div
-                                style={{
-                                  fontSize: "0.7rem",
-                                  color: "var(--text-muted)",
-                                  marginTop: "3px",
-                                  marginLeft: "18px",
-                                  fontStyle: "italic",
-                                }}
-                              >
-                                → until end
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() =>
-                              setAssignment((prev) => ({
-                                ...prev,
-                                responseSections: (
-                                  prev.responseSections || []
-                                ).filter((_, idx) => idx !== i),
-                              }))
-                            }
-                            style={{
-                              background: "none",
-                              border: "none",
-                              color: "var(--text-muted)",
-                              cursor: "pointer",
-                              padding: "0",
-                            }}
-                          >
-                            <Icon name="X" size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -5421,7 +5637,16 @@ ${signature}`;
                           Matching Submissions for "{gradeFilterStudent}"
                         </label>
                         {(() => {
-                          const studentName = gradeFilterStudent.toLowerCase();
+                          let studentName = gradeFilterStudent.toLowerCase();
+                          // Handle "Last; First" or "Last, First" roster format
+                          if (studentName.includes(';') || studentName.includes(',')) {
+                            const parts = studentName.split(/[;,]/).map(p => p.trim());
+                            if (parts.length >= 2) {
+                              const lastName = parts[0];
+                              const firstName = parts[1].split(' ')[0];
+                              studentName = firstName + ' ' + lastName;
+                            }
+                          }
                           const matchingFiles = availableFiles.filter((f) => {
                             const fileName = f.name.toLowerCase();
                             return (
@@ -5656,6 +5881,58 @@ ${signature}`;
                           </label>
                         </div>
                       )}
+
+                    {/* Exclude students already graded in this session */}
+                    {status.results.length > 0 && (
+                      <div
+                        className="glass-card"
+                        style={{
+                          padding: "15px 20px",
+                          marginBottom: "20px",
+                          background: "rgba(34, 197, 94, 0.05)",
+                          border: "1px solid rgba(34, 197, 94, 0.2)",
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={excludeGradedStudents}
+                            onChange={(e) =>
+                              setExcludeGradedStudents(e.target.checked)
+                            }
+                            style={{
+                              width: "18px",
+                              height: "18px",
+                              cursor: "pointer",
+                            }}
+                          />
+                          <div>
+                            <span
+                              style={{ fontWeight: 600, color: "#22c55e" }}
+                            >
+                              Exclude Already Graded Students
+                            </span>
+                            <p
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "var(--text-secondary)",
+                                margin: "4px 0 0 0",
+                              }}
+                            >
+                              Skip files for {[...new Set(status.results.map((r) => r.student_name))].length} student(s) who already have results.
+                              Only grade new students.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    )}
 
                     {/* Grading Notes - Quick notes for this grading session */}
                     <div
@@ -6166,14 +6443,7 @@ ${signature}`;
                 >
                   {/* Results Table */}
                   <div className="glass-card" style={{ padding: "25px" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "20px",
-                      }}
-                    >
+                    <div style={{ marginBottom: "20px" }}>
                       <h2
                         style={{
                           fontSize: "1.3rem",
@@ -6181,6 +6451,7 @@ ${signature}`;
                           display: "flex",
                           alignItems: "center",
                           gap: "10px",
+                          marginBottom: "15px",
                         }}
                       >
                         <Icon name="FileText" size={24} />
@@ -6210,6 +6481,7 @@ ${signature}`;
                             display: "flex",
                             gap: "10px",
                             alignItems: "center",
+                            flexWrap: "wrap",
                           }}
                         >
                           {/* Sort Dropdown */}
@@ -6333,6 +6605,110 @@ ${signature}`;
                           >
                             <Icon name="Download" size={18} />
                             Focus Export
+                          </button>
+                          {/* Email Actions */}
+                          <div style={{ borderLeft: "1px solid var(--glass-border)", height: "24px", margin: "0 5px" }} />
+                          {/* Send by Period Dropdown */}
+                          {sortedPeriods.length > 0 && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                              <select
+                                className="input"
+                                style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                                defaultValue=""
+                                onChange={async (e) => {
+                                  const period = e.target.value;
+                                  if (!period) return;
+                                  const periodResults = status.results.filter((r) => r.period === period && r.student_email);
+                                  if (periodResults.length === 0) {
+                                    addToast(`No students with emails in ${period}`, "warning");
+                                    e.target.value = "";
+                                    return;
+                                  }
+                                  if (!confirm(`Send emails to ${periodResults.length} students in ${period}?`)) {
+                                    e.target.value = "";
+                                    return;
+                                  }
+                                  setEmailStatus({ sending: true, sent: 0, failed: 0, message: `Sending to ${period}...` });
+                                  try {
+                                    const resultsWithEmail = periodResults.map((r) => {
+                                      const idx = status.results.findIndex((sr) => sr.filename === r.filename);
+                                      const edited = editedEmails[idx];
+                                      return {
+                                        ...r,
+                                        custom_email_subject: edited?.subject || `Grade Report: ${r.assignment}`,
+                                        custom_email_body: edited?.body || getDefaultEmailBody(idx),
+                                      };
+                                    });
+                                    const response = await api.sendEmails(resultsWithEmail, config.teacher_email, config.teacher_name, config.email_signature);
+                                    setEmailStatus({
+                                      sending: false,
+                                      sent: response.sent || 0,
+                                      failed: response.failed || 0,
+                                      message: `${period}: Sent ${response.sent}${response.failed > 0 ? `, ${response.failed} failed` : ""}`,
+                                    });
+                                  } catch (err) {
+                                    setEmailStatus({ sending: false, sent: 0, failed: 0, message: `Error: ${err.message}` });
+                                  }
+                                  e.target.value = "";
+                                }}
+                                disabled={emailStatus.sending}
+                              >
+                                <option value="">Send by Period...</option>
+                                {sortedPeriods.map((p) => {
+                                  const count = status.results.filter((r) => r.period === p.period_name && r.student_email).length;
+                                  return (
+                                    <option key={p.filename} value={p.period_name}>
+                                      {p.period_name} ({count} emails)
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          )}
+                          <button
+                            onClick={async () => {
+                              const withEmail = status.results.filter((r) => r.student_email);
+                              if (withEmail.length === 0) {
+                                addToast("No students have email addresses", "warning");
+                                return;
+                              }
+                              // Count unique students (by email), not total results
+                              const uniqueEmails = [...new Set(withEmail.map((r) => r.student_email))];
+                              const msg = uniqueEmails.length === 1
+                                ? `Send 1 email to ${withEmail[0].student_name?.split(' ')[0] || 'student'} with ${withEmail.length} assignment${withEmail.length > 1 ? 's' : ''}?`
+                                : `Send emails to ${uniqueEmails.length} students (${withEmail.length} total assignments)?`;
+                              if (!confirm(msg)) return;
+                              setEmailStatus({ sending: true, sent: 0, failed: 0, message: `Sending to ${uniqueEmails.length} student${uniqueEmails.length > 1 ? 's' : ''}...` });
+                              try {
+                                const resultsWithEmail = withEmail.map((r) => {
+                                  const idx = status.results.findIndex((sr) => sr.filename === r.filename);
+                                  const edited = editedEmails[idx];
+                                  return {
+                                    ...r,
+                                    custom_email_subject: edited?.subject || `Grade Report: ${r.assignment}`,
+                                    custom_email_body: edited?.body || getDefaultEmailBody(idx),
+                                  };
+                                });
+                                const response = await api.sendEmails(resultsWithEmail, config.teacher_email, config.teacher_name, config.email_signature);
+                                setEmailStatus({
+                                  sending: false,
+                                  sent: response.sent || 0,
+                                  failed: response.failed || 0,
+                                  message: `Sent ${response.sent} emails${response.failed > 0 ? `, ${response.failed} failed` : ""}`,
+                                });
+                              } catch (e) {
+                                setEmailStatus({ sending: false, sent: 0, failed: 0, message: `Error: ${e.message}` });
+                              }
+                            }}
+                            className="btn btn-primary"
+                            disabled={emailStatus.sending}
+                            style={{
+                              background: "linear-gradient(135deg, #22c55e, #16a34a)",
+                            }}
+                            title="Send emails to all students"
+                          >
+                            <Icon name="Send" size={18} />
+                            {emailStatus.sending ? "Sending..." : "Send All Emails"}
                           </button>
                         </div>
                       )}
@@ -6605,6 +6981,50 @@ ${signature}`;
                               <Icon name="CheckCircle" size={14} />
                               Approve All
                             </button>
+                            {Object.keys(emailApprovals).length > 0 && (
+                              <button
+                                onClick={() => {
+                                  setEmailApprovals({});
+                                  addToast("All approvals cleared", "info");
+                                }}
+                                className="btn btn-secondary"
+                                style={{
+                                  fontSize: "0.85rem",
+                                  padding: "6px 12px",
+                                  background: "rgba(239, 68, 68, 0.15)",
+                                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                                  color: "#f87171",
+                                }}
+                              >
+                                <Icon name="X" size={14} />
+                                Clear Approvals
+                              </button>
+                            )}
+                            {Object.values(emailApprovals).some((v) => v === "approved") && (
+                              <button
+                                onClick={() => {
+                                  const newSentEmails = { ...sentEmails };
+                                  Object.keys(emailApprovals).forEach((idx) => {
+                                    if (emailApprovals[idx] === "approved") {
+                                      newSentEmails[idx] = true;
+                                    }
+                                  });
+                                  setSentEmails(newSentEmails);
+                                  addToast("All approved emails marked as sent (no emails sent)", "info");
+                                }}
+                                className="btn btn-secondary"
+                                style={{
+                                  fontSize: "0.85rem",
+                                  padding: "6px 12px",
+                                  background: "rgba(59, 130, 246, 0.15)",
+                                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                                  color: "#3b82f6",
+                                }}
+                              >
+                                <Icon name="Send" size={14} />
+                                Mark All as Sent
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -7051,35 +7471,41 @@ ${signature}`;
                                               fontSize: "0.8rem",
                                               fontWeight: 600,
                                               background:
-                                                emailApprovals[
-                                                  originalIndex
-                                                ] === "approved"
-                                                  ? "rgba(74,222,128,0.2)"
+                                                sentEmails[originalIndex]
+                                                  ? "rgba(59,130,246,0.25)"
                                                   : emailApprovals[
-                                                        originalIndex
-                                                      ] === "rejected"
-                                                    ? "rgba(248,113,113,0.2)"
-                                                    : "var(--glass-border)",
+                                                      originalIndex
+                                                    ] === "approved"
+                                                    ? "rgba(74,222,128,0.2)"
+                                                    : emailApprovals[
+                                                          originalIndex
+                                                        ] === "rejected"
+                                                      ? "rgba(248,113,113,0.2)"
+                                                      : "var(--glass-border)",
                                               color:
-                                                emailApprovals[
-                                                  originalIndex
-                                                ] === "approved"
-                                                  ? "#4ade80"
+                                                sentEmails[originalIndex]
+                                                  ? "#3b82f6"
                                                   : emailApprovals[
-                                                        originalIndex
-                                                      ] === "rejected"
-                                                    ? "#f87171"
-                                                    : "var(--text-secondary)",
+                                                      originalIndex
+                                                    ] === "approved"
+                                                    ? "#4ade80"
+                                                    : emailApprovals[
+                                                          originalIndex
+                                                        ] === "rejected"
+                                                      ? "#f87171"
+                                                      : "var(--text-secondary)",
                                             }}
                                           >
-                                            {emailApprovals[originalIndex] ===
-                                            "approved"
-                                              ? "Approved"
-                                              : emailApprovals[
-                                                    originalIndex
-                                                  ] === "rejected"
-                                                ? "Rejected"
-                                                : "Pending"}
+                                            {sentEmails[originalIndex]
+                                              ? "Sent"
+                                              : emailApprovals[originalIndex] ===
+                                                "approved"
+                                                ? "Approved"
+                                                : emailApprovals[
+                                                      originalIndex
+                                                    ] === "rejected"
+                                                  ? "Rejected"
+                                                  : "Pending"}
                                           </span>
                                         )}
                                         {r.edited && (
@@ -7115,6 +7541,84 @@ ${signature}`;
                                         title="Edit"
                                       >
                                         <Icon name="Edit" size={16} />
+                                      </button>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          if (!confirm(`Regrade "${r.student_name}"'s assignment? This will delete the previous grade.`)) return;
+                                          try {
+                                            // Delete the previous result first
+                                            await api.deleteResult(r.filename);
+                                            setStatus((prev) => ({
+                                              ...prev,
+                                              results: prev.results.filter((res) => res.filename !== r.filename),
+                                            }));
+                                            addToast(`Regrading ${r.student_name}...`, "info");
+                                            // Use the original filename to regrade
+                                            const filename = r.original_filename || r.filename;
+                                            await api.startGrading({
+                                              assignments_folder: config.assignments_folder,
+                                              output_folder: config.output_folder,
+                                              roster_file: config.roster_file,
+                                              grading_period: config.grading_period,
+                                              grade_level: config.grade_level,
+                                              subject: config.subject,
+                                              teacher_name: config.teacher_name,
+                                              school_name: config.school_name,
+                                              ai_model: config.ai_model,
+                                              selectedFiles: [filename],
+                                              globalAINotes: globalAINotes,
+                                              classPeriod: r.period || '',
+                                            });
+                                            // Poll for completion
+                                            const checkStatus = setInterval(async () => {
+                                              const st = await api.getStatus();
+                                              if (!st.is_running) {
+                                                clearInterval(checkStatus);
+                                                if (st.results && st.results.length > 0) {
+                                                  const newResult = st.results.find(res =>
+                                                    res.student_name === r.student_name &&
+                                                    (res.assignment === r.assignment || res.filename === filename)
+                                                  );
+                                                  if (newResult) {
+                                                    addToast(`Regraded ${r.student_name}: ${newResult.letter_grade} (${newResult.score}%)`, "success");
+                                                  }
+                                                }
+                                              }
+                                            }, 1000);
+                                          } catch (err) {
+                                            addToast(`Regrade failed: ${err.message}`, "error");
+                                          }
+                                        }}
+                                        style={{
+                                          background: "none",
+                                          border: "none",
+                                          color: "#fbbf24",
+                                          cursor: "pointer",
+                                          padding: "4px",
+                                        }}
+                                        title="Regrade this assignment"
+                                        disabled={status.is_running}
+                                      >
+                                        <Icon name="RefreshCw" size={16} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          sendSingleEmail(r, originalIndex);
+                                        }}
+                                        style={{
+                                          background: "none",
+                                          border: "none",
+                                          color: r.student_email ? "#4ade80" : "#6b7280",
+                                          cursor: r.student_email ? "pointer" : "not-allowed",
+                                          padding: "4px",
+                                          opacity: r.student_email ? 1 : 0.5,
+                                        }}
+                                        title={r.student_email ? `Send email to ${r.student_email}` : "No email address"}
+                                        disabled={!r.student_email}
+                                      >
+                                        <Icon name="Mail" size={16} />
                                       </button>
                                       <button
                                         onClick={async (e) => {
@@ -7232,6 +7736,14 @@ ${signature}`;
                                       failed: result.failed || 0,
                                       message: `Sent ${result.sent || approvedResults.length} emails successfully!`,
                                     });
+                                    // Mark approved emails as sent
+                                    const newSentEmails = { ...sentEmails };
+                                    Object.keys(emailApprovals).forEach((idx) => {
+                                      if (emailApprovals[idx] === "approved") {
+                                        newSentEmails[idx] = true;
+                                      }
+                                    });
+                                    setSentEmails(newSentEmails);
                                   } catch (e) {
                                     setEmailStatus({
                                       sending: false,
@@ -9043,7 +9555,7 @@ ${signature}`;
                                 size={16}
                                 style={{ color: "#f59e0b" }}
                               />
-                              <div>
+                              <div style={{ flex: 1 }}>
                                 <div
                                   style={{
                                     fontWeight: 600,
@@ -9061,6 +9573,28 @@ ${signature}`;
                                   {period.row_count} students
                                 </div>
                               </div>
+                              <select
+                                value={period.class_level || "standard"}
+                                onChange={async (e) => {
+                                  const newLevel = e.target.value;
+                                  await api.updatePeriodLevel(period.filename, newLevel);
+                                  const data = await api.listPeriods();
+                                  setPeriods(data.periods || []);
+                                }}
+                                style={{
+                                  padding: "4px 8px",
+                                  borderRadius: "6px",
+                                  border: "1px solid var(--glass-border)",
+                                  background: period.class_level === "advanced" ? "rgba(139, 92, 246, 0.2)" : period.class_level === "support" ? "rgba(244, 114, 182, 0.2)" : "var(--input-bg)",
+                                  color: period.class_level === "advanced" ? "#a78bfa" : period.class_level === "support" ? "#f472b6" : "var(--text-primary)",
+                                  fontSize: "0.8rem",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <option value="standard">Standard</option>
+                                <option value="advanced">Advanced</option>
+                                <option value="support">Support</option>
+                              </select>
                               <button
                                 onClick={async () => {
                                   if (
@@ -9848,6 +10382,303 @@ ${signature}`;
                           </button>
                         </div>
                       </div>
+
+                      {/* Student Writing Profiles */}
+                      <div
+                        style={{
+                          marginTop: "20px",
+                          padding: "15px",
+                          background: "var(--input-bg)",
+                          borderRadius: "10px",
+                          border: "1px solid var(--input-border)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "12px",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600 }}>
+                            <Icon
+                              name="UserCheck"
+                              size={16}
+                              style={{
+                                marginRight: "8px",
+                                verticalAlign: "middle",
+                              }}
+                            />
+                            Student Writing Profiles
+                          </div>
+                          <button
+                            onClick={async () => {
+                              setStudentHistoryLoading(true);
+                              try {
+                                const data = await api.listStudentHistory();
+                                setStudentHistoryList(data.students || []);
+                              } catch (err) {
+                                addToast(
+                                  "Failed to load history: " + err.message,
+                                  "error",
+                                );
+                              }
+                              setStudentHistoryLoading(false);
+                            }}
+                            className="btn btn-secondary"
+                            style={{ fontSize: "0.8rem", padding: "4px 10px" }}
+                          >
+                            {studentHistoryLoading ? "Loading..." : "Refresh"}
+                          </button>
+                        </div>
+                        <p
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "var(--text-muted)",
+                            marginBottom: "12px",
+                          }}
+                        >
+                          Writing profiles track vocabulary complexity and style
+                          patterns for AI detection. View or delete individual
+                          profiles.
+                        </p>
+
+                        {studentHistoryList.length > 0 ? (
+                          <>
+                            <div
+                              style={{
+                                maxHeight: "200px",
+                                overflowY: "auto",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              {studentHistoryList.map((student) => (
+                                <div
+                                  key={student.student_id}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    padding: "8px 12px",
+                                    background: "var(--glass-bg)",
+                                    borderRadius: "6px",
+                                    marginBottom: "6px",
+                                    border: "1px solid var(--glass-border)",
+                                  }}
+                                >
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontWeight: 500,
+                                        fontSize: "0.85rem",
+                                      }}
+                                    >
+                                      {student.name || student.student_id}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "var(--text-muted)",
+                                      }}
+                                    >
+                                      {student.submissions_analyzed} submissions
+                                      • Complexity: {student.avg_complexity}
+                                    </div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: "6px" }}>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const data =
+                                            await api.getStudentHistory(
+                                              student.student_id,
+                                            );
+                                          setSelectedStudentHistory(data);
+                                        } catch (err) {
+                                          addToast(
+                                            "Failed to load: " + err.message,
+                                            "error",
+                                          );
+                                        }
+                                      }}
+                                      className="btn btn-secondary"
+                                      style={{
+                                        padding: "4px 8px",
+                                        fontSize: "0.75rem",
+                                      }}
+                                    >
+                                      <Icon name="Eye" size={12} />
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        if (
+                                          !confirm(
+                                            `Delete writing profile for ${student.name || student.student_id}?`,
+                                          )
+                                        )
+                                          return;
+                                        try {
+                                          await api.deleteStudentHistory(
+                                            student.student_id,
+                                          );
+                                          setStudentHistoryList((prev) =>
+                                            prev.filter(
+                                              (s) =>
+                                                s.student_id !==
+                                                student.student_id,
+                                            ),
+                                          );
+                                          addToast("Profile deleted", "success");
+                                        } catch (err) {
+                                          addToast(
+                                            "Failed to delete: " + err.message,
+                                            "error",
+                                          );
+                                        }
+                                      }}
+                                      className="btn btn-secondary"
+                                      style={{
+                                        padding: "4px 8px",
+                                        fontSize: "0.75rem",
+                                        color: "#ef4444",
+                                      }}
+                                    >
+                                      <Icon name="Trash2" size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (
+                                  !confirm(
+                                    "Delete ALL student writing profiles? This resets AI detection baselines.",
+                                  )
+                                )
+                                  return;
+                                try {
+                                  const result =
+                                    await api.deleteAllStudentHistory();
+                                  setStudentHistoryList([]);
+                                  addToast(
+                                    `Deleted ${result.deleted} profiles`,
+                                    "success",
+                                  );
+                                } catch (err) {
+                                  addToast(
+                                    "Failed to delete: " + err.message,
+                                    "error",
+                                  );
+                                }
+                              }}
+                              className="btn btn-danger"
+                              style={{ fontSize: "0.8rem" }}
+                            >
+                              <Icon name="Trash2" size={14} />
+                              Delete All Profiles
+                            </button>
+                          </>
+                        ) : (
+                          <div
+                            style={{
+                              padding: "20px",
+                              textAlign: "center",
+                              color: "var(--text-muted)",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            {studentHistoryLoading
+                              ? "Loading..."
+                              : 'Click "Refresh" to load student writing profiles'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Student History Detail Modal */}
+                      {selectedStudentHistory && (
+                        <div
+                          style={{
+                            position: "fixed",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: "rgba(0,0,0,0.7)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            zIndex: 1000,
+                          }}
+                          onClick={() => setSelectedStudentHistory(null)}
+                        >
+                          <div
+                            style={{
+                              background: "var(--card-bg)",
+                              borderRadius: "12px",
+                              padding: "25px",
+                              maxWidth: "600px",
+                              maxHeight: "80vh",
+                              overflow: "auto",
+                              width: "90%",
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "20px",
+                              }}
+                            >
+                              <h3 style={{ margin: 0 }}>
+                                <Icon
+                                  name="User"
+                                  size={20}
+                                  style={{ marginRight: "10px" }}
+                                />
+                                {selectedStudentHistory.name ||
+                                  selectedStudentHistory.student_id ||
+                                  "Student Profile"}
+                              </h3>
+                              <button
+                                onClick={() => setSelectedStudentHistory(null)}
+                                className="btn btn-secondary"
+                                style={{ padding: "4px 8px" }}
+                              >
+                                <Icon name="X" size={16} />
+                              </button>
+                            </div>
+
+                            <div
+                              style={{
+                                background: "var(--input-bg)",
+                                borderRadius: "8px",
+                                padding: "15px",
+                                fontSize: "0.85rem",
+                              }}
+                            >
+                              <pre
+                                style={{
+                                  margin: 0,
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                {JSON.stringify(
+                                  selectedStudentHistory,
+                                  null,
+                                  2,
+                                )}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -10675,8 +11506,7 @@ ${signature}`;
                                     }}
                                   />
                                   {name}
-                                  {savedAssignmentData[name]
-                                    ?.completionOnly && (
+                                  {savedAssignmentData[name]?.completionOnly && (
                                     <span
                                       style={{
                                         fontSize: "0.7rem",
@@ -10688,6 +11518,30 @@ ${signature}`;
                                       }}
                                     >
                                       Completion
+                                    </span>
+                                  )}
+                                  {savedAssignmentData[name]?.rubricType && savedAssignmentData[name]?.rubricType !== 'standard' && !savedAssignmentData[name]?.completionOnly && (
+                                    <span
+                                      style={{
+                                        fontSize: "0.65rem",
+                                        background: savedAssignmentData[name]?.rubricType === 'fill-in-blank' ? "rgba(251, 191, 36, 0.2)" :
+                                                   savedAssignmentData[name]?.rubricType === 'essay' ? "rgba(99, 102, 241, 0.2)" :
+                                                   savedAssignmentData[name]?.rubricType === 'cornell-notes' ? "rgba(34, 211, 238, 0.2)" :
+                                                   savedAssignmentData[name]?.rubricType === 'custom' ? "rgba(139, 92, 246, 0.2)" : "rgba(100,100,100,0.2)",
+                                        color: savedAssignmentData[name]?.rubricType === 'fill-in-blank' ? "#fbbf24" :
+                                               savedAssignmentData[name]?.rubricType === 'essay' ? "#818cf8" :
+                                               savedAssignmentData[name]?.rubricType === 'cornell-notes' ? "#22d3ee" :
+                                               savedAssignmentData[name]?.rubricType === 'custom' ? "#a78bfa" : "#888",
+                                        padding: "2px 6px",
+                                        borderRadius: "4px",
+                                        marginLeft: "4px",
+                                        textTransform: "uppercase",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {savedAssignmentData[name]?.rubricType === 'fill-in-blank' ? 'Fill-in' :
+                                       savedAssignmentData[name]?.rubricType === 'cornell-notes' ? 'Cornell' :
+                                       savedAssignmentData[name]?.rubricType}
                                     </span>
                                   )}
                                 </div>
@@ -11026,10 +11880,10 @@ ${signature}`;
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {marker}
+                                {typeof marker === 'string' ? marker : marker.start}
                               </span>
                               <button
-                                onClick={() => removeMarker(marker)}
+                                onClick={() => removeMarker(marker, i)}
                                 style={{
                                   background: "none",
                                   border: "none",
@@ -11094,11 +11948,11 @@ ${signature}`;
                               cursor: "pointer",
                             }}
                             onClick={() => {
-                              if (
-                                !(assignment.customMarkers || []).includes(
-                                  marker,
-                                )
-                              ) {
+                              // Check if marker already exists (handle both string and object formats)
+                              const exists = (assignment.customMarkers || []).some(m =>
+                                typeof m === 'string' ? m === marker : m.start === marker
+                              );
+                              if (!exists) {
                                 setAssignment({
                                   ...assignment,
                                   customMarkers: [
@@ -11110,10 +11964,164 @@ ${signature}`;
                             }}
                             title="Click to add"
                           >
-                            {marker}
+                            {typeof marker === 'string' ? marker : marker.start}
                           </span>
                         ))}
                       </div>
+                    </div>
+
+                    {/* Rubric Type Selector */}
+                    <div style={{ marginBottom: "25px" }}>
+                      <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon name="Scale" size={16} style={{ color: "#8b5cf6" }} />
+                        Assignment Rubric
+                      </label>
+                      <select
+                        className="input"
+                        value={assignment.rubricType || "standard"}
+                        onChange={(e) => {
+                          const newType = e.target.value;
+                          setAssignment({
+                            ...assignment,
+                            rubricType: newType,
+                            // Auto-set grading notes for fill-in-blank if not already set
+                            gradingNotes: newType === "fill-in-blank" && !assignment.gradingNotes
+                              ? "This is a Fill-in-the-Blank activity. Grade on accuracy and completion only."
+                              : assignment.gradingNotes,
+                          });
+                        }}
+                        style={{ marginBottom: "10px" }}
+                      >
+                        <option value="standard">Standard (Use Global Rubric)</option>
+                        <option value="fill-in-blank">Fill-in-the-Blank (Accuracy + Completion)</option>
+                        <option value="essay">Essay/Written Response (Writing Quality Focus)</option>
+                        <option value="cornell-notes">Cornell Notes (Structure + Summary)</option>
+                        <option value="completion-only">Completion Only (No AI Grading)</option>
+                        <option value="custom">Custom Rubric...</option>
+                      </select>
+
+                      {/* Rubric Preview/Description */}
+                      {assignment.rubricType && assignment.rubricType !== "standard" && assignment.rubricType !== "custom" && (
+                        <div style={{
+                          padding: "12px",
+                          background: "rgba(139, 92, 246, 0.1)",
+                          borderRadius: "8px",
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "10px",
+                        }}>
+                          {assignment.rubricType === "fill-in-blank" && (
+                            <div><strong>Categories:</strong> Accuracy (70%) + Completion (30%)<br/>Spelling errors ignored if intent is clear.</div>
+                          )}
+                          {assignment.rubricType === "essay" && (
+                            <div><strong>Categories:</strong> Content (35%) + Writing Quality (30%) + Analysis (20%) + Effort (15%)</div>
+                          )}
+                          {assignment.rubricType === "cornell-notes" && (
+                            <div><strong>Categories:</strong> Content (40%) + Note Structure (25%) + Summary (20%) + Effort (15%)</div>
+                          )}
+                          {assignment.rubricType === "completion-only" && (
+                            <div><strong>No AI grading.</strong> Just tracks that the assignment was submitted.</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Custom Rubric Editor */}
+                      {assignment.rubricType === "custom" && (
+                        <div style={{
+                          padding: "15px",
+                          background: "rgba(139, 92, 246, 0.08)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(139, 92, 246, 0.2)",
+                        }}>
+                          <div style={{ fontWeight: 600, marginBottom: "12px", fontSize: "0.9rem" }}>
+                            Custom Rubric Categories
+                          </div>
+                          {(assignment.customRubric || [
+                            { name: "Content Accuracy", weight: 40 },
+                            { name: "Completeness", weight: 25 },
+                            { name: "Writing Quality", weight: 20 },
+                            { name: "Effort", weight: 15 },
+                          ]).map((cat, i) => (
+                            <div key={i} style={{ display: "flex", gap: "10px", marginBottom: "8px", alignItems: "center" }}>
+                              <input
+                                className="input"
+                                value={cat.name}
+                                onChange={(e) => {
+                                  const newRubric = [...(assignment.customRubric || [
+                                    { name: "Content Accuracy", weight: 40 },
+                                    { name: "Completeness", weight: 25 },
+                                    { name: "Writing Quality", weight: 20 },
+                                    { name: "Effort", weight: 15 },
+                                  ])];
+                                  newRubric[i] = { ...newRubric[i], name: e.target.value };
+                                  setAssignment({ ...assignment, customRubric: newRubric });
+                                }}
+                                placeholder="Category name"
+                                style={{ flex: 1 }}
+                              />
+                              <input
+                                className="input"
+                                type="number"
+                                value={cat.weight}
+                                onChange={(e) => {
+                                  const newRubric = [...(assignment.customRubric || [
+                                    { name: "Content Accuracy", weight: 40 },
+                                    { name: "Completeness", weight: 25 },
+                                    { name: "Writing Quality", weight: 20 },
+                                    { name: "Effort", weight: 15 },
+                                  ])];
+                                  newRubric[i] = { ...newRubric[i], weight: parseInt(e.target.value) || 0 };
+                                  setAssignment({ ...assignment, customRubric: newRubric });
+                                }}
+                                style={{ width: "70px" }}
+                                min="0"
+                                max="100"
+                              />
+                              <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>%</span>
+                              <button
+                                onClick={() => {
+                                  const newRubric = (assignment.customRubric || [
+                                    { name: "Content Accuracy", weight: 40 },
+                                    { name: "Completeness", weight: 25 },
+                                    { name: "Writing Quality", weight: 20 },
+                                    { name: "Effort", weight: 15 },
+                                  ]).filter((_, idx) => idx !== i);
+                                  setAssignment({ ...assignment, customRubric: newRubric });
+                                }}
+                                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                              >
+                                <Icon name="X" size={16} />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => {
+                              const newRubric = [...(assignment.customRubric || [
+                                { name: "Content Accuracy", weight: 40 },
+                                { name: "Completeness", weight: 25 },
+                                { name: "Writing Quality", weight: 20 },
+                                { name: "Effort", weight: 15 },
+                              ]), { name: "", weight: 0 }];
+                              setAssignment({ ...assignment, customRubric: newRubric });
+                            }}
+                            className="btn btn-secondary"
+                            style={{ marginTop: "8px", fontSize: "0.85rem" }}
+                          >
+                            <Icon name="Plus" size={14} /> Add Category
+                          </button>
+                          <div style={{ marginTop: "10px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                            Total: {(assignment.customRubric || [
+                              { name: "Content Accuracy", weight: 40 },
+                              { name: "Completeness", weight: 25 },
+                              { name: "Writing Quality", weight: 20 },
+                              { name: "Effort", weight: 15 },
+                            ]).reduce((sum, c) => sum + (c.weight || 0), 0)}%
+                            {(assignment.customRubric || []).reduce((sum, c) => sum + (c.weight || 0), 0) !== 100 && (
+                              <span style={{ color: "#f59e0b" }}> (should be 100%)</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Grading Notes */}
@@ -16950,19 +17958,24 @@ ${signature}`;
               {toast.message}
             </span>
             <button
-              onClick={() =>
-                setToasts((prev) => prev.filter((t) => t.id !== toast.id))
-              }
+              onClick={(e) => {
+                e.stopPropagation();
+                removeToast(toast.id);
+              }}
               style={{
-                background: "none",
+                background: "rgba(255,255,255,0.1)",
                 border: "none",
+                borderRadius: "4px",
                 cursor: "pointer",
-                padding: "2px",
-                color: "var(--text-muted)",
+                padding: "4px 6px",
+                color: "var(--text-secondary)",
                 flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              <Icon name="X" size={14} />
+              <Icon name="X" size={16} />
             </button>
           </div>
         ))}
