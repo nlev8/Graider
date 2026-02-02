@@ -8443,6 +8443,9 @@ ${signature}`;
                             </option>
                           </optgroup>
                           <optgroup label="Anthropic">
+                            <option value="claude-haiku">
+                              Claude Haiku (Fast & Cheap)
+                            </option>
                             <option value="claude-sonnet">
                               Claude Sonnet (Balanced)
                             </option>

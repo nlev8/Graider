@@ -999,6 +999,9 @@ ROSTER_FILE = "/Users/alexc/Downloads/Assignment Grader/all_students_updated.xls
 # Your OpenAI API key (set in .env file or paste here)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-api-key-here")
 
+# Anthropic API key for Claude models
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
 # Assignment name (used in output files and emails)
 ASSIGNMENT_NAME = "Cornell Notes - Political Parties"  # UPDATE FOR EACH ASSIGNMENT
 
@@ -1955,13 +1958,36 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - authenticity_flag: 'clean', 'review', or 'flagged'
     - authenticity_reason: Explanation for flagged or review status
     """
-    try:
-        from openai import OpenAI
-    except ImportError:
-        print("❌ openai not installed. Run: pip install openai")
-        return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "API not available"}
-    
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    # Determine which API to use based on model name
+    use_claude = ai_model.startswith("claude")
+
+    if use_claude:
+        try:
+            import anthropic
+        except ImportError:
+            print("❌ anthropic not installed. Run: pip install anthropic")
+            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API not available - pip install anthropic"}
+
+        if not ANTHROPIC_API_KEY:
+            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API key not configured"}
+
+        claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        # Map friendly names to actual model IDs
+        claude_model_map = {
+            "claude-haiku": "claude-3-5-haiku-latest",
+            "claude-sonnet": "claude-sonnet-4-20250514",
+            "claude-opus": "claude-opus-4-20250514",
+        }
+        actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
+        print(f"  🤖 Using Claude model: {actual_model}")
+    else:
+        try:
+            from openai import OpenAI
+        except ImportError:
+            print("❌ openai not installed. Run: pip install openai")
+            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "OpenAI API not available"}
+
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
     # Check for empty/blank student submissions before sending to API
     content = assignment_data.get("content", "")
@@ -2443,15 +2469,43 @@ Provide your response in the following JSON format ONLY (no other text):
             extraction_result = {"type": "image", "verified": False}
         else:
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Unknown content type"}
-        
-        response = client.chat.completions.create(
-            model=ai_model,  # Configurable: gpt-4o or gpt-4o-mini
-            messages=messages,
-            max_tokens=1500,
-            temperature=0.3
-        )
-        
-        response_text = response.choices[0].message.content.strip()
+
+        # Make API call based on model type
+        if use_claude:
+            # Claude API call
+            # Convert OpenAI message format to Claude format
+            if assignment_data.get("type") == "image":
+                # Claude vision format
+                claude_content = [
+                    {"type": "text", "text": prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": assignment_data['media_type'],
+                            "data": assignment_data['content']
+                        }
+                    }
+                ]
+            else:
+                # Text-only content
+                claude_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
+
+            response = claude_client.messages.create(
+                model=actual_model,
+                max_tokens=1500,
+                messages=[{"role": "user", "content": claude_content}]
+            )
+            response_text = response.content[0].text.strip()
+        else:
+            # OpenAI API call
+            response = openai_client.chat.completions.create(
+                model=ai_model,  # Configurable: gpt-4o or gpt-4o-mini
+                messages=messages,
+                max_tokens=1500,
+                temperature=0.3
+            )
+            response_text = response.choices[0].message.content.strip()
 
         # Clean up response (remove markdown code blocks if present)
         if response_text.startswith("```"):
