@@ -1904,6 +1904,24 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
             grading_result["letter_grade"] = "C"
         print(f"  ⚠️  Score capped: {original_score} → {cap} ({cap_reason})")
 
+    # Apply minimum score floor for students who answered all/most questions
+    # (Only if no AI/plagiarism concerns - those are handled by caps above)
+    current_score = grading_result.get("score", 0)
+    unanswered = grading_result.get("unanswered_questions", [])
+    student_responses = grading_result.get("student_responses", [])
+
+    # Check if student completed the assignment (answered most questions)
+    if student_responses and len(unanswered) <= 1:  # Allow 1 unanswered at most
+        # Only apply floor if no AI/plagiarism flags
+        if ai_flag in ["none", "unlikely"] and plag_flag in ["none", "unlikely"]:
+            min_score = 85  # Minimum B for complete work
+            if current_score < min_score:
+                grading_result["score_floor_applied"] = True
+                grading_result["original_low_score"] = current_score
+                grading_result["score"] = min_score
+                grading_result["letter_grade"] = "B"
+                print(f"  📈 Score floor applied: {current_score} → {min_score} (all questions answered, no AI/plagiarism)")
+
     return grading_result
 
 
@@ -2494,6 +2512,26 @@ Provide your response in the following JSON format ONLY (no other text):
         # Add style comparison info to result for transparency
         if style_comparison and style_comparison.get("ai_likelihood") in ["likely", "possible"]:
             result["writing_style_deviation"] = style_comparison
+
+        # Apply minimum score floor for students who answered all/most questions
+        # (Only if no AI/plagiarism concerns)
+        current_score = result.get("score", 0)
+        unanswered = result.get("unanswered_questions", [])
+        student_responses = result.get("student_responses", [])
+        ai_flag = result.get("ai_detection", {}).get("flag", "none")
+        plag_flag = result.get("plagiarism_detection", {}).get("flag", "none")
+
+        # Check if student completed the assignment (answered most questions)
+        if student_responses and len(unanswered) <= 1:  # Allow 1 unanswered at most
+            # Only apply floor if no AI/plagiarism flags
+            if ai_flag in ["none", "unlikely"] and plag_flag in ["none", "unlikely"]:
+                min_score = 85  # Minimum B for complete work
+                if current_score < min_score:
+                    result["score_floor_applied"] = True
+                    result["original_low_score"] = current_score
+                    result["score"] = min_score
+                    result["letter_grade"] = "B"
+                    print(f"  📈 Score floor applied: {current_score} → {min_score} (all questions answered, no AI/plagiarism)")
 
         return result
 
