@@ -2206,6 +2206,7 @@ ${signature}`;
                   instructions: existingData.assignment.instructions || "",
                   questions: existingData.assignment.questions || [],
                   customMarkers: existingData.assignment.customMarkers || [],
+                  excludeMarkers: existingData.assignment.excludeMarkers || [],
                   gradingNotes: existingData.assignment.gradingNotes || "",
                   responseSections:
                     existingData.assignment.responseSections || [],
@@ -2567,6 +2568,7 @@ ${signature}`;
           instructions: "",
           questions: [],
           customMarkers: [],
+          excludeMarkers: [],
           gradingNotes: "",
           responseSections: [],
           rubricType: "standard",
@@ -4295,6 +4297,7 @@ ${signature}`;
                     instructions: "",
                     questions: [],
                     customMarkers: [],
+                    excludeMarkers: [],
                     gradingNotes: "",
                     responseSections: [],
                   });
@@ -4413,6 +4416,7 @@ ${signature}`;
                     instructions: "",
                     questions: [],
                     customMarkers: [],
+                    excludeMarkers: [],
                     gradingNotes: "",
                     responseSections: [],
                   });
@@ -4585,6 +4589,105 @@ ${signature}`;
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Excluded Sections */}
+              {(assignment.excludeMarkers || []).length > 0 && (
+                <div style={{ marginTop: "20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <h3 style={{ fontSize: "0.95rem", margin: 0, color: HIGHLIGHT_COLORS.exclude.border }}>
+                      <Icon name="EyeOff" size={14} style={{ marginRight: "6px" }} />
+                      Excluded Sections ({(assignment.excludeMarkers || []).length})
+                    </h3>
+                    <button
+                      onClick={() => {
+                        if (!confirm("Remove all exclude markers?")) return;
+                        // Remove exclude highlights from HTML
+                        let cleanHtml = docEditorModal.editedHtml;
+                        (assignment.excludeMarkers || []).forEach((_, idx) => {
+                          const regex = new RegExp(`<span[^>]*data-marker-id="exclude-${idx}"[^>]*>(.*?)</span>`, 'gi');
+                          cleanHtml = cleanHtml.replace(regex, '$1');
+                        });
+                        setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
+                        setAssignment({ ...assignment, excludeMarkers: [] });
+                        addToast("All exclude markers cleared", "info");
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    {(assignment.excludeMarkers || []).map((marker, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "8px 12px",
+                          background: HIGHLIGHT_COLORS.exclude.bg,
+                          borderRadius: "6px",
+                          border: `1px solid ${HIGHLIGHT_COLORS.exclude.border}`,
+                        }}
+                      >
+                        <Icon
+                          name="EyeOff"
+                          size={12}
+                          style={{ color: HIGHLIGHT_COLORS.exclude.border, flexShrink: 0 }}
+                        />
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            flex: 1,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            color: HIGHLIGHT_COLORS.exclude.border,
+                          }}
+                        >
+                          {marker.substring(0, 60)}{marker.length > 60 ? '...' : ''}
+                        </span>
+                        <button
+                          onClick={() => {
+                            // Remove this exclude marker
+                            const newExcludeMarkers = [...(assignment.excludeMarkers || [])];
+                            newExcludeMarkers.splice(i, 1);
+                            // Remove highlight from HTML
+                            const regex = new RegExp(`<span[^>]*data-marker-id="exclude-${i}"[^>]*>(.*?)</span>`, 'gi');
+                            const cleanHtml = docEditorModal.editedHtml.replace(regex, '$1');
+                            setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
+                            setAssignment({ ...assignment, excludeMarkers: newExcludeMarkers });
+                            addToast("Exclude marker removed", "info");
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--text-muted)",
+                            cursor: "pointer",
+                            padding: "0",
+                          }}
+                        >
+                          <Icon name="X" size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "8px", fontStyle: "italic" }}>
+                    These sections will NOT be graded or penalized.
+                  </p>
                 </div>
               )}
 
