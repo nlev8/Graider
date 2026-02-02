@@ -3286,14 +3286,16 @@ ${signature}`;
 
   // Send email for a single student
   const sendSingleEmail = async (result, index) => {
-    if (!result.student_email) {
+    const edited = editedEmails[index];
+    const emailToUse = edited?.email || result.student_email;
+    if (!emailToUse) {
       addToast("No email address for " + result.student_name, "error");
       return;
     }
     try {
-      const edited = editedEmails[index];
       const emailResult = {
         ...result,
+        student_email: emailToUse,
         custom_email_subject: edited?.subject || `Grade Report: ${result.assignment}`,
         custom_email_body: edited?.body || getDefaultEmailBody(index),
       };
@@ -4147,12 +4149,39 @@ ${signature}`;
                                 fontSize: "0.85rem",
                                 color: "#666",
                                 marginBottom: "4px",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
                               }}
                             >
-                              To:{" "}
-                              {r.student_email ||
-                                r.email ||
-                                "(no email on file)"}
+                              <span>To:</span>
+                              <input
+                                type="email"
+                                value={editedEmails[reviewModal.index]?.email ?? r.student_email ?? r.email ?? ""}
+                                onChange={(e) => {
+                                  setEditedEmails((prev) => ({
+                                    ...prev,
+                                    [reviewModal.index]: {
+                                      ...prev[reviewModal.index],
+                                      email: e.target.value,
+                                    },
+                                  }));
+                                }}
+                                placeholder="Enter student email..."
+                                style={{
+                                  flex: 1,
+                                  padding: "4px 8px",
+                                  border: (editedEmails[reviewModal.index]?.email ?? r.student_email ?? r.email) ? "1px solid #ddd" : "1px solid #f87171",
+                                  borderRadius: "4px",
+                                  fontSize: "0.85rem",
+                                  background: (editedEmails[reviewModal.index]?.email ?? r.student_email ?? r.email) ? "#fff" : "#fef2f2",
+                                }}
+                              />
+                              {!(r.student_email || r.email) && !editedEmails[reviewModal.index]?.email && (
+                                <span style={{ color: "#f87171", fontSize: "0.75rem" }}>
+                                  (not found)
+                                </span>
+                              )}
                             </div>
                             <div
                               style={{
@@ -6949,6 +6978,7 @@ ${signature}`;
                                       const edited = editedEmails[idx];
                                       return {
                                         ...r,
+                                        student_email: edited?.email || r.student_email,
                                         custom_email_subject: edited?.subject || `Grade Report: ${r.assignment}`,
                                         custom_email_body: edited?.body || getDefaultEmailBody(idx),
                                       };
@@ -6981,13 +7011,17 @@ ${signature}`;
                           )}
                           <button
                             onClick={async () => {
-                              const withEmail = status.results.filter((r) => r.student_email);
+                              // Include results with original email OR manually entered email
+                              const withEmail = status.results.filter((r, idx) => r.student_email || editedEmails[idx]?.email);
                               if (withEmail.length === 0) {
                                 addToast("No students have email addresses", "warning");
                                 return;
                               }
                               // Count unique students (by email), not total results
-                              const uniqueEmails = [...new Set(withEmail.map((r) => r.student_email))];
+                              const uniqueEmails = [...new Set(withEmail.map((r, idx) => {
+                                const globalIdx = status.results.findIndex((sr) => sr.filename === r.filename);
+                                return editedEmails[globalIdx]?.email || r.student_email;
+                              }))];
                               const msg = uniqueEmails.length === 1
                                 ? `Send 1 email to ${withEmail[0].student_name?.split(' ')[0] || 'student'} with ${withEmail.length} assignment${withEmail.length > 1 ? 's' : ''}?`
                                 : `Send emails to ${uniqueEmails.length} students (${withEmail.length} total assignments)?`;
@@ -6999,6 +7033,7 @@ ${signature}`;
                                   const edited = editedEmails[idx];
                                   return {
                                     ...r,
+                                    student_email: edited?.email || r.student_email,
                                     custom_email_subject: edited?.subject || `Grade Report: ${r.assignment}`,
                                     custom_email_body: edited?.body || getDefaultEmailBody(idx),
                                   };
@@ -8022,8 +8057,11 @@ ${signature}`;
                                       if (emailApprovals[i] !== "approved")
                                         return null;
                                       const edited = editedEmails[i];
+                                      const emailToUse = edited?.email || r.student_email;
+                                      if (!emailToUse) return null; // Skip if no email
                                       return {
                                         ...r,
+                                        student_email: emailToUse,
                                         custom_email_subject:
                                           edited?.subject ||
                                           `Grade Report: ${r.assignment}`,
