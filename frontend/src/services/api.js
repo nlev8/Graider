@@ -68,6 +68,13 @@ export async function deleteResult(filename) {
   })
 }
 
+export async function updateResult(filename, updates) {
+  return fetchApi('/api/update-result', {
+    method: 'POST',
+    body: JSON.stringify({ filename, ...updates }),
+  })
+}
+
 export async function checkNewFiles(folder, outputFolder) {
   return fetchApi('/api/check-new-files', {
     method: 'POST',
@@ -334,6 +341,20 @@ export async function sendEmails(results, teacherEmail = '', teacherName = '', e
   })
 }
 
+export async function updateApproval(filename, approval) {
+  return fetchApi('/api/update-approval', {
+    method: 'POST',
+    body: JSON.stringify({ filename, approval }),
+  })
+}
+
+export async function updateApprovalsBulk(approvals) {
+  return fetchApi('/api/update-approvals-bulk', {
+    method: 'POST',
+    body: JSON.stringify({ approvals }),
+  })
+}
+
 // ============ Roster & Period Uploads ============
 
 export async function uploadRoster(file) {
@@ -392,6 +413,13 @@ export async function deletePeriod(filename) {
   return fetchApi('/api/delete-period', {
     method: 'POST',
     body: JSON.stringify({ filename }),
+  })
+}
+
+export async function updatePeriodLevel(filename, classLevel) {
+  return fetchApi('/api/update-period-level', {
+    method: 'POST',
+    body: JSON.stringify({ filename, class_level: classLevel }),
   })
 }
 
@@ -561,12 +589,40 @@ export async function deleteSavedAssessment(filename) {
   })
 }
 
+// Student History/Writing Profiles
+export async function listStudentHistory() {
+  return fetchApi('/api/student-history')
+}
+
+export async function getStudentHistory(studentId) {
+  return fetchApi(`/api/student-history/${encodeURIComponent(studentId)}`)
+}
+
+export async function deleteStudentHistory(studentId) {
+  return fetchApi(`/api/student-history/${encodeURIComponent(studentId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deleteAllStudentHistory() {
+  return fetchApi('/api/student-history', {
+    method: 'DELETE',
+  })
+}
+
+export async function migrateStudentNames() {
+  return fetchApi('/api/student-history/migrate-names', {
+    method: 'POST',
+  })
+}
+
 export default {
   getStatus,
   startGrading,
   stopGrading,
   clearResults,
   deleteResult,
+  updateResult,
   checkNewFiles,
   saveRubric,
   loadRubric,
@@ -599,6 +655,8 @@ export default {
   submitAssignment,
   getAssignmentSubmissions,
   sendEmails,
+  updateApproval,
+  updateApprovalsBulk,
   uploadRoster,
   listRosters,
   deleteRoster,
@@ -607,6 +665,7 @@ export default {
   listPeriods,
   getPeriodStudents,
   deletePeriod,
+  updatePeriodLevel,
   uploadSupportDocument,
   listSupportDocuments,
   deleteSupportDocument,
@@ -635,4 +694,10 @@ export default {
   listSavedAssessments,
   loadSavedAssessment,
   deleteSavedAssessment,
+  // Student History/Writing Profiles
+  listStudentHistory,
+  getStudentHistory,
+  deleteStudentHistory,
+  deleteAllStudentHistory,
+  migrateStudentNames,
 }

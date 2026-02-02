@@ -50,10 +50,12 @@ def list_assignments():
                     assignment_data[name] = {
                         "aliases": data.get("aliases", []),
                         "title": data.get("title", name),
-                        "completionOnly": data.get("completionOnly", False)
+                        "completionOnly": data.get("completionOnly", False),
+                        "rubricType": data.get("rubricType", "standard"),
+                        "countsTowardsGrade": data.get("countsTowardsGrade", True),  # Default to True
                     }
             except:
-                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False}
+                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True}
 
     return jsonify({"assignments": sorted(assignments), "assignmentData": assignment_data})
 

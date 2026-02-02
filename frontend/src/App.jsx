@@ -932,6 +932,7 @@ function App() {
   const [autoApproveEmails, setAutoApproveEmails] = useState(false);
   const [editedEmails, setEditedEmails] = useState({}); // { index: { subject, body } }
   const [resultsSearch, setResultsSearch] = useState("");
+  const [curveModal, setCurveModal] = useState({ show: false, curveType: "add", curveValue: 5 }); // Curve modal state
 
   // Planner state
   const [standards, setStandards] = useState([]);
@@ -1558,6 +1559,21 @@ function App() {
       setShowActivityLog(true);
     }
   }, [status.error]);
+
+  // Load email approvals from persisted results
+  useEffect(() => {
+    if (status.results.length > 0) {
+      const loadedApprovals = {};
+      status.results.forEach((r, idx) => {
+        if (r.email_approval) {
+          loadedApprovals[idx] = r.email_approval;
+        }
+      });
+      if (Object.keys(loadedApprovals).length > 0) {
+        setEmailApprovals((prev) => ({ ...loadedApprovals, ...prev }));
+      }
+    }
+  }, [status.results.length]); // Only run when results count changes
 
   // Sync editedResults with status.results (preserve user edits)
   useEffect(() => {
@@ -3125,6 +3141,119 @@ ${signature}`;
     });
   };
 
+  // Helper to get letter grade from score
+  const getLetterGrade = (score) => {
+    const s = parseInt(score) || 0;
+    return s >= 90 ? "A" : s >= 80 ? "B" : s >= 70 ? "C" : s >= 60 ? "D" : "F";
+  };
+
+  // Apply curve to filtered results
+  const applyCurve = () => {
+    const { curveType, curveValue } = curveModal;
+    const val = parseFloat(curveValue) || 0;
+    if (val === 0) {
+      addToast("Please enter a curve value", "warning");
+      return;
+    }
+
+    // Get indices of filtered results (based on period filter)
+    const filteredIndices = [];
+    status.results.forEach((r, idx) => {
+      if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
+      filteredIndices.push(idx);
+    });
+
+    if (filteredIndices.length === 0) {
+      addToast("No results to curve", "warning");
+      return;
+    }
+
+    // Apply curve to each result
+    const newEditedResults = editedResults.length > 0 ? [...editedResults] : [...status.results];
+    const newEditedEmails = { ...editedEmails };
+    let curvedCount = 0;
+
+    filteredIndices.forEach((idx) => {
+      const result = status.results[idx];
+      const oldScore = parseInt(result.score) || 0;
+      const oldGrade = result.letter_grade || getLetterGrade(oldScore);
+
+      // Calculate new score based on curve type
+      let newScore;
+      if (curveType === "add") {
+        newScore = Math.min(100, Math.max(0, oldScore + val));
+      } else if (curveType === "percent") {
+        newScore = Math.min(100, Math.max(0, Math.round(oldScore * (1 + val / 100))));
+      } else if (curveType === "set_min") {
+        newScore = Math.max(val, oldScore);
+      }
+
+      const newGrade = getLetterGrade(newScore);
+
+      // Skip if no change
+      if (newScore === oldScore) return;
+
+      curvedCount++;
+
+      // Update the result
+      if (!newEditedResults[idx]) newEditedResults[idx] = { ...result };
+      newEditedResults[idx] = {
+        ...newEditedResults[idx],
+        score: newScore,
+        letter_grade: newGrade,
+        edited: true,
+      };
+
+      // Update feedback if it contains the old score/grade
+      let feedback = newEditedResults[idx].feedback || "";
+      if (feedback) {
+        // Replace score patterns like "85/100" or "Score: 85"
+        feedback = feedback.replace(new RegExp(oldScore + "/100", "g"), newScore + "/100");
+        feedback = feedback.replace(new RegExp("Score:\\s*" + oldScore, "gi"), "Score: " + newScore);
+        feedback = feedback.replace(new RegExp("\\b" + oldScore + "%", "g"), newScore + "%");
+        // Replace letter grade if mentioned
+        if (oldGrade !== newGrade) {
+          feedback = feedback.replace(new RegExp("\\(" + oldGrade + "\\)", "g"), "(" + newGrade + ")");
+          feedback = feedback.replace(new RegExp("Grade:\\s*" + oldGrade + "\\b", "gi"), "Grade: " + newGrade);
+        }
+        newEditedResults[idx].feedback = feedback;
+      }
+
+      // Update email if it exists
+      if (newEditedEmails[idx]) {
+        let subject = newEditedEmails[idx].subject || "";
+        let body = newEditedEmails[idx].body || "";
+
+        // Update subject
+        subject = subject.replace(new RegExp(": " + oldGrade + "$"), ": " + newGrade);
+
+        // Update body
+        body = body.replace(new RegExp("GRADE: " + oldScore + "/100 \\(" + oldGrade + "\\)"), "GRADE: " + newScore + "/100 (" + newGrade + ")");
+        body = body.replace(new RegExp(oldScore + "/100", "g"), newScore + "/100");
+
+        newEditedEmails[idx] = { ...newEditedEmails[idx], subject, body };
+      }
+    });
+
+    // Sync to state
+    setEditedResults(newEditedResults);
+    setEditedEmails(newEditedEmails);
+
+    // Also update status.results
+    setStatus((prev) => {
+      const updatedResults = [...prev.results];
+      filteredIndices.forEach((idx) => {
+        if (newEditedResults[idx]) {
+          updatedResults[idx] = { ...newEditedResults[idx] };
+        }
+      });
+      return { ...prev, results: updatedResults };
+    });
+
+    setCurveModal({ ...curveModal, show: false });
+    addToast(`Applied ${curveType === "add" ? "+" + val + " points" : curveType === "percent" ? "+" + val + "%" : "min " + val} curve to ${curvedCount} result${curvedCount !== 1 ? "s" : ""}`, "success");
+  };
+
   const sendEmails = async () => {
     setEmailPreview({ ...emailPreview, show: false });
     const results = editedResults.length > 0 ? editedResults : status.results;
@@ -3176,6 +3305,40 @@ ${signature}`;
       }
     } catch (e) {
       addToast("Error sending email: " + e.message, "error");
+    }
+  };
+
+  // Update approval status with persistence
+  const updateApprovalStatus = async (index, approval) => {
+    setEmailApprovals((prev) => ({ ...prev, [index]: approval }));
+    // Persist to backend
+    const result = status.results[index];
+    if (result?.filename) {
+      try {
+        await api.updateApproval(result.filename, approval);
+      } catch (e) {
+        console.error("Error saving approval:", e);
+      }
+    }
+  };
+
+  // Bulk update approvals with persistence
+  const updateApprovalsBulk = async (approvals) => {
+    setEmailApprovals(approvals);
+    // Build filename -> approval map for API
+    const filenameApprovals = {};
+    Object.entries(approvals).forEach(([idx, approval]) => {
+      const result = status.results[parseInt(idx)];
+      if (result?.filename) {
+        filenameApprovals[result.filename] = approval;
+      }
+    });
+    if (Object.keys(filenameApprovals).length > 0) {
+      try {
+        await api.updateApprovalsBulk(filenameApprovals);
+      } catch (e) {
+        console.error("Error saving approvals:", e);
+      }
     }
   };
 
@@ -4110,10 +4273,7 @@ ${signature}`;
                           >
                             <button
                               onClick={() => {
-                                setEmailApprovals((prev) => ({
-                                  ...prev,
-                                  [reviewModal.index]: "approved",
-                                }));
+                                updateApprovalStatus(reviewModal.index, "approved");
                                 addToast(
                                   "Email approved for sending",
                                   "success",
@@ -4146,10 +4306,7 @@ ${signature}`;
                             </button>
                             <button
                               onClick={() => {
-                                setEmailApprovals((prev) => ({
-                                  ...prev,
-                                  [reviewModal.index]: "rejected",
-                                }));
+                                updateApprovalStatus(reviewModal.index, "rejected");
                                 addToast("Email marked as rejected", "info");
                               }}
                               className="btn"
@@ -4175,10 +4332,7 @@ ${signature}`;
                             </button>
                             <button
                               onClick={() => {
-                                setEmailApprovals((prev) => ({
-                                  ...prev,
-                                  [reviewModal.index]: "approved",
-                                }));
+                                updateApprovalStatus(reviewModal.index, "approved");
                                 setSentEmails((prev) => ({
                                   ...prev,
                                   [reviewModal.index]: true,
@@ -6700,6 +6854,21 @@ ${signature}`;
                               ))}
                             </select>
                           )}
+                          {/* Apply Curve Button - shows when period is filtered */}
+                          {resultsPeriodFilter && (
+                            <button
+                              onClick={() => setCurveModal({ ...curveModal, show: true })}
+                              className="btn btn-secondary"
+                              style={{
+                                background: "linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(139, 92, 246, 0.2))",
+                                borderColor: "#a855f7",
+                              }}
+                              title="Apply a grade curve to all filtered results"
+                            >
+                              <Icon name="TrendingUp" size={18} />
+                              Apply Curve
+                            </button>
+                          )}
                           <button
                             onClick={openResults}
                             className="btn btn-secondary"
@@ -7095,7 +7264,7 @@ ${signature}`;
                                     if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
                                     approvals[i] = "approved";
                                   });
-                                  setEmailApprovals(approvals);
+                                  updateApprovalsBulk(approvals);
                                 }}
                                 className="btn btn-secondary"
                                 style={{
@@ -7115,7 +7284,7 @@ ${signature}`;
                                 status.results.forEach((_, i) => {
                                   approvals[i] = "approved";
                                 });
-                                setEmailApprovals(approvals);
+                                updateApprovalsBulk(approvals);
                               }}
                               className="btn btn-secondary"
                               style={{
@@ -7129,7 +7298,7 @@ ${signature}`;
                             {Object.keys(emailApprovals).length > 0 && (
                               <button
                                 onClick={() => {
-                                  setEmailApprovals({});
+                                  updateApprovalsBulk({});
                                   addToast("All approvals cleared", "info");
                                 }}
                                 className="btn btn-secondary"
@@ -11553,7 +11722,9 @@ ${signature}`;
                               marginTop: "15px",
                             }}
                           >
-                            {savedAssignments.map((name) => (
+                            {savedAssignments.map((name) => {
+                              const countsTowardsGrade = savedAssignmentData[name]?.countsTowardsGrade ?? true;
+                              return (
                               <div
                                 key={name}
                                 style={{
@@ -11561,16 +11732,21 @@ ${signature}`;
                                   background:
                                     loadedAssignmentName === name
                                       ? "rgba(99,102,241,0.2)"
-                                      : "var(--input-bg)",
+                                      : !countsTowardsGrade
+                                        ? "rgba(100,100,100,0.1)"
+                                        : "var(--input-bg)",
                                   borderRadius: "10px",
                                   border:
                                     loadedAssignmentName === name
                                       ? "2px solid rgba(99,102,241,0.5)"
-                                      : "1px solid var(--glass-border)",
+                                      : !countsTowardsGrade
+                                        ? "1px dashed rgba(100,100,100,0.4)"
+                                        : "1px solid var(--glass-border)",
                                   cursor: "pointer",
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
+                                  opacity: countsTowardsGrade ? 1 : 0.6,
                                 }}
                                 onClick={() => loadAssignment(name)}
                                 onDoubleClick={async () => {
@@ -11690,23 +11866,65 @@ ${signature}`;
                                     </span>
                                   )}
                                 </div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteAssignment(name);
-                                  }}
-                                  style={{
-                                    padding: "4px",
-                                    background: "none",
-                                    border: "none",
-                                    color: "var(--text-muted)",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <Icon name="Trash2" size={14} />
-                                </button>
+                                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                  {/* Star toggle for "counts towards grade" */}
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const currentValue = savedAssignmentData[name]?.countsTowardsGrade ?? true;
+                                      const newValue = !currentValue;
+                                      setSavedAssignmentData(prev => ({
+                                        ...prev,
+                                        [name]: { ...prev[name], countsTowardsGrade: newValue },
+                                      }));
+                                      try {
+                                        const fullData = await api.loadAssignment(name);
+                                        if (fullData.assignment) {
+                                          await api.saveAssignmentConfig({
+                                            ...fullData.assignment,
+                                            countsTowardsGrade: newValue,
+                                          });
+                                        }
+                                        addToast(
+                                          newValue
+                                            ? `"${name}" will count towards grade`
+                                            : `"${name}" excluded from grade calculation`,
+                                          "success"
+                                        );
+                                      } catch (err) {
+                                        console.error("Error saving:", err);
+                                      }
+                                    }}
+                                    style={{
+                                      padding: "4px",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      color: (savedAssignmentData[name]?.countsTowardsGrade ?? true) ? "#fbbf24" : "var(--text-muted)",
+                                    }}
+                                    title={(savedAssignmentData[name]?.countsTowardsGrade ?? true) ? "Counts towards grade (click to exclude)" : "Excluded from grade (click to include)"}
+                                  >
+                                    <Icon name={(savedAssignmentData[name]?.countsTowardsGrade ?? true) ? "Star" : "StarOff"} size={14} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteAssignment(name);
+                                    }}
+                                    style={{
+                                      padding: "4px",
+                                      background: "none",
+                                      border: "none",
+                                      color: "var(--text-muted)",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <Icon name="Trash2" size={14} />
+                                  </button>
+                                </div>
                               </div>
-                            ))}
+                            );
+                            })}
                           </div>
                         )}
                       </>
@@ -18024,6 +18242,185 @@ ${signature}`;
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Curve Modal */}
+      {curveModal.show && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={() => setCurveModal({ ...curveModal, show: false })}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#1a1a2e",
+              borderRadius: "12px",
+              width: "100%",
+              maxWidth: "400px",
+              padding: "25px",
+              border: "1px solid rgba(168, 85, 247, 0.3)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  color: "#a855f7",
+                }}
+              >
+                <Icon name="TrendingUp" size={24} />
+                Apply Grade Curve
+              </h2>
+              <button
+                onClick={() => setCurveModal({ ...curveModal, show: false })}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "5px",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                marginBottom: "20px",
+                fontSize: "0.9rem",
+              }}
+            >
+              Apply a curve to all{" "}
+              <span style={{ color: "#a855f7", fontWeight: 600 }}>
+                {resultsPeriodFilter}
+              </span>{" "}
+              results. This will update scores, letter grades, feedback, and emails.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              <div>
+                <label className="label">Curve Type</label>
+                <select
+                  className="input"
+                  value={curveModal.curveType}
+                  onChange={(e) => setCurveModal({ ...curveModal, curveType: e.target.value })}
+                  style={{ width: "100%" }}
+                >
+                  <option value="add">Add Points (e.g., +5 to every score)</option>
+                  <option value="percent">Percentage Boost (e.g., +10% to every score)</option>
+                  <option value="set_min">Set Minimum Score (e.g., min 50)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">
+                  {curveModal.curveType === "add"
+                    ? "Points to Add"
+                    : curveModal.curveType === "percent"
+                      ? "Percentage Boost"
+                      : "Minimum Score"}
+                </label>
+                <input
+                  type="number"
+                  className="input"
+                  value={curveModal.curveValue}
+                  onChange={(e) => setCurveModal({ ...curveModal, curveValue: e.target.value })}
+                  placeholder={
+                    curveModal.curveType === "add"
+                      ? "5"
+                      : curveModal.curveType === "percent"
+                        ? "10"
+                        : "50"
+                  }
+                  style={{ width: "100%" }}
+                />
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "5px" }}>
+                  {curveModal.curveType === "add"
+                    ? "Adds this many points to each score (capped at 100)"
+                    : curveModal.curveType === "percent"
+                      ? "Increases each score by this percentage"
+                      : "Sets this as the minimum score for all results"}
+                </p>
+              </div>
+
+              {/* Preview */}
+              <div
+                style={{
+                  padding: "12px",
+                  background: "rgba(168, 85, 247, 0.1)",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(168, 85, 247, 0.2)",
+                }}
+              >
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "5px" }}>
+                  Preview (example):
+                </div>
+                <div style={{ fontWeight: 600 }}>
+                  {(() => {
+                    const val = parseFloat(curveModal.curveValue) || 0;
+                    const example = 75;
+                    let newScore;
+                    if (curveModal.curveType === "add") {
+                      newScore = Math.min(100, example + val);
+                    } else if (curveModal.curveType === "percent") {
+                      newScore = Math.min(100, Math.round(example * (1 + val / 100)));
+                    } else {
+                      newScore = Math.max(val, example);
+                    }
+                    return `75% → ${newScore}%`;
+                  })()}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                <button
+                  onClick={() => setCurveModal({ ...curveModal, show: false })}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={applyCurve}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    background: "linear-gradient(135deg, #a855f7, #8b5cf6)",
+                  }}
+                >
+                  <Icon name="Check" size={18} />
+                  Apply Curve
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

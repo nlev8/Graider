@@ -1551,6 +1551,48 @@ def delete_single_result():
     })
 
 
+@app.route('/api/update-approval', methods=['POST'])
+def update_approval():
+    """Update email approval status for a result."""
+    data = request.json
+    filename = data.get('filename')
+    approval = data.get('approval')  # 'approved', 'rejected', or 'pending'
+
+    if not filename:
+        return jsonify({"error": "Missing filename"}), 400
+
+    # Find and update the result
+    for r in grading_state["results"]:
+        if r.get('filename') == filename:
+            r['email_approval'] = approval
+            save_results(grading_state["results"])
+            return jsonify({"status": "updated", "filename": filename, "approval": approval})
+
+    return jsonify({"error": "Result not found"}), 404
+
+
+@app.route('/api/update-approvals-bulk', methods=['POST'])
+def update_approvals_bulk():
+    """Update email approval status for multiple results at once."""
+    data = request.json
+    approvals = data.get('approvals', {})  # { filename: approval_status }
+
+    if not approvals:
+        return jsonify({"error": "No approvals provided"}), 400
+
+    updated = 0
+    for r in grading_state["results"]:
+        filename = r.get('filename')
+        if filename in approvals:
+            r['email_approval'] = approvals[filename]
+            updated += 1
+
+    if updated > 0:
+        save_results(grading_state["results"])
+
+    return jsonify({"status": "updated", "count": updated})
+
+
 # ══════════════════════════════════════════════════════════════
 # FERPA COMPLIANCE - DATA MANAGEMENT
 # ══════════════════════════════════════════════════════════════
