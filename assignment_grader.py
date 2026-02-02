@@ -108,7 +108,7 @@ def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int
     return -1
 
 
-def extract_student_responses(document_text: str, custom_markers: list = None) -> dict:
+def extract_student_responses(document_text: str, custom_markers: list = None, exclude_markers: list = None) -> dict:
     """
     Extract student responses from document using customMarkers from Builder.
 
@@ -120,6 +120,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None) -
     Args:
         document_text: The full document text
         custom_markers: List of marker strings from Builder (the template/prompt text)
+        exclude_markers: List of section names to NOT grade (e.g., "Notes Section")
 
     Returns:
         {
@@ -127,7 +128,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None) -
             "blank_questions": ["question text", ...],
             "total_questions": int,
             "answered_questions": int,
-            "extraction_summary": "string describing what was found"
+            "extraction_summary": "string describing what was found",
+            "excluded_sections": ["section name", ...] - sections that were skipped
         }
     """
     import re
@@ -186,11 +188,33 @@ def extract_student_responses(document_text: str, custom_markers: list = None) -
         # Sort by position in document
         marker_positions.sort(key=lambda x: x['start'])
 
+        # Track excluded sections
+        excluded_sections = []
+
+        # Normalize exclude markers for comparison
+        exclude_markers_normalized = []
+        if exclude_markers:
+            for em in exclude_markers:
+                exclude_markers_normalized.append(em.lower().strip())
+
         # Extract response after each marker
         for i, mp in enumerate(marker_positions):
             marker_text = mp['marker']
             content_start = mp['end']
             end_marker = mp.get('end_marker')
+
+            # Check if this marker should be excluded from grading
+            marker_lower = marker_text.lower().strip()
+            is_excluded = False
+            for em in exclude_markers_normalized:
+                # Check if exclude marker is contained in this marker or vice versa
+                if em in marker_lower or marker_lower in em:
+                    is_excluded = True
+                    excluded_sections.append(marker_text[:80])
+                    break
+
+            if is_excluded:
+                continue  # Skip this section - don't grade it
 
             # Determine where content ends (in priority order):
             # 1. Explicit end marker (if defined)
@@ -297,12 +321,16 @@ def extract_student_responses(document_text: str, custom_markers: list = None) -
             match_summary = f"{exact_matches} exact"
             if fuzzy_matches > 0:
                 match_summary += f", {fuzzy_matches} fuzzy"
+            summary = f"Extracted {len(extracted)} responses using {len(marker_positions)} markers ({match_summary})."
+            if excluded_sections:
+                summary += f" Excluded {len(excluded_sections)} section(s) from grading."
             return {
                 "extracted_responses": extracted,
                 "blank_questions": blank_questions,
                 "total_questions": total_q,
                 "answered_questions": len(extracted),
-                "extraction_summary": f"Extracted {len(extracted)} responses using {len(marker_positions)} markers ({match_summary})."
+                "extraction_summary": summary,
+                "excluded_sections": excluded_sections
             }
 
     # FALLBACK: If no markers provided, use simple pattern matching
@@ -1769,7 +1797,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    grade_level: str = '6', subject: str = 'Social Studies',
                                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
                                    assignment_template: str = None, rubric_prompt: str = None,
-                                   custom_markers: list = None) -> dict:
+                                   custom_markers: list = None, exclude_markers: list = None) -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
@@ -1782,7 +1810,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     extracted_text = ""
 
     if assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content, custom_markers)
+        extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
         if extraction_result.get("extracted_responses"):
             extracted_text = "\n".join([
                 f"Q: {r.get('question', 'Unknown')}\nA: {r.get('answer', '')}"
@@ -1793,7 +1821,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     if not extracted_text:
         return grade_assignment(student_name, assignment_data, custom_ai_instructions,
                                grade_level, subject, ai_model, student_id, assignment_template, rubric_prompt,
-                               custom_markers)
+                               custom_markers, exclude_markers)
 
     print(f"  🔄 Running parallel detection + grading...")
 
@@ -1883,7 +1911,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -2046,7 +2074,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     extraction_result = None
     extracted_responses_text = ''
     if assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content, custom_markers)
+        extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
         if extraction_result:
             extracted_responses_text = format_extracted_for_grading(extraction_result)
             answered = extraction_result.get("answered_questions", 0)

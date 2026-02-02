@@ -867,6 +867,7 @@ function App() {
     instructions: "",
     questions: [],
     customMarkers: [],
+    excludeMarkers: [], // Sections to NOT grade (e.g., "Notes Section")
     gradingNotes: "",
     responseSections: [],
     aliases: [], // Previous names for matching renamed assignments
@@ -904,13 +905,14 @@ function App() {
     viewMode: "formatted",
   });
 
-  // Highlighter mode: "start" (green) or "end" (red)
+  // Highlighter mode: "start" (green), "end" (red), or "exclude" (orange)
   const [highlighterMode, setHighlighterMode] = useState("start");
 
   // Highlight colors
   const HIGHLIGHT_COLORS = {
     start: { bg: "rgba(34, 197, 94, 0.4)", border: "#22c55e", label: "Start" },
     end: { bg: "rgba(239, 68, 68, 0.4)", border: "#ef4444", label: "End" },
+    exclude: { bg: "rgba(251, 146, 60, 0.4)", border: "#fb923c", label: "Exclude" },
   };
 
   // Results state
@@ -2300,6 +2302,27 @@ ${signature}`;
           setAssignment({ ...assignment, customMarkers: newMarkers });
           setDocEditorModal({ ...docEditorModal, editedHtml: newHtml });
           addToast("Start marker added (green)", "success");
+        }
+      } else if (highlighterMode === "exclude") {
+        // Adding an exclude marker - section to NOT grade
+        const exists = (assignment.excludeMarkers || []).some(m => m === text);
+        if (!exists) {
+          const newExcludeMarkers = [...(assignment.excludeMarkers || []), text];
+          const excludeIndex = newExcludeMarkers.length - 1;
+
+          // Apply highlight to HTML
+          const newHtml = highlightTextInHtml(
+            docEditorModal.editedHtml,
+            text,
+            HIGHLIGHT_COLORS.exclude,
+            `exclude-${excludeIndex}`
+          );
+
+          setAssignment({ ...assignment, excludeMarkers: newExcludeMarkers });
+          setDocEditorModal({ ...docEditorModal, editedHtml: newHtml });
+          addToast("Exclude marker added (orange) - this section will NOT be graded", "success");
+        } else {
+          addToast("This section is already marked as excluded", "warning");
         }
       } else {
         // Adding an end marker - attach to the last marker that doesn't have one
@@ -4317,6 +4340,7 @@ ${signature}`;
                     padding: "8px 12px",
                     background: highlighterMode === "end" ? HIGHLIGHT_COLORS.end.bg : "transparent",
                     border: "none",
+                    borderRight: "1px solid var(--glass-border)",
                     color: highlighterMode === "end" ? HIGHLIGHT_COLORS.end.border : "var(--text-muted)",
                     fontWeight: highlighterMode === "end" ? 600 : 400,
                     cursor: "pointer",
@@ -4329,17 +4353,35 @@ ${signature}`;
                   <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: HIGHLIGHT_COLORS.end.border }} />
                   End
                 </button>
+                <button
+                  onClick={() => setHighlighterMode("exclude")}
+                  style={{
+                    padding: "8px 12px",
+                    background: highlighterMode === "exclude" ? HIGHLIGHT_COLORS.exclude.bg : "transparent",
+                    border: "none",
+                    color: highlighterMode === "exclude" ? HIGHLIGHT_COLORS.exclude.border : "var(--text-muted)",
+                    fontWeight: highlighterMode === "exclude" ? 600 : 400,
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: HIGHLIGHT_COLORS.exclude.border }} />
+                  Exclude
+                </button>
               </div>
               <button
                 onClick={addSelectedAsMarker}
                 className="btn btn-secondary"
                 style={{
-                  background: highlighterMode === "start" ? HIGHLIGHT_COLORS.start.bg : HIGHLIGHT_COLORS.end.bg,
-                  borderColor: highlighterMode === "start" ? HIGHLIGHT_COLORS.start.border : HIGHLIGHT_COLORS.end.border,
+                  background: HIGHLIGHT_COLORS[highlighterMode].bg,
+                  borderColor: HIGHLIGHT_COLORS[highlighterMode].border,
                 }}
               >
                 <Icon name="Target" size={16} />
-                Mark {highlighterMode === "start" ? "Start" : "End"}
+                Mark {HIGHLIGHT_COLORS[highlighterMode].label}
               </button>
               <button
                 onClick={async () => {

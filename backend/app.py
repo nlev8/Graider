@@ -11,6 +11,7 @@ import sys
 import json
 import csv
 import threading
+import concurrent.futures
 from pathlib import Path
 from datetime import datetime
 
@@ -255,15 +256,72 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period=''):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None):
     """Run the grading process in a background thread.
 
     Args:
         selected_files: List of filenames to grade, or None to grade all files
         ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
         skip_verified: If True, skip files that were previously graded with verified status
+        rubric: Custom rubric dict from Settings with categories, weights, descriptions
     """
     global grading_state
+
+    # Log global AI notes status
+    if global_ai_notes:
+        preview = global_ai_notes[:100].replace('\n', ' ')
+        print(f"[GRADING] Global AI Instructions received: {len(global_ai_notes)} chars - \"{preview}...\"")
+    else:
+        print("[GRADING] No Global AI Instructions provided")
+
+    # Convert rubric to prompt string
+    def format_rubric_for_prompt(rubric_data):
+        """Convert rubric dict to a formatted prompt string."""
+        if not rubric_data or not rubric_data.get('categories'):
+            return None
+
+        categories = rubric_data.get('categories', [])
+        generous = rubric_data.get('generous', True)
+
+        lines = []
+        lines.append("GRADING RUBRIC (from teacher's custom settings):")
+        lines.append("")
+
+        total_weight = sum(c.get('weight', 0) for c in categories)
+        lines.append(f"Total Points: {total_weight}")
+        lines.append("")
+
+        for i, cat in enumerate(categories, 1):
+            name = cat.get('name', f'Category {i}')
+            weight = cat.get('weight', 0)
+            desc = cat.get('description', '')
+            lines.append(f"{i}. {name.upper()} ({weight} points)")
+            if desc:
+                lines.append(f"   - {desc}")
+            lines.append("")
+
+        lines.append("GRADE RANGES:")
+        lines.append("- A: 90-100 (Excellent)")
+        lines.append("- B: 80-89 (Good)")
+        lines.append("- C: 70-79 (Satisfactory)")
+        lines.append("- D: 60-69 (Needs Improvement)")
+        lines.append("- F: Below 60 (Unsatisfactory)")
+        lines.append("")
+
+        if generous:
+            lines.append("GRADING STYLE: Be ENCOURAGING and GENEROUS. When in doubt, give the student the benefit of the doubt.")
+        else:
+            lines.append("GRADING STYLE: Grade strictly according to the rubric criteria.")
+
+        return "\n".join(lines)
+
+    # Format rubric and log status
+    rubric_prompt = format_rubric_for_prompt(rubric)
+    if rubric_prompt:
+        print(f"[GRADING] Custom rubric loaded: {len(rubric.get('categories', []))} categories")
+        grading_state["log"].append(f"📋 Using custom rubric ({len(rubric.get('categories', []))} categories)")
+    else:
+        print("[GRADING] No custom rubric - using default")
 
     # Load ALL saved assignment configs for auto-matching
     all_configs = {}
@@ -455,9 +513,9 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     try:
         from assignment_grader import (
             load_roster, parse_filename, read_assignment_file,
-            extract_student_work, grade_assignment, export_focus_csv,
-            export_detailed_report, save_emails_to_folder, save_to_master_csv,
-            ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
+            extract_student_work, grade_assignment, grade_with_parallel_detection,
+            export_focus_csv, export_detailed_report, save_emails_to_folder,
+            save_to_master_csv, ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
         )
 
         if all_configs:
@@ -472,13 +530,29 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             grading_state["log"].append(f"Loaded reference documents for AI context")
 
         # Load student-to-period mapping from period CSVs for per-student grading levels
-        student_period_map = {}
+        student_period_map = {}  # Maps student name -> period name
+        period_class_level_map = {}  # Maps period name -> class level (standard/advanced/support)
         periods_dir = os.path.expanduser("~/.graider_data/periods")
         if os.path.exists(periods_dir):
             import csv
             for period_file in os.listdir(periods_dir):
                 if period_file.endswith('.csv'):
                     period_name = period_file.replace('.csv', '')
+                    class_level = 'standard'  # Default
+
+                    # Load class_level from metadata file if it exists
+                    meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
+                    if os.path.exists(meta_path):
+                        try:
+                            with open(meta_path, 'r') as mf:
+                                meta = json.load(mf)
+                                period_name = meta.get('period_name', period_name)
+                                class_level = meta.get('class_level', 'standard')
+                        except:
+                            pass
+
+                    period_class_level_map[period_name] = class_level
+
                     try:
                         with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as pf:
                             reader = csv.DictReader(pf)
@@ -506,6 +580,11 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
             if student_period_map:
                 grading_state["log"].append(f"Loaded period data for {len(student_period_map)} students")
+                # Log class levels
+                advanced_count = sum(1 for v in period_class_level_map.values() if v == 'advanced')
+                support_count = sum(1 for v in period_class_level_map.values() if v == 'support')
+                if advanced_count or support_count:
+                    grading_state["log"].append(f"  Class levels: {advanced_count} advanced, {support_count} support, {len(period_class_level_map) - advanced_count - support_count} standard")
 
         os.makedirs(output_folder, exist_ok=True)
 
@@ -549,13 +628,77 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
             all_files.extend(assignment_path.glob(ext))
 
+        # DEDUPLICATE: Keep only the most recent file per student + assignment combo
+        # If a student uploads the same assignment twice, ignore all but the newest
+        # But different assignments from the same student should all be graded
+        def extract_student_and_assignment(filename):
+            """Extract student name AND assignment from filename for deduplication.
+
+            Returns tuple: (student_key, assignment_key)
+            Example: 'jackson_gaytan_Chapter_10_Notes.docx' -> ('jackson_gaytan', 'chapter_10_notes')
+            """
+            import re
+            name = filename.lower()
+            name = os.path.splitext(name)[0]  # Remove extension
+
+            # Try to split into student name (first 2 words) and assignment (rest)
+            # Pattern: "firstname_lastname_assignment_name" or "firstname lastname - assignment"
+
+            # Remove emojis for cleaner parsing
+            name_clean = re.sub(r'[^\w\s_-]', '', name)
+
+            # Split by underscores or spaces
+            parts = re.split(r'[_\s]+', name_clean)
+            parts = [p for p in parts if p]  # Remove empty parts
+
+            if len(parts) >= 3:
+                # First 2 parts are student name, rest is assignment
+                student_key = f"{parts[0]}_{parts[1]}".lower()
+                assignment_key = '_'.join(parts[2:]).lower()
+            elif len(parts) == 2:
+                student_key = f"{parts[0]}_{parts[1]}".lower()
+                assignment_key = "unknown"
+            else:
+                student_key = name_clean
+                assignment_key = "unknown"
+
+            return (student_key, assignment_key)
+
+        # Group files by student + assignment
+        file_groups = {}
+        for f in all_files:
+            key = extract_student_and_assignment(f.name)
+            if key not in file_groups:
+                file_groups[key] = []
+            file_groups[key].append(f)
+
+        # Keep only the most recent file per student + assignment
+        deduplicated_files = []
+        duplicates_found = 0
+        for (student_key, assignment_key), files in file_groups.items():
+            if len(files) > 1:
+                # Sort by modification time (newest first)
+                files_sorted = sorted(files, key=lambda x: x.stat().st_mtime, reverse=True)
+                deduplicated_files.append(files_sorted[0])
+                duplicates_found += len(files) - 1
+                # Log which files were skipped
+                for skipped in files_sorted[1:]:
+                    grading_state["log"].append(f"⏭️ Skipping older version: {skipped.name}")
+            else:
+                deduplicated_files.append(files[0])
+
+        if duplicates_found > 0:
+            grading_state["log"].append(f"📋 Found {duplicates_found} duplicate submissions, using most recent only")
+
+        all_files = deduplicated_files
+
         # Filter by selected files if provided
         if selected_files is not None and len(selected_files) > 0:
             selected_set = set(selected_files)
             all_files = [f for f in all_files if f.name in selected_set]
-            grading_state["log"].append(f"Grading {len(all_files)} selected files")
+            grading_state["log"].append(f"🎯 Matched {len(all_files)} of {len(selected_files)} selected files")
         else:
-            grading_state["log"].append(f"Found {len(all_files)} total files")
+            grading_state["log"].append(f"Found {len(all_files)} total files (no filter applied)")
 
         # Filter out already graded files (only if not using selection)
         if selected_files is None:
@@ -586,303 +729,465 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
         all_grades = []
 
-        for i, filepath in enumerate(new_files, 1):
-            # Check if stop was requested
-            if grading_state.get("stop_requested", False):
-                grading_state["log"].append("")
-                grading_state["log"].append(f"Stopped at {i-1}/{len(new_files)} files")
-                grading_state["log"].append(f"Progress saved! {len(all_grades)} grades completed.")
-                break
+        # ═══════════════════════════════════════════════════════════
+        # PARALLEL GRADING HELPER FUNCTION
+        # ═══════════════════════════════════════════════════════════
+        def grade_single_file(filepath, file_index, total_files):
+            """Grade a single file - designed for parallel execution."""
+            try:
+                parsed = parse_filename(filepath.name)
+                student_name = f"{parsed['first_name']} {parsed['last_name']}"
+                lookup_key = parsed['lookup_key']
 
-            grading_state["progress"] = i
-            grading_state["current_file"] = filepath.name
+                # Lookup student in roster
+                if lookup_key in roster:
+                    student_info = roster[lookup_key].copy()
+                else:
+                    # Try fuzzy matching for last name initials
+                    student_info = None
+                    first_name_lower = parsed['first_name'].lower()
+                    last_name_lower = parsed['last_name'].lower()
 
-            parsed = parse_filename(filepath.name)
-            student_name = f"{parsed['first_name']} {parsed['last_name']}"
-            lookup_key = parsed['lookup_key']
+                    if len(last_name_lower) <= 2:
+                        for roster_key, roster_data in roster.items():
+                            if isinstance(roster_data, dict):
+                                roster_first = roster_data.get('first_name', '').lower()
+                                roster_last = roster_data.get('last_name', '').lower()
+                                if roster_first == first_name_lower and roster_last.startswith(last_name_lower):
+                                    student_info = roster_data.copy()
+                                    student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
+                                    break
 
-            if lookup_key in roster:
-                student_info = roster[lookup_key].copy()
-            else:
-                # Try fuzzy matching for last name initials (e.g., "serenity_p" → "serenity petite")
-                student_info = None
-                first_name_lower = parsed['first_name'].lower()
-                last_name_lower = parsed['last_name'].lower()
+                    if not student_info:
+                        student_info = {"student_id": "UNKNOWN", "student_name": student_name,
+                                       "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
 
-                # If last name is just 1-2 chars (initial), search for matching first name + last initial
-                if len(last_name_lower) <= 2:
-                    for roster_key, roster_data in roster.items():
-                        if isinstance(roster_data, dict):
-                            roster_first = roster_data.get('first_name', '').lower()
-                            roster_last = roster_data.get('last_name', '').lower()
-                            # Match: same first name AND last name starts with the initial
-                            if roster_first == first_name_lower and roster_last.startswith(last_name_lower):
-                                student_info = roster_data.copy()
-                                student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
-                                grading_state["log"].append(f"  Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
-                                break
+                # Match assignment config
+                matched_config = find_matching_config(filepath.name)
+                if not matched_config:
+                    try:
+                        temp_file_data = read_assignment_file(filepath)
+                        if temp_file_data and temp_file_data.get("type") == "text":
+                            file_text = temp_file_data.get("content", "")
+                            if file_text:
+                                matched_config = find_matching_config(filepath.name, file_text)
+                    except:
+                        pass
 
-                if not student_info:
-                    student_info = {"student_id": "UNKNOWN", "student_name": student_name, "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
+                if matched_config:
+                    file_markers = matched_config.get('customMarkers', [])
+                    file_exclude_markers = matched_config.get('excludeMarkers', [])
+                    file_notes = matched_config.get('gradingNotes', '')
+                    file_sections = matched_config.get('responseSections', [])
+                    matched_title = matched_config.get('title', 'Unknown')
+                    is_completion_only = matched_config.get('completionOnly', False)
+                    imported_doc = matched_config.get('importedDoc', {})
+                    assignment_template_local = imported_doc.get('text', '')
+                    rubric_type = matched_config.get('rubricType', 'standard')
+                    custom_rubric = matched_config.get('customRubric', None)
+                else:
+                    file_markers = fallback_markers
+                    file_exclude_markers = []
+                    file_notes = fallback_notes
+                    file_sections = fallback_sections
+                    matched_title = ASSIGNMENT_NAME
+                    is_completion_only = False
+                    assignment_template_local = ''
+                    rubric_type = 'standard'
+                    custom_rubric = None
 
-            grading_state["log"].append(f"[{i}/{len(new_files)}] {student_info['student_name']}")
+                # Handle completion-only rubric type
+                if rubric_type == 'completion-only':
+                    is_completion_only = True
 
-            # Try to auto-match assignment config based on filename first
-            matched_config = find_matching_config(filepath.name)
+                # Auto-detect rubric type from filename if not already set
+                filename_lower = filepath.name.lower().replace('_', ' ').replace('-', ' ')
+                if rubric_type == 'standard':
+                    if 'fill in the blank' in filename_lower or 'fill in blank' in filename_lower or 'fillintheblank' in filename_lower.replace(' ', ''):
+                        rubric_type = 'fill-in-blank'
+                        print(f"  ✓ Auto-detected Fill-in-the-Blank from filename")
+                    elif 'cornell notes' in filename_lower or 'cornellnotes' in filename_lower.replace(' ', ''):
+                        rubric_type = 'cornell-notes'
+                        print(f"  ✓ Auto-detected Cornell Notes from filename")
 
-            # If no good filename match, try content fingerprinting
-            if not matched_config:
+                # Get student's period
+                student_period = student_period_map.get(student_info['student_name'].lower(), class_period)
+
+                # Handle completion-only assignments
+                if is_completion_only:
+                    return {
+                        "success": True,
+                        "student_info": student_info,
+                        "filepath": filepath,
+                        "matched_title": matched_title,
+                        "student_period": student_period,
+                        "is_completion_only": True,
+                        "grade_result": {
+                            "score": 100,
+                            "letter_grade": "SUBMITTED",
+                            "feedback": "Completion-only assignment - submitted successfully.",
+                            "breakdown": {},
+                            "student_responses": [],
+                            "unanswered_questions": [],
+                            "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+                            "plagiarism_detection": {"flag": "none", "reason": ""}
+                        },
+                        "file_data": {"type": "text", "content": ""},
+                        "marker_status": "completion_only",
+                        "baseline_deviation": {"flag": "normal", "reasons": [], "details": {}},
+                        "log_messages": [f"  Completion only - recorded submission"]
+                    }
+
+                # Build AI notes
+                file_ai_notes = global_ai_notes
+                if global_ai_notes:
+                    print(f"  ✓ Applying Global AI Instructions ({len(global_ai_notes)} chars)")
+                if file_notes:
+                    file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
+                    print(f"  ✓ Applying Assignment-Specific Notes ({len(file_notes)} chars)")
+
+                    # Detect fill-in-the-blank assignments and add special rubric override
+                    if 'fill-in' in file_notes.lower() or 'fill in' in file_notes.lower():
+                        file_ai_notes += """
+
+FILL-IN-THE-BLANK RUBRIC OVERRIDE:
+This is a fill-in-the-blank assignment. IGNORE the standard rubric categories and use this instead:
+- Content Accuracy (70%): Is each answer correct or essentially correct?
+- Completeness (30%): Did the student attempt all blanks?
+
+CRITICAL GRADING RULES FOR FILL-IN-THE-BLANK:
+- DO NOT penalize for spelling errors if the word is recognizable
+- DO NOT penalize for capitalization
+- DO NOT assess "Writing Quality" or "Critical Thinking" - these don't apply
+- Accept synonyms and reasonable variations
+- If the answer is close enough to understand the intent, mark it CORRECT
+- A student who fills in all blanks with mostly correct answers should get 90+
+- Minor typos like "rebelion" for "rebellion" = FULL CREDIT
+"""
+                        print(f"  ✓ Fill-in-the-blank detected - applying lenient grading override")
+
+                # Apply assignment-specific rubric type (overrides global rubric)
+                if rubric_type and rubric_type != 'standard':
+                    if rubric_type == 'fill-in-blank':
+                        file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: FILL-IN-THE-BLANK
+IGNORE the standard rubric. Use these categories ONLY:
+- Content Accuracy (70%): Is each answer correct or essentially correct?
+- Completeness (30%): Did the student attempt all blanks?
+
+CRITICAL RULES:
+- DO NOT penalize spelling errors if the word is recognizable
+- DO NOT penalize capitalization
+- Accept synonyms and reasonable variations
+- A student who fills in all blanks with mostly correct answers = 90+
+"""
+                        print(f"  ✓ Rubric Type: Fill-in-the-Blank")
+                    elif rubric_type == 'essay':
+                        file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: ESSAY/WRITTEN RESPONSE
+Use these categories:
+- Content & Ideas (35%): Are the main points valid and well-supported?
+- Writing Quality (30%): Grammar, spelling, sentence structure, clarity
+- Critical Thinking & Analysis (20%): Depth of analysis, connections made
+- Effort & Engagement (15%): Evidence of genuine effort and thought
+
+Grade writing quality more strictly than fill-in-blank, but still be encouraging.
+"""
+                        print(f"  ✓ Rubric Type: Essay/Written Response")
+                    elif rubric_type == 'cornell-notes':
+                        file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: CORNELL NOTES
+Use these categories:
+- Content Accuracy (40%): Are the notes factually correct and relevant?
+- Note Structure (25%): Proper Cornell format - questions in cue column, notes in main area
+- Summary Quality (20%): Does the summary synthesize main ideas?
+- Effort & Completeness (15%): Are all sections filled in?
+
+Look for: main ideas captured, good questions, clear summary at bottom.
+"""
+                        print(f"  ✓ Rubric Type: Cornell Notes")
+                    elif rubric_type == 'custom' and custom_rubric:
+                        rubric_text = "ASSIGNMENT RUBRIC TYPE: CUSTOM\nUse these categories ONLY:\n"
+                        for cat in custom_rubric:
+                            name = cat.get('name', 'Unknown')
+                            weight = cat.get('weight', 0)
+                            rubric_text += f"- {name} ({weight}%)\n"
+                        file_ai_notes += f"\n{rubric_text}"
+                        print(f"  ✓ Rubric Type: Custom ({len(custom_rubric)} categories)")
+
+                # Add accommodation prompt if student has IEP/504
+                if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                    accommodation_prompt = build_accommodation_prompt(student_info['student_id'])
+                    if accommodation_prompt:
+                        file_ai_notes += f"\n{accommodation_prompt}"
+
+                # Add student history context
+                if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                    history_context = build_history_context(student_info['student_id'])
+                    if history_context:
+                        file_ai_notes += f"\n{history_context}"
+
+                # Add class period context for differentiated grading
+                if student_period:
+                    class_level = period_class_level_map.get(student_period, 'standard')
+                    file_ai_notes += f"\n\nCLASS PERIOD: {student_period}"
+                    file_ai_notes += f"\nCLASS LEVEL: {class_level.upper()}"
+
+                    if class_level == 'advanced':
+                        file_ai_notes += """
+ADVANCED CLASS - RUBRIC ADJUSTMENT:
+When applying the rubric above, make these automatic adjustments:
+- INCREASE weight of Critical Thinking/Analysis categories by +15%
+- INCREASE weight of Writing Quality/Communication by +10%
+- DECREASE weight of Completion/Effort categories by -15%
+- DECREASE weight of basic Content Accuracy by -10%
+(Percentages are relative shifts - redistribute points accordingly)
+
+ADVANCED CLASS GRADING EXPECTATIONS:
+- Hold students to HIGHER standards than the base rubric suggests
+- Expect detailed, thoughtful responses with deeper analysis
+- Grade more strictly on grammar, vocabulary, and sophistication
+- Look for evidence of critical thinking and connections between concepts
+- Surface-level or simplistic answers should score in the B/C range, not A
+- An "A" (90+) should represent truly exceptional, insightful work
+- Be constructive but maintain high expectations
+"""
+                    elif class_level == 'support':
+                        file_ai_notes += """
+SUPPORT CLASS - RUBRIC ADJUSTMENT:
+When applying the rubric above, make these automatic adjustments:
+- INCREASE weight of Effort/Engagement categories by +20%
+- INCREASE weight of Completion categories by +15%
+- DECREASE weight of Writing Quality/Grammar by -20%
+- DECREASE weight of Critical Thinking/Analysis by -15%
+(Percentages are relative shifts - redistribute points accordingly)
+
+SUPPORT CLASS GRADING EXPECTATIONS:
+- Be MORE LENIENT and ENCOURAGING than the base rubric suggests
+- Prioritize effort, completion, and basic understanding
+- Be very generous with partial credit for attempts that show learning
+- Do NOT penalize spelling, grammar, or incomplete sentences
+- If student attempted the work and shows basic understanding, lean toward passing
+- Recognize and praise progress and effort in feedback
+- Focus feedback on encouragement and growth, not deficits
+- A student who tries hard and completes work should score B or higher
+"""
+                    else:  # standard
+                        file_ai_notes += """
+STANDARD CLASS GRADING EXPECTATIONS:
+- Apply the rubric as written without adjustment
+- Balance rigor with encouragement
+- Award credit for demonstrated understanding even if answers aren't perfect
+- Grade fairly according to grade-level expectations
+"""
+
+                # Read file
+                file_data = read_assignment_file(filepath)
+                if not file_data:
+                    return {"success": False, "error": "Could not read file", "filepath": filepath}
+
+                # Prepare grade data
+                if file_data["type"] == "text":
+                    grade_data = {"type": "text", "content": file_data["content"]}
+                else:
+                    grade_data = file_data
+
+                # Grade with parallel detection
+                # Pass file_markers (customMarkers) for extraction, not file_sections
+                # Pass file_exclude_markers (excludeMarkers) to skip sections that shouldn't be graded
+                grade_result = grade_with_parallel_detection(
+                    student_info['student_name'], grade_data, file_ai_notes,
+                    grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+                    rubric_prompt, file_markers, file_exclude_markers
+                )
+
+                # Check for errors
+                if grade_result.get('letter_grade') == 'ERROR':
+                    return {"success": False, "error": grade_result.get('feedback', 'API error'),
+                            "filepath": filepath, "is_api_error": True}
+
+                # Determine marker status
+                has_config = matched_config is not None
+                has_custom_markers = len(file_markers) > 0
+                has_grading_notes = bool(file_notes.strip()) if file_notes else False
+                has_response_sections = len(file_sections) > 0
+                is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
+                marker_status = "verified" if is_verified else "unverified"
+
+                # Check baseline deviation
+                baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
+                if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                    try:
+                        baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
+                    except:
+                        pass
+
+                # Save to student history
+                if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+                    try:
+                        grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
+                                       "assignment": matched_title, "period": student_period}
+                        add_assignment_to_history(student_info['student_id'], grade_record_hist)
+                    except:
+                        pass
+
+                # Get class level for logging
+                class_level = period_class_level_map.get(student_period, 'standard') if student_period else 'standard'
+                level_indicator = "🎯" if class_level == "advanced" else "💚" if class_level == "support" else ""
+
+                log_messages = [f"  Score: {grade_result['score']} ({grade_result['letter_grade']}) {level_indicator}{class_level.upper() if class_level != 'standard' else ''}".strip()]
+                if marker_status == "unverified":
+                    log_messages.append(f"  ⚠️  UNVERIFIED: No assignment config")
+                if baseline_deviation.get('flag') != 'normal':
+                    log_messages.append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
+                if grade_result.get('ai_detection', {}).get('flag') in ['possible', 'likely']:
+                    log_messages.append(f"  🤖 AI detected: {grade_result['ai_detection']['flag']}")
+                if grade_result.get('plagiarism_detection', {}).get('flag') in ['possible', 'likely']:
+                    log_messages.append(f"  📋 Plagiarism detected: {grade_result['plagiarism_detection']['flag']}")
+
+                return {
+                    "success": True,
+                    "student_info": student_info,
+                    "filepath": filepath,
+                    "matched_title": matched_title,
+                    "student_period": student_period,
+                    "is_completion_only": False,
+                    "grade_result": grade_result,
+                    "file_data": file_data,
+                    "marker_status": marker_status,
+                    "baseline_deviation": baseline_deviation,
+                    "log_messages": log_messages
+                }
+
+            except Exception as e:
+                return {"success": False, "error": str(e), "filepath": filepath}
+
+        # ═══════════════════════════════════════════════════════════
+        # PARALLEL GRADING EXECUTION
+        # ═══════════════════════════════════════════════════════════
+        PARALLEL_WORKERS = 3  # Conservative: 3 students at once (6 API calls with detection)
+
+        grading_state["log"].append(f"⚡ Parallel grading enabled ({PARALLEL_WORKERS} workers)")
+        grading_state["log"].append("")
+
+        completed = 0
+        api_error_occurred = False
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
+            # Submit all files as futures
+            future_to_file = {}
+            for i, filepath in enumerate(new_files):
+                if grading_state.get("stop_requested", False):
+                    break
+                future = executor.submit(grade_single_file, filepath, i + 1, len(new_files))
+                future_to_file[future] = (filepath, i + 1)
+
+            # Process completed futures as they finish
+            for future in concurrent.futures.as_completed(future_to_file):
+                if grading_state.get("stop_requested", False):
+                    # Cancel remaining futures
+                    for f in future_to_file:
+                        f.cancel()
+                    grading_state["log"].append("")
+                    grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
+                    break
+
+                filepath, file_num = future_to_file[future]
+
                 try:
-                    # Read file content for fingerprint matching
-                    temp_file_data = read_assignment_file(filepath)
-                    if temp_file_data and temp_file_data.get("type") == "text":
-                        file_text = temp_file_data.get("content", "")
-                        if file_text:
-                            matched_config = find_matching_config(filepath.name, file_text)
-                            if matched_config:
-                                grading_state["log"].append(f"  Matched by document content")
+                    result = future.result()
                 except Exception as e:
-                    pass  # Fall back to no match
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                    grading_state["log"].append(f"  ❌ Error: {str(e)}")
+                    continue
 
-            if matched_config:
-                file_markers = matched_config.get('customMarkers', [])
-                file_notes = matched_config.get('gradingNotes', '')
-                file_sections = matched_config.get('responseSections', [])
-                matched_title = matched_config.get('title', 'Unknown')
-                is_completion_only = matched_config.get('completionOnly', False)
-                grading_state["log"].append(f"  Matched config: {matched_title}")
-            else:
-                file_markers = fallback_markers
-                file_notes = fallback_notes
-                file_sections = fallback_sections
-                is_completion_only = False
+                # Update progress
+                completed += 1
+                grading_state["progress"] = completed
+                grading_state["current_file"] = filepath.name
 
-            # Look up student's period from period CSVs, fall back to selected class_period
-            student_period = student_period_map.get(student_info['student_name'].lower(), class_period)
-            if student_period and student_period != class_period and student_period_map.get(student_info['student_name'].lower()):
-                grading_state["log"].append(f"  Student period: {student_period}")
+                # Handle failed grading
+                if not result.get("success"):
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                    grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
 
-            # Handle completion-only assignments (track submission without AI grading)
-            if is_completion_only:
-                grading_state["log"].append(f"  Completion only - recording submission")
-                # Use assignment title from matched config
-                assignment_title = matched_title if matched_config else ASSIGNMENT_NAME
-                # Record as submitted with full points
-                grading_state["results"].append({
-                    "student_name": student_info['student_name'],
-                    "student_id": student_info['student_id'],
-                    "email": student_info.get('email', ''),
-                    "filename": filepath.name,
-                    "filepath": str(filepath),
-                    "assignment": assignment_title,
-                    "period": student_period,
-                    "score": 100,
-                    "letter_grade": "SUBMITTED",
-                    "feedback": "Completion-only assignment - submitted successfully.",
-                    "student_content": "",
-                    "full_content": "",
-                    "breakdown": {},
-                    "student_responses": [],
-                    "unanswered_questions": [],
-                    "authenticity_flag": "clean",
-                    "authenticity_reason": "",
-                    "baseline_deviation": {"flag": "normal", "reasons": [], "details": {}},
-                    "skills_demonstrated": {},
-                    "marker_status": "completion_only",
-                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                })
-                # Add to grades for CSV export
-                all_grades.append({
+                    # Stop on API errors
+                    if result.get("is_api_error"):
+                        api_error_occurred = True
+                        grading_state["log"].append("")
+                        grading_state["log"].append("=" * 50)
+                        grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
+                        grading_state["log"].append("=" * 50)
+                        grading_state["error"] = f"API Error: {result.get('error')}"
+                        # Cancel remaining futures
+                        for f in future_to_file:
+                            f.cancel()
+                        break
+                    continue
+
+                # Log success
+                student_info = result["student_info"]
+                grade_result = result["grade_result"]
+
+                grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
+                for msg in result.get("log_messages", []):
+                    grading_state["log"].append(msg)
+
+                # Build grade record for export
+                file_data = result.get("file_data", {})
+                if file_data.get("type") == "text":
+                    student_content = file_data.get("content", "")[:5000]
+                    full_content = file_data.get("content", "")[:10000]
+                else:
+                    student_content = "[Image file]"
+                    full_content = "[Image file]"
+
+                grade_record = {
                     **student_info,
-                    "score": 100,
-                    "letter_grade": "SUBMITTED",
-                    "feedback": "Completion-only assignment - submitted successfully.",
+                    **grade_result,
                     "filename": filepath.name,
-                    "assignment": assignment_title,
-                    "period": student_period,
+                    "assignment": result["matched_title"],
+                    "period": result["student_period"],
                     "grading_period": grading_period,
                     "has_markers": False
+                }
+                all_grades.append(grade_record)
+
+                # Add to results for UI
+                grading_state["results"].append({
+                    "student_name": student_info['student_name'],
+                    "student_id": student_info.get('student_id', ''),
+                    "student_email": student_info.get('email', ''),
+                    "filename": filepath.name,
+                    "filepath": str(filepath),
+                    "assignment": result["matched_title"],
+                    "period": result["student_period"],
+                    "score": grade_result.get('score', 0),
+                    "letter_grade": grade_result.get('letter_grade', 'N/A'),
+                    "feedback": grade_result.get('feedback', ''),
+                    "student_content": student_content,
+                    "full_content": full_content,
+                    "breakdown": grade_result.get('breakdown', {}),
+                    "student_responses": grade_result.get('student_responses', []),
+                    "unanswered_questions": grade_result.get('unanswered_questions', []),
+                    "ai_detection": grade_result.get('ai_detection', {}),
+                    "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
+                    "baseline_deviation": result.get("baseline_deviation", {}),
+                    "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
+                    "marker_status": result.get("marker_status", "unverified"),
+                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 })
-                continue  # Skip to next file
 
-            # Build combined AI notes for this file
-            file_ai_notes = ''
-            if global_ai_notes:
-                file_ai_notes += f"GLOBAL GRADING INSTRUCTIONS:\n{global_ai_notes}\n\n"
-
-            # Add student's period to AI context for period-specific grading
-            if student_period:
-                file_ai_notes += f"CLASS PERIOD BEING GRADED: {student_period}\n(Apply any period-specific grading expectations from the instructions above)\n\n"
-
-            if file_notes:
-                file_ai_notes += f"ASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}\n\n"
-
-            # Add support documents content (rubrics, curriculum guides, standards)
-            if support_docs_content:
-                file_ai_notes += support_docs_content
-
-            # Add response sections (highlighted areas where student work should be found)
-            if file_sections:
-                sections_text = "HIGHLIGHTED RESPONSE SECTIONS (Focus on content within these ranges):\n"
-                for idx, section in enumerate(file_sections, 1):
-                    start = section.get('start', '')
-                    end = section.get('end')
-                    if end:
-                        sections_text += f"  {idx}. From \"{start}\" to \"{end}\"\n"
-                    else:
-                        sections_text += f"  {idx}. From \"{start}\" to end of document\n"
-                sections_text += "\nStudent responses should be found WITHIN these highlighted sections. Content outside these sections is likely teacher instructions or questions.\n"
-                file_ai_notes += sections_text
-
-            # Add IEP/504 accommodation instructions if student has accommodations
-            # FERPA compliant: Only accommodation TYPE sent to AI, never student name/ID
-            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-                accommodation_prompt = build_accommodation_prompt(student_info['student_id'])
-                if accommodation_prompt:
-                    file_ai_notes += f"\n{accommodation_prompt}\n"
-                    grading_state["log"].append(f"  Applying IEP/504 accommodations")
-
-            # Add student history context for personalized feedback
-            # FERPA compliant: Only performance patterns sent to AI, never student name/ID
-            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-                history_context = build_history_context(student_info['student_id'])
-                if history_context:
-                    file_ai_notes += f"\n{history_context}\n"
-                    grading_state["log"].append(f"  Including student history context")
-
-            # Add file-specific markers to the markers list temporarily
-            original_markers = STUDENT_WORK_MARKERS.copy()
-            for marker in file_markers:
-                if marker not in STUDENT_WORK_MARKERS:
-                    STUDENT_WORK_MARKERS.append(marker)
-
-            file_data = read_assignment_file(filepath)
-            if not file_data:
-                grading_state["log"].append(f"  Could not read file")
-                STUDENT_WORK_MARKERS.clear()
-                STUDENT_WORK_MARKERS.extend(original_markers)
-                continue
-
-            markers_found = []
-            if file_data["type"] == "text":
-                # Send FULL document to AI - let it identify student work
-                # The AI is better at distinguishing questions from answers
-                full_doc_content = file_data["content"]
-                grade_data = {"type": "text", "content": full_doc_content}
-                grading_state["log"].append(f"  Document: {len(full_doc_content)} chars")
-            else:
-                grading_state["log"].append(f"  Image file")
-                grade_data = file_data
-
-            grading_state["log"].append(f"  Grading with {ai_model}...")
-            grade_result = grade_assignment(student_info['student_name'], grade_data, file_ai_notes, grade_level, subject, ai_model, student_info.get('student_id'))
-
-            # Restore original markers
-            STUDENT_WORK_MARKERS.clear()
-            STUDENT_WORK_MARKERS.extend(original_markers)
-
-            # Check for API/network errors - stop grading to prevent bad grades
-            if grade_result.get('letter_grade') == 'ERROR':
-                error_msg = grade_result.get('feedback', 'Unknown API error')
-                grading_state["log"].append("")
-                grading_state["log"].append("=" * 50)
-                grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
-                grading_state["log"].append("=" * 50)
-                grading_state["log"].append(f"Error: {error_msg}")
-                grading_state["log"].append("")
-                grading_state["log"].append("Please check:")
-                grading_state["log"].append("  • Internet connection")
-                grading_state["log"].append("  • OpenAI API key is valid")
-                grading_state["log"].append("  • API service is available")
-                grading_state["log"].append("")
-                grading_state["log"].append(f"Progress saved: {len(all_grades)} assignments graded")
-                grading_state["log"].append("Fix the issue and restart to continue.")
-                grading_state["error"] = f"API Error: {error_msg}"
-                grading_state["complete"] = True
-                grading_state["is_running"] = False
-                # Save any progress made
-                if grading_state["results"]:
-                    save_results(grading_state["results"])
-                return
-
-            grading_state["log"].append(f"  Score: {grade_result['score']} ({grade_result['letter_grade']})")
-
-            # Use assignment title from matched config (full name, not truncated filename)
-            assignment_title = matched_title if matched_config else ASSIGNMENT_NAME
-
-            # Get student content for review - show full document
-            if file_data["type"] == "text":
-                full_content = file_data.get("content", "")
-                # Show full document - AI grades the whole thing
-                student_content = full_content
-            else:
-                student_content = "[Image file - view in original document]"
-                full_content = "[Image file - view in original document]"
-
-            # Build full grade record for export
-            grade_record = {
-                **student_info,
-                **grade_result,
-                "filename": filepath.name,
-                "assignment": assignment_title,
-                "period": student_period,
-                "grading_period": grading_period,
-                "has_markers": len(markers_found) > 0
-            }
-            all_grades.append(grade_record)
-
-            # Check for baseline deviation BEFORE saving to history (compare to existing baseline)
-            baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
-            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-                try:
-                    baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
-                    if baseline_deviation.get('flag') != 'normal':
-                        grading_state["log"].append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
-                except Exception as e:
-                    print(f"  Note: Could not check baseline deviation: {e}")
-
-            # Save to student history for progress tracking
-            if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-                try:
-                    add_assignment_to_history(student_info['student_id'], grade_record)
-                except Exception as e:
-                    print(f"  Note: Could not update student history: {e}")
-
-            # Determine marker status: verified if has config with markers/notes/sections
-            # A file is "verified" if graded with an assignment config (markers, notes, or response sections)
-            has_config = matched_config is not None
-            has_custom_markers = len(file_markers) > 0
-            has_grading_notes = bool(file_notes.strip()) if file_notes else False
-            has_response_sections = len(file_sections) > 0
-            is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
-            marker_status = "verified" if is_verified else "unverified"
-
-            if marker_status == "unverified":
-                grading_state["log"].append(f"  ⚠️  UNVERIFIED: No assignment config - grade may be inaccurate")
-
-            grading_state["results"].append({
-                "student_name": student_info['student_name'],
-                "student_id": student_info['student_id'],
-                "email": student_info.get('email', ''),
-                "filename": filepath.name,
-                "filepath": str(filepath),
-                "assignment": assignment_title,
-                "period": student_period,
-                "score": grade_result['score'],
-                "letter_grade": grade_result['letter_grade'],
-                "feedback": grade_result.get('feedback', ''),
-                "student_content": student_content[:5000],
-                "full_content": full_content[:10000],
-                "breakdown": grade_result.get('breakdown', {}),
-                "student_responses": grade_result.get('student_responses', []),
-                "unanswered_questions": grade_result.get('unanswered_questions', []),
-                "authenticity_flag": grade_result.get('authenticity_flag', 'clean'),
-                "authenticity_reason": grade_result.get('authenticity_reason', ''),
-                "baseline_deviation": baseline_deviation,
-                "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
-                "marker_status": marker_status,
-                "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            })
+        # Handle API error - stop and save
+        if api_error_occurred:
+            grading_state["complete"] = True
+            grading_state["is_running"] = False
+            if grading_state["results"]:
+                save_results(grading_state["results"])
+            return
 
         # Export CSVs and emails
         if len(all_grades) > 0:
@@ -975,6 +1280,9 @@ def start_grading():
     # Get class period for differentiated grading (e.g., "Period 4" for different expectations)
     class_period = data.get('classPeriod', '')
 
+    # Get custom rubric from Settings
+    rubric = data.get('rubric', None)
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -989,7 +1297,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric)
     )
     thread.start()
 
@@ -1042,11 +1350,18 @@ def grade_individual():
 
     # Build AI notes from config
     file_ai_notes = global_ai_notes or ''
+    assignment_template = ''
+    file_exclude_markers = []
     if class_period:
         file_ai_notes += f"\nCLASS PERIOD BEING GRADED: {class_period}\n(Apply any period-specific grading expectations from the instructions above)\n"
     if assignment_config:
         if assignment_config.get('gradingNotes'):
             file_ai_notes = assignment_config['gradingNotes'] + '\n\n' + file_ai_notes
+        # Get assignment template for question context
+        imported_doc = assignment_config.get('importedDoc', {})
+        assignment_template = imported_doc.get('text', '')
+        # Get exclude markers
+        file_exclude_markers = assignment_config.get('excludeMarkers', [])
 
     try:
         import base64
@@ -1083,8 +1398,8 @@ def grade_individual():
         # Get student ID for history tracking
         individual_student_id = student_info.get('id', '') if student_info else None
 
-        # Grade the assignment
-        grade_result = grade_assignment(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id)
+        # Grade the assignment (no custom rubric for individual grading yet)
+        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers)
 
         if grade_result.get('letter_grade') == 'ERROR':
             return jsonify({"error": grade_result.get('feedback', 'Grading failed')}), 500
