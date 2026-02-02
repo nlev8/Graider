@@ -97,7 +97,7 @@ def stop_grading():
 
 @grading_bp.route('/api/clear-results', methods=['POST'])
 def clear_results():
-    """Clear all grading results."""
+    """Clear all grading results (keeps student history intact)."""
     if grading_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
 
@@ -125,6 +125,7 @@ def clear_results():
 def delete_result():
     """Delete a single grading result by filename."""
     import json
+    import csv
 
     if grading_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
@@ -156,6 +157,92 @@ def delete_result():
     except Exception as e:
         # Log but don't fail - state is already updated
         pass
+
+    # Also remove from master_grades.csv if it exists
+    settings_file = os.path.expanduser("~/.graider_settings.json")
+    try:
+        with open(settings_file, 'r') as f:
+            settings = json.load(f)
+        output_folder = settings.get('config', {}).get('output_folder', '')
+        if output_folder:
+            master_file = os.path.join(output_folder, "master_grades.csv")
+            if os.path.exists(master_file):
+                # Read all rows, filter out the deleted one
+                rows = []
+                fieldnames = None
+                with open(master_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    fieldnames = reader.fieldnames
+                    rows = [row for row in reader if row.get('Filename', '') != filename]
+
+                # Write back without the deleted row
+                if fieldnames and len(rows) > 0:
+                    with open(master_file, 'w', encoding='utf-8', newline='') as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(rows)
+                elif len(rows) == 0:
+                    # If no rows left, delete the file
+                    os.remove(master_file)
+    except Exception as e:
+        # Log but don't fail
+        pass
+
+    return jsonify({"status": "deleted"})
+
+
+@grading_bp.route('/api/update-result', methods=['POST'])
+def update_result():
+    """Update a single grading result (score, feedback, etc.)."""
+    import json
+
+    if grading_state is None:
+        return jsonify({"error": "Grading not initialized"}), 500
+
+    data = request.json
+    filename = data.get('filename', '')
+
+    if not filename:
+        return jsonify({"error": "Filename is required"}), 400
+
+    # Find the result to update
+    result_index = None
+    for i, r in enumerate(grading_state["results"]):
+        if r.get('filename', '') == filename:
+            result_index = i
+            break
+
+    if result_index is None:
+        return jsonify({"error": "Result not found"}), 404
+
+    # Update allowed fields
+    allowed_fields = ['score', 'letter_grade', 'feedback', 'verified']
+    for field in allowed_fields:
+        if field in data:
+            grading_state["results"][result_index][field] = data[field]
+
+    # Recalculate letter grade if score changed
+    if 'score' in data:
+        score = int(data['score'])
+        grading_state["results"][result_index]['letter_grade'] = (
+            'A' if score >= 90 else
+            'B' if score >= 80 else
+            'C' if score >= 70 else
+            'D' if score >= 60 else 'F'
+        )
+
+    # Save to file
+    results_file = os.path.expanduser("~/.graider_results.json")
+    try:
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(grading_state["results"], f, indent=2)
+    except Exception as e:
+        pass
+
+    return jsonify({
+        "status": "updated",
+        "result": grading_state["results"][result_index]
+    })
 
     return jsonify({
         "status": "deleted",
@@ -456,4 +543,268 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
         "count": matched_count,
         "total": len(students_to_match),
         "unmatched": len(students_to_match) - matched_count
+    })
+
+
+# ══════════════════════════════════════════════════════════════
+# STUDENT HISTORY MANAGEMENT
+# ══════════════════════════════════════════════════════════════
+
+@grading_bp.route('/api/student-history', methods=['GET'])
+def list_student_history():
+    """List all students with saved history/writing profiles."""
+    import json
+
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    students = []
+
+    # Build ID -> name lookup from roster and period files
+    id_to_name = _build_student_name_lookup()
+
+    if os.path.exists(history_dir):
+        for f in os.listdir(history_dir):
+            if f.endswith('.json'):
+                student_id = f.replace('.json', '')
+                filepath = os.path.join(history_dir, f)
+                try:
+                    with open(filepath, 'r') as hf:
+                        data = json.load(hf)
+                        # Get summary info
+                        profile = data.get('writing_profile', {})
+                        submissions = profile.get('sample_count', 0)
+                        last_updated = data.get('last_updated', 'Unknown')
+                        avg_complexity = profile.get('avg_complexity_score', 0)
+
+                        # Get name: from profile, then roster lookup, then ID as fallback
+                        name = data.get('name') or id_to_name.get(student_id) or student_id
+
+                        students.append({
+                            'student_id': student_id,
+                            'name': name,
+                            'submissions_analyzed': submissions,
+                            'last_updated': last_updated,
+                            'avg_complexity': round(avg_complexity, 1) if avg_complexity else 0,
+                            'file_size': os.path.getsize(filepath)
+                        })
+                except Exception as e:
+                    students.append({
+                        'student_id': student_id,
+                        'name': id_to_name.get(student_id, student_id),
+                        'error': str(e)
+                    })
+
+    # Sort by name
+    students.sort(key=lambda x: x.get('name', '').lower())
+
+    return jsonify({
+        "students": students,
+        "total": len(students),
+        "history_dir": history_dir
+    })
+
+
+def _build_student_name_lookup():
+    """Build a student_id -> name lookup from roster and period files."""
+    import csv
+
+    id_to_name = {}
+
+    def parse_student_name(row):
+        """Parse student name from various formats."""
+        # Try separate first/last columns first
+        first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
+        last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
+        if first and last:
+            return f"{first} {last}"
+
+        # Try combined "Student" column with "LastName; FirstName" format
+        student = row.get('Student', row.get('Name', row.get('Student Name', ''))).strip()
+        if student and '; ' in student:
+            parts = student.split('; ', 1)
+            if len(parts) == 2:
+                return f"{parts[1]} {parts[0]}"  # "FirstName LastName"
+
+        # Try combined name column as-is
+        if student:
+            return student
+
+        return None
+
+    def get_student_id(row):
+        """Get student ID from various column names."""
+        for col in ['Student ID', 'StudentID', 'ID', 'student_id']:
+            if col in row and row[col]:
+                return str(row[col]).strip()
+        return None
+
+    # Try main roster
+    roster_file = os.path.expanduser("~/.graider_data/roster.csv")
+    if os.path.exists(roster_file):
+        try:
+            with open(roster_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    student_id = get_student_id(row)
+                    name = parse_student_name(row)
+                    if student_id and name:
+                        id_to_name[student_id] = name
+        except Exception:
+            pass
+
+    # Also try period CSVs
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+    if os.path.exists(periods_dir):
+        for period_file in os.listdir(periods_dir):
+            if period_file.endswith('.csv'):
+                try:
+                    with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            student_id = get_student_id(row)
+                            name = parse_student_name(row)
+                            if student_id and name:
+                                id_to_name[student_id] = name
+                except Exception:
+                    pass
+
+    return id_to_name
+
+
+@grading_bp.route('/api/student-history/<student_id>', methods=['GET'])
+def get_student_history(student_id):
+    """Get detailed history for a specific student."""
+    import json
+
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    filepath = os.path.join(history_dir, f"{student_id}.json")
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Student history not found"}), 404
+
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@grading_bp.route('/api/student-history/<student_id>', methods=['DELETE'])
+def delete_student_history(student_id):
+    """Delete history for a specific student."""
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    filepath = os.path.join(history_dir, f"{student_id}.json")
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Student history not found"}), 404
+
+    try:
+        os.remove(filepath)
+        return jsonify({"status": "deleted", "student_id": student_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@grading_bp.route('/api/student-history', methods=['DELETE'])
+def delete_all_student_history():
+    """Delete ALL student history (fresh start)."""
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+
+    if not os.path.exists(history_dir):
+        return jsonify({"status": "cleared", "deleted": 0})
+
+    deleted_count = 0
+    errors = []
+
+    for f in os.listdir(history_dir):
+        if f.endswith('.json'):
+            try:
+                os.remove(os.path.join(history_dir, f))
+                deleted_count += 1
+            except Exception as e:
+                errors.append(f"{f}: {e}")
+
+    return jsonify({
+        "status": "cleared",
+        "deleted": deleted_count,
+        "errors": errors if errors else None
+    })
+
+
+@grading_bp.route('/api/student-history/migrate-names', methods=['POST'])
+def migrate_student_names():
+    """Add student names to existing profiles by looking up from roster."""
+    import json
+    import csv
+
+    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    roster_file = os.path.expanduser("~/.graider_data/roster.csv")
+
+    # Also check for period CSVs which have student names
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+
+    if not os.path.exists(history_dir):
+        return jsonify({"error": "No student history directory found"}), 404
+
+    # Build a lookup of student_id -> name from all sources
+    id_to_name = {}
+
+    # Try main roster first
+    if os.path.exists(roster_file):
+        try:
+            with open(roster_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    student_id = row.get('StudentID', row.get('Student ID', row.get('ID', row.get('student_id', ''))))
+                    first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
+                    last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
+                    if student_id and first and last:
+                        id_to_name[str(student_id).strip()] = f"{first} {last}"
+        except Exception as e:
+            print(f"Could not read roster: {e}")
+
+    # Also try period CSVs
+    if os.path.exists(periods_dir):
+        for period_file in os.listdir(periods_dir):
+            if period_file.endswith('.csv'):
+                try:
+                    with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            student_id = row.get('StudentID', row.get('Student ID', row.get('ID', row.get('student_id', ''))))
+                            first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
+                            last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
+                            if student_id and first and last:
+                                id_to_name[str(student_id).strip()] = f"{first} {last}"
+                except Exception:
+                    pass
+
+    # Update profiles with names
+    updated = 0
+    for f in os.listdir(history_dir):
+        if f.endswith('.json'):
+            student_id = f.replace('.json', '')
+            filepath = os.path.join(history_dir, f)
+            try:
+                with open(filepath, 'r') as hf:
+                    data = json.load(hf)
+
+                # Check if name already exists
+                if data.get('name') and data['name'] != student_id:
+                    continue  # Already has a name
+
+                # Look up name
+                name = id_to_name.get(student_id)
+                if name:
+                    data['name'] = name
+                    with open(filepath, 'w') as hf:
+                        json.dump(data, hf, indent=2)
+                    updated += 1
+            except Exception:
+                pass
+
+    return jsonify({
+        "status": "migrated",
+        "updated": updated,
+        "roster_entries": len(id_to_name)
     })
