@@ -2705,24 +2705,29 @@ ${signature}`;
         const effortPts = data.assignment.effortPoints ?? 15;
         let migratedMarkers = data.assignment.customMarkers || [];
 
-        // Check if markers need migration (any string markers or markers without points)
-        const needsMigration = migratedMarkers.length > 0 && migratedMarkers.some(m =>
-          typeof m === 'string' || (typeof m === 'object' && !m.points)
-        );
+        // If no markers exist, add a default Content section
+        if (migratedMarkers.length === 0) {
+          migratedMarkers = [{ start: "Content", points: 100 - effortPts, type: "written" }];
+        } else {
+          // Check if markers need migration (any string markers or markers without points)
+          const needsMigration = migratedMarkers.some(m =>
+            typeof m === 'string' || (typeof m === 'object' && !m.points)
+          );
 
-        if (needsMigration) {
-          // Distribute remaining points (100 - effort) evenly among markers
-          const availablePoints = 100 - effortPts;
-          const pointsPerMarker = Math.floor(availablePoints / migratedMarkers.length);
-          const remainder = availablePoints % migratedMarkers.length;
+          if (needsMigration) {
+            // Distribute remaining points (100 - effort) evenly among markers
+            const availablePoints = 100 - effortPts;
+            const pointsPerMarker = Math.floor(availablePoints / migratedMarkers.length);
+            const remainder = availablePoints % migratedMarkers.length;
 
-          migratedMarkers = migratedMarkers.map((m, i) => {
-            const markerText = typeof m === 'string' ? m : m.start;
-            const markerType = typeof m === 'object' ? (m.type || 'written') : 'written';
-            // Give first marker any remainder points
-            const pts = pointsPerMarker + (i === 0 ? remainder : 0);
-            return { start: markerText, points: pts, type: markerType };
-          });
+            migratedMarkers = migratedMarkers.map((m, i) => {
+              const markerText = typeof m === 'string' ? m : m.start;
+              const markerType = typeof m === 'object' ? (m.type || 'written') : 'written';
+              // Give first marker any remainder points
+              const pts = pointsPerMarker + (i === 0 ? remainder : 0);
+              return { start: markerText, points: pts, type: markerType };
+            });
+          }
         }
 
         setAssignment({
