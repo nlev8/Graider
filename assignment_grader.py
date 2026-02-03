@@ -2053,7 +2053,8 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     # But NOT for blank submissions (they get their own feedback)
     ai_confidence = grading_result.get("ai_detection", {}).get("confidence", 0)
     student_responses = grading_result.get("student_responses", [])
-    is_blank = not student_responses  # Empty list = blank submission
+    # Empty list = blank submission, UNLESS we recovered from JSON error (then we don't know)
+    is_blank = not student_responses and not grading_result.get("json_recovery")
 
     if is_blank:
         # Blank submission - use clear feedback, skip academic integrity check
