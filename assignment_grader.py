@@ -55,6 +55,116 @@ load_dotenv(os.path.join(app_dir, '.env'), override=True)
 # PRE-EXTRACTION - Extract student responses BEFORE AI grading (prevents hallucination)
 # =============================================================================
 
+def is_question_or_prompt(text: str) -> bool:
+    """
+    Check if text looks like a question or instruction prompt rather than a student response.
+    Returns True if the text should NOT be treated as a student response.
+
+    This prevents the common error where questions are detected as responses
+    when students leave sections blank.
+    """
+    if not text or not text.strip():
+        return True  # Empty is not a valid response
+
+    text = text.strip()
+
+    # If text ends with a question mark, it's likely a question, not a response
+    if text.rstrip().endswith('?'):
+        return True
+
+    # Check if text starts with common question/instruction words
+    question_starters = [
+        'what ', 'what\'s', 'whats',
+        'how ', 'how\'s', 'hows',
+        'why ', 'why\'s', 'whys',
+        'when ', 'when\'s', 'whens',
+        'where ', 'where\'s', 'wheres',
+        'who ', 'who\'s', 'whos',
+        'which ', 'which\'s',
+        'explain ', 'explain:',
+        'describe ', 'describe:',
+        'list ', 'list:',
+        'define ', 'define:',
+        'identify ', 'identify:',
+        'compare ', 'compare:',
+        'analyze ', 'analyze:',
+        'discuss ', 'discuss:',
+        'summarize ', 'summarize:',
+        'write your ', 'write a ',
+        'in your own words',
+        'using evidence',
+        'provide evidence',
+        'give an example',
+        'give examples',
+    ]
+
+    text_lower = text.lower()
+    for starter in question_starters:
+        if text_lower.startswith(starter):
+            # But check if there's actual content after the question
+            # e.g., "What year? 1803" should keep "1803" as the answer
+            if '?' in text:
+                after_question = text.split('?', 1)[1].strip()
+                if after_question and len(after_question) > 2:
+                    return False  # There's content after the question - not just a prompt
+            return True
+
+    # Check if it looks like a numbered question with no answer
+    # e.g., "1. What was the cause?" or "2) How did..."
+    num_question_pattern = r'^\d+[\.\)]\s*(what|how|why|when|where|who|which|explain|describe|list|define)\b'
+    if re.match(num_question_pattern, text_lower):
+        return True
+
+    # Check for instruction-only patterns
+    instruction_patterns = [
+        r'^answer\s*(the\s*)?(following|below|these)',
+        r'^complete\s*(the\s*)?(following|below|these)',
+        r'^fill\s*in\s*(the\s*)?blank',
+        r'^use\s*(the\s*)?(reading|text|passage)',
+        r'^\d+[\.\)]\s*$',  # Just a number with no content
+    ]
+    for pattern in instruction_patterns:
+        if re.match(pattern, text_lower):
+            return True
+
+    return False
+
+
+def filter_questions_from_response(response_text: str) -> str:
+    """
+    Filter out question/prompt text from a response, keeping only actual answers.
+
+    For example:
+    Input: "What year was the Louisiana Purchase? 1803"
+    Output: "1803"
+
+    Input: "How did slavery affect daily life?"
+    Output: "" (blank - student didn't answer)
+    """
+    if not response_text:
+        return ""
+
+    lines = response_text.strip().split('\n')
+    filtered_lines = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # If line ends with ?, check if there's an answer after it
+        if '?' in line:
+            parts = line.split('?')
+            # Get everything after the last question mark
+            after_question = parts[-1].strip() if len(parts) > 1 else ''
+            if after_question and len(after_question) > 2 and not is_question_or_prompt(after_question):
+                filtered_lines.append(after_question)
+        elif not is_question_or_prompt(line):
+            filtered_lines.append(line)
+
+    return '\n'.join(filtered_lines).strip()
+
+
 def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int:
     """
     Find a marker in document using fuzzy matching.
@@ -303,6 +413,13 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     # Use filtered response
                     response = '\n'.join(student_lines)
 
+            # CRITICAL: Filter out questions/prompts from response
+            # This prevents detecting "What was the cause?" as a student answer
+            if not is_blank:
+                response = filter_questions_from_response(response)
+                if not response or len(response.strip()) < 3:
+                    is_blank = True
+
             if not is_blank:
                 # Check for blank vocab terms within this section (Term: with no definition)
                 for line in response.split('\n'):
@@ -359,6 +476,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             # Save previous Q&A if exists
             if current_question and current_answer_lines:
                 answer = ' '.join(current_answer_lines).strip()
+                # Filter out questions/prompts from answer
+                answer = filter_questions_from_response(answer)
                 if answer and len(answer) > 3:
                     extracted.append({
                         "question": current_question,
@@ -386,6 +505,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
     # Don't forget last Q&A
     if current_question and current_answer_lines:
         answer = ' '.join(current_answer_lines).strip()
+        # Filter out questions/prompts from answer
+        answer = filter_questions_from_response(answer)
         if answer and len(answer) > 3:
             extracted.append({
                 "question": current_question,
@@ -2153,7 +2274,11 @@ SECTION POINT VALUES:"""]
     total += effort_points
     rubric_lines.append(f"\nTOTAL: {total} points")
 
-    rubric_lines.append("""
+    # Build section names list for JSON example
+    section_names = [m.get('start', 'Section') if isinstance(m, dict) else m for m in marker_config]
+    section_json_example = ',\n        '.join([f'"{name}": {{"earned": <pts>, "possible": {m.get("points", 10) if isinstance(m, dict) else 10}}}' for name, m in zip(section_names, marker_config)])
+
+    rubric_lines.append(f"""
 GRADING RULES:
 - Grade each section out of its assigned points
 - BLANK SECTION = 0 POINTS for that section (no partial credit)
@@ -2163,7 +2288,13 @@ GRADING RULES:
 - Accept reasonable synonyms and alternate phrasings
 - Minor spelling errors should NOT be penalized if meaning is clear
 
-In your JSON output, include a "section_scores" field with each section's earned points.
+IMPORTANT: Your JSON output MUST include a "section_scores" field showing points for each section:
+"section_scores": {{
+        {section_json_example},
+        "Effort & Engagement": {{"earned": <pts>, "possible": {effort_points}}}
+    }}
+
+The "score" field should equal the sum of all section_scores earned values.
 """)
 
     return "\n".join(rubric_lines)

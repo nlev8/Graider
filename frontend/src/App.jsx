@@ -872,6 +872,7 @@ function App() {
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
   const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
+  const [resultsAssignmentFilter, setResultsAssignmentFilter] = useState(""); // Filter results by assignment
   const [resultsSort, setResultsSort] = useState({
     field: "time",
     direction: "desc",
@@ -1213,6 +1214,15 @@ function App() {
   const [rosterMappingModal, setRosterMappingModal] = useState({
     show: false,
     roster: null,
+  });
+
+  // Add Student from Screenshot modal
+  const [addStudentModal, setAddStudentModal] = useState({
+    show: false,
+    loading: false,
+    image: null,
+    student: null,
+    error: null,
   });
 
   // Accommodation state (IEP/504 support - FERPA compliant)
@@ -2621,22 +2631,45 @@ ${signature}`;
     setAssignment({ ...assignment, customMarkers: updated });
   };
 
-  // Highlight text in HTML with a colored span
+  // Highlight text in HTML with a colored span (handles multi-line markers)
   const highlightTextInHtml = (html, text, color, markerId) => {
     if (!text || !html) return html;
-
-    // Escape special regex characters
-    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Match the text (case-insensitive, first occurrence only)
-    const regex = new RegExp(`(${escaped})`, 'i');
 
     // Check if already highlighted
     if (html.includes(`data-marker-id="${markerId}"`)) {
       return html; // Already highlighted
     }
 
-    // Replace first occurrence with highlighted span
-    return html.replace(regex, `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">$1</span>`);
+    // First try exact match (fastest)
+    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const exactRegex = new RegExp(`(${escaped})`, 'i');
+    if (exactRegex.test(html)) {
+      return html.replace(exactRegex, `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">$1</span>`);
+    }
+
+    // Multi-line handling: build flexible regex that allows HTML tags/whitespace between words
+    // Split marker text into words, preserving punctuation attached to words
+    const words = text.split(/[\s\n\r]+/).filter(w => w.length > 0);
+    if (words.length === 0) return html;
+
+    // Build pattern: each word with optional HTML tags and whitespace between
+    // This matches "Main Idea" even if HTML has "Main</p><p>Idea" or "Main<br>Idea"
+    const flexPattern = words.map(word => {
+      const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return `(${escapedWord})`;
+    }).join('((?:<[^>]*>|\\s)*)'); // Allow HTML tags or whitespace between words
+
+    const flexRegex = new RegExp(flexPattern, 'i');
+    const match = html.match(flexRegex);
+
+    if (match) {
+      // Wrap the entire matched content (including any HTML tags between words)
+      const fullMatch = match[0];
+      const highlightSpan = `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">${fullMatch}</span>`;
+      return html.replace(fullMatch, highlightSpan);
+    }
+
+    return html; // No match found
   };
 
   // Remove highlight from HTML by marker ID
@@ -4263,6 +4296,24 @@ ${signature}`;
                             </span>
                           </div>
                         </div>
+
+                        {/* Section Scores (if available) */}
+                        {r.section_scores && Object.keys(r.section_scores).length > 0 && (
+                          <div style={{ marginBottom: "8px" }}>
+                            <label className="label">Section Breakdown</label>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", background: "var(--input-bg)", padding: "12px", borderRadius: "8px" }}>
+                              {Object.entries(r.section_scores).map(([section, data]) => (
+                                <div key={section} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem" }}>
+                                  <span style={{ color: "var(--text-secondary)" }}>{section}</span>
+                                  <span style={{ fontWeight: 600, color: data.earned === data.possible ? "#4ade80" : data.earned === 0 ? "#f87171" : "#fbbf24" }}>
+                                    {data.earned}/{data.possible} pts
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         <div
                           style={{
                             flex: 1,
@@ -5599,7 +5650,7 @@ ${signature}`;
                                     )}
                                   </div>
                                   <button
-                                    className={isCompletionOnly ? "btn btn-secondary" : "btn btn-primary"}
+                                    className="btn"
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       const newData = {
@@ -5634,9 +5685,17 @@ ${signature}`;
                                         addToast("Error saving: " + e.message, "error");
                                       }
                                     }}
-                                    style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+                                    style={{
+                                      padding: "6px 12px",
+                                      fontSize: "0.8rem",
+                                      background: isCompletionOnly ? "rgba(34, 197, 94, 0.2)" : "rgba(99, 102, 241, 0.2)",
+                                      color: isCompletionOnly ? "#22c55e" : "#818cf8",
+                                      border: `1px solid ${isCompletionOnly ? "rgba(34, 197, 94, 0.4)" : "rgba(99, 102, 241, 0.4)"}`,
+                                    }}
+                                    title={isCompletionOnly ? "Click to enable AI grading" : "Click to set as completion only"}
                                   >
-                                    {isCompletionOnly ? "Enable AI Grading" : "Completion Only"}
+                                    <Icon name={isCompletionOnly ? "CheckCircle" : "Sparkles"} size={14} style={{ marginRight: "6px" }} />
+                                    {isCompletionOnly ? "Completion Only" : "AI Grading"}
                                   </button>
                                 </div>
                               );
@@ -7052,7 +7111,7 @@ ${signature}`;
                       >
                         <Icon name="FileText" size={24} />
                         Grading Results (
-                        {resultsFilter === "all" && !resultsPeriodFilter
+                        {resultsFilter === "all" && !resultsPeriodFilter && !resultsAssignmentFilter
                           ? status.results.length
                           : status.results.filter((r) => {
                               if (resultsFilter === "handwritten" && !r.is_handwritten)
@@ -7065,12 +7124,77 @@ ${signature}`;
                                 return false;
                               if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
                                 return false;
+                              if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter)
+                                return false;
                               return true;
                             }).length}
-                        {(resultsFilter !== "all" || resultsPeriodFilter) &&
+                        {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter) &&
                           ` of ${status.results.length}`}
                         )
                       </h2>
+                      {/* Assignment Stats - shows when assignment filter is active */}
+                      {resultsAssignmentFilter && (() => {
+                        const assignmentResults = status.results.filter(r => (r.assignment || r.filename) === resultsAssignmentFilter);
+                        const gradedCount = assignmentResults.length;
+                        const avgScore = gradedCount > 0 ? Math.round(assignmentResults.reduce((sum, r) => sum + (parseInt(r.score) || 0), 0) / gradedCount) : 0;
+                        const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+                        assignmentResults.forEach(r => {
+                          const grade = (r.letter_grade || "F")[0];
+                          if (gradeDistribution[grade] !== undefined) gradeDistribution[grade]++;
+                        });
+                        const periodBreakdown = {};
+                        assignmentResults.forEach(r => {
+                          const period = r.period || "Unknown";
+                          periodBreakdown[period] = (periodBreakdown[period] || 0) + 1;
+                        });
+                        return (
+                          <div style={{
+                            background: "rgba(99,102,241,0.1)",
+                            border: "1px solid rgba(99,102,241,0.2)",
+                            borderRadius: "10px",
+                            padding: "12px 16px",
+                            marginBottom: "15px",
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "20px",
+                            alignItems: "center",
+                            fontSize: "0.85rem"
+                          }}>
+                            <div>
+                              <span style={{ color: "var(--text-muted)" }}>Graded:</span>{" "}
+                              <strong>{gradedCount}</strong> students
+                            </div>
+                            <div>
+                              <span style={{ color: "var(--text-muted)" }}>Avg Score:</span>{" "}
+                              <strong style={{ color: avgScore >= 80 ? "#4ade80" : avgScore >= 70 ? "#fbbf24" : "#f87171" }}>{avgScore}%</strong>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <span style={{ color: "var(--text-muted)" }}>Grades:</span>
+                              {Object.entries(gradeDistribution).map(([grade, count]) => count > 0 && (
+                                <span key={grade} style={{
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  background: grade === "A" ? "rgba(74,222,128,0.2)" : grade === "B" ? "rgba(96,165,250,0.2)" : grade === "C" ? "rgba(251,191,36,0.2)" : "rgba(248,113,113,0.2)",
+                                  color: grade === "A" ? "#4ade80" : grade === "B" ? "#60a5fa" : grade === "C" ? "#fbbf24" : "#f87171",
+                                  fontWeight: 600
+                                }}>
+                                  {grade}: {count}
+                                </span>
+                              ))}
+                            </div>
+                            {Object.keys(periodBreakdown).length > 1 && (
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <span style={{ color: "var(--text-muted)" }}>By Period:</span>
+                                {Object.entries(periodBreakdown).sort((a, b) => a[0].localeCompare(b[0])).map(([period, count]) => (
+                                  <span key={period} style={{ padding: "2px 8px", borderRadius: "4px", background: "rgba(255,255,255,0.1)" }}>
+                                    {period}: {count}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {status.results.length > 0 && (
                         <div
                           style={{
@@ -7147,6 +7271,27 @@ ${signature}`;
                               {sortedPeriods.map((p) => (
                                 <option key={p.filename} value={p.period_name}>
                                   {p.period_name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {/* Assignment Filter Dropdown */}
+                          {status.results.length > 0 && (
+                            <select
+                              className="input"
+                              value={resultsAssignmentFilter}
+                              onChange={(e) => setResultsAssignmentFilter(e.target.value)}
+                              style={{
+                                width: "auto",
+                                padding: "8px 12px",
+                                fontSize: "0.85rem",
+                                maxWidth: "200px",
+                              }}
+                            >
+                              <option value="">All Assignments</option>
+                              {[...new Set(status.results.map((r) => r.assignment || r.filename || "Unknown"))].sort().map((a) => (
+                                <option key={a} value={a}>
+                                  {a.length > 30 ? a.substring(0, 30) + "..." : a}
                                 </option>
                               ))}
                             </select>
@@ -7554,7 +7699,7 @@ ${signature}`;
                               gap: "10px",
                             }}
                           >
-                            {(resultsFilter !== "all" || resultsPeriodFilter) && (
+                            {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter) && (
                               <button
                                 onClick={() => {
                                   const approvals = { ...emailApprovals };
@@ -7565,6 +7710,7 @@ ${signature}`;
                                     if (resultsFilter === "verified" && r.marker_status !== "verified") return;
                                     if (resultsFilter === "unverified" && r.marker_status !== "verified") return;
                                     if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
+                                    if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter) return;
                                     approvals[i] = "approved";
                                   });
                                   updateApprovalsBulk(approvals);
@@ -7769,6 +7915,9 @@ ${signature}`;
                                   return false;
                                 // Apply period filter
                                 if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
+                                  return false;
+                                // Apply assignment filter
+                                if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter)
                                   return false;
                                 // Apply search filter
                                 if (!resultsSearch.trim()) return true;
@@ -10322,6 +10471,121 @@ ${signature}`;
                       )}
                     </div>
 
+                    {/* Add Student from Screenshot Section */}
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--glass-border)",
+                        paddingTop: "25px",
+                        marginTop: "25px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Camera"
+                          size={20}
+                          style={{ color: "#8b5cf6" }}
+                        />
+                        Add Student from Screenshot
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Paste or upload a screenshot of student info - AI will extract and add to roster
+                      </p>
+
+                      <div style={{ display: "flex", gap: "10px", marginBottom: "15px", flexWrap: "wrap" }}>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const clipboardItems = await navigator.clipboard.read();
+                              for (const item of clipboardItems) {
+                                if (item.types.includes("image/png")) {
+                                  const blob = await item.getType("image/png");
+                                  const reader = new FileReader();
+                                  reader.onload = async (e) => {
+                                    const base64 = e.target.result;
+                                    setAddStudentModal({ show: true, loading: true, image: base64, student: null, error: null });
+                                    try {
+                                      const response = await fetch("/api/extract-student-from-image", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ image: base64 }),
+                                      });
+                                      const data = await response.json();
+                                      if (data.error) {
+                                        setAddStudentModal(prev => ({ ...prev, loading: false, error: data.error }));
+                                      } else {
+                                        setAddStudentModal(prev => ({ ...prev, loading: false, student: data.student }));
+                                      }
+                                    } catch (err) {
+                                      setAddStudentModal(prev => ({ ...prev, loading: false, error: err.message }));
+                                    }
+                                  };
+                                  reader.readAsDataURL(blob);
+                                  return;
+                                }
+                              }
+                              addToast("No image found in clipboard. Copy a screenshot first.", "warning");
+                            } catch (err) {
+                              addToast("Could not access clipboard: " + err.message, "error");
+                            }
+                          }}
+                          className="btn btn-primary"
+                        >
+                          <Icon name="Clipboard" size={18} />
+                          Paste from Clipboard
+                        </button>
+                        <label className="btn btn-secondary" style={{ cursor: "pointer" }}>
+                          <Icon name="Upload" size={18} />
+                          Upload Image
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = async (ev) => {
+                                const base64 = ev.target.result;
+                                setAddStudentModal({ show: true, loading: true, image: base64, student: null, error: null });
+                                try {
+                                  const response = await fetch("/api/extract-student-from-image", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ image: base64 }),
+                                  });
+                                  const data = await response.json();
+                                  if (data.error) {
+                                    setAddStudentModal(prev => ({ ...prev, loading: false, error: data.error }));
+                                  } else {
+                                    setAddStudentModal(prev => ({ ...prev, loading: false, student: data.student }));
+                                  }
+                                } catch (err) {
+                                  setAddStudentModal(prev => ({ ...prev, loading: false, error: err.message }));
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
                     {/* Period/Class Upload Section */}
                     <div
                       style={{
@@ -11958,6 +12222,177 @@ ${signature}`;
                         Cancel
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Add Student from Screenshot Modal */}
+              {addStudentModal.show && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "var(--modal-bg)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000,
+                  }}
+                >
+                  <div
+                    className="glass-card"
+                    style={{
+                      width: "90%",
+                      maxWidth: "600px",
+                      maxHeight: "90vh",
+                      overflow: "auto",
+                      padding: "25px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <h3 style={{ fontSize: "1.2rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Icon name="UserPlus" size={24} style={{ color: "#8b5cf6" }} />
+                        Add Student to Roster
+                      </h3>
+                      <button
+                        onClick={() => setAddStudentModal({ show: false, loading: false, image: null, student: null, error: null })}
+                        style={{ background: "none", border: "none", color: "var(--text-primary)", cursor: "pointer" }}
+                      >
+                        <Icon name="X" size={24} />
+                      </button>
+                    </div>
+
+                    {addStudentModal.loading && (
+                      <div style={{ textAlign: "center", padding: "40px" }}>
+                        <div style={{ marginBottom: "15px", color: "var(--text-secondary)" }}>
+                          <Icon name="Loader2" size={32} style={{ animation: "spin 1s linear infinite" }} />
+                        </div>
+                        <p>Extracting student info with AI...</p>
+                      </div>
+                    )}
+
+                    {addStudentModal.error && (
+                      <div style={{ padding: "20px", background: "rgba(239,68,68,0.1)", borderRadius: "8px", marginBottom: "20px" }}>
+                        <p style={{ color: "#ef4444", fontWeight: 600 }}>Error: {addStudentModal.error}</p>
+                      </div>
+                    )}
+
+                    {addStudentModal.student && !addStudentModal.loading && (
+                      <>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "20px" }}>
+                          <div>
+                            <label className="label">First Name</label>
+                            <input
+                              type="text"
+                              className="input"
+                              value={addStudentModal.student.first_name || ""}
+                              onChange={(e) => setAddStudentModal(prev => ({ ...prev, student: { ...prev.student, first_name: e.target.value } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="label">Middle Name</label>
+                            <input
+                              type="text"
+                              className="input"
+                              value={addStudentModal.student.middle_name || ""}
+                              onChange={(e) => setAddStudentModal(prev => ({ ...prev, student: { ...prev.student, middle_name: e.target.value } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="label">Last Name</label>
+                            <input
+                              type="text"
+                              className="input"
+                              value={addStudentModal.student.last_name || ""}
+                              onChange={(e) => setAddStudentModal(prev => ({ ...prev, student: { ...prev.student, last_name: e.target.value } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="label">Student ID</label>
+                            <input
+                              type="text"
+                              className="input"
+                              value={addStudentModal.student.student_id || ""}
+                              onChange={(e) => setAddStudentModal(prev => ({ ...prev, student: { ...prev.student, student_id: e.target.value } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="label">Email</label>
+                            <input
+                              type="email"
+                              className="input"
+                              value={addStudentModal.student.email || ""}
+                              onChange={(e) => setAddStudentModal(prev => ({ ...prev, student: { ...prev.student, email: e.target.value } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="label">Period *</label>
+                            <input
+                              type="text"
+                              className="input"
+                              placeholder="e.g., 2"
+                              value={addStudentModal.student.period || ""}
+                              onChange={(e) => setAddStudentModal(prev => ({ ...prev, student: { ...prev.student, period: e.target.value } }))}
+                            />
+                          </div>
+                        </div>
+
+                        {addStudentModal.image && (
+                          <div style={{ marginBottom: "20px" }}>
+                            <label className="label">Source Image</label>
+                            <img
+                              src={addStudentModal.image}
+                              alt="Student info screenshot"
+                              style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", border: "1px solid var(--glass-border)" }}
+                            />
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => setAddStudentModal({ show: false, loading: false, image: null, student: null, error: null })}
+                            className="btn btn-secondary"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!addStudentModal.student.period) {
+                                addToast("Please enter a period", "warning");
+                                return;
+                              }
+                              try {
+                                const response = await fetch("/api/add-student-to-roster", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ student: addStudentModal.student, period: addStudentModal.student.period }),
+                                });
+                                const data = await response.json();
+                                if (data.error) {
+                                  addToast(data.error, "error");
+                                } else {
+                                  addToast(data.message, "success");
+                                  setAddStudentModal({ show: false, loading: false, image: null, student: null, error: null });
+                                }
+                              } catch (err) {
+                                addToast("Failed to add student: " + err.message, "error");
+                              }
+                            }}
+                            className="btn btn-primary"
+                          >
+                            <Icon name="UserPlus" size={18} />
+                            Add to Period {addStudentModal.student.period || "?"}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -18908,10 +19343,15 @@ ${signature}`;
               <button
                 onClick={() => setFocusExportModal(false)}
                 style={{
-                  background: "none",
+                  background: "rgba(255,255,255,0.1)",
                   border: "none",
                   cursor: "pointer",
-                  padding: "5px",
+                  padding: "8px",
+                  borderRadius: "6px",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 <Icon name="X" size={20} />
@@ -19074,6 +19514,13 @@ ${signature}`;
                         Download Focus CSV
                       </>
                     )}
+                  </button>
+                  <button
+                    onClick={() => setFocusExportModal(false)}
+                    className="btn btn-secondary"
+                    style={{ width: "100%", marginTop: "10px" }}
+                  >
+                    Cancel
                   </button>
                 </div>
               );

@@ -764,10 +764,15 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                             # 2. Last name initials (e.g., "K" matches "Kolas")
                             # 3. Hyphenated names (e.g., "Kolas" matches "Kolas-Nowicki")
                             # 4. First part of hyphenated name (e.g., "Kolas" matches "Kolas-Nowicki")
+                            # 5. Space-separated compound names (e.g., "Maloney" matches "Maloney Fox")
+                            roster_last_parts_hyphen = roster_last.split('-')
+                            roster_last_parts_space = roster_last.split(' ')
                             if (
                                 roster_last.startswith(last_name_lower) or  # "k" matches "kolas"
-                                roster_last.split('-')[0] == last_name_lower or  # "kolas" matches "kolas-nowicki"
-                                last_name_lower in roster_last.split('-')  # "nowicki" matches "kolas-nowicki"
+                                roster_last_parts_hyphen[0] == last_name_lower or  # "kolas" matches "kolas-nowicki"
+                                last_name_lower in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
+                                roster_last_parts_space[0] == last_name_lower or  # "maloney" matches "maloney fox"
+                                last_name_lower in roster_last_parts_space  # "fox" matches "maloney fox"
                             ):
                                 student_info = roster_data.copy()
                                 student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
@@ -832,8 +837,34 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                         rubric_type = 'cornell-notes'
                         print(f"  ✓ Auto-detected Cornell Notes from filename")
 
-                # Get student's period
-                student_period = student_period_map.get(student_info['student_name'].lower(), class_period)
+                # Get student's period - try exact match first, then fuzzy match
+                student_name_lower = student_info['student_name'].lower()
+                student_period = student_period_map.get(student_name_lower, None)
+
+                # If no exact match, try fuzzy matching on period map
+                if not student_period:
+                    first_name_lower = student_info.get('first_name', '').lower() or student_name_lower.split()[0] if student_name_lower else ''
+                    last_name_lower = student_info.get('last_name', '').lower() or (student_name_lower.split()[-1] if len(student_name_lower.split()) > 1 else '')
+
+                    for period_key, period_val in student_period_map.items():
+                        period_parts = period_key.split()
+                        if len(period_parts) >= 2:
+                            # period_key format: "firstname middlename lastname" or "firstname lastname"
+                            period_first = period_parts[0]
+                            period_last = period_parts[-1]
+
+                            # Match first name
+                            if period_first == first_name_lower or period_first.startswith(first_name_lower) or first_name_lower.startswith(period_first):
+                                # Match last name (handle initials and compound names)
+                                if (period_last == last_name_lower or
+                                    period_last.startswith(last_name_lower) or
+                                    last_name_lower.startswith(period_last) or
+                                    (len(last_name_lower) == 1 and period_last.startswith(last_name_lower))):
+                                    student_period = period_val
+                                    break
+
+                if not student_period:
+                    student_period = class_period
 
                 # Handle completion-only assignments
                 if is_completion_only:
@@ -1831,6 +1862,193 @@ def retranslate_feedback():
 
         translation = response.choices[0].message.content.strip()
         return jsonify({"translation": translation})
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+# ══════════════════════════════════════════════════════════════
+# ROSTER MANAGEMENT - Add student from screenshot
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/extract-student-from-image', methods=['POST'])
+def extract_student_from_image():
+    """Use Claude Opus 4.5 to extract student info from a screenshot."""
+    try:
+        data = request.json
+        image_data = data.get('image')  # Base64 encoded image
+
+        if not image_data:
+            return jsonify({"error": "No image provided"})
+
+        # Use Anthropic Claude Opus 4.5 for extraction
+        try:
+            import anthropic
+        except ImportError:
+            return jsonify({"error": "Anthropic library not installed. Run: pip install anthropic"})
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY not configured"})
+
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # Remove data URL prefix if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+
+        prompt = """Extract student information from this screenshot. Return ONLY a JSON object with these fields:
+{
+    "first_name": "Student's first name",
+    "middle_name": "Student's middle name (if visible, otherwise empty string)",
+    "last_name": "Student's last name",
+    "student_id": "Student ID number (if visible, otherwise empty string)",
+    "email": "Student's email address (if visible, otherwise empty string)",
+    "grade": "Grade level (if visible, otherwise empty string)",
+    "period": "Class period number only, e.g., '2' not 'Period 2' (if visible, otherwise empty string)"
+}
+
+Important:
+- Extract exactly what you see, don't guess
+- For names with multiple parts, include all parts (e.g., middle names)
+- Return ONLY the JSON, no other text"""
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": image_data
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ]
+        )
+
+        response_text = response.content[0].text.strip()
+
+        # Parse JSON from response
+        if response_text.startswith('```'):
+            lines = response_text.split('\n')
+            response_text = '\n'.join(lines[1:-1])
+
+        student_info = json.loads(response_text)
+        return jsonify({"success": True, "student": student_info})
+
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"Failed to parse AI response: {e}", "raw_response": response_text})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route('/api/add-student-to-roster', methods=['POST'])
+def add_student_to_roster():
+    """Add a student to the appropriate period CSV and optionally the main roster."""
+    try:
+        data = request.json
+        student = data.get('student', {})
+        period = data.get('period', '').strip()
+
+        if not period:
+            return jsonify({"error": "Period is required"})
+
+        first_name = student.get('first_name', '').strip()
+        middle_name = student.get('middle_name', '').strip()
+        last_name = student.get('last_name', '').strip()
+        student_id = student.get('student_id', '').strip()
+        email = student.get('email', '').strip()
+        grade = student.get('grade', '06').strip()
+
+        if not first_name or not last_name:
+            return jsonify({"error": "First name and last name are required"})
+
+        # Build full first name with middle name
+        full_first = f"{first_name} {middle_name}".strip() if middle_name else first_name
+
+        # Format: "LastName; FirstName MiddleName"
+        student_name = f"{last_name}; {full_first}"
+
+        # Find the period CSV file
+        periods_dir = "/Users/alexc/Downloads/Graider/Period CSVs"
+        period_file = None
+
+        for f in os.listdir(periods_dir):
+            if f.endswith('.csv'):
+                # Match "Period 2.csv", "Period_2.csv", "Period2.csv", etc.
+                f_lower = f.lower().replace('_', ' ').replace('.csv', '')
+                if f"period {period}" in f_lower or f"period{period}" in f_lower:
+                    period_file = os.path.join(periods_dir, f)
+                    break
+
+        if not period_file:
+            # Create new period file
+            period_file = os.path.join(periods_dir, f"Period {period}.csv")
+            with open(period_file, 'w', newline='', encoding='utf-8') as pf:
+                writer = csv.writer(pf)
+                writer.writerow(["Student", "Student ID", "Local ID", "Grade", "Local Student ID", "Team"])
+
+        # Check if student already exists
+        existing_students = []
+        with open(period_file, 'r', encoding='utf-8') as pf:
+            reader = csv.reader(pf)
+            existing_students = list(reader)
+
+        for row in existing_students[1:]:  # Skip header
+            if row and row[0].lower() == student_name.lower():
+                return jsonify({"error": f"Student '{student_name}' already exists in Period {period}"})
+
+        # Add student to period CSV
+        with open(period_file, 'a', newline='', encoding='utf-8') as pf:
+            writer = csv.writer(pf)
+            writer.writerow([student_name, student_id, student_id, grade, student_id, ""])
+
+        return jsonify({
+            "success": True,
+            "message": f"Added {full_first} {last_name} to Period {period}",
+            "student_name": student_name,
+            "period_file": period_file
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)})
+
+
+@app.route('/api/list-periods', methods=['GET'])
+def list_periods():
+    """List available period CSV files."""
+    try:
+        periods_dir = "/Users/alexc/Downloads/Graider/Period CSVs"
+        periods = []
+
+        if os.path.exists(periods_dir):
+            for f in os.listdir(periods_dir):
+                if f.endswith('.csv'):
+                    period_name = f.replace('.csv', '').replace('_', ' ')
+                    # Count students
+                    count = 0
+                    try:
+                        with open(os.path.join(periods_dir, f), 'r', encoding='utf-8') as pf:
+                            count = sum(1 for _ in pf) - 1  # Subtract header
+                    except:
+                        pass
+                    periods.append({"name": period_name, "file": f, "student_count": count})
+
+        periods.sort(key=lambda x: x['name'])
+        return jsonify({"periods": periods})
 
     except Exception as e:
         return jsonify({"error": str(e)})
