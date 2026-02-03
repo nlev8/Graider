@@ -765,6 +765,9 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
             line = line.strip()
             if not line:
                 continue
+            # Skip common prompt-only lines (no student content)
+            if line.lower() in ('write your answer:', 'your answer:', 'answer:'):
+                continue
             # If line has a question mark, only keep text AFTER the ?
             if '?' in line:
                 parts = line.split('?')
@@ -777,11 +780,13 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
                 parts = line.split(':', 1)
                 term = parts[0].strip()
                 defn = parts[1].strip() if len(parts) > 1 else ''
-                # Only treat as vocab if term is short (1-4 words)
-                if len(term.split()) <= 4 and defn:
+                # Only treat as vocab if term is short (1-4 words) AND has a definition
+                if len(term.split()) <= 4 and defn and len(defn) > 1:
                     cleaned_lines.append(defn)
-                else:
+                elif defn and len(defn) > 1:
+                    # Longer term but has definition - keep whole line
                     cleaned_lines.append(line)
+                # Skip lines that are just "Term:" with no definition (blank vocab)
             else:
                 cleaned_lines.append(line)
 
