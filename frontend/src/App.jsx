@@ -2706,11 +2706,15 @@ ${signature}`;
           instructions: data.assignment.instructions || "",
           questions: data.assignment.questions || [],
           customMarkers: data.assignment.customMarkers || [],
+          excludeMarkers: data.assignment.excludeMarkers || [],
           gradingNotes: data.assignment.gradingNotes || "",
           responseSections: data.assignment.responseSections || [],
           aliases: data.assignment.aliases || [],
+          completionOnly: data.assignment.completionOnly || false,
           rubricType: data.assignment.rubricType || "standard",
           customRubric: data.assignment.customRubric || null,
+          sectionTemplate: data.assignment.sectionTemplate || "Custom",
+          effortPoints: data.assignment.effortPoints ?? 15,
         });
         setLoadedAssignmentName(name);
       }
@@ -2739,8 +2743,12 @@ ${signature}`;
           excludeMarkers: [],
           gradingNotes: "",
           responseSections: [],
+          aliases: [],
+          completionOnly: false,
           rubricType: "standard",
           customRubric: null,
+          sectionTemplate: "Custom",
+          effortPoints: 15,
         });
         setLoadedAssignmentName("");
       }
