@@ -141,7 +141,9 @@ const ASSIGNMENT_TEMPLATES = {
     description: "Standard essay format"
   },
   "Custom": {
-    markers: [],
+    markers: [
+      { start: "Content", points: 85, type: "written", description: "Main assignment content" },
+    ],
     effortPoints: 15,
     description: "Define your own sections and point values"
   }
