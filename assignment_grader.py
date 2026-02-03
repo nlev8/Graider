@@ -288,13 +288,10 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
 
                 # Remove lines that start with instructions/prompts
                 lines = [l.strip() for l in response_clean.split('\n') if l.strip()]
-                # Filter out instruction lines (start with "Write", "Explain", emoji headers, etc.)
+                # Filter out blank placeholder lines only
                 student_lines = []
                 for line in lines:
-                    # Skip instruction lines
-                    if line.startswith(('Write ', 'Explain ', 'Describe ', 'List ', 'Answer ', '📖', '📘', '📓', '🌟')):
-                        continue
-                    # Skip lines that are just underscores (blank lines)
+                    # Skip lines that are just underscores (blank placeholders)
                     if line.replace('_', '').replace(' ', '') == '':
                         continue
                     student_lines.append(line)
