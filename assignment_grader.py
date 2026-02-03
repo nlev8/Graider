@@ -2472,7 +2472,9 @@ If a section (like "Notes Section") was NOT extracted, it means the teacher did 
 Do NOT penalize students for sections that were not marked for grading by the teacher.
 Only the extracted/marked sections count toward the grade.
 
-Your "student_responses" field in the output MUST ONLY contain the answers shown in the VERIFIED section above.
+Your "student_responses" field MUST contain ONLY the raw answer text from each "STUDENT ANSWER:" line above.
+Do NOT include question numbers, section names, or labels like "[1] Summary:" - just the student's actual written text.
+Example: If the verified response shows 'STUDENT ANSWER: "The treaty was signed in 1803"', your student_responses should contain "The treaty was signed in 1803" - not "Summary: The treaty was signed in 1803".
 If no responses were extracted, the student gets a 0.
 
 For MATCHING exercises specifically:
@@ -2616,7 +2618,7 @@ Provide your response in the following JSON format ONLY (no other text):
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
-    "student_responses": ["<ONLY the student's answers - NOT the questions. e.g. '1803', 'France', 'It helped trade...' - just the response text>"],
+    "student_responses": ["<EXTRACT ONLY the actual answer text that appears after 'STUDENT ANSWER:' in the verified responses above. Do NOT include the question/section name, number, or label. WRONG: 'Summary: The treaty was...' or '[1] Summary: The treaty...' - RIGHT: 'The treaty was signed in 1803 and...' - just the raw answer text the student wrote>"],
     "unanswered_questions": ["<list ALL questions/sections the student left blank or didn't answer - especially written response sections like reflections, explanations, summaries>"],
     "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
     "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
