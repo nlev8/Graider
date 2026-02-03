@@ -12755,14 +12755,34 @@ ${signature}`;
                               onChange={(e) => {
                                 const enabled = e.target.checked;
                                 if (enabled) {
-                                  // When enabling, set up default markers if none exist
-                                  const hasMarkers = (assignment.customMarkers || []).length > 0;
-                                  const template = ASSIGNMENT_TEMPLATES["Custom"];
+                                  // When enabling, add point values to existing markers (distribute evenly)
+                                  const existingMarkers = assignment.customMarkers || [];
+                                  const effortPts = assignment.effortPoints ?? 15;
+                                  let markersWithPoints;
+
+                                  if (existingMarkers.length > 0) {
+                                    // Distribute remaining points evenly among existing markers
+                                    const availablePoints = 100 - effortPts;
+                                    const pointsPerMarker = Math.floor(availablePoints / existingMarkers.length);
+                                    const remainder = availablePoints % existingMarkers.length;
+
+                                    markersWithPoints = existingMarkers.map((m, i) => {
+                                      const markerText = typeof m === 'string' ? m : m.start;
+                                      const markerType = typeof m === 'object' ? (m.type || 'written') : 'written';
+                                      const pts = pointsPerMarker + (i === 0 ? remainder : 0);
+                                      return { start: markerText, points: pts, type: markerType };
+                                    });
+                                  } else {
+                                    // No markers - create a default Content section
+                                    markersWithPoints = [{ start: "Content", points: 100 - effortPts, type: "written" }];
+                                  }
+
                                   setAssignment({
                                     ...assignment,
                                     useSectionPoints: true,
-                                    customMarkers: hasMarkers ? assignment.customMarkers : template.markers.map(m => ({ ...m })),
-                                    effortPoints: assignment.effortPoints ?? 15,
+                                    customMarkers: markersWithPoints,
+                                    effortPoints: effortPts,
+                                    sectionTemplate: "Custom",
                                   });
                                 } else {
                                   setAssignment({ ...assignment, useSectionPoints: false });
@@ -12779,40 +12799,37 @@ ${signature}`;
                         </div>
                       </div>
 
-                      {/* Section Template Selector - Only show when toggle is ON */}
+                      {/* Section Point Summary - Only show when toggle is ON */}
                       {assignment.useSectionPoints && (
                         <div style={{ marginBottom: "20px", padding: "15px", background: "rgba(59,130,246,0.05)", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.15)" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                            <Icon name="Layout" size={16} style={{ color: "#3b82f6" }} />
-                            <span style={{ fontWeight: "500", fontSize: "14px" }}>Template</span>
-                          </div>
-                          <select
-                            value={assignment.sectionTemplate || "Custom"}
-                            onChange={(e) => {
-                              const templateName = e.target.value;
-                              const template = ASSIGNMENT_TEMPLATES[templateName];
-                              if (template) {
-                                setAssignment({
-                                  ...assignment,
-                                  sectionTemplate: templateName,
-                                  customMarkers: template.markers.map(m => ({ ...m })),
-                                  effortPoints: template.effortPoints || 15,
-                                });
-                              }
-                            }}
-                            className="input"
-                            style={{ width: "100%", marginBottom: "8px" }}
-                          >
-                            {Object.keys(ASSIGNMENT_TEMPLATES).map(name => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
-                          {assignment.sectionTemplate && ASSIGNMENT_TEMPLATES[assignment.sectionTemplate] && (
-                            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                              {ASSIGNMENT_TEMPLATES[assignment.sectionTemplate].description}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <Icon name="Calculator" size={16} style={{ color: "#3b82f6" }} />
+                              <span style={{ fontWeight: "500", fontSize: "14px" }}>Point Distribution</span>
                             </div>
-                          )}
-                          <div style={{ marginTop: "10px", padding: "8px", background: "rgba(0,0,0,0.1)", borderRadius: "4px", fontSize: "13px" }}>
+                            <button
+                              onClick={() => {
+                                // Redistribute points evenly among existing markers
+                                const markers = assignment.customMarkers || [];
+                                if (markers.length === 0) return;
+                                const effortPts = assignment.effortPoints || 15;
+                                const availablePoints = 100 - effortPts;
+                                const pointsPerMarker = Math.floor(availablePoints / markers.length);
+                                const remainder = availablePoints % markers.length;
+                                const redistributed = markers.map((m, i) => ({
+                                  ...m,
+                                  start: typeof m === 'string' ? m : m.start,
+                                  points: pointsPerMarker + (i === 0 ? remainder : 0),
+                                }));
+                                setAssignment({ ...assignment, customMarkers: redistributed });
+                              }}
+                              className="btn btn-secondary"
+                              style={{ fontSize: "12px", padding: "4px 10px" }}
+                            >
+                              Distribute Evenly
+                            </button>
+                          </div>
+                          <div style={{ padding: "8px", background: "rgba(0,0,0,0.1)", borderRadius: "4px", fontSize: "13px" }}>
                             <strong>Total Points:</strong> {calculateTotalPoints(assignment.customMarkers, assignment.effortPoints || 15)}
                             {calculateTotalPoints(assignment.customMarkers, assignment.effortPoints || 15) !== 100 && (
                               <span style={{ color: "#ef4444", marginLeft: "10px" }}>

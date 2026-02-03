@@ -2332,6 +2332,14 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     extraction_result = None
     extracted_responses_text = ''
     if assignment_data.get("type") == "text" and content:
+        # Debug: Log markers being used
+        marker_count = len(custom_markers) if custom_markers else 0
+        print(f"  🔍 Extraction using {marker_count} markers")
+        if custom_markers and marker_count > 0:
+            for i, m in enumerate(custom_markers[:3]):  # Show first 3
+                marker_text = m.get('start', m) if isinstance(m, dict) else m
+                print(f"      Marker {i+1}: {marker_text[:50]}...")
+
         extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
         if extraction_result:
             extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config)
@@ -2341,7 +2349,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 
             # If no responses found, return early with 0 score
             if answered == 0:
-                print(f"  ⚠️  NO RESPONSES EXTRACTED - Document is blank")
+                print(f"  ⚠️  NO RESPONSES EXTRACTED - Document is blank or markers don't match")
                 return {
                     "score": 0,
                     "letter_grade": "INCOMPLETE",
