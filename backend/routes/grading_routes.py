@@ -121,74 +121,7 @@ def clear_results():
     return jsonify({"status": "cleared"})
 
 
-@grading_bp.route('/api/delete-result', methods=['POST'])
-def delete_result():
-    """Delete a single grading result by filename."""
-    import json
-    import csv
-
-    if grading_state is None:
-        return jsonify({"error": "Grading not initialized"}), 500
-
-    if grading_state["is_running"]:
-        return jsonify({"error": "Cannot delete results while grading is in progress"}), 400
-
-    data = request.json
-    filename = data.get('filename', '')
-
-    if not filename:
-        return jsonify({"error": "Filename is required"}), 400
-
-    # Find and remove the result from state
-    original_count = len(grading_state["results"])
-    grading_state["results"] = [
-        r for r in grading_state["results"]
-        if r.get('filename', '') != filename
-    ]
-
-    if len(grading_state["results"]) == original_count:
-        return jsonify({"error": "Result not found"}), 404
-
-    # Save updated results to file
-    results_file = os.path.expanduser("~/.graider_results.json")
-    try:
-        with open(results_file, 'w', encoding='utf-8') as f:
-            json.dump(grading_state["results"], f, indent=2)
-    except Exception as e:
-        # Log but don't fail - state is already updated
-        pass
-
-    # Also remove from master_grades.csv if it exists
-    settings_file = os.path.expanduser("~/.graider_settings.json")
-    try:
-        with open(settings_file, 'r') as f:
-            settings = json.load(f)
-        output_folder = settings.get('config', {}).get('output_folder', '')
-        if output_folder:
-            master_file = os.path.join(output_folder, "master_grades.csv")
-            if os.path.exists(master_file):
-                # Read all rows, filter out the deleted one
-                rows = []
-                fieldnames = None
-                with open(master_file, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    fieldnames = reader.fieldnames
-                    rows = [row for row in reader if row.get('Filename', '') != filename]
-
-                # Write back without the deleted row
-                if fieldnames and len(rows) > 0:
-                    with open(master_file, 'w', encoding='utf-8', newline='') as f:
-                        writer = csv.DictWriter(f, fieldnames=fieldnames)
-                        writer.writeheader()
-                        writer.writerows(rows)
-                elif len(rows) == 0:
-                    # If no rows left, delete the file
-                    os.remove(master_file)
-    except Exception as e:
-        # Log but don't fail
-        pass
-
-    return jsonify({"status": "deleted"})
+# NOTE: delete-result route is in app.py to avoid duplication
 
 
 @grading_bp.route('/api/update-result', methods=['POST'])

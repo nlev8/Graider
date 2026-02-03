@@ -33,8 +33,9 @@ def send_emails():
         students = defaultdict(list)
 
         for r in results:
-            email = r.get('email', '')
-            if email and '@' in email and r.get('student_id') != 'UNKNOWN':
+            # Support both 'email' and 'student_email' field names
+            email = r.get('student_email') or r.get('email', '')
+            if email and '@' in email:
                 students[email].append(r)
 
         sent = 0

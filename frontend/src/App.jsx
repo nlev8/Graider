@@ -526,6 +526,8 @@ function App() {
     school_name: "",
     showToastNotifications: true,
     ai_model: "gpt-4o-mini",
+    ensemble_enabled: false,
+    ensemble_models: [], // e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash']
     availableTools: [], // Tools teacher has access to for lesson planning
   });
 
@@ -533,12 +535,15 @@ function App() {
   const [apiKeys, setApiKeys] = useState({
     openai: "",
     anthropic: "",
+    gemini: "",
     openaiConfigured: false,
     anthropicConfigured: false,
+    geminiConfigured: false,
   });
   const [showApiKeys, setShowApiKeys] = useState({
     openai: false,
     anthropic: false,
+    gemini: false,
   });
   const [savingApiKeys, setSavingApiKeys] = useState(false);
 
@@ -812,6 +817,7 @@ function App() {
   });
 
   const [activeTab, setActiveTab] = useState("grade");
+  const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy
   const [analytics, setAnalytics] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
@@ -1301,6 +1307,7 @@ function App() {
           ...prev,
           openaiConfigured: data.openai_configured,
           anthropicConfigured: data.anthropic_configured,
+          geminiConfigured: data.gemini_configured,
         }));
       })
       .catch(console.error);
@@ -1901,24 +1908,92 @@ function App() {
               });
             }
 
-            // Filter by assignment name in filename
+            // Filter by assignment name in filename (including aliases, title, and original imported filename)
             if (gradeFilterAssignment) {
+              // Get all name variations to match: assignment name, title, aliases, and imported filename
+              const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
+              const importedFilename = (assignmentConfig.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, ""); // Remove extension
+
+              // Clean function to remove emojis and special chars for better matching
+              const cleanForMatch = (str) => str.replace(/[\u{1F300}-\u{1F9FF}]/gu, "").replace(/[–—]/g, "-").replace(/[^\w\s-]/g, "").trim();
+
+              // Extract chapter/section patterns like "chapter 10 section 2"
+              const extractChapterSection = (str) => {
+                const match = str.match(/chapter\s*(\d+)\s*[-–—]?\s*section\s*(\d+)/i);
+                return match ? `chapter ${match[1]} section ${match[2]}` : null;
+              };
+
+              const chapterSection = extractChapterSection(importedFilename) || extractChapterSection(assignmentConfig.title || "");
+
+              const namesToMatch = [
+                gradeFilterAssignment,
+                assignmentConfig.title || "",
+                ...(assignmentConfig.aliases || []),
+                importedFilename,
+                cleanForMatch(importedFilename),
+                cleanForMatch(assignmentConfig.title || ""),
+                chapterSection
+              ].filter(Boolean).map(n => n.toLowerCase());
+
               filtered = filtered.filter((f) => {
                 const fileName = f.name.toLowerCase();
-                const assignmentName = gradeFilterAssignment.toLowerCase();
-                // Check if filename contains assignment name
-                return (
-                  fileName.includes(assignmentName.replace(/\s+/g, "")) ||
-                  fileName.includes(assignmentName.replace(/\s+/g, "_")) ||
-                  fileName.includes(assignmentName.replace(/\s+/g, "-")) ||
-                  fileName.includes(assignmentName)
-                );
+                const fileNameNoExt = fileName.replace(/\.[^/.]+$/, ""); // Remove extension for matching
+                const fileNameClean = cleanForMatch(fileNameNoExt);
+                const fileChapterSection = extractChapterSection(fileName);
+
+                // Check if filename contains any of the assignment names/aliases/imported filename
+                return namesToMatch.some(name => {
+                  if (!name) return false;
+                  const nameClean = cleanForMatch(name);
+
+                  // Check various spacing formats
+                  if (fileName.includes(name.replace(/\s+/g, "")) ||
+                      fileName.includes(name.replace(/\s+/g, "_")) ||
+                      fileName.includes(name.replace(/\s+/g, "-")) ||
+                      fileName.includes(name) ||
+                      fileNameClean.includes(nameClean) ||
+                      nameClean.includes(fileNameClean)) {
+                    return true;
+                  }
+                  // Check chapter/section match
+                  if (chapterSection && fileChapterSection && chapterSection === fileChapterSection) {
+                    return true;
+                  }
+                  // Also check if the imported filename matches this file (for exact original document match)
+                  if (importedFilename && (fileNameNoExt.includes(importedFilename) || importedFilename.includes(fileNameNoExt))) {
+                    return true;
+                  }
+                  return false;
+                });
               });
             }
 
-            // Exclude students who already have results in this session
+            // Exclude students who already have results for THIS assignment
             if (excludeGradedStudents && status.results.length > 0) {
-              const gradedStudentNames = status.results.map((r) =>
+              // Filter results to only those matching the current assignment filter
+              let relevantResults = status.results;
+              if (gradeFilterAssignment) {
+                const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
+                const importedFilename = (assignmentConfig.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
+                const assignmentNamesToMatch = [
+                  gradeFilterAssignment,
+                  assignmentConfig.title || "",
+                  ...(assignmentConfig.aliases || []),
+                  importedFilename
+                ].filter(Boolean).map(n => n.toLowerCase());
+
+                relevantResults = status.results.filter((r) => {
+                  const resultAssignment = (r.assignment || "").toLowerCase();
+                  const resultFilename = (r.filename || "").toLowerCase();
+                  return assignmentNamesToMatch.some(name =>
+                    resultAssignment.includes(name) ||
+                    resultFilename.includes(name) ||
+                    name.includes(resultAssignment)
+                  );
+                });
+              }
+
+              const gradedStudentNames = relevantResults.map((r) =>
                 (r.student_name || "").toLowerCase().replace(/\s+/g, "")
               );
               filtered = filtered.filter((f) => {
@@ -1989,6 +2064,8 @@ function App() {
         skipVerified: skipVerified,
         // Pass the period name for differentiated grading expectations
         classPeriod: selectedPeriodName,
+        // Pass ensemble models if enabled (need at least 2 models)
+        ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
       });
       setStatus((prev) => ({
         ...prev,
@@ -3643,7 +3720,7 @@ ${signature}`;
                           }}
                         >
                           <Icon name="CheckCircle" size={14} />
-                          AI Detected
+                          Responses
                         </button>
                         <button
                           onClick={() => setReviewModalTab("raw")}
@@ -3720,7 +3797,7 @@ ${signature}`;
                             gap: "16px",
                           }}
                         >
-                          {/* AI Detected Responses */}
+                          {/* Student Responses */}
                           {r.student_responses &&
                           r.student_responses.length > 0 ? (
                             <div>
@@ -3869,7 +3946,7 @@ ${signature}`;
                                   Handwritten responses were extracted by AI
                                   vision.
                                   <br />
-                                  Check the "AI Detected" tab to see extracted
+                                  Check the "Responses" tab to see extracted
                                   answers.
                                 </p>
                               )}
@@ -4159,12 +4236,35 @@ ${signature}`;
                                 type="email"
                                 value={editedEmails[reviewModal.index]?.email ?? r.student_email ?? r.email ?? ""}
                                 onChange={(e) => {
-                                  setEditedEmails((prev) => ({
+                                  const newEmail = e.target.value;
+                                  const studentId = r.student_id;
+                                  const studentName = r.student_name;
+
+                                  // Update editedEmails for ALL results with the same student
+                                  setEditedEmails((prev) => {
+                                    const updated = { ...prev };
+                                    status.results.forEach((result, idx) => {
+                                      if ((studentId && result.student_id === studentId) ||
+                                          (studentName && result.student_name === studentName)) {
+                                        updated[idx] = {
+                                          ...prev[idx],
+                                          email: newEmail,
+                                        };
+                                      }
+                                    });
+                                    return updated;
+                                  });
+
+                                  // Also update status.results so it persists when saved
+                                  setStatus((prev) => ({
                                     ...prev,
-                                    [reviewModal.index]: {
-                                      ...prev[reviewModal.index],
-                                      email: e.target.value,
-                                    },
+                                    results: prev.results.map((result) => {
+                                      if ((studentId && result.student_id === studentId) ||
+                                          (studentName && result.student_name === studentName)) {
+                                        return { ...result, student_email: newEmail };
+                                      }
+                                      return result;
+                                    }),
                                   }));
                                 }}
                                 placeholder="Enter student email..."
@@ -6254,7 +6354,21 @@ ${signature}`;
                                 margin: "4px 0 0 0",
                               }}
                             >
-                              Skip files for {[...new Set(status.results.map((r) => r.student_name))].length} student(s) who already have results.
+                              Skip files for {(() => {
+                                // Filter results by current assignment filter
+                                let relevantResults = status.results;
+                                if (gradeFilterAssignment) {
+                                  const cfg = savedAssignmentData[gradeFilterAssignment] || {};
+                                  const importedFn = (cfg.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
+                                  const names = [gradeFilterAssignment, cfg.title || "", ...(cfg.aliases || []), importedFn].filter(Boolean).map(n => n.toLowerCase());
+                                  relevantResults = status.results.filter((r) => {
+                                    const rAssign = (r.assignment || "").toLowerCase();
+                                    const rFile = (r.filename || "").toLowerCase();
+                                    return names.some(n => rAssign.includes(n) || rFile.includes(n) || n.includes(rAssign));
+                                  });
+                                }
+                                return [...new Set(relevantResults.map((r) => r.student_name))].length;
+                              })()} student(s) who already have results{gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
                               Only grade new students.
                             </p>
                           </div>
@@ -7874,7 +7988,8 @@ ${signature}`;
                                         )}
                                       </div>
                                     </td>
-                                    <td style={{ display: "flex", gap: "4px" }}>
+                                    <td>
+                                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -7918,6 +8033,7 @@ ${signature}`;
                                               selectedFiles: [filename],
                                               globalAINotes: globalAINotes,
                                               classPeriod: r.period || '',
+                                              ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
                                             });
                                             // Poll for completion
                                             const checkStatus = setInterval(async () => {
@@ -8030,6 +8146,7 @@ ${signature}`;
                                       >
                                         <Icon name="Trash2" size={16} />
                                       </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 );
@@ -8133,7 +8250,7 @@ ${signature}`;
                     style={{
                       fontSize: "1.3rem",
                       fontWeight: 700,
-                      marginBottom: "20px",
+                      marginBottom: "15px",
                       display: "flex",
                       alignItems: "center",
                       gap: "10px",
@@ -8143,6 +8260,40 @@ ${signature}`;
                     Settings
                   </h2>
 
+                  {/* Settings Sub-tabs */}
+                  <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid var(--glass-border)", paddingBottom: "12px", flexWrap: "wrap" }}>
+                    {[
+                      { id: "general", label: "General", icon: "FolderOpen" },
+                      { id: "grading", label: "Grading", icon: "ClipboardCheck" },
+                      { id: "ai", label: "AI", icon: "Sparkles" },
+                      { id: "classroom", label: "Classroom", icon: "Users" },
+                      { id: "integration", label: "Tools", icon: "Laptop" },
+                      { id: "privacy", label: "Privacy", icon: "Shield" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setSettingsTab(tab.id)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: "8px",
+                          border: "none",
+                          background: settingsTab === tab.id ? "var(--accent-primary)" : "transparent",
+                          color: settingsTab === tab.id ? "white" : "var(--text-secondary)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "0.85rem",
+                          fontWeight: settingsTab === tab.id ? 600 : 500,
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        <Icon name={tab.icon} size={16} />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div
                     style={{
                       display: "flex",
@@ -8150,6 +8301,9 @@ ${signature}`;
                       gap: "20px",
                     }}
                   >
+                    {/* General Tab */}
+                    {settingsTab === "general" && (
+                      <>
                     <div>
                       <label className="label">Assignments Folder</label>
                       <div style={{ display: "flex", gap: "10px" }}>
@@ -8317,6 +8471,70 @@ ${signature}`;
                       </span>
                     </div>
 
+                    {/* Notifications */}
+                    <div>
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon name="Bell" size={20} style={{ color: "#f59e0b" }} />
+                        Notifications
+                      </h3>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                          cursor: "pointer",
+                          padding: "12px 16px",
+                          background: "var(--input-bg)",
+                          borderRadius: "12px",
+                          border: "1px solid var(--input-border)",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={config.showToastNotifications}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              showToastNotifications: e.target.checked,
+                            }))
+                          }
+                          style={{
+                            width: "18px",
+                            height: "18px",
+                            accentColor: "var(--accent-primary)",
+                            cursor: "pointer",
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                            Toast Notifications
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.85rem",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Show popup notifications when assignments are graded
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                      </>
+                    )}
+
+                    {/* Grading Tab */}
+                    {settingsTab === "grading" && (
+                      <>
                     <div
                       style={{
                         display: "grid",
@@ -8421,61 +8639,392 @@ ${signature}`;
                           <option value="S2">Semester 2 (S2)</option>
                         </select>
                       </div>
+                    </div>
 
-                      <div>
-                        <label className="label">AI Model</label>
-                        <select
-                          className="input"
-                          value={config.ai_model}
-                          onChange={(e) =>
-                            setConfig((prev) => ({
-                              ...prev,
-                              ai_model: e.target.value,
-                            }))
-                          }
+                    {/* Rubric Configuration */}
+                    <div>
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="ClipboardCheck"
+                          size={20}
+                          style={{ color: "#8b5cf6" }}
+                        />
+                        Grading Rubric
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Configure how assignments are scored. Weights must total
+                        100%.
+                      </p>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "12px",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        {rubric.categories.map((cat, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: "flex",
+                              gap: "10px",
+                              alignItems: "center",
+                              padding: "12px",
+                              background: "var(--input-bg)",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              className="input"
+                              value={cat.name}
+                              onChange={(e) => {
+                                const updated = [...rubric.categories];
+                                updated[idx].name = e.target.value;
+                                setRubric({ ...rubric, categories: updated });
+                              }}
+                              style={{ flex: 1 }}
+                              placeholder="Category name"
+                            />
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "5px",
+                              }}
+                            >
+                              <input
+                                type="number"
+                                className="input"
+                                value={cat.weight}
+                                onChange={(e) => {
+                                  const updated = [...rubric.categories];
+                                  updated[idx].weight =
+                                    parseInt(e.target.value) || 0;
+                                  setRubric({ ...rubric, categories: updated });
+                                }}
+                                style={{ width: "70px", textAlign: "center" }}
+                                min="0"
+                                max="100"
+                              />
+                              <span style={{ color: "var(--text-secondary)" }}>
+                                %
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const updated = rubric.categories.filter(
+                                  (_, i) => i !== idx,
+                                );
+                                setRubric({ ...rubric, categories: updated });
+                              }}
+                              style={{
+                                padding: "6px",
+                                background: "none",
+                                border: "none",
+                                color: "var(--text-muted)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Icon name="X" size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "15px",
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            setRubric({
+                              ...rubric,
+                              categories: [
+                                ...rubric.categories,
+                                { name: "", weight: 0, description: "" },
+                              ],
+                            });
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.85rem" }}
                         >
-                          <optgroup label="OpenAI">
-                            <option value="gpt-4o-mini">
-                              GPT-4o Mini (Fast & Cheap)
-                            </option>
-                            <option value="gpt-4o">
-                              GPT-4o (Best Quality)
-                            </option>
-                          </optgroup>
-                          <optgroup label="Anthropic">
-                            <option value="claude-haiku">
-                              Claude Haiku (Fast & Cheap)
-                            </option>
-                            <option value="claude-sonnet">
-                              Claude Sonnet (Balanced)
-                            </option>
-                            <option value="claude-opus">
-                              Claude Opus (Most Capable)
-                            </option>
-                          </optgroup>
-                        </select>
-                        <p
+                          <Icon name="Plus" size={16} />
+                          Add Category
+                        </button>
+                        <span
                           style={{
-                            fontSize: "0.75rem",
-                            color: "var(--text-muted)",
-                            marginTop: "6px",
+                            fontSize: "0.85rem",
+                            color:
+                              rubric.categories.reduce(
+                                (sum, c) => sum + c.weight,
+                                0,
+                              ) === 100
+                                ? "#10b981"
+                                : "#ef4444",
                           }}
                         >
-                          {config.ai_model?.startsWith("claude")
-                            ? apiKeys.anthropicConfigured
-                              ? "Using Anthropic API"
-                              : "⚠️ Add Anthropic API key below"
+                          Total:{" "}
+                          {rubric.categories.reduce(
+                            (sum, c) => sum + c.weight,
+                            0,
+                          )}
+                          %
+                          {rubric.categories.reduce(
+                            (sum, c) => sum + c.weight,
+                            0,
+                          ) !== 100 && " (must equal 100%)"}
+                        </span>
+                      </div>
+                    </div>
+                      </>
+                    )}
+
+                    {/* AI Tab */}
+                    {settingsTab === "ai" && (
+                      <>
+                    {/* AI Model Selection */}
+                    <div>
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon name="Sparkles" size={20} style={{ color: "#8b5cf6" }} />
+                        AI Model
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
+                        Choose which AI model to use for grading and assessment generation.
+                      </p>
+                      <select
+                        className="input"
+                        value={config.ai_model}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            ai_model: e.target.value,
+                          }))
+                        }
+                        style={{ maxWidth: "350px" }}
+                      >
+                        <optgroup label="OpenAI">
+                          <option value="gpt-4o-mini">
+                            GPT-4o Mini (Fast & Cheap)
+                          </option>
+                          <option value="gpt-4o">
+                            GPT-4o (Best Quality)
+                          </option>
+                        </optgroup>
+                        <optgroup label="Anthropic">
+                          <option value="claude-haiku">
+                            Claude Haiku (Fast & Cheap)
+                          </option>
+                          <option value="claude-sonnet">
+                            Claude Sonnet (Balanced)
+                          </option>
+                          <option value="claude-opus">
+                            Claude Opus (Most Capable)
+                          </option>
+                        </optgroup>
+                        <optgroup label="Google">
+                          <option value="gemini-flash">
+                            Gemini 2.0 Flash (Fast & Cheap)
+                          </option>
+                          <option value="gemini-pro">
+                            Gemini 2.0 Pro (Balanced)
+                          </option>
+                        </optgroup>
+                      </select>
+                      <p
+                        style={{
+                          fontSize: "0.8rem",
+                          color: "var(--text-muted)",
+                          marginTop: "10px",
+                          padding: "10px 14px",
+                          background: (() => {
+                            const isConfigured = config.ai_model?.startsWith("claude")
+                              ? apiKeys.anthropicConfigured
+                              : config.ai_model?.startsWith("gemini")
+                                ? apiKeys.geminiConfigured
+                                : apiKeys.openaiConfigured;
+                            return isConfigured ? "rgba(74,222,128,0.1)" : "rgba(245,158,11,0.1)";
+                          })(),
+                          borderRadius: "8px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Icon
+                          name={(() => {
+                            const isConfigured = config.ai_model?.startsWith("claude")
+                              ? apiKeys.anthropicConfigured
+                              : config.ai_model?.startsWith("gemini")
+                                ? apiKeys.geminiConfigured
+                                : apiKeys.openaiConfigured;
+                            return isConfigured ? "CheckCircle" : "AlertCircle";
+                          })()}
+                          size={16}
+                          style={{ color: (() => {
+                            const isConfigured = config.ai_model?.startsWith("claude")
+                              ? apiKeys.anthropicConfigured
+                              : config.ai_model?.startsWith("gemini")
+                                ? apiKeys.geminiConfigured
+                                : apiKeys.openaiConfigured;
+                            return isConfigured ? "#4ade80" : "#f59e0b";
+                          })() }}
+                        />
+                        {config.ai_model?.startsWith("claude")
+                          ? apiKeys.anthropicConfigured
+                            ? "Anthropic API connected"
+                            : "Add Anthropic API key below to use Claude"
+                          : config.ai_model?.startsWith("gemini")
+                            ? apiKeys.geminiConfigured
+                              ? "Google AI API connected"
+                              : "Add Google AI API key below to use Gemini"
                             : apiKeys.openaiConfigured
-                              ? "Using OpenAI API"
-                              : "⚠️ Add OpenAI API key below"}
-                        </p>
+                              ? "OpenAI API connected"
+                              : "Add OpenAI API key below to use GPT"}
+                      </p>
+
+                      {/* Ensemble Grading Toggle */}
+                      <div style={{ marginTop: "20px", padding: "15px", background: "var(--input-bg)", borderRadius: "10px", border: "1px solid var(--input-border)" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={config.ensemble_enabled}
+                            onChange={(e) => setConfig((prev) => ({ ...prev, ensemble_enabled: e.target.checked }))}
+                            style={{ width: "18px", height: "18px" }}
+                          />
+                          <span style={{ fontWeight: 600 }}>
+                            <Icon name="Users" size={16} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                            Ensemble Grading
+                          </span>
+                          <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                            (Grade with multiple AIs for accuracy)
+                          </span>
+                        </label>
+
+                        {config.ensemble_enabled && (
+                          <div style={{ marginTop: "15px" }}>
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>
+                              Select 2-3 models to grade each assignment. Final score = median of all models.
+                            </p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                              {[
+                                { value: "gpt-4o-mini", label: "GPT-4o Mini", cost: "$0.001", provider: "openai" },
+                                { value: "gpt-4o", label: "GPT-4o", cost: "$0.015", provider: "openai" },
+                                { value: "claude-haiku", label: "Claude Haiku", cost: "$0.002", provider: "anthropic" },
+                                { value: "claude-sonnet", label: "Claude Sonnet", cost: "$0.02", provider: "anthropic" },
+                                { value: "gemini-flash", label: "Gemini Flash", cost: "$0.0005", provider: "gemini" },
+                                { value: "gemini-pro", label: "Gemini Pro", cost: "$0.008", provider: "gemini" },
+                              ].map((model) => {
+                                const isConfigured = model.provider === "openai" ? apiKeys.openaiConfigured
+                                  : model.provider === "anthropic" ? apiKeys.anthropicConfigured
+                                  : apiKeys.geminiConfigured;
+                                const isSelected = config.ensemble_models?.includes(model.value);
+                                return (
+                                  <label
+                                    key={model.value}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                      padding: "8px 12px",
+                                      borderRadius: "8px",
+                                      background: isSelected ? "rgba(139, 92, 246, 0.15)" : "transparent",
+                                      border: isSelected ? "1px solid rgba(139, 92, 246, 0.3)" : "1px solid transparent",
+                                      cursor: isConfigured ? "pointer" : "not-allowed",
+                                      opacity: isConfigured ? 1 : 0.5,
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      disabled={!isConfigured}
+                                      onChange={(e) => {
+                                        setConfig((prev) => {
+                                          const models = prev.ensemble_models || [];
+                                          if (e.target.checked) {
+                                            return { ...prev, ensemble_models: [...models, model.value] };
+                                          } else {
+                                            return { ...prev, ensemble_models: models.filter((m) => m !== model.value) };
+                                          }
+                                        });
+                                      }}
+                                      style={{ width: "16px", height: "16px" }}
+                                    />
+                                    <span style={{ flex: 1 }}>{model.label}</span>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>~{model.cost}/assignment</span>
+                                    {!isConfigured && (
+                                      <span style={{ fontSize: "0.7rem", color: "#f59e0b" }}>No API key</span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {config.ensemble_models?.length >= 2 && (
+                              <p style={{ marginTop: "10px", fontSize: "0.8rem", color: "#4ade80" }}>
+                                <Icon name="CheckCircle" size={14} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                                {config.ensemble_models.length} models selected - estimated ~${(
+                                  config.ensemble_models.reduce((sum, m) => {
+                                    const costs = { "gpt-4o-mini": 0.001, "gpt-4o": 0.015, "claude-haiku": 0.002, "claude-sonnet": 0.02, "gemini-flash": 0.0005, "gemini-pro": 0.008 };
+                                    return sum + (costs[m] || 0);
+                                  }, 0)
+                                ).toFixed(4)}/assignment
+                              </p>
+                            )}
+                            {config.ensemble_models?.length === 1 && (
+                              <p style={{ marginTop: "10px", fontSize: "0.8rem", color: "#f59e0b" }}>
+                                <Icon name="AlertCircle" size={14} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                                Select at least 2 models for ensemble grading
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
+                    {/* Global AI Instructions */}
                     <div>
-                      <label className="label">
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon name="MessageSquare" size={20} style={{ color: "#6366f1" }} />
                         Global AI Instructions
-                      </label>
+                      </h3>
                       <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>
                         These instructions apply to both grading AND assessment generation. Include differentiation rules for periods here.
                       </p>
@@ -8489,13 +9038,7 @@ ${signature}`;
                     </div>
 
                     {/* API Keys Section */}
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--glass-border)",
-                        paddingTop: "20px",
-                        marginTop: "20px",
-                      }}
-                    >
+                    <div>
                       <h3
                         style={{
                           fontSize: "1.1rem",
@@ -8506,7 +9049,7 @@ ${signature}`;
                           gap: "8px",
                         }}
                       >
-                        <Icon name="Key" size={20} />
+                        <Icon name="Key" size={20} style={{ color: "#f59e0b" }} />
                         API Keys
                       </h3>
                       <p
@@ -8709,6 +9252,99 @@ ${signature}`;
                           </p>
                         </div>
 
+                        {/* Google AI (Gemini) API Key */}
+                        <div>
+                          <label
+                            className="label"
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                            }}
+                          >
+                            Google AI (Gemini) API Key
+                            {apiKeys.geminiConfigured && (
+                              <span
+                                style={{
+                                  color: "#22c55e",
+                                  fontSize: "0.75rem",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <Icon name="CheckCircle" size={14} /> Connected
+                              </span>
+                            )}
+                          </label>
+                          <div style={{ display: "flex", gap: "10px" }}>
+                            <div style={{ position: "relative", flex: 1 }}>
+                              <input
+                                type={
+                                  showApiKeys.gemini ? "text" : "password"
+                                }
+                                className="input"
+                                value={apiKeys.gemini}
+                                onChange={(e) =>
+                                  setApiKeys((prev) => ({
+                                    ...prev,
+                                    gemini: e.target.value,
+                                  }))
+                                }
+                                placeholder={
+                                  apiKeys.geminiConfigured
+                                    ? "••••••••••••••••"
+                                    : "AIza..."
+                                }
+                                style={{ paddingRight: "40px" }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowApiKeys((prev) => ({
+                                    ...prev,
+                                    gemini: !prev.gemini,
+                                  }))
+                                }
+                                style={{
+                                  position: "absolute",
+                                  right: "10px",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                <Icon
+                                  name={
+                                    showApiKeys.gemini ? "EyeOff" : "Eye"
+                                  }
+                                  size={18}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--text-muted)",
+                              marginTop: "4px",
+                            }}
+                          >
+                            Get your key from{" "}
+                            <a
+                              href="https://aistudio.google.com/apikey"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "var(--accent)" }}
+                            >
+                              aistudio.google.com
+                            </a>
+                          </p>
+                        </div>
+
                         <button
                           onClick={async () => {
                             setSavingApiKeys(true);
@@ -8722,8 +9358,8 @@ ${signature}`;
                                   },
                                   body: JSON.stringify({
                                     openai_key: apiKeys.openai || undefined,
-                                    anthropic_key:
-                                      apiKeys.anthropic || undefined,
+                                    anthropic_key: apiKeys.anthropic || undefined,
+                                    gemini_key: apiKeys.gemini || undefined,
                                   }),
                                 },
                               );
@@ -8733,9 +9369,10 @@ ${signature}`;
                                   ...prev,
                                   openai: "",
                                   anthropic: "",
+                                  gemini: "",
                                   openaiConfigured: data.openai_configured,
-                                  anthropicConfigured:
-                                    data.anthropic_configured,
+                                  anthropicConfigured: data.anthropic_configured,
+                                  geminiConfigured: data.gemini_configured,
                                 }));
                                 addToast(
                                   "API keys saved successfully",
@@ -8758,28 +9395,27 @@ ${signature}`;
                           }}
                           disabled={
                             savingApiKeys ||
-                            (!apiKeys.openai && !apiKeys.anthropic)
+                            (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini)
                           }
                           className="btn btn-primary"
                           style={{
                             alignSelf: "flex-start",
                             opacity:
-                              !apiKeys.openai && !apiKeys.anthropic ? 0.5 : 1,
+                              !apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini ? 0.5 : 1,
                           }}
                         >
                           {savingApiKeys ? "Saving..." : "Save API Keys"}
                         </button>
                       </div>
                     </div>
+                      </>
+                    )}
 
+                    {/* Integration Tab (now Tools) */}
+                    {settingsTab === "integration" && (
+                      <>
                     {/* Available EdTech Tools */}
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--glass-border)",
-                        paddingTop: "20px",
-                        marginTop: "20px",
-                      }}
-                    >
+                    <div>
                       <h3
                         style={{
                           fontSize: "1.1rem",
@@ -9310,294 +9946,14 @@ ${signature}`;
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
 
-                    {/* Preferences */}
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--glass-border)",
-                        paddingTop: "20px",
-                        marginTop: "20px",
-                      }}
-                    >
-                      <h3
-                        style={{
-                          fontSize: "1.1rem",
-                          fontWeight: 700,
-                          marginBottom: "15px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <Icon name="Bell" size={20} />
-                        Notifications
-                      </h3>
-
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                          cursor: "pointer",
-                          padding: "12px 16px",
-                          background: "var(--input-bg)",
-                          borderRadius: "12px",
-                          border: "1px solid var(--input-border)",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={config.showToastNotifications}
-                          onChange={(e) =>
-                            setConfig((prev) => ({
-                              ...prev,
-                              showToastNotifications: e.target.checked,
-                            }))
-                          }
-                          style={{
-                            width: "18px",
-                            height: "18px",
-                            accentColor: "var(--accent-primary)",
-                            cursor: "pointer",
-                          }}
-                        />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                            Toast Notifications
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.85rem",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Show popup notifications when assignments are graded
-                          </div>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Rubric Configuration */}
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--glass-border)",
-                        paddingTop: "20px",
-                        marginTop: "20px",
-                      }}
-                    >
-                      <h3
-                        style={{
-                          fontSize: "1.1rem",
-                          fontWeight: 700,
-                          marginBottom: "15px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                        }}
-                      >
-                        <Icon
-                          name="ClipboardCheck"
-                          size={20}
-                          style={{ color: "#8b5cf6" }}
-                        />
-                        Grading Rubric
-                      </h3>
-                      <p
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        Configure how assignments are scored. Weights must total
-                        100%.
-                      </p>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "12px",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        {rubric.categories.map((cat, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              display: "flex",
-                              gap: "10px",
-                              alignItems: "center",
-                              padding: "12px",
-                              background: "var(--input-bg)",
-                              borderRadius: "8px",
-                            }}
-                          >
-                            <input
-                              type="text"
-                              className="input"
-                              value={cat.name}
-                              onChange={(e) => {
-                                const updated = [...rubric.categories];
-                                updated[idx].name = e.target.value;
-                                setRubric({ ...rubric, categories: updated });
-                              }}
-                              style={{ flex: 1 }}
-                              placeholder="Category name"
-                            />
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "5px",
-                              }}
-                            >
-                              <input
-                                type="number"
-                                className="input"
-                                value={cat.weight}
-                                onChange={(e) => {
-                                  const updated = [...rubric.categories];
-                                  updated[idx].weight =
-                                    parseInt(e.target.value) || 0;
-                                  setRubric({ ...rubric, categories: updated });
-                                }}
-                                style={{ width: "70px", textAlign: "center" }}
-                                min="0"
-                                max="100"
-                              />
-                              <span style={{ color: "var(--text-secondary)" }}>
-                                %
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => {
-                                const updated = rubric.categories.filter(
-                                  (_, i) => i !== idx,
-                                );
-                                setRubric({ ...rubric, categories: updated });
-                              }}
-                              style={{
-                                padding: "6px",
-                                background: "none",
-                                border: "none",
-                                color: "var(--text-muted)",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <Icon name="X" size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "15px",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        <button
-                          onClick={() => {
-                            setRubric({
-                              ...rubric,
-                              categories: [
-                                ...rubric.categories,
-                                { name: "", weight: 0, description: "" },
-                              ],
-                            });
-                          }}
-                          className="btn btn-secondary"
-                          style={{ fontSize: "0.85rem" }}
-                        >
-                          <Icon name="Plus" size={16} />
-                          Add Category
-                        </button>
-                        <span
-                          style={{
-                            fontSize: "0.85rem",
-                            color:
-                              rubric.categories.reduce(
-                                (sum, c) => sum + c.weight,
-                                0,
-                              ) === 100
-                                ? "#10b981"
-                                : "#ef4444",
-                          }}
-                        >
-                          Total:{" "}
-                          {rubric.categories.reduce(
-                            (sum, c) => sum + c.weight,
-                            0,
-                          )}
-                          %
-                          {rubric.categories.reduce(
-                            (sum, c) => sum + c.weight,
-                            0,
-                          ) !== 100 && " (must equal 100%)"}
-                        </span>
-                      </div>
-
-                      <span
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                        }}
-                      >
-                        <Icon
-                          name="Check"
-                          size={14}
-                          style={{ color: "#4ade80" }}
-                        />
-                        Auto-saved
-                      </span>
-                    </div>
-
-                    {/* Auto-save indicator */}
-                    <div
-                      style={{
-                        alignSelf: "flex-start",
-                        marginTop: "20px",
-                        padding: "12px 20px",
-                        background: "rgba(74,222,128,0.1)",
-                        border: "1px solid rgba(74,222,128,0.3)",
-                        borderRadius: "10px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}
-                    >
-                      <Icon
-                        name="CheckCircle"
-                        size={20}
-                        style={{ color: "#4ade80" }}
-                      />
-                      <span style={{ color: "#4ade80", fontWeight: 600 }}>
-                        Settings auto-save
-                      </span>
-                      <span
-                        style={{
-                          color: "var(--text-secondary)",
-                          fontSize: "0.85rem",
-                        }}
-                      >
-                        Changes are saved automatically
-                      </span>
-                    </div>
-
+                    {/* Classroom Tab */}
+                    {settingsTab === "classroom" && (
+                      <>
                     {/* Roster Upload Section */}
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--glass-border)",
-                        paddingTop: "25px",
-                        marginTop: "25px",
-                      }}
-                    >
+                    <div>
                       <h3
                         style={{
                           fontSize: "1.1rem",
@@ -10393,15 +10749,14 @@ ${signature}`;
                         </p>
                       </div>
                     </div>
+                      </>
+                    )}
 
+                    {/* Privacy Tab */}
+                    {settingsTab === "privacy" && (
+                      <>
                     {/* FERPA Compliance & Data Privacy */}
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--glass-border)",
-                        paddingTop: "25px",
-                        marginTop: "25px",
-                      }}
-                    >
+                    <div>
                       <h3
                         style={{
                           fontSize: "1.1rem",
@@ -11035,6 +11390,8 @@ ${signature}`;
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -12031,6 +12388,91 @@ ${signature}`;
                           }
                           placeholder="e.g., Louisiana Purchase Quiz"
                         />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          Aliases (Alternative Names)
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 400 }}>
+                            - helps match student files with different naming
+                          </span>
+                        </label>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+                          {(assignment.aliases || []).map((alias, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                padding: "4px 10px",
+                                background: "rgba(139, 92, 246, 0.2)",
+                                border: "1px solid rgba(139, 92, 246, 0.4)",
+                                borderRadius: "6px",
+                                fontSize: "0.85rem",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                              }}
+                            >
+                              {alias}
+                              <button
+                                onClick={() => setAssignment({
+                                  ...assignment,
+                                  aliases: assignment.aliases.filter((_, idx) => idx !== i)
+                                })}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  padding: "0",
+                                  fontSize: "1rem",
+                                  lineHeight: 1,
+                                }}
+                                title="Remove alias"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <input
+                            type="text"
+                            className="input"
+                            placeholder="Add alias (e.g., Chapter 10 Section 2)"
+                            style={{ flex: 1 }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && e.target.value.trim()) {
+                                e.preventDefault();
+                                const newAlias = e.target.value.trim();
+                                if (!assignment.aliases?.includes(newAlias)) {
+                                  setAssignment({
+                                    ...assignment,
+                                    aliases: [...(assignment.aliases || []), newAlias]
+                                  });
+                                }
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: "8px 16px" }}
+                            onClick={(e) => {
+                              const input = e.target.previousSibling;
+                              if (input.value.trim()) {
+                                const newAlias = input.value.trim();
+                                if (!assignment.aliases?.includes(newAlias)) {
+                                  setAssignment({
+                                    ...assignment,
+                                    aliases: [...(assignment.aliases || []), newAlias]
+                                  });
+                                }
+                                input.value = "";
+                              }
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label className="label">Subject</label>

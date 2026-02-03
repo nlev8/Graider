@@ -131,10 +131,23 @@ When you have previously graded assignments and want to regrade only the unverif
 3. Shows count of unverified vs verified assignments
 4. Click **Start Grading**
 
+**Understanding the count display:**
+> "14 unverified assignments will be regraded. 98 verified grades will be kept."
+
+This means:
+- **14 unverified** = Assignments graded without a saved config (AI had less guidance, grade may be less reliable)
+- **98 verified** = Assignments you manually verified OR graded with a matching saved configuration
+
 **When to use:**
 - You graded files before setting up the assignment config
 - You want to fix grades that were marked without proper markers
 - You added a new assignment config and want to apply it retroactively
+- You improved your grading instructions and want to update uncertain grades
+- You switched AI models and want to regrade only questionable results
+
+**How grades become verified:**
+1. **Automatic**: Graded with a matching saved assignment configuration (custom markers, grading notes, etc.)
+2. **Manual**: You click the "Verify" button after reviewing the grade in Results
 
 **How it works:**
 - Files that matched an assignment config during grading = **Verified** (kept)
@@ -858,14 +871,54 @@ These resources can enhance AI grading and lesson planning accuracy.
 
 ### AI Model Selection
 
-Choose which OpenAI model to use for grading:
+Choose which AI model to use for grading:
 
 | Model | Cost | Best For |
 |-------|------|----------|
-| **GPT-4o-mini** (default) | ~$0.09 per 100 assignments | Routine grading, cost savings |
-| **GPT-4o** | ~$1.43 per 100 assignments | Complex assignments, better nuance |
+| **GPT-4o-mini** (default) | ~$0.01 per assignment | Routine grading, cost savings |
+| **GPT-4o** | ~$0.03 per assignment | Complex assignments, better nuance |
+| **Claude 3.5 Haiku** | ~$0.01 per assignment | Fast, cost-effective |
+| **Claude 3.5 Sonnet** | ~$0.02 per assignment | Excellent reasoning |
+| **Gemini 2.0 Flash** | ~$0.01 per assignment | Fast, good value |
+| **Gemini 2.0 Pro** | ~$0.05 per assignment | Most capable Gemini model |
 
 **Note:** Individual uploads (handwritten/scanned) always use GPT-4o for better handwriting recognition.
+
+### Ensemble Grading
+
+Run each assignment through multiple AI models and use the median score for more reliable grading.
+
+**How to enable:**
+1. Go to **Settings > AI**
+2. Enable **Ensemble Grading**
+3. Select 2-3 models to use (checkboxes appear)
+4. Grade assignments normally
+
+**How it works:**
+1. Each assignment is sent to all selected models **simultaneously** (parallel processing)
+2. All models grade independently
+3. The **median score** is selected (protects against outliers)
+4. Feedback comes from the model closest to the median score
+
+**Performance impact:**
+| Mode | Time per Assignment |
+|------|---------------------|
+| Single model | 3-8 seconds |
+| Ensemble (3 models) | 5-12 seconds |
+
+Models run in parallel, so total time ≈ slowest model (not sum of all).
+
+**Cost estimate:** ~$0.03-0.09 per assignment with 3 models
+
+**When to use ensemble:**
+- High-stakes assignments (final essays, major projects)
+- Subjective writing where grading is harder
+- Borderline grades where you want more confidence
+
+**When to skip ensemble:**
+- Routine homework
+- Assignments you'll manually verify anyway
+- Clear-cut right/wrong work (fill-in-the-blank, matching)
 
 ### Global AI Instructions
 
@@ -1203,10 +1256,12 @@ Each student's file contains:
 
 ---
 
-## Recent Updates (January 2026)
+## Recent Updates (February 2026)
 
 ### New Features
 
+- **Ensemble Grading**: Run assignments through multiple AI models (GPT-4, Claude, Gemini) and use median score for more reliable grading
+- **Multi-Provider AI Support**: Choose from OpenAI (GPT-4o, GPT-4o-mini), Anthropic (Claude 3.5 Sonnet, Haiku), and Google (Gemini 2.0 Flash, Pro)
 - **Assessment Generator**: Create standards-aligned assessments with multiple question types (MC, Short Answer, Extended Response, True/False, Matching)
 - **Student Portal**: Publish assessments with join codes for students to take online
 - **Teacher Dashboard**: Monitor published assessments, view submissions, track scores
@@ -1249,4 +1304,4 @@ Each student's file contains:
 
 ---
 
-*Last updated: January 31, 2026*
+*Last updated: February 2, 2026*

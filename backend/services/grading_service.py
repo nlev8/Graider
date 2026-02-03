@@ -47,8 +47,10 @@ OUTPUT_FOLDER = "/Users/alexc/Downloads/Assignment Grader/Results"
 # Path to your student roster Excel file
 ROSTER_FILE = "/Users/alexc/Downloads/Assignment Grader/all_students_updated.xlsx"
 
-# Your OpenAI API key (set in .env file or paste here)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-api-key-here")
+# API keys (set in .env file)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Assignment name (used in output files and emails)
 ASSIGNMENT_NAME = "Cornell Notes - Political Parties"  # UPDATE FOR EACH ASSIGNMENT
@@ -581,14 +583,119 @@ def extract_student_work(content: str) -> tuple:
 
 
 # =============================================================================
-# AI GRADING WITH CLAUDE
+# AI GRADING - MULTI-PROVIDER SUPPORT
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies') -> dict:
-    """
-    Use OpenAI GPT to grade a student assignment.
+def _grade_with_openai(prompt: str, assignment_data: dict, model: str) -> str:
+    """Grade using OpenAI API."""
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
 
-    FERPA COMPLIANCE: Student name is NOT sent to OpenAI.
+    if assignment_data["type"] == "text":
+        messages = [{"role": "user", "content": prompt}]
+    else:
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{assignment_data['media_type']};base64,{assignment_data['content']}"
+                    }
+                }
+            ]
+        }]
+
+    # Map model aliases to actual model names
+    model_map = {
+        'gpt-4o': 'gpt-4o',
+        'gpt-4o-mini': 'gpt-4o-mini',
+        'gpt-4-turbo': 'gpt-4-turbo',
+        'gpt-4': 'gpt-4',
+        'gpt-3.5-turbo': 'gpt-3.5-turbo'
+    }
+    actual_model = model_map.get(model, 'gpt-4o')
+
+    response = client.chat.completions.create(
+        model=actual_model,
+        messages=messages,
+        max_tokens=1500,
+        temperature=0.3
+    )
+    return response.choices[0].message.content.strip()
+
+
+def _grade_with_anthropic(prompt: str, assignment_data: dict, model: str) -> str:
+    """Grade using Anthropic Claude API."""
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    # Map model aliases to actual model names
+    model_map = {
+        'claude-sonnet': 'claude-sonnet-4-20250514',
+        'claude-haiku': 'claude-3-5-haiku-20241022',
+        'claude-opus': 'claude-3-opus-20240229'
+    }
+    actual_model = model_map.get(model, 'claude-sonnet-4-20250514')
+
+    if assignment_data["type"] == "text":
+        content = [{"type": "text", "text": prompt}]
+    else:
+        content = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": assignment_data['media_type'],
+                    "data": assignment_data['content']
+                }
+            }
+        ]
+
+    response = client.messages.create(
+        model=actual_model,
+        max_tokens=1500,
+        messages=[{"role": "user", "content": content}]
+    )
+    return response.content[0].text.strip()
+
+
+def _grade_with_gemini(prompt: str, assignment_data: dict, model: str) -> str:
+    """Grade using Google Gemini API."""
+    import google.generativeai as genai
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    # Map model aliases to actual model names
+    model_map = {
+        'gemini-flash': 'gemini-2.0-flash',
+        'gemini-pro': 'gemini-1.5-pro'
+    }
+    actual_model = model_map.get(model, 'gemini-2.0-flash')
+
+    gen_model = genai.GenerativeModel(actual_model)
+
+    if assignment_data["type"] == "text":
+        response = gen_model.generate_content(prompt)
+    else:
+        # For images, we need to include the image data
+        import base64
+        image_data = base64.b64decode(assignment_data['content'])
+        image_part = {
+            "mime_type": assignment_data['media_type'],
+            "data": image_data
+        }
+        response = gen_model.generate_content([prompt, image_part])
+
+    return response.text.strip()
+
+
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', model: str = 'gpt-4o') -> dict:
+    """
+    Use AI (OpenAI, Anthropic, or Gemini) to grade a student assignment.
+
+    FERPA COMPLIANCE: Student name is NOT sent to AI APIs.
     We use "Student" as a placeholder to protect privacy.
 
     Supports both text and image inputs.
@@ -599,6 +706,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - custom_ai_instructions: Additional grading instructions from the teacher
     - grade_level: The student's grade level (e.g., '6', '7', '8')
     - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
+    - model: AI model to use (gpt-4o, claude-sonnet, gemini-flash, etc.)
 
     Returns dict with:
     - score: numeric grade (0-100)
@@ -608,13 +716,6 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - authenticity_flag: 'clean', 'review', or 'flagged'
     - authenticity_reason: Explanation for flagged or review status
     """
-    try:
-        from openai import OpenAI
-    except ImportError:
-        print("❌ openai not installed. Run: pip install openai")
-        return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "API not available"}
-    
-    client = OpenAI(api_key=OPENAI_API_KEY)
 
     # Check for empty/blank student submissions before sending to API
     content = assignment_data.get("content", "")
@@ -775,40 +876,32 @@ Provide your response in the following JSON format ONLY (no other text):
 }}
 """
 
-    print(f"  🤖 Grading with AI...")
-    
+    # Determine provider from model name
+    if model.startswith('claude'):
+        provider = 'anthropic'
+    elif model.startswith('gemini'):
+        provider = 'gemini'
+    else:
+        provider = 'openai'
+
+    print(f"  🤖 Grading with {provider.upper()} ({model})...")
+
     try:
         # Build the message content based on input type
         if assignment_data["type"] == "text":
-            # Text-based assignment
             full_prompt = prompt_text + f"\n\nSTUDENT'S RESPONSES/WORK:\n{assignment_data['content']}"
-            messages = [{"role": "user", "content": full_prompt}]
-        
         elif assignment_data["type"] == "image":
-            # Image-based assignment - use vision
-            messages = [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt_text + "\n\nSTUDENT'S WORK (see attached image):"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{assignment_data['media_type']};base64,{assignment_data['content']}"
-                        }
-                    }
-                ]
-            }]
+            full_prompt = prompt_text + "\n\nSTUDENT'S WORK (see attached image):"
         else:
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Unknown content type"}
-        
-        response = client.chat.completions.create(
-            model="gpt-4o",  # Use gpt-4o for vision capability
-            messages=messages,
-            max_tokens=1500,
-            temperature=0.3
-        )
-        
-        response_text = response.choices[0].message.content.strip()
+
+        # Route to appropriate provider
+        if provider == 'anthropic':
+            response_text = _grade_with_anthropic(full_prompt, assignment_data, model)
+        elif provider == 'gemini':
+            response_text = _grade_with_gemini(full_prompt, assignment_data, model)
+        else:
+            response_text = _grade_with_openai(full_prompt, assignment_data, model)
         
         # Clean up response (remove markdown code blocks if present)
         if response_text.startswith("```"):

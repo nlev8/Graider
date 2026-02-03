@@ -256,14 +256,15 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None):
     """Run the grading process in a background thread.
 
     Args:
         selected_files: List of filenames to grade, or None to grade all files
-        ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
+        ai_model: AI model to use (or primary model if not using ensemble)
         skip_verified: If True, skip files that were previously graded with verified status
         rubric: Custom rubric dict from Settings with categories, weights, descriptions
+        ensemble_models: List of models for ensemble grading (e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash'])
     """
     global grading_state
 
@@ -514,8 +515,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         from assignment_grader import (
             load_roster, parse_filename, read_assignment_file,
             extract_student_work, grade_assignment, grade_with_parallel_detection,
-            export_focus_csv, export_detailed_report, save_emails_to_folder,
-            save_to_master_csv, ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
+            grade_with_ensemble, export_focus_csv, export_detailed_report,
+            save_emails_to_folder, save_to_master_csv, ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
         )
 
         if all_configs:
@@ -995,14 +996,21 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 else:
                     grade_data = file_data
 
-                # Grade with parallel detection
+                # Grade with parallel detection or ensemble
                 # Pass file_markers (customMarkers) for extraction, not file_sections
                 # Pass file_exclude_markers (excludeMarkers) to skip sections that shouldn't be graded
-                grade_result = grade_with_parallel_detection(
-                    student_info['student_name'], grade_data, file_ai_notes,
-                    grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
-                    rubric_prompt, file_markers, file_exclude_markers
-                )
+                if ensemble_models and len(ensemble_models) >= 2:
+                    grade_result = grade_with_ensemble(
+                        student_info['student_name'], grade_data, file_ai_notes,
+                        grade_level, subject, ensemble_models, student_info.get('student_id'),
+                        assignment_template_local, rubric_prompt, file_markers, file_exclude_markers
+                    )
+                else:
+                    grade_result = grade_with_parallel_detection(
+                        student_info['student_name'], grade_data, file_ai_notes,
+                        grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+                        rubric_prompt, file_markers, file_exclude_markers
+                    )
 
                 # Check for errors
                 if grade_result.get('letter_grade') == 'ERROR':
@@ -1156,7 +1164,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 }
                 all_grades.append(grade_record)
 
-                # Add to results for UI
+                # Add to results for UI (remove any existing result for same file first - for regrading)
+                grading_state["results"] = [r for r in grading_state["results"] if r.get("filename") != filepath.name]
                 grading_state["results"].append({
                     "student_name": student_info['student_name'],
                     "student_id": student_info.get('student_id', ''),
@@ -1283,6 +1292,9 @@ def start_grading():
     # Get custom rubric from Settings
     rubric = data.get('rubric', None)
 
+    # Get ensemble models for multi-model grading
+    ensemble_models = data.get('ensemble_models', None)
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -1297,7 +1309,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models)
     )
     thread.start()
 
@@ -1535,8 +1547,9 @@ def delete_single_result():
         if r.get('filename', '') != filename
     ]
 
+    # If result wasn't found, that's OK - it's already deleted
     if len(grading_state["results"]) == original_count:
-        return jsonify({"error": "Result not found"}), 404
+        return jsonify({"status": "already_deleted", "filename": filename})
 
     # Save updated results to file
     save_results(grading_state["results"])

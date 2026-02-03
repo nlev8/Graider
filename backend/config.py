@@ -24,6 +24,8 @@ GRAIDER_CONFIG_DIR.mkdir(exist_ok=True)
 
 # API Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Default folders (can be overridden by user settings)
 DEFAULT_ASSIGNMENTS_FOLDER = str(HOME_DIR / "Downloads" / "Graider" / "Assignments")

@@ -1002,6 +1002,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-api-key-here")
 # Anthropic API key for Claude models
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# Google Gemini API key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
 # Assignment name (used in output files and emails)
 ASSIGNMENT_NAME = "Cornell Notes - Political Parties"  # UPDATE FOR EACH ASSIGNMENT
 
@@ -1796,6 +1799,112 @@ Respond ONLY with this JSON (no other text):
         }
 
 
+def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
+                        grade_level: str = '6', subject: str = 'Social Studies',
+                        ensemble_models: list = None, student_id: str = None,
+                        assignment_template: str = None, rubric_prompt: str = None,
+                        custom_markers: list = None, exclude_markers: list = None) -> dict:
+    """
+    Grade assignment using multiple AI models and combine results.
+
+    Args:
+        ensemble_models: List of model names to use (e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash'])
+
+    Returns:
+        Combined result with:
+        - score: Average of all model scores
+        - ensemble_scores: Individual scores from each model
+        - ensemble_feedback: Feedback from each model
+        - letter_grade: Based on averaged score
+    """
+    if not ensemble_models or len(ensemble_models) < 2:
+        # Fall back to single model grading
+        model = ensemble_models[0] if ensemble_models else 'gpt-4o-mini'
+        return grade_with_parallel_detection(student_name, assignment_data, custom_ai_instructions,
+                                             grade_level, subject, model, student_id,
+                                             assignment_template, rubric_prompt, custom_markers, exclude_markers)
+
+    print(f"  🎯 Ensemble grading with {len(ensemble_models)} models: {', '.join(ensemble_models)}")
+
+    # Run all models in parallel
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(ensemble_models)) as executor:
+        futures = {}
+        for model in ensemble_models:
+            future = executor.submit(
+                grade_assignment, student_name, assignment_data, custom_ai_instructions,
+                grade_level, subject, model, student_id, assignment_template, rubric_prompt,
+                custom_markers, exclude_markers
+            )
+            futures[future] = model
+
+        # Collect results
+        for future in concurrent.futures.as_completed(futures):
+            model = futures[future]
+            try:
+                result = future.result()
+                results[model] = result
+                print(f"    ✓ {model}: {result.get('score', 0)} ({result.get('letter_grade', 'N/A')})")
+            except Exception as e:
+                print(f"    ✗ {model}: Error - {str(e)[:50]}")
+                results[model] = {"score": 0, "letter_grade": "ERROR", "feedback": f"Error: {e}"}
+
+    # Calculate ensemble score
+    valid_scores = [r.get('score', 0) for r in results.values() if r.get('letter_grade') != 'ERROR']
+    if not valid_scores:
+        return {"score": 0, "letter_grade": "ERROR", "feedback": "All models failed", "breakdown": {}}
+
+    # Use median for robustness against outliers
+    valid_scores.sort()
+    if len(valid_scores) % 2 == 0:
+        median_score = (valid_scores[len(valid_scores)//2 - 1] + valid_scores[len(valid_scores)//2]) / 2
+    else:
+        median_score = valid_scores[len(valid_scores)//2]
+
+    avg_score = sum(valid_scores) / len(valid_scores)
+    final_score = round(median_score)  # Use median as final
+
+    # Determine letter grade
+    if final_score >= 90:
+        letter_grade = "A"
+    elif final_score >= 80:
+        letter_grade = "B"
+    elif final_score >= 70:
+        letter_grade = "C"
+    elif final_score >= 60:
+        letter_grade = "D"
+    else:
+        letter_grade = "F"
+
+    # Pick the best feedback (from the model closest to median score)
+    best_model = min(results.keys(), key=lambda m: abs(results[m].get('score', 0) - median_score) if results[m].get('letter_grade') != 'ERROR' else 999)
+    best_result = results[best_model]
+
+    # Build ensemble result
+    ensemble_result = {
+        "score": final_score,
+        "letter_grade": letter_grade,
+        "feedback": best_result.get("feedback", ""),
+        "breakdown": best_result.get("breakdown", {}),
+        "ai_detection": best_result.get("ai_detection", {}),
+        "plagiarism_detection": best_result.get("plagiarism_detection", {}),
+        "student_responses": best_result.get("student_responses", []),
+        "unanswered_questions": best_result.get("unanswered_questions", []),
+        # Ensemble-specific fields
+        "ensemble_grading": True,
+        "ensemble_models": ensemble_models,
+        "ensemble_scores": {model: results[model].get("score", 0) for model in results},
+        "ensemble_grades": {model: results[model].get("letter_grade", "N/A") for model in results},
+        "ensemble_avg": round(avg_score, 1),
+        "ensemble_median": round(median_score, 1),
+        "ensemble_feedback_source": best_model,
+    }
+
+    print(f"  📊 Ensemble result: {final_score} ({letter_grade}) - avg: {avg_score:.1f}, median: {median_score:.1f}")
+
+    return ensemble_result
+
+
 def grade_with_parallel_detection(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
                                    grade_level: str = '6', subject: str = 'Social Studies',
                                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
@@ -1907,6 +2016,24 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
             grading_result["letter_grade"] = "C"
         print(f"  ⚠️  Score capped: {original_score} → {cap} ({cap_reason})")
 
+    # Replace feedback with academic integrity message for high AI/plagiarism likelihood
+    # But NOT for blank submissions (they get their own feedback)
+    ai_confidence = grading_result.get("ai_detection", {}).get("confidence", 0)
+    student_responses = grading_result.get("student_responses", [])
+    is_blank = not student_responses  # Empty list = blank submission
+
+    if is_blank:
+        # Blank submission - use clear feedback, skip academic integrity check
+        grading_result["feedback"] = "You submitted a blank assignment. Please resubmit a completed version."
+        grading_result["score"] = 0
+        grading_result["letter_grade"] = "F"
+        print(f"  📝 Blank submission detected")
+    elif ai_confidence >= 50 or plag_flag in ["possible", "likely"]:
+        grading_result["original_feedback"] = grading_result.get("feedback", "")
+        grading_result["feedback"] = "Please resubmit using your own words. Copying and pasting from Google (plagiarism) or use of AI is considered a violation of academic integrity."
+        grading_result["academic_integrity_flag"] = True
+        print(f"  🚨 Academic integrity concern - feedback replaced")
+
     # Apply minimum score floor for students who answered all/most questions
     # (Only if no AI/plagiarism concerns - those are handled by caps above)
     current_score = grading_result.get("score", 0)
@@ -1959,9 +2086,15 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - authenticity_reason: Explanation for flagged or review status
     """
     # Determine which API to use based on model name
-    use_claude = ai_model.startswith("claude")
+    if ai_model.startswith("claude"):
+        provider = "anthropic"
+    elif ai_model.startswith("gemini"):
+        provider = "gemini"
+    else:
+        provider = "openai"
 
-    if use_claude:
+    # Initialize the appropriate client
+    if provider == "anthropic":
         try:
             import anthropic
         except ImportError:
@@ -1972,7 +2105,6 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API key not configured"}
 
         claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        # Map friendly names to actual model IDs
         claude_model_map = {
             "claude-haiku": "claude-3-5-haiku-latest",
             "claude-sonnet": "claude-sonnet-4-20250514",
@@ -1980,7 +2112,27 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
         }
         actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
         print(f"  🤖 Using Claude model: {actual_model}")
-    else:
+
+    elif provider == "gemini":
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            print("❌ google-generativeai not installed. Run: pip install google-generativeai")
+            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Google AI not available - pip install google-generativeai"}
+
+        if not GEMINI_API_KEY:
+            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Gemini API key not configured"}
+
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model_map = {
+            "gemini-flash": "gemini-2.0-flash",
+            "gemini-pro": "gemini-2.0-pro-exp",
+        }
+        actual_model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
+        gemini_client = genai.GenerativeModel(actual_model)
+        print(f"  🤖 Using Gemini model: {actual_model}")
+
+    else:  # OpenAI
         try:
             from openai import OpenAI
         except ImportError:
@@ -2387,7 +2539,7 @@ Provide your response in the following JSON format ONLY (no other text):
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
-    "student_responses": ["<list each student answer you found, e.g. '1803', 'France', 'It helped trade...' etc>"],
+    "student_responses": ["<ONLY the student's answers - NOT the questions. e.g. '1803', 'France', 'It helped trade...' - just the response text>"],
     "unanswered_questions": ["<list ALL questions/sections the student left blank or didn't answer - especially written response sections like reflections, explanations, summaries>"],
     "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
     "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
@@ -2470,12 +2622,10 @@ Provide your response in the following JSON format ONLY (no other text):
         else:
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Unknown content type"}
 
-        # Make API call based on model type
-        if use_claude:
+        # Make API call based on provider
+        if provider == "anthropic":
             # Claude API call
-            # Convert OpenAI message format to Claude format
             if assignment_data.get("type") == "image":
-                # Claude vision format
                 claude_content = [
                     {"type": "text", "text": prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."},
                     {
@@ -2488,7 +2638,6 @@ Provide your response in the following JSON format ONLY (no other text):
                     }
                 ]
             else:
-                # Text-only content
                 claude_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
 
             response = claude_client.messages.create(
@@ -2497,10 +2646,41 @@ Provide your response in the following JSON format ONLY (no other text):
                 messages=[{"role": "user", "content": claude_content}]
             )
             response_text = response.content[0].text.strip()
+
+        elif provider == "gemini":
+            # Gemini API call with retry for rate limits
+            import time
+            max_retries = 3
+            retry_delay = 2  # seconds
+
+            for attempt in range(max_retries):
+                try:
+                    if assignment_data.get("type") == "image":
+                        import base64
+                        image_data = base64.b64decode(assignment_data['content'])
+                        image_part = {
+                            "mime_type": assignment_data['media_type'],
+                            "data": image_data
+                        }
+                        full_prompt = prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."
+                        response = gemini_client.generate_content([full_prompt, image_part])
+                    else:
+                        text_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
+                        response = gemini_client.generate_content(text_content)
+                    response_text = response.text.strip()
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        print(f"  ⏳ Rate limited, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        raise  # Re-raise if not rate limit or out of retries
+
         else:
             # OpenAI API call
             response = openai_client.chat.completions.create(
-                model=ai_model,  # Configurable: gpt-4o or gpt-4o-mini
+                model=ai_model,
                 messages=messages,
                 max_tokens=1500,
                 temperature=0.3
@@ -2519,38 +2699,89 @@ Provide your response in the following JSON format ONLY (no other text):
             response_text = '\n'.join(lines[start:end])
         response_text = response_text.strip()
 
-        # Fix common JSON issues from AI responses
-        # Replace control characters that break JSON parsing
+        # Fix Claude's malformed JSON:
+        # 1. Remove parenthetical comments after string values
+        # 2. Add missing commas between properties
+        # 3. Escape unescaped newlines inside strings
         import re
-        # Fix unescaped newlines inside strings (common AI mistake)
-        # This regex finds strings and escapes newlines within them
-        def fix_json_strings(text):
-            # Replace literal newlines/tabs in the middle of JSON strings
-            # First try to parse as-is
+
+        def fix_claude_json(text):
+            # First check if already valid
             try:
                 json.loads(text)
-                return text  # Already valid
-            except:
+                return text
+            except json.JSONDecodeError:
                 pass
-            # Replace problematic control chars
-            text = text.replace('\r\n', '\\n').replace('\r', '\\n')
-            # Fix unescaped newlines in string values (between quotes)
-            text = re.sub(r'(?<!\\)\n(?=[^"]*"[,\}\]])', '\\n', text)
-            return text
 
-        response_text = fix_json_strings(response_text)
+            # Fix 1: Remove parenthetical comments after closing quotes
+            fixed = re.sub(r'"\s*\([^)]+\)', '"', text)
 
-        # Try parsing JSON with fallbacks
+            # Fix 2: Remove double quotes (Claude sometimes outputs "" instead of ")
+            fixed = re.sub(r'""', '"', fixed)
+
+            # Fix 3: Add missing commas - pattern: "value"\n    "key" → "value",\n    "key"
+            fixed = re.sub(r'"\s*\n(\s*)"', r'",\n\1"', fixed)
+
+            # Fix 4: Add missing commas after numbers/booleans before string keys
+            fixed = re.sub(r'(\d)\s*\n(\s*)"', r'\1,\n\2"', fixed)
+            fixed = re.sub(r'(true|false|null)\s*\n(\s*)"', r'\1,\n\2"', fixed)
+
+            # Fix 5: Add missing commas after ] or } before "key"
+            fixed = re.sub(r'(\]|\})\s*\n(\s*)"', r'\1,\n\2"', fixed)
+
+            # Fix 6: Escape newlines inside strings (character-by-character)
+            result = []
+            in_string = False
+            i = 0
+            while i < len(fixed):
+                char = fixed[i]
+                if char == '\\' and i + 1 < len(fixed):
+                    result.append(char)
+                    result.append(fixed[i + 1])
+                    i += 2
+                    continue
+                if char == '"':
+                    in_string = not in_string
+                    result.append(char)
+                    i += 1
+                    continue
+                if in_string:
+                    if char == '\n':
+                        result.append('\\n')
+                    elif char == '\r':
+                        pass
+                    elif char == '\t':
+                        result.append('\\t')
+                    else:
+                        result.append(char)
+                else:
+                    result.append(char)
+                i += 1
+
+            return ''.join(result)
+
+        original_text = response_text
+        response_text = fix_claude_json(response_text)
+
         try:
             result = json.loads(response_text)
-        except json.JSONDecodeError:
-            # Fallback: try with strict=False (allows control chars)
-            try:
-                result = json.loads(response_text, strict=False)
-            except json.JSONDecodeError:
-                # Last resort: strip all control chars except newlines
-                cleaned = re.sub(r'[\x00-\x09\x0b\x0c\x0e-\x1f]', '', response_text)
-                result = json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            # Debug: show what we're trying to parse
+            print(f"  ⚠️  JSON parse error: {e}")
+            print(f"  ⚠️  Error at position {e.pos}, showing context:")
+            start = max(0, e.pos - 100)
+            end = min(len(response_text), e.pos + 100)
+            print(f"  ⚠️  ...{repr(response_text[start:end])}...")
+
+            # Save both original and fixed for comparison
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='_original.json', delete=False) as f:
+                f.write(original_text)
+                print(f"  ⚠️  Original saved to: {f.name}")
+            with tempfile.NamedTemporaryFile(mode='w', suffix='_fixed.json', delete=False) as f:
+                f.write(response_text)
+                print(f"  ⚠️  Fixed saved to: {f.name}")
+            raise
 
         # Update student's writing profile (only if not flagged as AI)
         # This builds their baseline for future AI detection
@@ -2591,17 +2822,31 @@ Provide your response in the following JSON format ONLY (no other text):
 
     except json.JSONDecodeError as e:
         print(f"  ⚠️  Error parsing AI response: {e}")
+        # Try to show response content for debugging
+        try:
+            raw_preview = response_text[:800] if len(response_text) > 800 else response_text
+            print(f"  ⚠️  Raw response preview:\n{raw_preview}")
+            # Write full response to temp file for debugging
+            import tempfile
+            debug_file = tempfile.NamedTemporaryFile(mode='w', suffix='_graider_debug.json', delete=False)
+            debug_file.write(response_text)
+            debug_file.close()
+            print(f"  ⚠️  Full response saved to: {debug_file.name}")
+        except:
+            print(f"  ⚠️  Could not display response")
         return {
             "score": 0,
             "letter_grade": "ERROR",
             "breakdown": {},
-            "feedback": "Error grading - please review manually."
+            "feedback": f"Error grading - AI returned invalid JSON. Please review manually."
         }
     except Exception as e:
         print(f"  ⚠️  API error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "score": 0,
-            "letter_grade": "ERROR", 
+            "letter_grade": "ERROR",
             "breakdown": {},
             "feedback": f"API error: {e}"
         }

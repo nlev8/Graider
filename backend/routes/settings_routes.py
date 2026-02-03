@@ -403,6 +403,38 @@ def delete_period():
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route('/api/update-period-level', methods=['POST'])
+def update_period_level():
+    """Update the class level (standard/advanced/support) for a period."""
+    data = request.json
+    filename = data.get('filename')
+    class_level = data.get('class_level', 'standard')
+
+    if not filename:
+        return jsonify({"error": "No filename provided"}), 400
+
+    if class_level not in ['standard', 'advanced', 'support']:
+        return jsonify({"error": "Invalid class level. Use: standard, advanced, or support"}), 400
+
+    metadata_path = os.path.join(PERIODS_DIR, f"{secure_filename(filename)}.meta.json")
+
+    if not os.path.exists(metadata_path):
+        return jsonify({"error": "Period metadata not found"}), 404
+
+    try:
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        metadata['class_level'] = class_level
+
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return jsonify({"status": "updated", "class_level": class_level})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route('/api/get-period-students', methods=['POST'])
 def get_period_students():
     """Get student names from a period CSV file."""
@@ -701,6 +733,7 @@ def save_api_keys():
     data = request.json
     openai_key = data.get('openai_key')
     anthropic_key = data.get('anthropic_key')
+    gemini_key = data.get('gemini_key')
 
     # Load existing keys
     keys = load_api_keys()
@@ -710,6 +743,8 @@ def save_api_keys():
         keys['openai'] = openai_key
     if anthropic_key:
         keys['anthropic'] = anthropic_key
+    if gemini_key:
+        keys['gemini'] = gemini_key
 
     # Save to file
     save_api_keys_to_file(keys)
@@ -724,6 +759,7 @@ def save_api_keys():
     # Update or add keys in .env
     openai_found = False
     anthropic_found = False
+    gemini_found = False
     new_lines = []
     for line in env_lines:
         if line.startswith('OPENAI_API_KEY=') and openai_key:
@@ -732,6 +768,9 @@ def save_api_keys():
         elif line.startswith('ANTHROPIC_API_KEY=') and anthropic_key:
             new_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
             anthropic_found = True
+        elif line.startswith('GEMINI_API_KEY=') and gemini_key:
+            new_lines.append(f'GEMINI_API_KEY={gemini_key}\n')
+            gemini_found = True
         else:
             new_lines.append(line)
 
@@ -739,6 +778,8 @@ def save_api_keys():
         new_lines.append(f'OPENAI_API_KEY={openai_key}\n')
     if anthropic_key and not anthropic_found:
         new_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
+    if gemini_key and not gemini_found:
+        new_lines.append(f'GEMINI_API_KEY={gemini_key}\n')
 
     with open(env_path, 'w') as f:
         f.writelines(new_lines)
@@ -746,7 +787,8 @@ def save_api_keys():
     return jsonify({
         "status": "success",
         "openai_configured": bool(keys.get('openai')),
-        "anthropic_configured": bool(keys.get('anthropic'))
+        "anthropic_configured": bool(keys.get('anthropic')),
+        "gemini_configured": bool(keys.get('gemini'))
     })
 
 
@@ -759,14 +801,17 @@ def check_api_keys():
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
     openai_in_env = False
     anthropic_in_env = False
+    gemini_in_env = False
 
     if os.path.exists(env_path):
         with open(env_path, 'r') as f:
             content = f.read()
             openai_in_env = 'OPENAI_API_KEY=' in content and 'your-key-here' not in content
             anthropic_in_env = 'ANTHROPIC_API_KEY=' in content
+            gemini_in_env = 'GEMINI_API_KEY=' in content
 
     return jsonify({
         "openai_configured": bool(keys.get('openai')) or openai_in_env,
-        "anthropic_configured": bool(keys.get('anthropic')) or anthropic_in_env
+        "anthropic_configured": bool(keys.get('anthropic')) or anthropic_in_env,
+        "gemini_configured": bool(keys.get('gemini')) or gemini_in_env
     })

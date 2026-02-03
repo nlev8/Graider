@@ -47,15 +47,17 @@ def list_assignments():
             try:
                 with open(os.path.join(ASSIGNMENTS_DIR, f), 'r') as af:
                     data = json.load(af)
+                    imported_doc = data.get("importedDoc", {})
                     assignment_data[name] = {
                         "aliases": data.get("aliases", []),
                         "title": data.get("title", name),
                         "completionOnly": data.get("completionOnly", False),
                         "rubricType": data.get("rubricType", "standard"),
                         "countsTowardsGrade": data.get("countsTowardsGrade", True),  # Default to True
+                        "importedFilename": imported_doc.get("filename", ""),  # Original filename for matching
                     }
             except:
-                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True}
+                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": ""}
 
     return jsonify({"assignments": sorted(assignments), "assignmentData": assignment_data})
 
