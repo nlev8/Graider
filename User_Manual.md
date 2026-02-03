@@ -555,6 +555,52 @@ When you rename an assignment in the Builder, Graider automatically tracks the p
 - Aliases are stored in the assignment JSON config
 - They're automatically used for matching - no action required
 
+### Section Point Values
+
+The Section Point Values feature lets you assign specific point values to different sections of an assignment, giving you fine-grained control over how grades are calculated.
+
+**Enabling Section Points:**
+1. In the Builder tab, find the **"Use Section Point Values"** toggle
+2. When **OFF** (default): Uses standard rubric (Content 40, Completeness 25, Writing 20, Effort 15)
+3. When **ON**: Shows the section point editor
+
+**Using Section Points:**
+
+1. **Toggle ON** the "Use Section Point Values" switch
+2. **Select a Template** (optional):
+   - **Cornell Notes**: Questions/Terms (40), Summary (20), Vocabulary (25), Effort (15)
+   - **Worksheet - Fill-in-Blank Heavy**: Fill-in-blank (50), Short Answer (35), Effort (15)
+   - **Worksheet - Written Heavy**: Questions (30), Written Response (40), Reflection (15), Effort (15)
+   - **Essay**: Thesis/Intro (20), Body (45), Conclusion (20), Effort (15)
+   - **Custom**: Define your own sections
+
+3. **Customize Points**:
+   - Edit section names directly in the text boxes
+   - Adjust point values (must total 100)
+   - Change section types (Written, Fill-blank, Vocabulary, Matching)
+   - Adjust Effort & Engagement points (default 15)
+
+4. **Verify Total**: The total points display shows if your points sum to 100
+   - Shows warning in red if total ≠ 100
+
+**How It Affects Grading:**
+
+When Section Point Values is **enabled**:
+- Each section is graded out of its assigned points
+- **Blank sections = 0 points** for that section (no partial credit)
+- The AI receives specific instructions about point values per section
+- Results show section-by-section breakdown
+
+When Section Point Values is **disabled**:
+- Uses the standard rubric categories
+- More flexible, holistic grading approach
+
+**Best Practices:**
+- Use for assignments with clearly defined sections
+- Ensure total points = 100
+- Match section names to actual assignment headers for accurate extraction
+- Keep Effort & Engagement at 15 for consistency
+
 ### Persistence
 
 All saved assignment configs are stored in `~/.graider_assignments/` and persist across restarts.

@@ -786,9 +786,10 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     assignment_template_local = imported_doc.get('text', '')
                     rubric_type = matched_config.get('rubricType', 'standard')
                     custom_rubric = matched_config.get('customRubric', None)
-                    # Section-based point configuration
-                    marker_config = file_markers  # customMarkers now contain point values
-                    effort_points = matched_config.get('effortPoints', 15)
+                    # Section-based point configuration - only use when toggle is enabled
+                    use_section_points = matched_config.get('useSectionPoints', False)
+                    marker_config = file_markers if use_section_points else None
+                    effort_points = matched_config.get('effortPoints', 15) if use_section_points else 15
                 else:
                     file_markers = fallback_markers
                     file_exclude_markers = []

@@ -926,6 +926,7 @@ function App() {
     completionOnly: false, // If true, track submission but don't AI grade
     rubricType: "standard", // standard, fill-in-blank, essay, cornell-notes, completion-only, custom
     customRubric: null, // Custom rubric categories if rubricType is "custom"
+    useSectionPoints: false,     // Toggle for section-based point system
     sectionTemplate: "Custom",   // Track which template is applied
     effortPoints: 15,            // Points for effort/engagement category
   });
@@ -2701,26 +2702,25 @@ ${signature}`;
         } else {
           setImportedDoc({ text: "", html: "", filename: "", loading: false });
         }
-        // Migrate old markers (strings or missing points) to have proper point values
+        // Load markers and section point settings
+        const useSectionPts = data.assignment.useSectionPoints || false;
         const effortPts = data.assignment.effortPoints ?? 15;
-        let migratedMarkers = data.assignment.customMarkers || [];
+        let markers = data.assignment.customMarkers || [];
 
-        // If no markers exist, add a default Content section
-        if (migratedMarkers.length === 0) {
-          migratedMarkers = [{ start: "Content", points: 100 - effortPts, type: "written" }];
-        } else {
+        // Only migrate markers if section points is enabled
+        if (useSectionPts && markers.length > 0) {
           // Check if markers need migration (any string markers or markers without points)
-          const needsMigration = migratedMarkers.some(m =>
+          const needsMigration = markers.some(m =>
             typeof m === 'string' || (typeof m === 'object' && !m.points)
           );
 
           if (needsMigration) {
             // Distribute remaining points (100 - effort) evenly among markers
             const availablePoints = 100 - effortPts;
-            const pointsPerMarker = Math.floor(availablePoints / migratedMarkers.length);
-            const remainder = availablePoints % migratedMarkers.length;
+            const pointsPerMarker = Math.floor(availablePoints / markers.length);
+            const remainder = availablePoints % markers.length;
 
-            migratedMarkers = migratedMarkers.map((m, i) => {
+            markers = markers.map((m, i) => {
               const markerText = typeof m === 'string' ? m : m.start;
               const markerType = typeof m === 'object' ? (m.type || 'written') : 'written';
               // Give first marker any remainder points
@@ -2736,7 +2736,7 @@ ${signature}`;
           totalPoints: data.assignment.totalPoints || 100,
           instructions: data.assignment.instructions || "",
           questions: data.assignment.questions || [],
-          customMarkers: migratedMarkers,
+          customMarkers: markers,
           excludeMarkers: data.assignment.excludeMarkers || [],
           gradingNotes: data.assignment.gradingNotes || "",
           responseSections: data.assignment.responseSections || [],
@@ -2744,6 +2744,7 @@ ${signature}`;
           completionOnly: data.assignment.completionOnly || false,
           rubricType: data.assignment.rubricType || "standard",
           customRubric: data.assignment.customRubric || null,
+          useSectionPoints: useSectionPts,
           sectionTemplate: data.assignment.sectionTemplate || "Custom",
           effortPoints: effortPts,
         });
@@ -2778,6 +2779,7 @@ ${signature}`;
           completionOnly: false,
           rubricType: "standard",
           customRubric: null,
+          useSectionPoints: false,
           sectionTemplate: "Custom",
           effortPoints: 15,
         });
@@ -12739,49 +12741,87 @@ ${signature}`;
                         </div>
                       </div>
 
-                      {/* Section Template Selector */}
-                      <div style={{ marginTop: "20px", marginBottom: "20px", padding: "15px", background: "rgba(59,130,246,0.1)", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.2)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                          <Icon name="Layout" size={18} style={{ color: "#3b82f6" }} />
-                          <span style={{ fontWeight: "600" }}>Section Point Template</span>
-                        </div>
-                        <select
-                          value={assignment.sectionTemplate || "Custom"}
-                          onChange={(e) => {
-                            const templateName = e.target.value;
-                            const template = ASSIGNMENT_TEMPLATES[templateName];
-                            if (template && templateName !== "Custom") {
-                              setAssignment({
-                                ...assignment,
-                                sectionTemplate: templateName,
-                                customMarkers: template.markers.map(m => ({ ...m })),
-                                effortPoints: template.effortPoints || 15,
-                              });
-                            } else {
-                              setAssignment({ ...assignment, sectionTemplate: "Custom" });
-                            }
-                          }}
-                          className="input"
-                          style={{ width: "100%", marginBottom: "8px" }}
-                        >
-                          {Object.keys(ASSIGNMENT_TEMPLATES).map(name => (
-                            <option key={name} value={name}>{name}</option>
-                          ))}
-                        </select>
-                        {assignment.sectionTemplate && ASSIGNMENT_TEMPLATES[assignment.sectionTemplate] && (
-                          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                            {ASSIGNMENT_TEMPLATES[assignment.sectionTemplate].description}
+                      {/* Section Point Values Toggle */}
+                      <div style={{ marginTop: "20px", marginBottom: "15px", padding: "15px", background: "rgba(59,130,246,0.1)", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.2)" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Icon name="Sliders" size={18} style={{ color: "#3b82f6" }} />
+                            <span style={{ fontWeight: "600" }}>Use Section Point Values</span>
                           </div>
-                        )}
-                        <div style={{ marginTop: "10px", padding: "8px", background: "rgba(0,0,0,0.1)", borderRadius: "4px", fontSize: "13px" }}>
-                          <strong>Total Points:</strong> {calculateTotalPoints(assignment.customMarkers, assignment.effortPoints || 15)}
-                          {calculateTotalPoints(assignment.customMarkers, assignment.effortPoints || 15) !== 100 && (
-                            <span style={{ color: "#ef4444", marginLeft: "10px" }}>
-                              (Should equal 100)
-                            </span>
-                          )}
+                          <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={assignment.useSectionPoints || false}
+                              onChange={(e) => {
+                                const enabled = e.target.checked;
+                                if (enabled) {
+                                  // When enabling, set up default markers if none exist
+                                  const hasMarkers = (assignment.customMarkers || []).length > 0;
+                                  const template = ASSIGNMENT_TEMPLATES["Custom"];
+                                  setAssignment({
+                                    ...assignment,
+                                    useSectionPoints: true,
+                                    customMarkers: hasMarkers ? assignment.customMarkers : template.markers.map(m => ({ ...m })),
+                                    effortPoints: assignment.effortPoints ?? 15,
+                                  });
+                                } else {
+                                  setAssignment({ ...assignment, useSectionPoints: false });
+                                }
+                              }}
+                              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                            />
+                          </label>
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "8px" }}>
+                          {assignment.useSectionPoints
+                            ? "Grade each section with specific point values"
+                            : "Use standard rubric (Content 40, Completeness 25, Writing 20, Effort 15)"}
                         </div>
                       </div>
+
+                      {/* Section Template Selector - Only show when toggle is ON */}
+                      {assignment.useSectionPoints && (
+                        <div style={{ marginBottom: "20px", padding: "15px", background: "rgba(59,130,246,0.05)", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.15)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                            <Icon name="Layout" size={16} style={{ color: "#3b82f6" }} />
+                            <span style={{ fontWeight: "500", fontSize: "14px" }}>Template</span>
+                          </div>
+                          <select
+                            value={assignment.sectionTemplate || "Custom"}
+                            onChange={(e) => {
+                              const templateName = e.target.value;
+                              const template = ASSIGNMENT_TEMPLATES[templateName];
+                              if (template) {
+                                setAssignment({
+                                  ...assignment,
+                                  sectionTemplate: templateName,
+                                  customMarkers: template.markers.map(m => ({ ...m })),
+                                  effortPoints: template.effortPoints || 15,
+                                });
+                              }
+                            }}
+                            className="input"
+                            style={{ width: "100%", marginBottom: "8px" }}
+                          >
+                            {Object.keys(ASSIGNMENT_TEMPLATES).map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                          {assignment.sectionTemplate && ASSIGNMENT_TEMPLATES[assignment.sectionTemplate] && (
+                            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                              {ASSIGNMENT_TEMPLATES[assignment.sectionTemplate].description}
+                            </div>
+                          )}
+                          <div style={{ marginTop: "10px", padding: "8px", background: "rgba(0,0,0,0.1)", borderRadius: "4px", fontSize: "13px" }}>
+                            <strong>Total Points:</strong> {calculateTotalPoints(assignment.customMarkers, assignment.effortPoints || 15)}
+                            {calculateTotalPoints(assignment.customMarkers, assignment.effortPoints || 15) !== 100 && (
+                              <span style={{ color: "#ef4444", marginLeft: "10px" }}>
+                                (Should equal 100)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Manual Marker Input */}
                       <div
@@ -12847,105 +12887,107 @@ ${signature}`;
                         </button>
                       </div>
 
-                      {/* Grading Sections with Points */}
-                      <div style={{ marginTop: "15px" }}>
-                        <div style={{ fontWeight: "600", marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
-                          <Icon name="Target" size={16} />
-                          Grading Sections
-                        </div>
-                        {(assignment.customMarkers || []).length === 0 ? (
-                          <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px", background: "rgba(0,0,0,0.05)", borderRadius: "6px" }}>
-                            No sections defined. Select a template above or add sections manually.
+                      {/* Grading Sections with Points - Only show when toggle is ON */}
+                      {assignment.useSectionPoints && (
+                        <div style={{ marginTop: "15px" }}>
+                          <div style={{ fontWeight: "600", marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <Icon name="Target" size={16} />
+                            Grading Sections
                           </div>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            {assignment.customMarkers.map((marker, i) => (
-                              <div key={i} style={{
+                          {(assignment.customMarkers || []).length === 0 ? (
+                            <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px", background: "rgba(0,0,0,0.05)", borderRadius: "6px" }}>
+                              No sections defined. Select a template above or add sections manually.
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                              {assignment.customMarkers.map((marker, i) => (
+                                <div key={i} style={{
+                                  display: "flex", alignItems: "center", gap: "8px", padding: "10px",
+                                  background: "rgba(251,191,36,0.15)", borderRadius: "6px", border: "1px solid rgba(251,191,36,0.3)"
+                                }}>
+                                  <Icon name="Target" size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
+                                  <input
+                                    type="text"
+                                    value={getMarkerText(marker)}
+                                    onChange={(e) => {
+                                      const updated = [...assignment.customMarkers];
+                                      if (typeof updated[i] === "string") {
+                                        updated[i] = { start: e.target.value, points: 10, type: "written" };
+                                      } else {
+                                        updated[i] = { ...updated[i], start: e.target.value };
+                                      }
+                                      setAssignment({ ...assignment, customMarkers: updated, sectionTemplate: "Custom" });
+                                    }}
+                                    className="input"
+                                    style={{ flex: 1, padding: "4px 8px", fontSize: "13px" }}
+                                    placeholder="Section name..."
+                                  />
+                                  <input
+                                    type="number"
+                                    value={getMarkerPoints(marker)}
+                                    onChange={(e) => {
+                                      const updated = [...assignment.customMarkers];
+                                      const pts = parseInt(e.target.value) || 0;
+                                      if (typeof updated[i] === "string") {
+                                        updated[i] = { start: updated[i], points: pts, type: "written" };
+                                      } else {
+                                        updated[i] = { ...updated[i], points: pts };
+                                      }
+                                      setAssignment({ ...assignment, customMarkers: updated, sectionTemplate: "Custom" });
+                                    }}
+                                    style={{ width: "60px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", textAlign: "center", fontSize: "13px", background: "var(--input-bg)", color: "var(--text-primary)" }}
+                                    min="0"
+                                    max="100"
+                                  />
+                                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>pts</span>
+                                  <select
+                                    value={getMarkerType(marker)}
+                                    onChange={(e) => {
+                                      const updated = [...assignment.customMarkers];
+                                      if (typeof updated[i] === "string") {
+                                        updated[i] = { start: updated[i], points: 10, type: e.target.value };
+                                      } else {
+                                        updated[i] = { ...updated[i], type: e.target.value };
+                                      }
+                                      setAssignment({ ...assignment, customMarkers: updated, sectionTemplate: "Custom" });
+                                    }}
+                                    style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", fontSize: "12px", background: "var(--input-bg)", color: "var(--text-primary)" }}
+                                  >
+                                    <option value="written">Written</option>
+                                    <option value="fill-blank">Fill-blank</option>
+                                    <option value="vocabulary">Vocabulary</option>
+                                    <option value="matching">Matching</option>
+                                  </select>
+                                  <button
+                                    onClick={() => removeMarker(marker, i)}
+                                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#ef4444" }}
+                                  >
+                                    <Icon name="X" size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                              {/* Effort Points (always present) */}
+                              <div style={{
                                 display: "flex", alignItems: "center", gap: "8px", padding: "10px",
-                                background: "rgba(251,191,36,0.15)", borderRadius: "6px", border: "1px solid rgba(251,191,36,0.3)"
+                                background: "rgba(34,197,94,0.15)", borderRadius: "6px", border: "1px solid rgba(34,197,94,0.3)"
                               }}>
-                                <Icon name="Target" size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
-                                <input
-                                  type="text"
-                                  value={getMarkerText(marker)}
-                                  onChange={(e) => {
-                                    const updated = [...assignment.customMarkers];
-                                    if (typeof updated[i] === "string") {
-                                      updated[i] = { start: e.target.value, points: 10, type: "written" };
-                                    } else {
-                                      updated[i] = { ...updated[i], start: e.target.value };
-                                    }
-                                    setAssignment({ ...assignment, customMarkers: updated, sectionTemplate: "Custom" });
-                                  }}
-                                  className="input"
-                                  style={{ flex: 1, padding: "4px 8px", fontSize: "13px" }}
-                                  placeholder="Section name..."
-                                />
+                                <Icon name="Star" size={14} style={{ color: "#22c55e", flexShrink: 0 }} />
+                                <span style={{ flex: 1, fontSize: "13px", fontWeight: "500" }}>Effort & Engagement</span>
                                 <input
                                   type="number"
-                                  value={getMarkerPoints(marker)}
-                                  onChange={(e) => {
-                                    const updated = [...assignment.customMarkers];
-                                    const pts = parseInt(e.target.value) || 0;
-                                    if (typeof updated[i] === "string") {
-                                      updated[i] = { start: updated[i], points: pts, type: "written" };
-                                    } else {
-                                      updated[i] = { ...updated[i], points: pts };
-                                    }
-                                    setAssignment({ ...assignment, customMarkers: updated, sectionTemplate: "Custom" });
-                                  }}
+                                  value={assignment.effortPoints || 15}
+                                  onChange={(e) => setAssignment({ ...assignment, effortPoints: parseInt(e.target.value) || 0, sectionTemplate: "Custom" })}
                                   style={{ width: "60px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", textAlign: "center", fontSize: "13px", background: "var(--input-bg)", color: "var(--text-primary)" }}
                                   min="0"
-                                  max="100"
+                                  max="30"
                                 />
                                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>pts</span>
-                                <select
-                                  value={getMarkerType(marker)}
-                                  onChange={(e) => {
-                                    const updated = [...assignment.customMarkers];
-                                    if (typeof updated[i] === "string") {
-                                      updated[i] = { start: updated[i], points: 10, type: e.target.value };
-                                    } else {
-                                      updated[i] = { ...updated[i], type: e.target.value };
-                                    }
-                                    setAssignment({ ...assignment, customMarkers: updated, sectionTemplate: "Custom" });
-                                  }}
-                                  style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", fontSize: "12px", background: "var(--input-bg)", color: "var(--text-primary)" }}
-                                >
-                                  <option value="written">Written</option>
-                                  <option value="fill-blank">Fill-blank</option>
-                                  <option value="vocabulary">Vocabulary</option>
-                                  <option value="matching">Matching</option>
-                                </select>
-                                <button
-                                  onClick={() => removeMarker(marker, i)}
-                                  style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#ef4444" }}
-                                >
-                                  <Icon name="X" size={14} />
-                                </button>
+                                <div style={{ width: "90px" }}></div> {/* Spacer to align with other rows */}
                               </div>
-                            ))}
-                            {/* Effort Points (always present) */}
-                            <div style={{
-                              display: "flex", alignItems: "center", gap: "8px", padding: "10px",
-                              background: "rgba(34,197,94,0.15)", borderRadius: "6px", border: "1px solid rgba(34,197,94,0.3)"
-                            }}>
-                              <Icon name="Star" size={14} style={{ color: "#22c55e", flexShrink: 0 }} />
-                              <span style={{ flex: 1, fontSize: "13px", fontWeight: "500" }}>Effort & Engagement</span>
-                              <input
-                                type="number"
-                                value={assignment.effortPoints || 15}
-                                onChange={(e) => setAssignment({ ...assignment, effortPoints: parseInt(e.target.value) || 0, sectionTemplate: "Custom" })}
-                                style={{ width: "60px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", textAlign: "center", fontSize: "13px", background: "var(--input-bg)", color: "var(--text-primary)" }}
-                                min="0"
-                                max="30"
-                              />
-                              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>pts</span>
-                              <div style={{ width: "90px" }}></div> {/* Spacer to align with other rows */}
                             </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Marker Library */}
