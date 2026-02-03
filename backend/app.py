@@ -256,7 +256,7 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured'):
     """Run the grading process in a background thread.
 
     Args:
@@ -265,6 +265,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         skip_verified: If True, skip files that were previously graded with verified status
         rubric: Custom rubric dict from Settings with categories, weights, descriptions
         ensemble_models: List of models for ensemble grading (e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash'])
+        extraction_mode: "structured" (parse with rules) or "ai" (let AI identify responses)
     """
     global grading_state
 
@@ -1025,14 +1026,14 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ensemble_models, student_info.get('student_id'),
                         assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points
+                        marker_config, effort_points, extraction_mode
                     )
                 else:
                     grade_result = grade_with_parallel_detection(
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points
+                        marker_config, effort_points, extraction_mode
                     )
 
                 # Check for errors
@@ -1298,6 +1299,7 @@ def start_grading():
     teacher_name = data.get('teacher_name', '')
     school_name = data.get('school_name', '')
     ai_model = data.get('ai_model', 'gpt-4o-mini')
+    extraction_mode = data.get('extraction_mode', 'structured')  # "structured" or "ai"
 
     # Get custom assignment config and global AI notes
     assignment_config = data.get('assignmentConfig')
@@ -1332,7 +1334,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode)
     )
     thread.start()
 

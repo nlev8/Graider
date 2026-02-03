@@ -304,6 +304,17 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     response = '\n'.join(student_lines)
 
             if not is_blank:
+                # Check for blank vocab terms within this section (Term: with no definition)
+                for line in response.split('\n'):
+                    line = line.strip()
+                    if ':' in line and not line.startswith('http'):
+                        parts = line.split(':', 1)
+                        term = parts[0].strip()
+                        defn = parts[1].strip() if len(parts) > 1 else ''
+                        # If term is short (vocab-like) and definition is empty, it's blank
+                        if len(term.split()) <= 3 and not defn:
+                            blank_questions.append(f"{term} (no definition)")
+
                 extracted.append({
                     "question": question_label,
                     "answer": response[:1000],
@@ -727,7 +738,7 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
     }
 
 
-def format_extracted_for_grading(extraction_result: dict, marker_config: list = None) -> str:
+def format_extracted_for_grading(extraction_result: dict, marker_config: list = None, extraction_mode: str = 'structured') -> str:
     """
     Format pre-extracted responses for the grading prompt.
     Includes section point values if provided.
@@ -735,6 +746,7 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
     Args:
         extraction_result: Dict with extracted_responses, blank_questions, etc.
         marker_config: List of marker configs with points, e.g. [{"start": "Summary", "points": 20}, ...]
+        extraction_mode: "structured" (parse with rules) or "ai" (send raw, let AI figure it out)
     """
     if not extraction_result or not extraction_result.get("extracted_responses"):
         return "NO STUDENT RESPONSES FOUND - Document appears to be blank or unfinished."
@@ -750,7 +762,10 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
 
     output = []
     output.append("=" * 50)
-    output.append("VERIFIED STUDENT RESPONSES (extracted from document)")
+    if extraction_mode == 'ai':
+        output.append("RAW SECTION CONTENT (AI will identify prompts vs student responses)")
+    else:
+        output.append("VERIFIED STUDENT RESPONSES (extracted from document)")
     output.append("=" * 50)
     output.append("")
 
@@ -759,38 +774,42 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
         question = item.get("question", "Unknown question")
         answer = item.get("answer", "")
 
-        # Clean answer: strip out question text, keep only student responses
-        cleaned_lines = []
-        for line in answer.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            # Skip common prompt-only lines (no student content)
-            if line.lower() in ('write your answer:', 'your answer:', 'answer:'):
-                continue
-            # If line has a question mark, only keep text AFTER the ?
-            if '?' in line:
-                parts = line.split('?')
-                after_q = parts[-1].strip() if len(parts) > 1 else ''
-                if after_q and len(after_q) > 1:
-                    cleaned_lines.append(after_q)
-                # Skip lines that are ONLY questions (nothing after ?)
-            # If line has colon (vocab format), only keep text AFTER the :
-            elif ':' in line and not line.startswith('http'):
-                parts = line.split(':', 1)
-                term = parts[0].strip()
-                defn = parts[1].strip() if len(parts) > 1 else ''
-                # Only treat as vocab if term is short (1-4 words) AND has a definition
-                if len(term.split()) <= 4 and defn and len(defn) > 1:
-                    cleaned_lines.append(defn)
-                elif defn and len(defn) > 1:
-                    # Longer term but has definition - keep whole line
+        if extraction_mode == 'ai':
+            # AI mode: send raw content, let AI identify what's prompt vs response
+            cleaned_answer = answer
+        else:
+            # Structured mode: clean answer by stripping out question text
+            cleaned_lines = []
+            for line in answer.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                # Skip common prompt-only lines (no student content)
+                if line.lower() in ('write your answer:', 'your answer:', 'answer:'):
+                    continue
+                # If line has a question mark, only keep text AFTER the ?
+                if '?' in line:
+                    parts = line.split('?')
+                    after_q = parts[-1].strip() if len(parts) > 1 else ''
+                    if after_q and len(after_q) > 1:
+                        cleaned_lines.append(after_q)
+                    # Skip lines that are ONLY questions (nothing after ?)
+                # If line has colon (vocab format), only keep text AFTER the :
+                elif ':' in line and not line.startswith('http'):
+                    parts = line.split(':', 1)
+                    term = parts[0].strip()
+                    defn = parts[1].strip() if len(parts) > 1 else ''
+                    # Only treat as vocab if term is short (1-4 words) AND has a definition
+                    if len(term.split()) <= 4 and defn and len(defn) > 1:
+                        cleaned_lines.append(defn)
+                    elif defn and len(defn) > 1:
+                        # Longer term but has definition - keep whole line
+                        cleaned_lines.append(line)
+                    # Skip lines that are just "Term:" with no definition (blank vocab)
+                else:
                     cleaned_lines.append(line)
-                # Skip lines that are just "Term:" with no definition (blank vocab)
-            else:
-                cleaned_lines.append(line)
 
-        cleaned_answer = '\n'.join(cleaned_lines) if cleaned_lines else answer
+            cleaned_answer = '\n'.join(cleaned_lines) if cleaned_lines else answer
 
         # Look up points for this section
         points_str = ""
@@ -1860,7 +1879,8 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                         ensemble_models: list = None, student_id: str = None,
                         assignment_template: str = None, rubric_prompt: str = None,
                         custom_markers: list = None, exclude_markers: list = None,
-                        marker_config: list = None, effort_points: int = 15) -> dict:
+                        marker_config: list = None, effort_points: int = 15,
+                        extraction_mode: str = 'structured') -> dict:
     """
     Grade assignment using multiple AI models and combine results.
 
@@ -1970,7 +1990,8 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
                                    assignment_template: str = None, rubric_prompt: str = None,
                                    custom_markers: list = None, exclude_markers: list = None,
-                                   marker_config: list = None, effort_points: int = 15) -> dict:
+                                   marker_config: list = None, effort_points: int = 15,
+                                   extraction_mode: str = 'structured') -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
@@ -1996,7 +2017,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     if not extracted_text:
         return grade_assignment(student_name, assignment_data, custom_ai_instructions,
                                grade_level, subject, ai_model, student_id, assignment_template, rubric_prompt,
-                               custom_markers, exclude_markers, marker_config, effort_points)
+                               custom_markers, exclude_markers, marker_config, effort_points, extraction_mode)
 
     print(f"  🔄 Running parallel detection + grading...")
 
@@ -2152,7 +2173,7 @@ In your JSON output, include a "section_scores" field with each section's earned
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured') -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -2373,7 +2394,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 
         extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
         if extraction_result:
-            extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config)
+            extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config, extraction_mode)
             answered = extraction_result.get("answered_questions", 0)
             total = extraction_result.get("total_questions", 0)
             print(f"  📋 Pre-extracted {answered}/{total} responses")
@@ -2472,6 +2493,37 @@ ASSIGNMENT TEMPLATE (The questions/prompts the student was asked to answer):
 
     effective_rubric = rubric_prompt if rubric_prompt else GRADING_RUBRIC
 
+    # Build extraction mode-specific instructions
+    if extraction_mode == 'ai':
+        extraction_instructions = """
+CRITICAL - AI EXTRACTION MODE:
+The content above contains RAW section content that includes BOTH prompts/questions AND student responses.
+YOUR JOB is to identify what is a prompt/question vs what the student actually wrote.
+
+IDENTIFYING STUDENT RESPONSES:
+- Questions end with "?" - anything AFTER the "?" on the same line is the student's answer
+- Vocabulary format "Term:" - anything after the ":" is the student's definition
+- Prompts like "Write your answer:", "Explain...", etc. are instructions, not student content
+- Look for the actual student-written text, which is usually less formal and may have spelling errors
+- If a section has only a prompt with no student response, mark it as BLANK/UNANSWERED
+
+For example:
+- "1. What year was the Louisiana Purchase? 1803" → Student answer is "1803"
+- "Antebellum: the period before the war" → Student answer is "the period before the war"
+- "Antebellum:" with nothing after → BLANK, student didn't answer
+- "Write your answer:" with nothing after → BLANK
+
+Be thorough in separating prompts from responses. Students often write answers on the same line as questions.
+"""
+    else:
+        extraction_instructions = """
+CRITICAL - PRE-EXTRACTED RESPONSES:
+The student responses have been PRE-EXTRACTED from the document and listed above.
+DO NOT invent or hallucinate any responses that are not in the VERIFIED STUDENT RESPONSES section.
+ONLY grade the responses that were explicitly extracted and shown to you.
+If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
+"""
+
     prompt_text = f"""
 {effective_rubric}
 
@@ -2492,11 +2544,7 @@ STUDENT CONTEXT:
 
 {extracted_responses_section}
 
-CRITICAL - PRE-EXTRACTED RESPONSES:
-The student responses have been PRE-EXTRACTED from the document and listed above.
-DO NOT invent or hallucinate any responses that are not in the VERIFIED STUDENT RESPONSES section.
-ONLY grade the responses that were explicitly extracted and shown to you.
-If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
+{extraction_instructions}
 
 IMPORTANT: Only assess sections that appear in the extracted responses above.
 If a section (like "Notes Section") was NOT extracted, it means the teacher did NOT require it for grading.
