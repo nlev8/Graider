@@ -2792,8 +2792,14 @@ Provide your response in the following JSON format ONLY (no other text):
             except json.JSONDecodeError:
                 pass
 
+            # Fix 0: Handle malformed "reason" fields where AI didn't close the string
+            # Pattern: "reason": "\n    },  or  "reason": "    },
+            # Replace with: "reason": ""
+            fixed = re.sub(r'"reason":\s*"[\\n\s]*\},', '"reason": ""},', text)
+            fixed = re.sub(r'"reason":\s*"[\\n\s]*$', '"reason": ""', fixed, flags=re.MULTILINE)
+
             # Fix 1: Remove parenthetical comments after closing quotes
-            fixed = re.sub(r'"\s*\([^)]+\)', '"', text)
+            fixed = re.sub(r'"\s*\([^)]+\)', '"', fixed)
 
             # Fix 2: Remove double quotes (Claude sometimes outputs "" instead of ")
             fixed = re.sub(r'""', '"', fixed)
@@ -2893,6 +2899,30 @@ Provide your response in the following JSON format ONLY (no other text):
             print(f"  ⚠️  Full response saved to: {debug_file.name}")
         except:
             print(f"  ⚠️  Could not display response")
+
+        # Try to extract key fields with regex as fallback
+        try:
+            score_match = re.search(r'"score":\s*(\d+)', response_text)
+            grade_match = re.search(r'"letter_grade":\s*"([A-F])"', response_text)
+            feedback_match = re.search(r'"feedback":\s*"([^"]{20,500})', response_text)
+
+            if score_match and grade_match:
+                print(f"  ✅ Recovered score/grade from malformed JSON")
+                return {
+                    "score": int(score_match.group(1)),
+                    "letter_grade": grade_match.group(1),
+                    "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                    "feedback": feedback_match.group(1) + "..." if feedback_match else "Grading completed but response was malformed.",
+                    "student_responses": [],
+                    "unanswered_questions": [],
+                    "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+                    "plagiarism_detection": {"flag": "none", "reason": ""},
+                    "skills_demonstrated": {"strengths": [], "developing": []},
+                    "json_recovery": True
+                }
+        except:
+            pass
+
         return {
             "score": 0,
             "letter_grade": "ERROR",
