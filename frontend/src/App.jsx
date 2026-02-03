@@ -899,9 +899,13 @@ function App() {
   const addToast = (message, type = "success", duration = 4000) => {
     const id = ++toastIdCounter.current;
     setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, duration);
+    // If duration is 0 or null, toast persists until manually removed
+    if (duration) {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, duration);
+    }
+    return id; // Return ID so caller can remove it later
   };
 
   const removeToast = (id) => {
@@ -1454,6 +1458,39 @@ function App() {
     }, 500);
     return () => clearInterval(interval);
   }, []);
+
+  // Persistent grading toast
+  const gradingToastId = useRef(null);
+  const wasGrading = useRef(false);
+
+  useEffect(() => {
+    if (status.is_running && !wasGrading.current) {
+      // Grading just started - show persistent toast
+      wasGrading.current = true;
+      gradingToastId.current = addToast(
+        `Grading in progress... ${status.current_file || ''}`,
+        "info",
+        0 // persistent
+      );
+    } else if (status.is_running && gradingToastId.current) {
+      // Update the toast message with current file
+      setToasts(prev => prev.map(t =>
+        t.id === gradingToastId.current
+          ? { ...t, message: `Grading: ${status.current_file || 'Processing...'}` }
+          : t
+      ));
+    } else if (!status.is_running && wasGrading.current) {
+      // Grading just finished - remove persistent toast
+      wasGrading.current = false;
+      if (gradingToastId.current) {
+        removeToast(gradingToastId.current);
+        gradingToastId.current = null;
+      }
+      if (status.results && status.results.length > 0) {
+        addToast(`Grading complete! ${status.results.length} assignments graded.`, "success");
+      }
+    }
+  }, [status.is_running, status.current_file, status.results]);
 
   // Load files when student filter is set (for file preview)
   useEffect(() => {
