@@ -2701,13 +2701,37 @@ ${signature}`;
         } else {
           setImportedDoc({ text: "", html: "", filename: "", loading: false });
         }
+        // Migrate old markers (strings or missing points) to have proper point values
+        const effortPts = data.assignment.effortPoints ?? 15;
+        let migratedMarkers = data.assignment.customMarkers || [];
+
+        // Check if markers need migration (any string markers or markers without points)
+        const needsMigration = migratedMarkers.length > 0 && migratedMarkers.some(m =>
+          typeof m === 'string' || (typeof m === 'object' && !m.points)
+        );
+
+        if (needsMigration) {
+          // Distribute remaining points (100 - effort) evenly among markers
+          const availablePoints = 100 - effortPts;
+          const pointsPerMarker = Math.floor(availablePoints / migratedMarkers.length);
+          const remainder = availablePoints % migratedMarkers.length;
+
+          migratedMarkers = migratedMarkers.map((m, i) => {
+            const markerText = typeof m === 'string' ? m : m.start;
+            const markerType = typeof m === 'object' ? (m.type || 'written') : 'written';
+            // Give first marker any remainder points
+            const pts = pointsPerMarker + (i === 0 ? remainder : 0);
+            return { start: markerText, points: pts, type: markerType };
+          });
+        }
+
         setAssignment({
           title: data.assignment.title || "",
           subject: data.assignment.subject || "Social Studies",
           totalPoints: data.assignment.totalPoints || 100,
           instructions: data.assignment.instructions || "",
           questions: data.assignment.questions || [],
-          customMarkers: data.assignment.customMarkers || [],
+          customMarkers: migratedMarkers,
           excludeMarkers: data.assignment.excludeMarkers || [],
           gradingNotes: data.assignment.gradingNotes || "",
           responseSections: data.assignment.responseSections || [],
@@ -2716,7 +2740,7 @@ ${signature}`;
           rubricType: data.assignment.rubricType || "standard",
           customRubric: data.assignment.customRubric || null,
           sectionTemplate: data.assignment.sectionTemplate || "Custom",
-          effortPoints: data.assignment.effortPoints ?? 15,
+          effortPoints: effortPts,
         });
         setLoadedAssignmentName(name);
       }
