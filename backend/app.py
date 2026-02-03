@@ -744,20 +744,34 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                 if lookup_key in roster:
                     student_info = roster[lookup_key].copy()
                 else:
-                    # Try fuzzy matching for last name initials
+                    # Try fuzzy matching for partial/hyphenated last names
                     student_info = None
                     first_name_lower = parsed['first_name'].lower()
                     last_name_lower = parsed['last_name'].lower()
 
-                    if len(last_name_lower) <= 2:
-                        for roster_key, roster_data in roster.items():
-                            if isinstance(roster_data, dict):
-                                roster_first = roster_data.get('first_name', '').lower()
-                                roster_last = roster_data.get('last_name', '').lower()
-                                if roster_first == first_name_lower and roster_last.startswith(last_name_lower):
-                                    student_info = roster_data.copy()
-                                    student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
-                                    break
+                    for roster_key, roster_data in roster.items():
+                        if isinstance(roster_data, dict):
+                            roster_first = roster_data.get('first_name', '').lower()
+                            roster_last = roster_data.get('last_name', '').lower()
+
+                            # Match first name exactly
+                            if roster_first != first_name_lower and not roster_first.startswith(first_name_lower):
+                                continue
+
+                            # Check various last name matching patterns:
+                            # 1. Exact match (already handled above)
+                            # 2. Last name initials (e.g., "K" matches "Kolas")
+                            # 3. Hyphenated names (e.g., "Kolas" matches "Kolas-Nowicki")
+                            # 4. First part of hyphenated name (e.g., "Kolas" matches "Kolas-Nowicki")
+                            if (
+                                roster_last.startswith(last_name_lower) or  # "k" matches "kolas"
+                                roster_last.split('-')[0] == last_name_lower or  # "kolas" matches "kolas-nowicki"
+                                last_name_lower in roster_last.split('-')  # "nowicki" matches "kolas-nowicki"
+                            ):
+                                student_info = roster_data.copy()
+                                student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
+                                grading_state["log"].append(f"  📎 Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
+                                break
 
                     if not student_info:
                         student_info = {"student_id": "UNKNOWN", "student_name": student_name,
