@@ -2794,10 +2794,14 @@ Provide your response in the following JSON format ONLY (no other text):
                 pass
 
             # Fix 0: Handle malformed "reason" fields where AI didn't close the string
-            # Pattern: "reason": "\n    },  or  "reason": "    },
-            # Replace with: "reason": ""
-            fixed = re.sub(r'"reason":\s*"[\\n\s]*\},', '"reason": ""},', text)
-            fixed = re.sub(r'"reason":\s*"[\\n\s]*$', '"reason": ""', fixed, flags=re.MULTILINE)
+            # The AI sometimes outputs: "reason": "\n    },\n    "next_field"
+            # This replaces any "reason" field that contains },  or starts with whitespace/newline
+            # with an empty string
+            fixed = re.sub(r'"reason":\s*"[^"]*\\n[^"]*"', '"reason": ""', text)
+            fixed = re.sub(r'"reason":\s*"[\s\n]*\}', '"reason": ""}', fixed)
+            fixed = re.sub(r'"reason":\s*"[\s\n]*,', '"reason": "",', fixed)
+            # Also fix cases where reason value contains JSON-like content
+            fixed = re.sub(r'"reason":\s*"[^"]*\{[^"]*"', '"reason": ""', fixed)
 
             # Fix 1: Remove parenthetical comments after closing quotes
             fixed = re.sub(r'"\s*\([^)]+\)', '"', fixed)
