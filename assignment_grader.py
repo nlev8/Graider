@@ -730,13 +730,26 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
     }
 
 
-def format_extracted_for_grading(extraction_result: dict) -> str:
+def format_extracted_for_grading(extraction_result: dict, marker_config: list = None) -> str:
     """
-    Format extracted responses for the AI grading prompt.
-    Only includes verified responses - no hallucination possible.
+    Format pre-extracted responses for the grading prompt.
+    Includes section point values if provided.
+
+    Args:
+        extraction_result: Dict with extracted_responses, blank_questions, etc.
+        marker_config: List of marker configs with points, e.g. [{"start": "Summary", "points": 20}, ...]
     """
     if not extraction_result or not extraction_result.get("extracted_responses"):
         return "NO STUDENT RESPONSES FOUND - Document appears to be blank or unfinished."
+
+    # Build marker points lookup
+    marker_points = {}
+    if marker_config:
+        for m in marker_config:
+            if isinstance(m, dict):
+                marker_points[m.get('start', '').lower()] = m.get('points', 10)
+            elif isinstance(m, str):
+                marker_points[m.lower()] = 10
 
     output = []
     output.append("=" * 50)
@@ -749,16 +762,29 @@ def format_extracted_for_grading(extraction_result: dict) -> str:
         question = item.get("question", "Unknown question")
         answer = item.get("answer", "")
 
-        output.append(f"[{i}] {question}")
-        output.append(f"    STUDENT ANSWER: \"{answer}\"")
+        # Look up points for this section
+        points_str = ""
+        for marker_key, pts in marker_points.items():
+            if marker_key in question.lower():
+                points_str = f" [{pts} points]"
+                break
+
+        output.append(f"[{i}] {question}{points_str}")
+        output.append(f"    STUDENT ANSWER: \"{answer[:500]}{'...' if len(answer) > 500 else ''}\"")
         output.append(f"    (Type: {q_type})")
         output.append("")
 
+    # Add blank questions with their point values
     if extraction_result.get("blank_questions"):
         output.append("-" * 50)
         output.append("UNANSWERED QUESTIONS (left blank by student):")
         for q in extraction_result["blank_questions"]:
-            output.append(f"  • {q}")
+            points_str = ""
+            for marker_key, pts in marker_points.items():
+                if marker_key in q.lower():
+                    points_str = f" [LOSES {pts} points]"
+                    break
+            output.append(f"  • {q}{points_str}")
 
     output.append("")
     output.append(f"SUMMARY: {extraction_result.get('extraction_summary', '')}")
@@ -1803,12 +1829,15 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                         grade_level: str = '6', subject: str = 'Social Studies',
                         ensemble_models: list = None, student_id: str = None,
                         assignment_template: str = None, rubric_prompt: str = None,
-                        custom_markers: list = None, exclude_markers: list = None) -> dict:
+                        custom_markers: list = None, exclude_markers: list = None,
+                        marker_config: list = None, effort_points: int = 15) -> dict:
     """
     Grade assignment using multiple AI models and combine results.
 
     Args:
         ensemble_models: List of model names to use (e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash'])
+        marker_config: List of marker configs with points for section-based grading
+        effort_points: Points for effort/engagement category (default 15)
 
     Returns:
         Combined result with:
@@ -1822,7 +1851,8 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
         model = ensemble_models[0] if ensemble_models else 'gpt-4o-mini'
         return grade_with_parallel_detection(student_name, assignment_data, custom_ai_instructions,
                                              grade_level, subject, model, student_id,
-                                             assignment_template, rubric_prompt, custom_markers, exclude_markers)
+                                             assignment_template, rubric_prompt, custom_markers, exclude_markers,
+                                             marker_config, effort_points)
 
     print(f"  🎯 Ensemble grading with {len(ensemble_models)} models: {', '.join(ensemble_models)}")
 
@@ -1834,7 +1864,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
             future = executor.submit(
                 grade_assignment, student_name, assignment_data, custom_ai_instructions,
                 grade_level, subject, model, student_id, assignment_template, rubric_prompt,
-                custom_markers, exclude_markers
+                custom_markers, exclude_markers, marker_config, effort_points
             )
             futures[future] = model
 
@@ -1909,13 +1939,16 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    grade_level: str = '6', subject: str = 'Social Studies',
                                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
                                    assignment_template: str = None, rubric_prompt: str = None,
-                                   custom_markers: list = None, exclude_markers: list = None) -> dict:
+                                   custom_markers: list = None, exclude_markers: list = None,
+                                   marker_config: list = None, effort_points: int = 15) -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
 
     Args:
         rubric_prompt: Custom rubric prompt string from Settings (overrides default)
+        marker_config: List of marker configs with points for section-based grading
+        effort_points: Points for effort/engagement category (default 15)
     """
     # Extract responses first (needed for both detection and grading context)
     content = assignment_data.get("content", "")
@@ -1933,7 +1966,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     if not extracted_text:
         return grade_assignment(student_name, assignment_data, custom_ai_instructions,
                                grade_level, subject, ai_model, student_id, assignment_template, rubric_prompt,
-                               custom_markers, exclude_markers)
+                               custom_markers, exclude_markers, marker_config, effort_points)
 
     print(f"  🔄 Running parallel detection + grading...")
 
@@ -1947,7 +1980,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         grading_future = executor.submit(grade_assignment, student_name, assignment_data,
                                          custom_ai_instructions, grade_level, subject,
                                          ai_model, student_id, assignment_template, rubric_prompt,
-                                         custom_markers)
+                                         custom_markers, exclude_markers, marker_config, effort_points)
 
         # Wait for both to complete
         detection_result = detection_future.result()
@@ -2034,32 +2067,61 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         grading_result["academic_integrity_flag"] = True
         print(f"  🚨 Academic integrity concern - feedback replaced")
 
-    # Apply minimum score floor for students who answered all/most questions
-    # (Only if no AI/plagiarism concerns - those are handled by caps above)
-    current_score = grading_result.get("score", 0)
-    unanswered = grading_result.get("unanswered_questions", [])
-    student_responses = grading_result.get("student_responses", [])
-
-    # Check if student completed the assignment (answered most questions)
-    if student_responses and len(unanswered) <= 1:  # Allow 1 unanswered at most
-        # Only apply floor if no AI/plagiarism flags
-        if ai_flag in ["none", "unlikely"] and plag_flag in ["none", "unlikely"]:
-            min_score = 85  # Minimum B for complete work
-            if current_score < min_score:
-                grading_result["score_floor_applied"] = True
-                grading_result["original_low_score"] = current_score
-                grading_result["score"] = min_score
-                grading_result["letter_grade"] = "B"
-                print(f"  📈 Score floor applied: {current_score} → {min_score} (all questions answered, no AI/plagiarism)")
-
     return grading_result
+
+
+# =============================================================================
+# SECTION-BASED RUBRIC BUILDER
+# =============================================================================
+
+def build_section_rubric(marker_config: list, effort_points: int = 15) -> str:
+    """Build a section-based rubric from marker configuration."""
+    if not marker_config:
+        return ""  # Use default rubric
+
+    rubric_lines = ["""
+You are grading a student assignment with SECTION-BASED POINT VALUES.
+Be ENCOURAGING and GENEROUS - these are middle school students.
+
+SECTION POINT VALUES:"""]
+
+    total = 0
+    for m in marker_config:
+        if isinstance(m, dict):
+            name = m.get('start', 'Section')
+            points = m.get('points', 10)
+            section_type = m.get('type', 'written')
+            rubric_lines.append(f"- {name}: {points} points ({section_type})")
+            total += points
+        elif isinstance(m, str):
+            rubric_lines.append(f"- {m}: 10 points")
+            total += 10
+
+    rubric_lines.append(f"- Effort & Engagement: {effort_points} points")
+    total += effort_points
+    rubric_lines.append(f"\nTOTAL: {total} points")
+
+    rubric_lines.append("""
+GRADING RULES:
+- Grade each section out of its assigned points
+- BLANK SECTION = 0 POINTS for that section (no partial credit)
+- For fill-blank sections: each correct answer is worth proportional points
+- For written sections: grade on quality, completeness, and effort
+- Effort & Engagement is based on overall presentation and engagement
+- Accept reasonable synonyms and alternate phrasings
+- Minor spelling errors should NOT be penalized if meaning is clear
+
+In your JSON output, include a "section_scores" field with each section's earned points.
+""")
+
+    return "\n".join(rubric_lines)
 
 
 # =============================================================================
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -2272,7 +2334,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     if assignment_data.get("type") == "text" and content:
         extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
         if extraction_result:
-            extracted_responses_text = format_extracted_for_grading(extraction_result)
+            extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config)
             answered = extraction_result.get("answered_questions", 0)
             total = extraction_result.get("total_questions", 0)
             print(f"  📋 Pre-extracted {answered}/{total} responses")
@@ -2364,10 +2426,17 @@ ASSIGNMENT TEMPLATE (The questions/prompts the student was asked to answer):
 """
 
     # Use custom rubric if provided, otherwise use default
+    # If marker_config is provided, build a section-based rubric
+    section_rubric = ""
+    if marker_config:
+        section_rubric = build_section_rubric(marker_config, effort_points)
+
     effective_rubric = rubric_prompt if rubric_prompt else GRADING_RUBRIC
 
     prompt_text = f"""
 {effective_rubric}
+
+{section_rubric}
 
 {ASSIGNMENT_INSTRUCTIONS}
 {custom_section}
@@ -2797,26 +2866,6 @@ Provide your response in the following JSON format ONLY (no other text):
         # Add style comparison info to result for transparency
         if style_comparison and style_comparison.get("ai_likelihood") in ["likely", "possible"]:
             result["writing_style_deviation"] = style_comparison
-
-        # Apply minimum score floor for students who answered all/most questions
-        # (Only if no AI/plagiarism concerns)
-        current_score = result.get("score", 0)
-        unanswered = result.get("unanswered_questions", [])
-        student_responses = result.get("student_responses", [])
-        ai_flag = result.get("ai_detection", {}).get("flag", "none")
-        plag_flag = result.get("plagiarism_detection", {}).get("flag", "none")
-
-        # Check if student completed the assignment (answered most questions)
-        if student_responses and len(unanswered) <= 1:  # Allow 1 unanswered at most
-            # Only apply floor if no AI/plagiarism flags
-            if ai_flag in ["none", "unlikely"] and plag_flag in ["none", "unlikely"]:
-                min_score = 85  # Minimum B for complete work
-                if current_score < min_score:
-                    result["score_floor_applied"] = True
-                    result["original_low_score"] = current_score
-                    result["score"] = min_score
-                    result["letter_grade"] = "B"
-                    print(f"  📈 Score floor applied: {current_score} → {min_score} (all questions answered, no AI/plagiarism)")
 
         return result
 

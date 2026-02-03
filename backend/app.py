@@ -786,6 +786,9 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     assignment_template_local = imported_doc.get('text', '')
                     rubric_type = matched_config.get('rubricType', 'standard')
                     custom_rubric = matched_config.get('customRubric', None)
+                    # Section-based point configuration
+                    marker_config = file_markers  # customMarkers now contain point values
+                    effort_points = matched_config.get('effortPoints', 15)
                 else:
                     file_markers = fallback_markers
                     file_exclude_markers = []
@@ -796,6 +799,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     assignment_template_local = ''
                     rubric_type = 'standard'
                     custom_rubric = None
+                    marker_config = None
+                    effort_points = 15
 
                 # Handle completion-only rubric type
                 if rubric_type == 'completion-only':
@@ -999,17 +1004,20 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Grade with parallel detection or ensemble
                 # Pass file_markers (customMarkers) for extraction, not file_sections
                 # Pass file_exclude_markers (excludeMarkers) to skip sections that shouldn't be graded
+                # Pass marker_config and effort_points for section-based point rubric
                 if ensemble_models and len(ensemble_models) >= 2:
                     grade_result = grade_with_ensemble(
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ensemble_models, student_info.get('student_id'),
-                        assignment_template_local, rubric_prompt, file_markers, file_exclude_markers
+                        assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
+                        marker_config, effort_points
                     )
                 else:
                     grade_result = grade_with_parallel_detection(
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
-                        rubric_prompt, file_markers, file_exclude_markers
+                        rubric_prompt, file_markers, file_exclude_markers,
+                        marker_config, effort_points
                     )
 
                 # Check for errors
@@ -1411,7 +1419,8 @@ def grade_individual():
         individual_student_id = student_info.get('id', '') if student_info else None
 
         # Grade the assignment (no custom rubric for individual grading yet)
-        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers)
+        # Pass None for marker_config and 15 for effort_points (defaults)
+        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers, None, 15)
 
         if grade_result.get('letter_grade') == 'ERROR':
             return jsonify({"error": grade_result.get('feedback', 'Grading failed')}), 500
