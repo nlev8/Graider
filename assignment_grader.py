@@ -762,6 +762,34 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
         question = item.get("question", "Unknown question")
         answer = item.get("answer", "")
 
+        # Clean answer: strip out question text, keep only student responses
+        cleaned_lines = []
+        for line in answer.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            # If line has a question mark, only keep text AFTER the ?
+            if '?' in line:
+                parts = line.split('?')
+                after_q = parts[-1].strip() if len(parts) > 1 else ''
+                if after_q and len(after_q) > 1:
+                    cleaned_lines.append(after_q)
+                # Skip lines that are ONLY questions (nothing after ?)
+            # If line has colon (vocab format), only keep text AFTER the :
+            elif ':' in line and not line.startswith('http'):
+                parts = line.split(':', 1)
+                term = parts[0].strip()
+                defn = parts[1].strip() if len(parts) > 1 else ''
+                # Only treat as vocab if term is short (1-4 words)
+                if len(term.split()) <= 4 and defn:
+                    cleaned_lines.append(defn)
+                else:
+                    cleaned_lines.append(line)
+            else:
+                cleaned_lines.append(line)
+
+        cleaned_answer = '\n'.join(cleaned_lines) if cleaned_lines else answer
+
         # Look up points for this section
         points_str = ""
         for marker_key, pts in marker_points.items():
@@ -770,7 +798,7 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
                 break
 
         output.append(f"[{i}] {question}{points_str}")
-        output.append(f"    STUDENT ANSWER: \"{answer[:500]}{'...' if len(answer) > 500 else ''}\"")
+        output.append(f"    STUDENT ANSWER: \"{cleaned_answer[:500]}{'...' if len(cleaned_answer) > 500 else ''}\"")
         output.append(f"    (Type: {q_type})")
         output.append("")
 
