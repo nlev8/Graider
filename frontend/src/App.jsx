@@ -576,6 +576,7 @@ function App() {
     ensemble_models: [], // e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash']
     extraction_mode: "structured", // "structured" = parsing logic, "ai" = let AI identify responses
     availableTools: [], // Tools teacher has access to for lesson planning
+    trustedStudents: [], // Students exempt from AI/copy detection flags (by student_id)
   });
 
   // API Keys state (separate from config for security)
@@ -2009,7 +2010,7 @@ function App() {
             if (gradeFilterAssignment) {
               // Get all name variations to match: assignment name, title, aliases, and imported filename
               const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
-              const importedFilename = (assignmentConfig.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, ""); // Remove extension
+              const importedFilename = (assignmentConfig.importedFilename || assignmentConfig.importedDoc?.filename || "").toLowerCase().replace(/\.[^/.]+$/, ""); // Remove extension
 
               // Clean function to remove emojis and special chars for better matching
               const cleanForMatch = (str) => str.replace(/[\u{1F300}-\u{1F9FF}]/gu, "").replace(/[–—]/g, "-").replace(/[^\w\s-]/g, "").trim();
@@ -2038,6 +2039,17 @@ function App() {
                 const fileNameClean = cleanForMatch(fileNameNoExt);
                 const fileChapterSection = extractChapterSection(fileName);
 
+                // Extract assignment part from filename (remove student name prefix)
+                // Handles "FirstName_LastName_AssignmentName" or "First Last - Assignment" formats
+                let assignmentPart = fileNameNoExt;
+                if (fileNameNoExt.includes(' - ')) {
+                  assignmentPart = fileNameNoExt.split(' - ').slice(1).join(' - ');
+                } else if (fileNameNoExt.includes('_')) {
+                  const parts = fileNameNoExt.split('_');
+                  assignmentPart = parts.length > 2 ? parts.slice(2).join('_') : fileNameNoExt;
+                }
+                const assignmentPartClean = cleanForMatch(assignmentPart);
+
                 // Check if filename contains any of the assignment names/aliases/imported filename
                 return namesToMatch.some(name => {
                   if (!name) return false;
@@ -2050,6 +2062,12 @@ function App() {
                       fileName.includes(name) ||
                       fileNameClean.includes(nameClean) ||
                       nameClean.includes(fileNameClean)) {
+                    return true;
+                  }
+                  // Check if assignment part matches (handles truncated filenames)
+                  if (assignmentPartClean && (
+                      nameClean.includes(assignmentPartClean) ||
+                      assignmentPartClean.includes(nameClean))) {
                     return true;
                   }
                   // Check chapter/section match
@@ -2163,6 +2181,8 @@ function App() {
         classPeriod: selectedPeriodName,
         // Pass ensemble models if enabled (need at least 2 models)
         ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
+        // Pass trusted students list to skip AI/plagiarism detection
+        trustedStudents: config.trustedStudents || [],
       });
       setStatus((prev) => ({
         ...prev,
@@ -2631,6 +2651,42 @@ ${signature}`;
     setAssignment({ ...assignment, customMarkers: updated });
   };
 
+  // Normalize special characters (smart quotes, em-dashes) to ASCII equivalents
+  const normalizeText = (str) => {
+    if (!str) return str;
+    return str
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // Smart single quotes to straight
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')  // Smart double quotes to straight
+      .replace(/[\u2013\u2014]/g, '-')              // En-dash and em-dash to hyphen
+      .replace(/\u2026/g, '...')                    // Ellipsis to dots
+      .replace(/\u00A0/g, ' ');                     // Non-breaking space to regular space
+  };
+
+  // Build a mapping from plain text positions to HTML positions
+  const buildTextToHtmlMap = (html) => {
+    const map = []; // map[plainTextIndex] = htmlIndex
+    let inTag = false;
+    let plainIndex = 0;
+
+    for (let i = 0; i < html.length; i++) {
+      if (html[i] === '<') {
+        inTag = true;
+      } else if (html[i] === '>') {
+        inTag = false;
+      } else if (!inTag) {
+        map[plainIndex] = i;
+        plainIndex++;
+      }
+    }
+    map[plainIndex] = html.length; // End marker
+    return map;
+  };
+
+  // Extract plain text from HTML
+  const htmlToPlainText = (html) => {
+    return html.replace(/<[^>]*>/g, '');
+  };
+
   // Highlight text in HTML with a colored span (handles multi-line markers)
   const highlightTextInHtml = (html, text, color, markerId) => {
     if (!text || !html) return html;
@@ -2640,35 +2696,77 @@ ${signature}`;
       return html; // Already highlighted
     }
 
-    // First try exact match (fastest)
-    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const exactRegex = new RegExp(`(${escaped})`, 'i');
-    if (exactRegex.test(html)) {
-      return html.replace(exactRegex, `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">$1</span>`);
+    // Normalize the search text
+    const normalizedSearchText = normalizeText(text).replace(/\s+/g, ' ').trim();
+
+    // Extract plain text from HTML and normalize it
+    const plainText = htmlToPlainText(html);
+    const normalizedPlainText = normalizeText(plainText);
+
+    // Build mapping from plain text positions to HTML positions
+    const textToHtmlMap = buildTextToHtmlMap(html);
+
+    // Try to find the normalized search text in normalized plain text
+    // Use case-insensitive search
+    const searchLower = normalizedSearchText.toLowerCase();
+    const plainLower = normalizedPlainText.toLowerCase();
+
+    let matchStart = plainLower.indexOf(searchLower);
+
+    // If exact match fails, try matching with flexible whitespace
+    if (matchStart === -1) {
+      // Create regex that allows any whitespace between words
+      const words = normalizedSearchText.split(/\s+/).filter(w => w.length > 0);
+      if (words.length > 0) {
+        const flexPattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+        const flexRegex = new RegExp(flexPattern, 'i');
+        const flexMatch = normalizedPlainText.match(flexRegex);
+        if (flexMatch) {
+          matchStart = flexMatch.index;
+        }
+      }
     }
 
-    // Multi-line handling: build flexible regex that allows HTML tags/whitespace between words
-    // Split marker text into words, preserving punctuation attached to words
-    const words = text.split(/[\s\n\r]+/).filter(w => w.length > 0);
-    if (words.length === 0) return html;
+    if (matchStart !== -1) {
+      // Find match end in plain text
+      const matchEnd = matchStart + normalizedSearchText.length;
 
-    // Build pattern: each word with optional HTML tags and whitespace between
-    // This matches "Main Idea" even if HTML has "Main</p><p>Idea" or "Main<br>Idea"
-    const flexPattern = words.map(word => {
-      const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return `(${escapedWord})`;
-    }).join('((?:<[^>]*>|\\s)*)'); // Allow HTML tags or whitespace between words
+      // Map to HTML positions
+      const htmlStart = textToHtmlMap[matchStart];
+      // Find the HTML end position - need to find where the last matched character ends
+      let htmlEnd = textToHtmlMap[matchEnd] || html.length;
 
-    const flexRegex = new RegExp(flexPattern, 'i');
-    const match = html.match(flexRegex);
+      // Adjust htmlEnd to include any trailing content before the next tag
+      // This ensures we capture the full matched text even with length differences
+      const remainingPlain = normalizedPlainText.substring(matchStart, matchEnd);
+      let plainIdx = matchStart;
+      let htmlIdx = htmlStart;
 
-    if (match) {
-      // Wrap the entire matched content (including any HTML tags between words)
-      const fullMatch = match[0];
-      const highlightSpan = `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">${fullMatch}</span>`;
-      return html.replace(fullMatch, highlightSpan);
+      // Walk through character by character to find exact HTML end
+      while (plainIdx < matchEnd && htmlIdx < html.length) {
+        if (html[htmlIdx] === '<') {
+          // Skip HTML tag
+          while (htmlIdx < html.length && html[htmlIdx] !== '>') htmlIdx++;
+          htmlIdx++; // Skip '>'
+        } else {
+          plainIdx++;
+          htmlIdx++;
+        }
+      }
+      htmlEnd = htmlIdx;
+
+      // Extract the HTML content to wrap
+      const matchedHtml = html.substring(htmlStart, htmlEnd);
+
+      // Wrap with highlight span
+      const highlightSpan = `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">${matchedHtml}</span>`;
+
+      return html.substring(0, htmlStart) + highlightSpan + html.substring(htmlEnd);
     }
 
+    console.log('Highlight match failed for:', text.substring(0, 50) + '...');
+    console.log('Searching for:', searchLower.substring(0, 80));
+    console.log('Plain text excerpt:', plainLower.substring(0, 300));
     return html; // No match found
   };
 
@@ -7254,6 +7352,7 @@ ${signature}`;
                             <option value="typed">Typed Only</option>
                             <option value="verified">Verified Only</option>
                             <option value="unverified">Unverified Only</option>
+                            <option value="mismatched">⚠️ Config Mismatch</option>
                           </select>
                           {/* Period Filter Dropdown */}
                           {sortedPeriods.length > 0 && (
@@ -7281,17 +7380,18 @@ ${signature}`;
                               className="input"
                               value={resultsAssignmentFilter}
                               onChange={(e) => setResultsAssignmentFilter(e.target.value)}
+                              title={resultsAssignmentFilter || "Filter by assignment"}
                               style={{
                                 width: "auto",
                                 padding: "8px 12px",
                                 fontSize: "0.85rem",
-                                maxWidth: "200px",
+                                maxWidth: "250px",
                               }}
                             >
                               <option value="">All Assignments</option>
                               {[...new Set(status.results.map((r) => r.assignment || r.filename || "Unknown"))].sort().map((a) => (
-                                <option key={a} value={a}>
-                                  {a.length > 30 ? a.substring(0, 30) + "..." : a}
+                                <option key={a} value={a} title={a}>
+                                  {a.length > 35 ? a.substring(0, 35) + "..." : a}
                                 </option>
                               ))}
                             </select>
@@ -7320,22 +7420,53 @@ ${signature}`;
                           </button>
                           <button
                             onClick={async () => {
-                              if (
-                                confirm(
-                                  "Clear all grading results? This cannot be undone.",
-                                )
-                              ) {
+                              const filteredCount = resultsAssignmentFilter
+                                ? status.results.filter(r => r.assignment === resultsAssignmentFilter).length
+                                : status.results.length;
+                              const confirmMsg = resultsAssignmentFilter
+                                ? `Clear ${filteredCount} results for "${resultsAssignmentFilter}"? This cannot be undone.`
+                                : `Clear all ${filteredCount} grading results? This cannot be undone.`;
+
+                              if (confirm(confirmMsg)) {
                                 try {
-                                  await api.clearResults();
-                                  setStatus((prev) => ({
-                                    ...prev,
-                                    results: [],
-                                    log: [],
-                                    complete: false,
-                                  }));
-                                  setEditedResults([]);
-                                  setEmailApprovals({});
-                                  setEditedEmails({});
+                                  await api.clearResults(resultsAssignmentFilter || null);
+                                  if (resultsAssignmentFilter) {
+                                    // Only remove filtered results from state
+                                    setStatus((prev) => ({
+                                      ...prev,
+                                      results: prev.results.filter(r => r.assignment !== resultsAssignmentFilter),
+                                    }));
+                                    setEditedResults((prev) =>
+                                      prev.filter(r => r.assignment !== resultsAssignmentFilter)
+                                    );
+                                    // Clear approvals/emails for removed students
+                                    const removedStudents = status.results
+                                      .filter(r => r.assignment === resultsAssignmentFilter)
+                                      .map(r => r.student_id || r.student);
+                                    setEmailApprovals((prev) => {
+                                      const updated = { ...prev };
+                                      removedStudents.forEach(id => delete updated[id]);
+                                      return updated;
+                                    });
+                                    setEditedEmails((prev) => {
+                                      const updated = { ...prev };
+                                      removedStudents.forEach(id => delete updated[id]);
+                                      return updated;
+                                    });
+                                    addToast(`Cleared ${filteredCount} results for "${resultsAssignmentFilter}"`, "success");
+                                  } else {
+                                    // Clear everything
+                                    setStatus((prev) => ({
+                                      ...prev,
+                                      results: [],
+                                      log: [],
+                                      complete: false,
+                                    }));
+                                    setEditedResults([]);
+                                    setEmailApprovals({});
+                                    setEditedEmails({});
+                                    addToast("Cleared all results", "success");
+                                  }
                                 } catch (e) {
                                   addToast(
                                     "Error clearing results: " + e.message,
@@ -7348,7 +7479,7 @@ ${signature}`;
                             style={{ background: "rgba(239,68,68,0.2)" }}
                           >
                             <Icon name="Trash2" size={18} />
-                            Clear
+                            {resultsAssignmentFilter ? "Clear Filtered" : "Clear All"}
                           </button>
                           <button
                             onClick={() => setFocusExportModal(true)}
@@ -7913,6 +8044,11 @@ ${signature}`;
                                   r.marker_status !== "unverified"
                                 )
                                   return false;
+                                if (
+                                  resultsFilter === "mismatched" &&
+                                  !r.config_mismatch
+                                )
+                                  return false;
                                 // Apply period filter
                                 if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
                                   return false;
@@ -8034,6 +8170,24 @@ ${signature}`;
                                             />
                                           </span>
                                         )}
+                                        {r.config_mismatch && (
+                                          <span
+                                            title={r.config_mismatch_reason || "CONFIG MISMATCH: This submission doesn't match any saved assignment. Grade may be incorrect!"}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              width: "20px",
+                                              height: "20px",
+                                              borderRadius: "4px",
+                                              background: "rgba(239, 68, 68, 0.2)",
+                                              color: "#ef4444",
+                                              cursor: "help",
+                                            }}
+                                          >
+                                            <Icon name="FileX" size={12} />
+                                          </span>
+                                        )}
                                         {r.student_id &&
                                           studentAccommodations[
                                             r.student_id
@@ -8123,6 +8277,54 @@ ${signature}`;
                                         const plagColor = getPlagFlagColor(
                                           auth.plag.flag,
                                         );
+                                        const studentId = r.student_id || r.student;
+                                        const isTrusted = (config.trustedStudents || []).includes(studentId);
+                                        const isFlagged = auth.ai.flag !== "none" || auth.plag.flag !== "none";
+
+                                        // If student is trusted, show trusted badge instead
+                                        if (isTrusted) {
+                                          return (
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
+                                              <span
+                                                title="This student is marked as trusted - detection flags are overridden"
+                                                style={{
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  gap: "4px",
+                                                  padding: "3px 8px",
+                                                  borderRadius: "12px",
+                                                  fontWeight: 500,
+                                                  background: "rgba(34,197,94,0.2)",
+                                                  color: "#22c55e",
+                                                  fontSize: "0.75rem",
+                                                }}
+                                              >
+                                                <Icon name="ShieldCheck" size={12} />
+                                                Trusted Writer
+                                              </span>
+                                              <button
+                                                onClick={() => {
+                                                  setConfig(prev => ({
+                                                    ...prev,
+                                                    trustedStudents: prev.trustedStudents.filter(id => id !== studentId)
+                                                  }));
+                                                  addToast(`Removed ${r.student} from trusted list`, "info");
+                                                }}
+                                                style={{
+                                                  background: "none",
+                                                  border: "none",
+                                                  color: "var(--text-muted)",
+                                                  fontSize: "0.7rem",
+                                                  cursor: "pointer",
+                                                  padding: "2px 4px",
+                                                }}
+                                              >
+                                                Remove trust
+                                              </button>
+                                            </div>
+                                          );
+                                        }
+
                                         return (
                                           <div
                                             style={{
@@ -8207,6 +8409,34 @@ ${signature}`;
                                                 ? "Clear"
                                                 : auth.plag.flag}
                                             </span>
+                                            {/* Trust button for flagged students */}
+                                            {isFlagged && (
+                                              <button
+                                                onClick={() => {
+                                                  setConfig(prev => ({
+                                                    ...prev,
+                                                    trustedStudents: [...(prev.trustedStudents || []), studentId]
+                                                  }));
+                                                  addToast(`Added ${r.student} to trusted writers list`, "success");
+                                                }}
+                                                title="Mark as trusted writer - this student writes well naturally"
+                                                style={{
+                                                  background: "rgba(34,197,94,0.1)",
+                                                  border: "1px solid rgba(34,197,94,0.3)",
+                                                  color: "#22c55e",
+                                                  fontSize: "0.7rem",
+                                                  cursor: "pointer",
+                                                  padding: "2px 6px",
+                                                  borderRadius: "4px",
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  gap: "3px",
+                                                }}
+                                              >
+                                                <Icon name="ShieldCheck" size={10} />
+                                                Trust
+                                              </button>
+                                            )}
                                           </div>
                                         );
                                       })()}
@@ -8338,6 +8568,7 @@ ${signature}`;
                                               globalAINotes: globalAINotes,
                                               classPeriod: r.period || '',
                                               ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
+                                              trustedStudents: config.trustedStudents || [],
                                             });
                                             // Poll for completion
                                             const checkStatus = setInterval(async () => {
@@ -11774,6 +12005,129 @@ ${signature}`;
                             {studentHistoryLoading
                               ? "Loading..."
                               : 'Click "Refresh" to load student writing profiles'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Trusted Writers */}
+                      <div
+                        style={{
+                          marginTop: "20px",
+                          padding: "15px",
+                          background: "rgba(34,197,94,0.1)",
+                          borderRadius: "12px",
+                          border: "1px solid rgba(34,197,94,0.2)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: 600,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                            }}
+                          >
+                            <Icon
+                              name="ShieldCheck"
+                              size={18}
+                              style={{
+                                color: "#22c55e",
+                                verticalAlign: "middle",
+                              }}
+                            />
+                            Trusted Writers
+                          </div>
+                          {(config.trustedStudents || []).length > 0 && (
+                            <button
+                              onClick={() => {
+                                if (confirm("Remove all trusted writers?")) {
+                                  setConfig(prev => ({ ...prev, trustedStudents: [] }));
+                                  addToast("Cleared trusted writers list", "info");
+                                }
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                            >
+                              Clear All
+                            </button>
+                          )}
+                        </div>
+                        <p
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-muted)",
+                            marginBottom: "12px",
+                          }}
+                        >
+                          Students marked as trusted writers won't be flagged for AI/copy detection.
+                          Use this for students who naturally write well.
+                        </p>
+
+                        {(config.trustedStudents || []).length > 0 ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px",
+                            }}
+                          >
+                            {config.trustedStudents.map((studentId) => (
+                              <div
+                                key={studentId}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  padding: "6px 10px",
+                                  background: "rgba(34,197,94,0.15)",
+                                  borderRadius: "6px",
+                                  fontSize: "0.85rem",
+                                }}
+                              >
+                                <Icon name="User" size={14} style={{ color: "#22c55e" }} />
+                                <span>{studentId}</span>
+                                <button
+                                  onClick={() => {
+                                    setConfig(prev => ({
+                                      ...prev,
+                                      trustedStudents: prev.trustedStudents.filter(id => id !== studentId)
+                                    }));
+                                    addToast(`Removed ${studentId} from trusted list`, "info");
+                                  }}
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    padding: "2px",
+                                    color: "var(--text-muted)",
+                                  }}
+                                >
+                                  <Icon name="X" size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              padding: "15px",
+                              textAlign: "center",
+                              color: "var(--text-muted)",
+                              fontSize: "0.85rem",
+                              background: "rgba(0,0,0,0.1)",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            No trusted writers yet. Mark students as trusted from the Results tab
+                            when they're flagged for AI/copy detection.
                           </div>
                         )}
                       </div>
