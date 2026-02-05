@@ -758,7 +758,7 @@ body {
     }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     .hero {
         min-height: calc(100vh - 60px);
         min-height: calc(100svh - 60px); /* Small viewport height - Safari friendly */
@@ -804,11 +804,11 @@ body {
     }
 
     .hero-stats {
-        display: none;
+        display: none !important;
     }
 
     .hero-visual {
-        display: none;
+        display: none !important;
     }
 }
 
