@@ -584,6 +584,17 @@ body {
     position: relative;
 }
 
+/* Hide hero card on mobile devices */
+@media (max-width: 768px) {
+    .hero .hero-visual,
+    .hero-visual {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+}
+
 .hero-card {
     background: white;
     border-radius: var(--radius-2xl);
