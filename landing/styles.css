@@ -771,9 +771,11 @@ body {
 
 @media (max-width: 768px) {
     .hero {
-        min-height: auto;
+        min-height: 100vh;
+        min-height: 100svh;
         padding-top: 80px;
-        padding-bottom: var(--space-6);
+        padding-bottom: 20px;
+        overflow: hidden;
     }
 
     .hero .container {
@@ -789,22 +791,20 @@ body {
     }
 
     .hero-title {
-        font-size: 1.625rem;
-        line-height: 1.15;
+        font-size: 1.5rem;
+        line-height: 1.2;
         margin-bottom: var(--space-2);
     }
 
     .hero-description {
         font-size: 0.875rem;
-        line-height: 1.45;
+        line-height: 1.4;
         margin-bottom: var(--space-4);
     }
 
     .hero-cta {
         flex-direction: column;
         gap: var(--space-2);
-        margin-bottom: 0;
-        justify-content: center;
     }
 
     .hero-cta .btn {
