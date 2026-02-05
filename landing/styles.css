@@ -820,6 +820,16 @@ body {
     }
 }
 
+/* Safari-specific fix for viewport gap */
+@supports (-webkit-touch-callout: none) {
+    @media (max-width: 768px) {
+        .hero {
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+        }
+    }
+}
+
 /* Small phones (iPhone SE, older Androids) */
 @media (max-width: 375px) {
     .hero-title {
