@@ -771,17 +771,13 @@ body {
 
 @media (max-width: 768px) {
     .hero {
-        min-height: 100vh;
-        min-height: 100dvh;
-        padding-top: 70px;
+        min-height: auto;
+        padding-top: 80px;
         padding-bottom: var(--space-6);
-        display: flex;
-        align-items: center;
     }
 
     .hero .container {
         display: block;
-        width: 100%;
     }
 
     .hero-content {
