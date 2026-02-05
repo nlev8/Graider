@@ -138,8 +138,8 @@ function handleLogin(event) {
 
     // Simulate API call - replace with actual API integration
     setTimeout(function() {
-        // For demo, redirect to app
-        window.location.href = '/';
+        // Redirect to app
+        window.location.href = 'https://app.graider.live';
     }, 1500);
 }
 
@@ -175,8 +175,8 @@ function handleSignup(event) {
 
     // Simulate API call - replace with actual API integration
     setTimeout(function() {
-        // For demo, redirect to app
-        window.location.href = '/';
+        // Redirect to app
+        window.location.href = 'https://app.graider.live';
     }, 1500);
 }
 
