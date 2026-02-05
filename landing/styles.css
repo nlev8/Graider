@@ -771,9 +771,11 @@ body {
 
 @media (max-width: 768px) {
     .hero {
-        min-height: auto;
-        padding-top: 70px;
-        padding-bottom: var(--space-4);
+        display: block !important;
+        align-items: unset !important;
+        min-height: auto !important;
+        padding-top: 80px;
+        padding-bottom: var(--space-6);
     }
 
     .hero .container {
