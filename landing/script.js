@@ -148,17 +148,11 @@ function handleSignup(event) {
     const firstName = document.getElementById('signup-first').value;
     const lastName = document.getElementById('signup-last').value;
     const email = document.getElementById('signup-email').value;
-    const password = document.getElementById('signup-password').value;
     const terms = document.getElementById('terms').checked;
 
     // Basic validation
-    if (!firstName || !lastName || !email || !password) {
+    if (!firstName || !lastName || !email) {
         showFormError('Please fill in all fields');
-        return;
-    }
-
-    if (password.length < 8) {
-        showFormError('Password must be at least 8 characters');
         return;
     }
 
@@ -169,15 +163,36 @@ function handleSignup(event) {
 
     // Show loading state
     const submitBtn = event.target.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    submitBtn.textContent = 'Creating account...';
+    submitBtn.textContent = 'Joining beta...';
     submitBtn.disabled = true;
 
-    // Simulate API call - replace with actual API integration
-    setTimeout(function() {
-        // Redirect to app
-        window.location.href = 'https://app.graider.live';
-    }, 1500);
+    // Submit to Formspree
+    fetch('https://formspree.io/f/mpqjaqzy', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            firstName: firstName,
+            lastName: lastName,
+            email: email,
+            source: 'beta-signup'
+        })
+    })
+    .then(function(response) {
+        if (response.ok) {
+            // Redirect to download page
+            window.location.href = '/download.html';
+        } else {
+            throw new Error('Form submission failed');
+        }
+    })
+    .catch(function(error) {
+        showFormError('Something went wrong. Please try again.');
+        submitBtn.textContent = 'Create Account';
+        submitBtn.disabled = false;
+    });
 }
 
 function handleForgotPassword(event) {
