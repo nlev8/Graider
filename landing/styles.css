@@ -391,6 +391,13 @@ body {
     width: 100%;
 }
 
+@media (max-width: 480px) {
+    .btn-full {
+        padding: var(--space-4) var(--space-5);
+        font-size: 1rem;
+    }
+}
+
 .btn-social {
     background: white;
     color: var(--gray-700);
@@ -1537,6 +1544,14 @@ body {
     visibility: hidden;
     transition: var(--transition-base);
     padding: var(--space-4);
+    overflow-y: auto;
+}
+
+@media (max-width: 480px) {
+    .modal-overlay {
+        padding: 0;
+        align-items: flex-start;
+    }
 }
 
 .modal-overlay.active {
@@ -1555,6 +1570,16 @@ body {
     box-shadow: var(--shadow-2xl);
     transform: scale(0.95) translateY(20px);
     transition: var(--transition-slow);
+}
+
+@media (max-width: 480px) {
+    .modal {
+        max-width: 100%;
+        max-height: 100%;
+        min-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
 }
 
 .modal-overlay.active .modal {
@@ -1592,9 +1617,25 @@ body {
     padding: var(--space-10) var(--space-8) var(--space-8);
 }
 
+@media (max-width: 480px) {
+    .modal-content {
+        padding: var(--space-8) var(--space-5) var(--space-6);
+    }
+}
+
 .modal-header {
     text-align: center;
     margin-bottom: var(--space-8);
+}
+
+@media (max-width: 480px) {
+    .modal-header {
+        margin-bottom: var(--space-6);
+    }
+
+    .modal-header h2 {
+        font-size: 1.375rem;
+    }
 }
 
 .modal-header h2 {
@@ -1618,6 +1659,13 @@ body {
     gap: var(--space-4);
 }
 
+@media (max-width: 480px) {
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+    }
+}
+
 .form-group label {
     display: block;
     font-size: 0.875rem;
@@ -1635,6 +1683,13 @@ body {
     border-radius: var(--radius-lg);
     background: white;
     transition: var(--transition-fast);
+}
+
+@media (max-width: 480px) {
+    .form-group input {
+        padding: var(--space-4);
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
 }
 
 .form-group input:focus {
@@ -1772,6 +1827,16 @@ body {
 .social-auth {
     display: flex;
     gap: var(--space-3);
+}
+
+@media (max-width: 480px) {
+    .social-auth {
+        flex-direction: column;
+    }
+
+    .social-auth .btn-social {
+        width: 100%;
+    }
 }
 
 .modal-footer-text {
