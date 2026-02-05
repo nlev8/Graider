@@ -530,6 +530,13 @@ body {
     background-clip: text;
 }
 
+.gradient-text-accent {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
 .hero-description {
     font-size: 1.25rem;
     color: var(--gray-600);
