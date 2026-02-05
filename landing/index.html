@@ -10,23 +10,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=10">
     <style>
         /* Critical mobile styles - inline to bypass cache */
-        @media screen and (max-width: 768px) {
-            .hero-visual,
-            .mobile-hidden,
-            div.hero-visual,
-            section.hero div.hero-visual,
-            .hero .hero-visual {
-                display: none !important;
-                visibility: hidden !important;
-                width: 0 !important;
-                height: 0 !important;
-                overflow: hidden !important;
-                position: absolute !important;
-                left: -9999px !important;
-            }
+        @media (max-width: 768px) {
+            .hero-visual { display: none !important; }
             .hero-stats { display: none !important; }
             .hero-badge, .hero-title, .hero-description, .hero-cta {
                 opacity: 1 !important;
@@ -34,12 +22,6 @@
             }
         }
     </style>
-    <script>
-        // Show hero-visual only on desktop
-        if (window.innerWidth > 768 && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-            document.write('<style>.hero-visual{display:block!important;}</style>');
-        }
-    </script>
 </head>
 <body>
     <!-- Navigation -->
@@ -92,8 +74,7 @@
                     <span>Now with GPT-4o Support</span>
                 </div>
                 <h1 class="hero-title animate-fade-in-up">
-                    <span class="gradient-text-accent">AI-Powered</span><br>
-                    Grading and Planning<br>
+                    AI-Powered Grading and Planning<br>
                     <span class="gradient-text">That Saves Teachers Hours</span>
                 </h1>
                 <p class="hero-description animate-fade-in-up delay-1">
@@ -112,7 +93,7 @@
                     </button>
                 </div>
             </div>
-            <div class="hero-visual animate-fade-in-up delay-2 mobile-hidden" id="hero-visual" style="display:none">
+            <div class="hero-visual animate-fade-in-up delay-2">
                 <div class="hero-card">
                     <div class="card-header">
                         <div class="card-dots">
@@ -703,14 +684,5 @@
     </div>
 
     <script src="script.js"></script>
-    <script>
-        // Show hero-visual only on desktop
-        document.addEventListener('DOMContentLoaded', function() {
-            var heroVisual = document.getElementById('hero-visual');
-            if (heroVisual && window.innerWidth > 768) {
-                heroVisual.style.display = 'block';
-            }
-        });
-    </script>
 </body>
 </html>
