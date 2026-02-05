@@ -772,8 +772,8 @@ body {
 @media (max-width: 768px) {
     .hero {
         min-height: auto;
-        padding-top: 80px;
-        padding-bottom: var(--space-8);
+        padding-top: 70px;
+        padding-bottom: var(--space-4);
     }
 
     .hero .container {
@@ -785,31 +785,32 @@ body {
     }
 
     .hero-badge {
-        margin-bottom: var(--space-4);
-    }
-
-    .hero-title {
-        font-size: 1.75rem;
-        line-height: 1.15;
+        margin-top: var(--space-2);
         margin-bottom: var(--space-3);
     }
 
+    .hero-title {
+        font-size: 1.625rem;
+        line-height: 1.15;
+        margin-bottom: var(--space-2);
+    }
+
     .hero-description {
-        font-size: 0.938rem;
-        line-height: 1.5;
-        margin-bottom: var(--space-5);
+        font-size: 0.875rem;
+        line-height: 1.45;
+        margin-bottom: var(--space-4);
     }
 
     .hero-cta {
         flex-direction: column;
-        gap: var(--space-3);
+        gap: var(--space-2);
         margin-bottom: 0;
         justify-content: center;
     }
 
     .hero-cta .btn {
         width: 100%;
-        padding: var(--space-4) var(--space-6);
+        padding: var(--space-3) var(--space-5);
     }
 
     .hero-stats {
