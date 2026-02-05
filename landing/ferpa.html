@@ -220,13 +220,13 @@
                 <h2>How Graider Addresses FERPA Requirements</h2>
 
                 <h3>1. Minimizing Data Exposure</h3>
-                <p>Graider's architecture is designed to minimize the exposure of student personally identifiable information (PII):</p>
+                <p>Graider's architecture is designed to minimize the exposure of student personally identifiable information (PII). This applies to all supported AI providers (OpenAI, Anthropic Claude, Google Gemini):</p>
 
                 <table class="comparison-table">
                     <tr>
                         <th>Data Type</th>
                         <th>Stored Locally</th>
-                        <th>Sent to AI</th>
+                        <th>Sent to AI Provider</th>
                     </tr>
                     <tr>
                         <td>Student Names</td>
@@ -280,8 +280,8 @@
                     <li>You select assignment files from your local computer</li>
                     <li>Graider reads and parses the files locally</li>
                     <li>Student names and identifiers are stripped from the content</li>
-                    <li>De-identified content + your rubric are sent directly from your computer to OpenAI</li>
-                    <li>OpenAI returns grades and feedback</li>
+                    <li>De-identified content + your rubric are sent directly from your computer to your chosen AI provider (OpenAI, Anthropic, or Google)</li>
+                    <li>The AI provider returns grades and feedback</li>
                     <li>Graider saves results to your local computer, re-associating student names</li>
                     <li>No data is ever sent to Graider's servers (we don't have any)</li>
                 </ol>
@@ -300,15 +300,37 @@
                     <p>While Graider strips student names before sending content to OpenAI, the student work itself is sent for AI analysis. Depending on your institution's interpretation, you may need to consider whether using OpenAI falls under the school official exception or requires separate consent. We recommend consulting with your institution's FERPA compliance officer.</p>
                 </div>
 
-                <h2>OpenAI Data Handling</h2>
-                <p>Since Graider uses OpenAI's API, their data practices are relevant:</p>
+                <h2>AI Provider Data Handling</h2>
+                <p>Graider supports multiple AI providers. Here's how each handles API data:</p>
+
+                <h3>OpenAI (GPT-4o)</h3>
                 <ul>
-                    <li><strong>API Data Retention:</strong> As of 2024, OpenAI does not use API data to train models by default</li>
-                    <li><strong>Data Retention:</strong> API inputs/outputs are retained for 30 days for abuse monitoring, then deleted</li>
-                    <li><strong>No PII Sent:</strong> Because Graider strips student names, no student PII reaches OpenAI</li>
-                    <li><strong>Business Terms:</strong> OpenAI offers enterprise agreements with additional privacy protections</li>
+                    <li><strong>Training:</strong> API data is NOT used to train models by default</li>
+                    <li><strong>Retention:</strong> Inputs/outputs retained for 30 days for abuse monitoring, then deleted</li>
+                    <li><strong>No PII Sent:</strong> Graider strips student names before sending</li>
+                    <li><strong>Policies:</strong> <a href="https://openai.com/policies/privacy-policy" target="_blank">Privacy Policy</a> | <a href="https://openai.com/policies/api-data-usage-policies" target="_blank">API Data Usage</a></li>
                 </ul>
-                <p>For the most current information, review <a href="https://openai.com/policies/privacy-policy" target="_blank">OpenAI's Privacy Policy</a> and <a href="https://openai.com/policies/api-data-usage-policies" target="_blank">API Data Usage Policies</a>.</p>
+
+                <h3>Anthropic (Claude)</h3>
+                <ul>
+                    <li><strong>Training:</strong> API data is NOT used to train models</li>
+                    <li><strong>Retention:</strong> Inputs/outputs may be retained for up to 30 days for trust & safety</li>
+                    <li><strong>No PII Sent:</strong> Graider strips student names before sending</li>
+                    <li><strong>Policies:</strong> <a href="https://www.anthropic.com/privacy" target="_blank">Privacy Policy</a> | <a href="https://www.anthropic.com/legal/commercial-terms" target="_blank">Commercial Terms</a></li>
+                </ul>
+
+                <h3>Google (Gemini)</h3>
+                <ul>
+                    <li><strong>Training:</strong> Paid API data is NOT used to train models</li>
+                    <li><strong>Retention:</strong> Data handling varies by product tier; API data is not retained for training</li>
+                    <li><strong>No PII Sent:</strong> Graider strips student names before sending</li>
+                    <li><strong>Policies:</strong> <a href="https://policies.google.com/privacy" target="_blank">Privacy Policy</a> | <a href="https://ai.google.dev/terms" target="_blank">Gemini API Terms</a></li>
+                </ul>
+
+                <div class="highlight-box">
+                    <h3>Consistent Protection Across All Providers</h3>
+                    <p>Regardless of which AI model you choose in Graider, the same privacy protections apply: student names are stripped before any content is sent, and all results are stored locally on your computer. The AI provider never receives student PII.</p>
+                </div>
 
                 <h2>Educator Responsibilities</h2>
                 <p>As the educator using Graider, you retain responsibility for:</p>
