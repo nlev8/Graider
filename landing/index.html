@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=9">
     <style>
         /* Critical mobile styles - inline to bypass cache */
         @media screen and (max-width: 768px) {
@@ -35,9 +35,9 @@
         }
     </style>
     <script>
-        // Early mobile detection - runs before body renders
-        if (window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-            document.write('<style>.hero-visual{display:none!important;}</style>');
+        // Show hero-visual only on desktop
+        if (window.innerWidth > 768 && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            document.write('<style>.hero-visual{display:block!important;}</style>');
         }
     </script>
 </head>
@@ -112,7 +112,7 @@
                     </button>
                 </div>
             </div>
-            <div class="hero-visual animate-fade-in-up delay-2 mobile-hidden">
+            <div class="hero-visual animate-fade-in-up delay-2 mobile-hidden" id="hero-visual" style="display:none">
                 <div class="hero-card">
                     <div class="card-header">
                         <div class="card-dots">
@@ -704,16 +704,13 @@
 
     <script src="script.js"></script>
     <script>
-        // Force hide hero-visual on mobile
-        if (window.innerWidth <= 768) {
-            document.addEventListener('DOMContentLoaded', function() {
-                var heroVisual = document.querySelector('.hero-visual');
-                if (heroVisual) {
-                    heroVisual.style.display = 'none';
-                    heroVisual.remove();
-                }
-            });
-        }
+        // Show hero-visual only on desktop
+        document.addEventListener('DOMContentLoaded', function() {
+            var heroVisual = document.getElementById('hero-visual');
+            if (heroVisual && window.innerWidth > 768) {
+                heroVisual.style.display = 'block';
+            }
+        });
     </script>
 </body>
 </html>
