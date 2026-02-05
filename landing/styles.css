@@ -1843,6 +1843,19 @@ body {
 
 .checkbox-label.terms {
     margin-bottom: var(--space-6);
+    align-items: flex-start;
+    line-height: 1.5;
+}
+
+.checkbox-label.terms .checkbox-custom {
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .checkbox-label.terms {
+        font-size: 0.813rem;
+    }
 }
 
 .checkbox-label a {
