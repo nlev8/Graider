@@ -4,6 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Download Graider - AI-Powered Grading Assistant</title>
+    <script>
+        (function() {
+            var password = 'graider2026';
+            var input = sessionStorage.getItem('download_auth');
+            if (input !== password) {
+                input = prompt('Enter beta access code:');
+                if (input !== password) {
+                    alert('Invalid access code. Please sign up for beta access.');
+                    window.location.href = '/';
+                    return;
+                }
+                sessionStorage.setItem('download_auth', input);
+            }
+        })();
+    </script>
     <meta name="description" content="Download Graider for Mac or Windows. AI-powered grading that saves teachers hours.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
