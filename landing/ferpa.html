@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FERPA Compliance - Graider</title>
+    <meta name="description" content="How Graider ensures FERPA compliance and protects student privacy. Detailed information for educators and administrators.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .legal-page {
+            padding: 120px 0 80px;
+            background: var(--gray-50);
+            min-height: 100vh;
+        }
+        .legal-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 var(--space-6);
+        }
+        .legal-header {
+            margin-bottom: var(--space-12);
+        }
+        .legal-header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--gray-900);
+            margin-bottom: var(--space-4);
+        }
+        .legal-header .subtitle {
+            font-size: 1.25rem;
+            color: var(--gray-600);
+            margin-bottom: var(--space-4);
+        }
+        .legal-header .last-updated {
+            color: var(--gray-500);
+            font-size: 0.938rem;
+        }
+        .legal-content {
+            background: white;
+            border-radius: var(--radius-2xl);
+            padding: var(--space-10);
+            box-shadow: var(--shadow-sm);
+        }
+        .legal-content h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-top: var(--space-8);
+            margin-bottom: var(--space-4);
+        }
+        .legal-content h2:first-child {
+            margin-top: 0;
+        }
+        .legal-content h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin-top: var(--space-6);
+            margin-bottom: var(--space-3);
+        }
+        .legal-content p {
+            color: var(--gray-600);
+            line-height: 1.8;
+            margin-bottom: var(--space-4);
+        }
+        .legal-content ul, .legal-content ol {
+            color: var(--gray-600);
+            line-height: 1.8;
+            margin-bottom: var(--space-4);
+            padding-left: var(--space-6);
+        }
+        .legal-content li {
+            margin-bottom: var(--space-2);
+        }
+        .legal-content a {
+            color: var(--primary-600);
+            text-decoration: none;
+        }
+        .legal-content a:hover {
+            text-decoration: underline;
+        }
+        .highlight-box {
+            background: var(--primary-50);
+            border: 1px solid var(--primary-200);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin: var(--space-6) 0;
+        }
+        .highlight-box h3 {
+            color: var(--primary-700);
+            margin-top: 0;
+        }
+        .highlight-box p, .highlight-box ul {
+            color: var(--primary-800);
+        }
+        .highlight-box p:last-child, .highlight-box ul:last-child {
+            margin-bottom: 0;
+        }
+        .warning-box {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin: var(--space-6) 0;
+        }
+        .warning-box h3 {
+            color: #92400e;
+            margin-top: 0;
+        }
+        .warning-box p {
+            color: #78350f;
+            margin-bottom: 0;
+        }
+        .checklist {
+            background: var(--gray-50);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin: var(--space-6) 0;
+        }
+        .checklist h3 {
+            margin-top: 0;
+            color: var(--gray-900);
+        }
+        .checklist ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .checklist li {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            padding: var(--space-2) 0;
+        }
+        .checklist li::before {
+            content: "✓";
+            color: var(--primary-600);
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: var(--space-6) 0;
+        }
+        .comparison-table th, .comparison-table td {
+            padding: var(--space-4);
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .comparison-table th {
+            background: var(--gray-50);
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+        .comparison-table td {
+            color: var(--gray-600);
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            color: var(--primary-600);
+            text-decoration: none;
+            font-weight: 500;
+            margin-top: var(--space-8);
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <img src="logo.svg" alt="Graider" class="logo-icon" style="height: 168px; width: auto;">
+            </a>
+            <div class="nav-actions">
+                <a href="/" class="btn btn-ghost">Back to Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="legal-page">
+        <div class="legal-container">
+            <div class="legal-header">
+                <h1>FERPA Compliance</h1>
+                <p class="subtitle">How Graider protects student privacy and supports educational compliance</p>
+                <p class="last-updated">Last updated: February 2026</p>
+            </div>
+
+            <div class="legal-content">
+                <h2>Executive Summary</h2>
+                <p>Graider is designed from the ground up to support FERPA (Family Educational Rights and Privacy Act) compliance. As a desktop application that processes data locally and strips student identifiers before any AI processing, Graider minimizes privacy risks while providing powerful grading assistance.</p>
+
+                <div class="highlight-box">
+                    <h3>Key FERPA Protections</h3>
+                    <ul>
+                        <li><strong>No student names sent to AI:</strong> Student identifiers are automatically stripped before content is sent for grading</li>
+                        <li><strong>Local data storage:</strong> All student work, grades, and feedback remain on your computer</li>
+                        <li><strong>No cloud servers:</strong> Graider does not operate servers that store educational records</li>
+                        <li><strong>Direct API connection:</strong> Your computer connects directly to OpenAI - no intermediary</li>
+                        <li><strong>You control the data:</strong> Delete local files anytime to remove all data</li>
+                    </ul>
+                </div>
+
+                <h2>What is FERPA?</h2>
+                <p>The Family Educational Rights and Privacy Act (FERPA) is a federal law that protects the privacy of student education records. It applies to all schools that receive funding from the U.S. Department of Education. Key requirements include:</p>
+                <ul>
+                    <li>Schools must have written consent before disclosing personally identifiable information (PII) from education records</li>
+                    <li>Parents and eligible students have the right to access and request corrections to education records</li>
+                    <li>Schools must maintain reasonable security measures to protect education records</li>
+                    <li>Third-party service providers may access PII only under specific conditions (the "school official" exception)</li>
+                </ul>
+
+                <h2>How Graider Addresses FERPA Requirements</h2>
+
+                <h3>1. Minimizing Data Exposure</h3>
+                <p>Graider's architecture is designed to minimize the exposure of student personally identifiable information (PII):</p>
+
+                <table class="comparison-table">
+                    <tr>
+                        <th>Data Type</th>
+                        <th>Stored Locally</th>
+                        <th>Sent to AI</th>
+                    </tr>
+                    <tr>
+                        <td>Student Names</td>
+                        <td>Yes (your files)</td>
+                        <td><strong>No</strong> - Automatically stripped</td>
+                    </tr>
+                    <tr>
+                        <td>Student Work Content</td>
+                        <td>Yes (your files)</td>
+                        <td>Yes - For grading analysis</td>
+                    </tr>
+                    <tr>
+                        <td>Grades & Scores</td>
+                        <td>Yes (local storage)</td>
+                        <td>No</td>
+                    </tr>
+                    <tr>
+                        <td>Feedback Comments</td>
+                        <td>Yes (local storage)</td>
+                        <td>Generated by AI, stored locally</td>
+                    </tr>
+                    <tr>
+                        <td>Rubrics & Settings</td>
+                        <td>Yes (local storage)</td>
+                        <td>Yes - Sent with grading request</td>
+                    </tr>
+                </table>
+
+                <h3>2. Student Name Stripping</h3>
+                <p>Before any content is sent to OpenAI for grading, Graider automatically:</p>
+                <ul>
+                    <li>Removes student names from file content</li>
+                    <li>Replaces names with generic placeholders (e.g., "Student")</li>
+                    <li>Strips identifying metadata from documents</li>
+                    <li>Processes filenames to remove student identifiers</li>
+                </ul>
+                <p>This de-identification process ensures that the AI service never receives information that could identify a specific student.</p>
+
+                <h3>3. Local-Only Architecture</h3>
+                <p>Unlike cloud-based grading tools, Graider operates entirely on your computer:</p>
+                <ul>
+                    <li><strong>No Graider servers:</strong> We do not operate servers that receive or store your data</li>
+                    <li><strong>No user accounts:</strong> No login means no data stored on our systems</li>
+                    <li><strong>Your API key:</strong> You connect directly to OpenAI using your own credentials</li>
+                    <li><strong>Local files only:</strong> Configuration, results, and history stored in your home directory</li>
+                </ul>
+
+                <h3>4. Data Flow Transparency</h3>
+                <p>Here's exactly what happens when you grade an assignment with Graider:</p>
+                <ol>
+                    <li>You select assignment files from your local computer</li>
+                    <li>Graider reads and parses the files locally</li>
+                    <li>Student names and identifiers are stripped from the content</li>
+                    <li>De-identified content + your rubric are sent directly from your computer to OpenAI</li>
+                    <li>OpenAI returns grades and feedback</li>
+                    <li>Graider saves results to your local computer, re-associating student names</li>
+                    <li>No data is ever sent to Graider's servers (we don't have any)</li>
+                </ol>
+
+                <h2>The "School Official" Exception</h2>
+                <p>FERPA allows schools to disclose PII to "school officials" with "legitimate educational interests" without consent. For third-party services, this typically requires:</p>
+                <ul>
+                    <li>A written agreement specifying permitted uses</li>
+                    <li>That the service is under direct control of the school</li>
+                    <li>That data is used only for specified purposes</li>
+                    <li>Appropriate security measures</li>
+                </ul>
+
+                <div class="warning-box">
+                    <h3>Important Consideration</h3>
+                    <p>While Graider strips student names before sending content to OpenAI, the student work itself is sent for AI analysis. Depending on your institution's interpretation, you may need to consider whether using OpenAI falls under the school official exception or requires separate consent. We recommend consulting with your institution's FERPA compliance officer.</p>
+                </div>
+
+                <h2>OpenAI Data Handling</h2>
+                <p>Since Graider uses OpenAI's API, their data practices are relevant:</p>
+                <ul>
+                    <li><strong>API Data Retention:</strong> As of 2024, OpenAI does not use API data to train models by default</li>
+                    <li><strong>Data Retention:</strong> API inputs/outputs are retained for 30 days for abuse monitoring, then deleted</li>
+                    <li><strong>No PII Sent:</strong> Because Graider strips student names, no student PII reaches OpenAI</li>
+                    <li><strong>Business Terms:</strong> OpenAI offers enterprise agreements with additional privacy protections</li>
+                </ul>
+                <p>For the most current information, review <a href="https://openai.com/policies/privacy-policy" target="_blank">OpenAI's Privacy Policy</a> and <a href="https://openai.com/policies/api-data-usage-policies" target="_blank">API Data Usage Policies</a>.</p>
+
+                <h2>Educator Responsibilities</h2>
+                <p>As the educator using Graider, you retain responsibility for:</p>
+
+                <div class="checklist">
+                    <h3>Your FERPA Compliance Checklist</h3>
+                    <ul>
+                        <li>Reviewing and approving all AI-generated grades and feedback before sharing with students</li>
+                        <li>Ensuring your use of Graider complies with your institution's technology and privacy policies</li>
+                        <li>Consulting with your administration or FERPA compliance officer if required</li>
+                        <li>Maintaining appropriate security on your computer (password, encryption, etc.)</li>
+                        <li>Not sharing your Graider installation or results with unauthorized individuals</li>
+                        <li>Properly disposing of grading data when no longer needed</li>
+                    </ul>
+                </div>
+
+                <h2>Comparison: Graider vs. Cloud Grading Tools</h2>
+                <table class="comparison-table">
+                    <tr>
+                        <th>Feature</th>
+                        <th>Graider (Desktop)</th>
+                        <th>Typical Cloud Tools</th>
+                    </tr>
+                    <tr>
+                        <td>Student data storage</td>
+                        <td>Your computer only</td>
+                        <td>Vendor's cloud servers</td>
+                    </tr>
+                    <tr>
+                        <td>Student names sent to AI</td>
+                        <td>No (stripped)</td>
+                        <td>Often yes</td>
+                    </tr>
+                    <tr>
+                        <td>Requires data agreement</td>
+                        <td>Only with OpenAI (no PII)</td>
+                        <td>Yes, with vendor</td>
+                    </tr>
+                    <tr>
+                        <td>Data breach risk</td>
+                        <td>Limited to your computer</td>
+                        <td>Vendor's entire database</td>
+                    </tr>
+                    <tr>
+                        <td>Data deletion control</td>
+                        <td>Immediate (delete local files)</td>
+                        <td>Depends on vendor policy</td>
+                    </tr>
+                    <tr>
+                        <td>Offline capability</td>
+                        <td>Partial (except AI calls)</td>
+                        <td>Usually none</td>
+                    </tr>
+                </table>
+
+                <h2>Best Practices for Educators</h2>
+                <h3>Before Using Graider</h3>
+                <ul>
+                    <li>Review your school's acceptable use and technology policies</li>
+                    <li>Consult with your FERPA compliance officer if you have questions</li>
+                    <li>Understand what data is sent to OpenAI and their retention policies</li>
+                    <li>Consider whether your institution requires parental notification for AI tool usage</li>
+                </ul>
+
+                <h3>While Using Graider</h3>
+                <ul>
+                    <li>Always review AI-generated grades and feedback before distribution</li>
+                    <li>Keep your computer secure with strong passwords and current software updates</li>
+                    <li>Don't share your Graider installation or output files on shared/public computers</li>
+                    <li>Use secure, encrypted storage if saving grading results long-term</li>
+                </ul>
+
+                <h3>Data Retention</h3>
+                <ul>
+                    <li>Graider stores data in <code>~/.graider_*/</code> directories</li>
+                    <li>Delete these folders to remove all Graider data from your computer</li>
+                    <li>Follow your institution's record retention policies for grade records</li>
+                    <li>Consider periodic cleanup of old assignment configurations and results</li>
+                </ul>
+
+                <h2>For IT Administrators</h2>
+                <p>If you're evaluating Graider for your school or district:</p>
+                <ul>
+                    <li><strong>Architecture:</strong> Desktop application, no cloud component, no data sent to Graider</li>
+                    <li><strong>API Connection:</strong> Direct educator device → OpenAI (HTTPS encrypted)</li>
+                    <li><strong>Authentication:</strong> Individual OpenAI API keys (no shared credentials)</li>
+                    <li><strong>PII Handling:</strong> Student names stripped before AI transmission</li>
+                    <li><strong>Data Residency:</strong> All educational records remain on educator's device</li>
+                    <li><strong>Audit Trail:</strong> Local logs only, no centralized logging</li>
+                </ul>
+
+                <h2>Frequently Asked Questions</h2>
+
+                <h3>Does Graider sign a Data Processing Agreement (DPA)?</h3>
+                <p>Because Graider doesn't process or store student data on our systems, a traditional DPA isn't applicable. The relevant agreement would be between your institution and OpenAI. However, since student names are stripped, OpenAI receives no PII.</p>
+
+                <h3>Can Graider be used with students under 13 (COPPA)?</h3>
+                <p>Graider is a tool for educators, not for direct student use. Students don't interact with Graider or create accounts. The educator processes student work through the application.</p>
+
+                <h3>What if a student's name appears in their essay content?</h3>
+                <p>Graider strips names from metadata and file structure. If a student writes their name within the body of their work, that text would be sent to OpenAI. We recommend instructing students not to include their names in the body of their work, or manually reviewing for this before grading.</p>
+
+                <h3>Is the AI grading accurate enough for official grades?</h3>
+                <p>Graider is a tool to assist educators, not replace their judgment. You should always review AI-generated grades and feedback before making them official. The final grading decision is yours.</p>
+
+                <h2>Contact Us</h2>
+                <p>If you have questions about FERPA compliance or need additional information for your institution's review, please contact us:</p>
+                <p><a href="mailto:admin@graider.live">admin@graider.live</a></p>
+                <p>We're happy to provide additional documentation or clarification for your compliance needs.</p>
+
+                <a href="/" class="back-link">&larr; Back to homepage</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
