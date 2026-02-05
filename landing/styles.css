@@ -772,22 +772,27 @@ body {
 @media (max-width: 768px) {
     .hero {
         display: block !important;
-        align-items: unset !important;
-        min-height: auto !important;
+        min-height: 100vh !important;
+        min-height: 100svh !important;
         padding-top: 80px;
-        padding-bottom: var(--space-6);
+        padding-bottom: 30px;
     }
 
     .hero .container {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 80px - 30px);
+        min-height: calc(100svh - 80px - 30px);
     }
 
     .hero-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
         text-align: center;
     }
 
     .hero-badge {
-        margin-top: var(--space-2);
         margin-bottom: var(--space-3);
     }
 
@@ -804,10 +809,9 @@ body {
     }
 
     .hero-cta {
+        margin-top: auto;
         flex-direction: column;
         gap: var(--space-2);
-        margin-bottom: 0;
-        justify-content: center;
     }
 
     .hero-cta .btn {
