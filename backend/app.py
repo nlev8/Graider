@@ -61,6 +61,15 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
 # ══════════════════════════════════════════════════════════════
+# AUTHENTICATION
+# ══════════════════════════════════════════════════════════════
+try:
+    from auth import init_auth
+    init_auth(app)
+except Exception as e:
+    print(f"Warning: Auth middleware not loaded: {e}")
+
+# ══════════════════════════════════════════════════════════════
 # GRADING STATE MANAGEMENT
 # ══════════════════════════════════════════════════════════════
 
@@ -256,7 +265,7 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured'):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None):
     """Run the grading process in a background thread.
 
     Args:
@@ -266,6 +275,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         rubric: Custom rubric dict from Settings with categories, weights, descriptions
         ensemble_models: List of models for ensemble grading (e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash'])
         extraction_mode: "structured" (parse with rules) or "ai" (let AI identify responses)
+        trusted_students: List of student IDs to skip AI/plagiarism detection for
     """
     global grading_state
 
@@ -795,6 +805,10 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     except:
                         pass
 
+                # Track if config matches the submitted file
+                config_mismatch = False
+                config_mismatch_reason = ""
+
                 if matched_config:
                     file_markers = matched_config.get('customMarkers', [])
                     file_exclude_markers = matched_config.get('excludeMarkers', [])
@@ -811,11 +825,30 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     marker_config = file_markers if use_section_points else None
                     effort_points = matched_config.get('effortPoints', 15) if use_section_points else 15
                 else:
+                    # NO MATCHING CONFIG FOUND - this is a potential problem!
+                    # Extract assignment name from filename
+                    if ' - ' in filepath.name:
+                        submitted_assignment = filepath.name.split(' - ', 1)[1]
+                        submitted_assignment = os.path.splitext(submitted_assignment)[0]
+                    else:
+                        submitted_assignment = os.path.splitext(filepath.name)[0]
+
+                    # Check if we're using a fallback config that doesn't match
+                    fallback_title = assignment_config.get('title', '') if assignment_config else ''
+                    if fallback_title and fallback_title.lower() != submitted_assignment.lower():
+                        config_mismatch = True
+                        config_mismatch_reason = f"Submitted '{submitted_assignment}' but no matching config found. Using fallback '{fallback_title}'"
+                        grading_state["log"].append(f"  ⚠️  CONFIG MISMATCH: {config_mismatch_reason}")
+                    elif not fallback_title:
+                        config_mismatch = True
+                        config_mismatch_reason = f"No saved config for '{submitted_assignment}'"
+                        grading_state["log"].append(f"  ⚠️  NO CONFIG: {submitted_assignment}")
+
                     file_markers = fallback_markers
                     file_exclude_markers = []
                     file_notes = fallback_notes
                     file_sections = fallback_sections
-                    matched_title = ASSIGNMENT_NAME
+                    matched_title = submitted_assignment if config_mismatch else ASSIGNMENT_NAME  # Use submitted name, not fallback
                     is_completion_only = False
                     assignment_template_local = ''
                     rubric_type = 'standard'
@@ -1052,6 +1085,23 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Pass file_markers (customMarkers) for extraction, not file_sections
                 # Pass file_exclude_markers (excludeMarkers) to skip sections that shouldn't be graded
                 # Pass marker_config and effort_points for section-based point rubric
+
+                # Check if student is trusted (skip AI/plagiarism detection)
+                student_id = student_info.get('student_id', '')
+                # Debug: Show what we're checking
+                print(f"  🔍 Checking trust: student_id='{student_id}', trusted_list={trusted_students}")
+                is_trusted = trusted_students and student_id in trusted_students
+                if is_trusted:
+                    print(f"  🛡️ Trusted student - skipping AI/copy detection")
+
+                # FITB: Skip AI/plagiarism detection - answers are factual, not creative writing
+                is_fitb = rubric_type == 'fill-in-blank'
+                if is_fitb:
+                    print(f"  📝 FITB assignment - skipping AI/copy detection")
+
+                # Skip detection for trusted students or FITB assignments
+                skip_detection = is_trusted or is_fitb
+
                 if ensemble_models and len(ensemble_models) >= 2:
                     grade_result = grade_with_ensemble(
                         student_info['student_name'], grade_data, file_ai_notes,
@@ -1059,6 +1109,21 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
                         marker_config, effort_points, extraction_mode
                     )
+                elif skip_detection:
+                    # Trusted student or FITB: Use direct grading without detection
+                    grade_result = grade_assignment(
+                        student_info['student_name'], grade_data, file_ai_notes,
+                        grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+                        rubric_prompt, file_markers, file_exclude_markers,
+                        marker_config, effort_points, extraction_mode
+                    )
+                    # Set detection to "none"
+                    if is_trusted:
+                        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
+                        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
+                    else:
+                        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
+                        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
                 else:
                     grade_result = grade_with_parallel_detection(
                         student_info['student_name'], grade_data, file_ai_notes,
@@ -1102,6 +1167,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 level_indicator = "🎯" if class_level == "advanced" else "💚" if class_level == "support" else ""
 
                 log_messages = [f"  Score: {grade_result['score']} ({grade_result['letter_grade']}) {level_indicator}{class_level.upper() if class_level != 'standard' else ''}".strip()]
+                if config_mismatch:
+                    log_messages.append(f"  ⚠️  CONFIG MISMATCH - may have wrong rubric!")
                 if marker_status == "unverified":
                     log_messages.append(f"  ⚠️  UNVERIFIED: No assignment config")
                 if baseline_deviation.get('flag') != 'normal':
@@ -1122,6 +1189,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "file_data": file_data,
                     "marker_status": marker_status,
                     "baseline_deviation": baseline_deviation,
+                    "config_mismatch": config_mismatch,
+                    "config_mismatch_reason": config_mismatch_reason,
                     "log_messages": log_messages
                 }
 
@@ -1215,7 +1284,9 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "assignment": result["matched_title"],
                     "period": result["student_period"],
                     "grading_period": grading_period,
-                    "has_markers": False
+                    "has_markers": False,
+                    "config_mismatch": result.get("config_mismatch", False),
+                    "config_mismatch_reason": result.get("config_mismatch_reason", "")
                 }
                 all_grades.append(grade_record)
 
@@ -1315,6 +1386,7 @@ register_routes(app, grading_state, run_grading_thread, reset_state)
 @app.route('/api/grade', methods=['POST'])
 def start_grading():
     """Start the grading process."""
+    print("🚀 BACKEND/APP.PY - /api/grade called")  # DEBUG: Confirm this file is being used
     global grading_state
 
     if grading_state["is_running"]:
@@ -1351,6 +1423,10 @@ def start_grading():
     # Get ensemble models for multi-model grading
     ensemble_models = data.get('ensemble_models', None)
 
+    # Get trusted students list (skip AI/plagiarism detection for these students)
+    trusted_students = data.get('trustedStudents', [])
+    print(f"🔐 Trusted students received: {trusted_students}")  # DEBUG
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -1365,7 +1441,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students)
     )
     thread.start()
 

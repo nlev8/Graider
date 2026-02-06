@@ -2,6 +2,12 @@
    GRAIDER LANDING PAGE - JAVASCRIPT
    ============================================ */
 
+// Supabase client
+const supabaseClient = window.supabase.createClient(
+    'https://hecxqiedfodnpujjriin.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlY3hxaWVkZm9kbnB1ampyaWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk4OTA3ODMsImV4cCI6MjA4NTQ2Njc4M30.KUvoxjmnCbZSUZo2a8nIj0UD56KM-CXB0dpZ1iYMwLE'
+);
+
 // DOM Elements
 const navbar = document.getElementById('navbar');
 const mobileMenuBtn = document.getElementById('mobile-menu-btn');
@@ -121,38 +127,55 @@ document.addEventListener('keydown', function(event) {
 
 function handleLogin(event) {
     event.preventDefault();
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
+    var email = document.getElementById('login-email').value;
+    var password = document.getElementById('login-password').value;
 
-    // Basic validation
     if (!email || !password) {
         showFormError('Please fill in all fields');
         return;
     }
 
-    // Show loading state
-    const submitBtn = event.target.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
+    var submitBtn = event.target.querySelector('button[type="submit"]');
+    var originalText = submitBtn.textContent;
     submitBtn.textContent = 'Signing in...';
     submitBtn.disabled = true;
 
-    // Simulate API call - replace with actual API integration
-    setTimeout(function() {
-        // Redirect to app
-        window.location.href = 'https://app.graider.live';
-    }, 1500);
+    supabaseClient.auth.signInWithPassword({ email: email, password: password })
+        .then(function(result) {
+            if (result.error) {
+                if (result.error.message.indexOf('Email not confirmed') >= 0) {
+                    showFormError('Please confirm your email first. Check your inbox.');
+                } else {
+                    showFormError(result.error.message);
+                }
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+                return;
+            }
+            window.location.href = 'https://app.graider.live';
+        })
+        .catch(function(err) {
+            showFormError('Something went wrong. Please try again.');
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+        });
 }
 
 function handleSignup(event) {
     event.preventDefault();
-    const firstName = document.getElementById('signup-first').value;
-    const lastName = document.getElementById('signup-last').value;
-    const email = document.getElementById('signup-email').value;
-    const terms = document.getElementById('terms').checked;
+    var firstName = document.getElementById('signup-first').value;
+    var lastName = document.getElementById('signup-last').value;
+    var email = document.getElementById('signup-email').value;
+    var password = document.getElementById('signup-password').value;
+    var terms = document.getElementById('terms').checked;
 
-    // Basic validation
-    if (!firstName || !lastName || !email) {
+    if (!firstName || !lastName || !email || !password) {
         showFormError('Please fill in all fields');
+        return;
+    }
+
+    if (password.length < 6) {
+        showFormError('Password must be at least 6 characters');
         return;
     }
 
@@ -161,34 +184,41 @@ function handleSignup(event) {
         return;
     }
 
-    // Show loading state
-    const submitBtn = event.target.querySelector('button[type="submit"]');
-    submitBtn.textContent = 'Joining beta...';
+    var submitBtn = event.target.querySelector('button[type="submit"]');
+    submitBtn.textContent = 'Creating account...';
     submitBtn.disabled = true;
 
-    // Submit to Formspree
-    fetch('https://formspree.io/f/mpqjaqzy', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-            firstName: firstName,
-            lastName: lastName,
-            email: email,
-            source: 'beta-signup'
-        })
-    })
-    .then(function(response) {
-        if (response.ok) {
-            // Redirect to download page
-            window.location.href = '/download.html';
-        } else {
-            throw new Error('Form submission failed');
+    supabaseClient.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+            data: {
+                first_name: firstName,
+                last_name: lastName,
+            },
+            emailRedirectTo: 'https://app.graider.live',
         }
     })
-    .catch(function(error) {
+    .then(function(result) {
+        if (result.error) {
+            showFormError(result.error.message);
+            submitBtn.textContent = 'Create Account';
+            submitBtn.disabled = false;
+            return;
+        }
+
+        // Show confirmation message
+        var formContent = event.target.parentElement;
+        formContent.innerHTML = '<div style="text-align:center;padding:20px 0;">' +
+            '<div style="font-size:3rem;margin-bottom:16px;">&#9993;</div>' +
+            '<h2 style="margin-bottom:12px;">Check your email</h2>' +
+            '<p style="color:rgba(255,255,255,0.6);margin-bottom:24px;">' +
+            'We sent a confirmation link to <strong>' + email + '</strong>. ' +
+            'Click the link to activate your account, then sign in at the app.</p>' +
+            '<a href="https://app.graider.live" class="btn btn-primary" style="display:inline-flex;">Go to App</a>' +
+            '</div>';
+    })
+    .catch(function(err) {
         showFormError('Something went wrong. Please try again.');
         submitBtn.textContent = 'Create Account';
         submitBtn.disabled = false;
@@ -197,20 +227,28 @@ function handleSignup(event) {
 
 function handleForgotPassword(event) {
     event.preventDefault();
-    const email = document.getElementById('forgot-email').value;
+    var email = document.getElementById('forgot-email').value;
 
     if (!email) {
         showFormError('Please enter your email');
         return;
     }
 
-    // Show loading state
-    const submitBtn = event.target.querySelector('button[type="submit"]');
+    var submitBtn = event.target.querySelector('button[type="submit"]');
     submitBtn.textContent = 'Sending...';
     submitBtn.disabled = true;
 
-    // Simulate API call
-    setTimeout(function() {
+    supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://app.graider.live',
+    })
+    .then(function(result) {
+        if (result.error) {
+            showFormError(result.error.message);
+            submitBtn.textContent = 'Send Reset Link';
+            submitBtn.disabled = false;
+            return;
+        }
+
         submitBtn.textContent = 'Link Sent!';
         submitBtn.style.background = '#22c55e';
 
@@ -220,7 +258,12 @@ function handleForgotPassword(event) {
             submitBtn.style.background = '';
             submitBtn.disabled = false;
         }, 2000);
-    }, 1500);
+    })
+    .catch(function(err) {
+        showFormError('Something went wrong. Please try again.');
+        submitBtn.textContent = 'Send Reset Link';
+        submitBtn.disabled = false;
+    });
 }
 
 function showFormError(message) {

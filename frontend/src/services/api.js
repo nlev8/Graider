@@ -3,28 +3,48 @@
  * Handles all API calls to the Flask backend
  */
 
+import { supabase } from './supabase'
+
 const API_BASE = ''  // Empty for same-origin, Vite proxies /api to Flask
 
 /**
- * Generic fetch wrapper with error handling
+ * Get authorization headers with current session token
+ */
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session?.access_token) {
+    return { 'Authorization': 'Bearer ' + session.access_token }
+  }
+  return {}
+}
+
+/**
+ * Generic fetch wrapper with error handling and auth
  */
 async function fetchApi(endpoint, options = {}) {
   try {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const authHeaders = await getAuthHeaders()
+    const response = await fetch(API_BASE + endpoint, {
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
         ...options.headers,
       },
       ...options,
     })
 
+    if (response.status === 401) {
+      window.dispatchEvent(new Event('auth-expired'))
+      throw new Error('Session expired. Please log in again.')
+    }
+
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
+      throw new Error('API error: ' + response.status)
     }
 
     return await response.json()
   } catch (error) {
-    console.error(`API Error (${endpoint}):`, error)
+    console.error('API Error (' + endpoint + '):', error)
     throw error
   }
 }
@@ -55,9 +75,11 @@ export async function listFiles(folder) {
   })
 }
 
-export async function clearResults() {
+export async function clearResults(assignment = null) {
   return fetchApi('/api/clear-results', {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assignment }),
   })
 }
 
@@ -146,8 +168,10 @@ export async function parseDocument(file) {
   const formData = new FormData()
   formData.append('file', file)
 
+  const authHeaders = await getAuthHeaders()
   const response = await fetch('/api/parse-document', {
     method: 'POST',
+    headers: { ...authHeaders },
     body: formData,
   })
 
@@ -286,8 +310,10 @@ export async function uploadAssessmentTemplate(file, platform, name) {
   formData.append('platform', platform)
   formData.append('name', name)
 
+  const authHeaders = await getAuthHeaders()
   const response = await fetch('/api/upload-assessment-template', {
     method: 'POST',
+    headers: { ...authHeaders },
     body: formData,
   })
   return response.json()
@@ -361,8 +387,10 @@ export async function uploadRoster(file) {
   const formData = new FormData()
   formData.append('file', file)
 
+  const authHeaders = await getAuthHeaders()
   const response = await fetch('/api/upload-roster', {
     method: 'POST',
+    headers: { ...authHeaders },
     body: formData,
   })
   return response.json()
@@ -391,8 +419,10 @@ export async function uploadPeriod(file, periodName) {
   formData.append('file', file)
   formData.append('period_name', periodName)
 
+  const authHeaders = await getAuthHeaders()
   const response = await fetch('/api/upload-period', {
     method: 'POST',
+    headers: { ...authHeaders },
     body: formData,
   })
   return response.json()
@@ -431,8 +461,10 @@ export async function uploadSupportDocument(file, docType, description) {
   formData.append('doc_type', docType)
   formData.append('description', description || '')
 
+  const authHeaders = await getAuthHeaders()
   const response = await fetch('/api/upload-document', {
     method: 'POST',
+    headers: { ...authHeaders },
     body: formData,
   })
   return response.json()
@@ -496,8 +528,10 @@ export async function importAccommodations(file, idColumn, accommodationColumn, 
   formData.append('accommodation_column', accommodationColumn)
   if (notesColumn) formData.append('notes_column', notesColumn)
 
+  const authHeaders = await getAuthHeaders()
   const response = await fetch('/api/import-accommodations', {
     method: 'POST',
+    headers: { ...authHeaders },
     body: formData,
   })
   return response.json()

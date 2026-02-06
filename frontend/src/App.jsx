@@ -22,6 +22,8 @@ import Icon from "./components/Icon";
 import { AssignmentPlayer } from "./components";
 import StudentPortal from "./components/StudentPortal";
 import * as api from "./services/api";
+import { supabase } from "./services/supabase";
+import LoginScreen from "./components/LoginScreen";
 
 // Tab configuration
 const TABS = [
@@ -539,6 +541,38 @@ function App() {
   // Check if this is the student portal route
   if (window.location.pathname.startsWith("/join")) {
     return <StudentPortal />;
+  }
+
+  // Auth state
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    function handleAuthExpired() {
+      supabase.auth.signOut();
+      setUser(null);
+    }
+    window.addEventListener('auth-expired', handleAuthExpired);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('auth-expired', handleAuthExpired);
+    };
+  }, []);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
   }
 
   // Theme state with localStorage persistence
@@ -3708,6 +3742,25 @@ ${signature}`;
 
   const pct = status.total > 0 ? (status.progress / status.total) * 100 : 0;
 
+  // Auth gate — show loading spinner or login screen before main app
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+      }}>
+        <div className="spin" style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#6366f1', borderRadius: '50%' }} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen onLogin={setUser} />;
+  }
+
   return (
     <div style={{ minHeight: "100vh", padding: "20px" }}>
       {/* Email Preview Modal */}
@@ -5443,6 +5496,29 @@ ${signature}`;
                 borderTop: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
               }}
             >
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  padding: "10px",
+                  marginBottom: "12px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--glass-border)",
+                  background: "var(--glass-bg)",
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  transition: "all 0.3s ease",
+                }}
+              >
+                <Icon name="LogOut" size={16} />
+                Sign Out
+              </button>
               <div
                 style={{
                   fontSize: "0.75rem",
@@ -5467,9 +5543,8 @@ ${signature}`;
             flex: 1,
             marginLeft: sidebarCollapsed ? "70px" : "260px",
             padding: "0",
-            maxWidth: sidebarCollapsed
-              ? "calc(100vw - 70px)"
-              : "calc(100vw - 260px)",
+            minWidth: 0,
+            overflowX: "auto",
             display: "flex",
             flexDirection: "column",
             transition: "all 0.3s ease",
@@ -7374,8 +7449,8 @@ ${signature}`;
                               ))}
                             </select>
                           )}
-                          {/* Assignment Filter Dropdown */}
-                          {status.results.length > 0 && (
+                          {/* Assignment Filter Dropdown - shows saved assignments from Builder */}
+                          {status.results.length > 0 && savedAssignments.length > 0 && (
                             <select
                               className="input"
                               value={resultsAssignmentFilter}
@@ -7389,11 +7464,15 @@ ${signature}`;
                               }}
                             >
                               <option value="">All Assignments</option>
-                              {[...new Set(status.results.map((r) => r.assignment || r.filename || "Unknown"))].sort().map((a) => (
-                                <option key={a} value={a} title={a}>
-                                  {a.length > 35 ? a.substring(0, 35) + "..." : a}
-                                </option>
-                              ))}
+                              {savedAssignments
+                                .map((name) => (savedAssignmentData[name] || {}).title || name)
+                                .filter((title, i, arr) => arr.indexOf(title) === i)
+                                .sort()
+                                .map((title) => (
+                                  <option key={title} value={title} title={title}>
+                                    {title.length > 35 ? title.substring(0, 35) + "..." : title}
+                                  </option>
+                                ))}
                             </select>
                           )}
                           {/* Apply Curve Button - shows when period is filtered */}
@@ -7647,6 +7726,7 @@ ${signature}`;
                               border: "1px solid rgba(248,113,113,0.3)",
                               display: "flex",
                               alignItems: "center",
+                              flexWrap: "wrap",
                               gap: "15px",
                             }}
                           >
@@ -7655,7 +7735,7 @@ ${signature}`;
                               size={24}
                               style={{ color: "#f87171" }}
                             />
-                            <div style={{ flex: 1 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div
                                 style={{ fontWeight: 700, marginBottom: "8px" }}
                               >
@@ -7664,6 +7744,7 @@ ${signature}`;
                               <div
                                 style={{
                                   display: "flex",
+                                  flexWrap: "wrap",
                                   gap: "20px",
                                   fontSize: "0.9rem",
                                 }}
@@ -7764,6 +7845,7 @@ ${signature}`;
                         style={{
                           display: "flex",
                           alignItems: "center",
+                          flexWrap: "wrap",
                           gap: "15px",
                           marginBottom: "20px",
                           padding: "12px 15px",
@@ -8003,17 +8085,28 @@ ${signature}`;
                             )}
                           </div>
                         </div>
-                        <table>
+                        <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", tableLayout: "fixed" }}>
+                          <colgroup>
+                            <col style={{ width: "13%" }} />
+                            <col style={{ width: "17%" }} />
+                            <col style={{ width: "14%" }} />
+                            <col style={{ width: "7%" }} />
+                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "14%" }} />
+                            <col style={{ width: "11%" }} />
+                            <col style={{ width: "16%" }} />
+                          </colgroup>
                           <thead>
                             <tr>
                               <th>Student</th>
                               <th>Assignment</th>
                               <th>Time</th>
-                              <th>Score</th>
-                              <th>Grade</th>
-                              <th>Authenticity</th>
-                              <th>Email</th>
-                              <th>Actions</th>
+                              <th style={{ textAlign: "center" }}>Score</th>
+                              <th style={{ textAlign: "center" }}>Grade</th>
+                              <th style={{ textAlign: "center" }}>Authenticity</th>
+                              <th style={{ textAlign: "center" }}>Email</th>
+                              <th style={{ textAlign: "center" }}>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -8121,15 +8214,16 @@ ${signature}`;
                                         : "transparent",
                                     }}
                                   >
-                                    <td>
+                                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                       <div
                                         style={{
                                           display: "flex",
                                           alignItems: "center",
-                                          gap: "6px",
+                                          gap: "4px",
+                                          overflow: "hidden",
                                         }}
                                       >
-                                        {r.student_name}
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.student_name}</span>
                                         {r.is_handwritten && (
                                           <span
                                             title="Handwritten/Scanned Assignment"
@@ -8221,15 +8315,14 @@ ${signature}`;
                                     </td>
                                     <td
                                       style={{
-                                        maxWidth: "300px",
                                         overflow: "hidden",
                                         textOverflow: "ellipsis",
                                         whiteSpace: "nowrap",
                                         cursor: "help",
                                       }}
-                                      title={r.filename || r.assignment}
+                                      title={r.assignment || r.filename}
                                     >
-                                      {r.filename || r.assignment}
+                                      {r.assignment || r.filename}
                                     </td>
                                     <td
                                       style={{
@@ -8240,8 +8333,8 @@ ${signature}`;
                                     >
                                       {r.graded_at || "-"}
                                     </td>
-                                    <td>{r.score}</td>
-                                    <td>
+                                    <td style={{ textAlign: "center" }}>{r.score}</td>
+                                    <td style={{ textAlign: "center" }}>
                                       <span
                                         style={{
                                           padding: "4px 12px",
@@ -8268,7 +8361,7 @@ ${signature}`;
                                         {r.letter_grade}
                                       </span>
                                     </td>
-                                    <td>
+                                    <td style={{ textAlign: "center" }}>
                                       {(() => {
                                         const auth = getAuthenticityStatus(r);
                                         const aiColor = getAIFlagColor(
@@ -8441,13 +8534,13 @@ ${signature}`;
                                         );
                                       })()}
                                     </td>
-                                    <td>
+                                    <td style={{ textAlign: "center" }}>
                                       <div
                                         style={{
                                           display: "flex",
                                           flexDirection: "column",
                                           gap: "4px",
-                                          alignItems: "flex-start",
+                                          alignItems: "center",
                                         }}
                                       >
                                         {autoApproveEmails ? (
@@ -8521,8 +8614,8 @@ ${signature}`;
                                         )}
                                       </div>
                                     </td>
-                                    <td>
-                                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                                    <td style={{ textAlign: "center" }}>
+                                      <div style={{ display: "flex", gap: "4px", alignItems: "center", justifyContent: "center" }}>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -8688,6 +8781,7 @@ ${signature}`;
                               })}
                           </tbody>
                         </table>
+                        </div>
 
                         {/* Send Approved Emails Button */}
                         {Object.values(emailApprovals).filter(
