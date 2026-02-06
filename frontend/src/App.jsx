@@ -8089,13 +8089,13 @@ ${signature}`;
                         <table style={{ width: "100%", tableLayout: "fixed" }}>
                           <colgroup>
                             <col style={{ width: "13%" }} />
-                            <col style={{ width: "17%" }} />
-                            <col style={{ width: "14%" }} />
+                            <col style={{ width: "15%" }} />
+                            <col style={{ width: "12%" }} />
                             <col style={{ width: "7%" }} />
-                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "11%" }} />
                             <col style={{ width: "14%" }} />
                             <col style={{ width: "11%" }} />
-                            <col style={{ width: "16%" }} />
+                            <col style={{ width: "17%" }} />
                           </colgroup>
                           <thead>
                             <tr>
@@ -8337,9 +8337,15 @@ ${signature}`;
                                     <td style={{ textAlign: "center" }}>
                                       <span
                                         style={{
-                                          padding: "4px 12px",
+                                          display: "inline-block",
+                                          padding: "4px 10px",
                                           borderRadius: "20px",
                                           fontWeight: 700,
+                                          fontSize: r.letter_grade && r.letter_grade.length > 2 ? "0.7rem" : undefined,
+                                          whiteSpace: "nowrap",
+                                          maxWidth: "100%",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
                                           background:
                                             r.score >= 90
                                               ? "rgba(74,222,128,0.2)"
@@ -8357,6 +8363,7 @@ ${signature}`;
                                                   ? "#fbbf24"
                                                   : "#f87171",
                                         }}
+                                        title={r.letter_grade}
                                       >
                                         {r.letter_grade}
                                       </span>
