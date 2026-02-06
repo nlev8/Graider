@@ -61,6 +61,13 @@ def init_auth(app):
     """
     @app.before_request
     def check_auth():
+        # Skip auth entirely on localhost (development)
+        host = request.host.split(':')[0]
+        if host in ('localhost', '127.0.0.1'):
+            g.user_id = 'local-dev'
+            g.user_email = 'dev@localhost'
+            return None
+
         # Skip non-API routes (static files, index.html, etc.)
         if not request.path.startswith('/api/'):
             return None

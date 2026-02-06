@@ -283,24 +283,32 @@ IMPORTANT: At least 2-3 of your ideas should incorporate these specific tools. F
             tools_instruction = """
 NO TECHNOLOGY TOOLS SELECTED: Focus entirely on non-digital activities using standard classroom materials (whiteboards, paper, manipulatives, discussions, group work)."""
 
+        # Format standards as numbered list for clarity
+        standards_text = ""
+        for i, s in enumerate(selected_standards, 1):
+            standards_text += f"\n{i}. {s}"
+
         prompt = f"""You are an expert curriculum developer brainstorming lesson plan ideas for a {config.get('grade', '7')}th grade {config.get('subject', 'Social Studies')} class.
 {support_docs}
 
-Standards to Cover:
-{', '.join(selected_standards)}
+STANDARDS TO COVER (every idea MUST directly address these specific standards):
+{standards_text}
+
+IMPORTANT: Read the benchmark text, vocabulary, and learning targets above carefully. Every lesson idea must be DIRECTLY about the specific topic described in the standard(s). Do NOT generate ideas about other topics, time periods, or standards — ONLY the ones listed above.
 {tools_instruction}
 
-Generate 6 creative and diverse lesson plan ideas that would effectively teach these standards. Each idea should represent a DIFFERENT teaching approach.
+Generate 6 creative and diverse lesson plan ideas that would effectively teach these exact standards. Each idea should represent a DIFFERENT teaching approach.
 
 CRITICAL REQUIREMENTS:
-1. ALL activities must be CONCRETE and ACTIONABLE - things a teacher can actually do tomorrow
-2. NEVER invent fictional apps, websites, platforms, or games (no "Math Ninja", "Number Quest", etc.)
-3. For technology activities, ONLY use tools from the AVAILABLE TECHNOLOGY TOOLS list above (if any)
-4. Focus on activities using standard classroom materials: whiteboards, manipulatives, worksheets, discussions, group work
-5. Be SPECIFIC about what students actually do - not vague descriptions
-6. For Math: use real problem types, manipulatives (fraction bars, algebra tiles), or proven strategies (number talks, think-pair-share)
-7. For Science: use actual lab materials or household items for experiments
-8. Avoid buzzwords without substance - every activity must have clear, executable steps
+1. Every idea MUST directly teach the specific content described in the standards above — not related or adjacent topics
+2. ALL activities must be CONCRETE and ACTIONABLE - things a teacher can actually do tomorrow
+3. NEVER invent fictional apps, websites, platforms, or games (no "Math Ninja", "Number Quest", etc.)
+4. For technology activities, ONLY use tools from the AVAILABLE TECHNOLOGY TOOLS list above (if any)
+5. Focus on activities using standard classroom materials: whiteboards, manipulatives, worksheets, discussions, group work
+6. Be SPECIFIC about what students actually do - not vague descriptions
+7. For Math: use real problem types, manipulatives (fraction bars, algebra tiles), or proven strategies (number talks, think-pair-share)
+8. For Science: use actual lab materials or household items for experiments
+9. Avoid buzzwords without substance - every activity must have clear, executable steps
 
 Return JSON with this structure:
 {{

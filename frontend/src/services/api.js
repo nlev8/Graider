@@ -10,7 +10,7 @@ const API_BASE = ''  // Empty for same-origin, Vite proxies /api to Flask
 /**
  * Get authorization headers with current session token
  */
-async function getAuthHeaders() {
+export async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession()
   if (session?.access_token) {
     return { 'Authorization': 'Bearer ' + session.access_token }

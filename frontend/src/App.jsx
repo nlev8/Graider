@@ -22,6 +22,7 @@ import Icon from "./components/Icon";
 import { AssignmentPlayer } from "./components";
 import StudentPortal from "./components/StudentPortal";
 import * as api from "./services/api";
+import { getAuthHeaders } from "./services/api";
 import { supabase } from "./services/supabase";
 import LoginScreen from "./components/LoginScreen";
 
@@ -547,8 +548,15 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
   // Check for existing session on mount
   useEffect(() => {
+    if (isLocalhost) {
+      setUser({ id: 'local-dev', email: 'dev@localhost' });
+      setAuthLoading(false);
+      return;
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthLoading(false);
@@ -905,6 +913,51 @@ function App() {
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
+  // Resizable column widths for Results table (in px, initialized on first render)
+  const [colWidths, setColWidths] = useState(null);
+  const tableRef = useRef(null);
+  const resizingCol = useRef(null);
+  const resizeStartX = useRef(0);
+  const resizeStartW = useRef(0);
+
+  const defaultColPercents = [13, 15, 12, 7, 11, 14, 11, 17];
+
+  function initColWidths() {
+    if (colWidths || !tableRef.current) return;
+    const tableW = tableRef.current.offsetWidth;
+    setColWidths(defaultColPercents.map(p => Math.round(tableW * p / 100)));
+  }
+
+  function handleResizeStart(e, colIndex) {
+    e.preventDefault();
+    resizingCol.current = colIndex;
+    resizeStartX.current = e.clientX;
+    resizeStartW.current = colWidths[colIndex];
+
+    function onMouseMove(ev) {
+      const diff = ev.clientX - resizeStartX.current;
+      setColWidths(prev => {
+        const next = [...prev];
+        const newW = Math.max(40, resizeStartW.current + diff);
+        next[resizingCol.current] = newW;
+        return next;
+      });
+    }
+
+    function onMouseUp() {
+      resizingCol.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
   const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
   const [resultsAssignmentFilter, setResultsAssignmentFilter] = useState(""); // Filter results by assignment
@@ -2294,8 +2347,10 @@ function App() {
         formData.append("assignmentConfig", JSON.stringify(gradeAssignment));
       }
 
+      const authHdrs = await getAuthHeaders();
       const response = await fetch("/api/grade-individual", {
         method: "POST",
+        headers: { ...authHdrs },
         body: formData,
       });
       const result = await response.json();
@@ -3022,10 +3077,18 @@ ${signature}`;
     setLessonPlan(null);  // Clear existing lesson plan so brainstorm results show
     setLessonVariations([]);  // Clear variations too
     try {
-      // Look up full standard objects from codes
+      // Look up full standard objects — include benchmark, vocabulary, and learning targets
       const fullStandards = selectedStandards.map((code) => {
         const std = standards.find((s) => s.code === code);
-        return std ? `${std.code}: ${std.benchmark}` : code;
+        if (!std) return code;
+        let text = std.code + ": " + std.benchmark;
+        if (std.vocabulary && std.vocabulary.length > 0) {
+          text += " | Key Vocabulary: " + std.vocabulary.join(", ");
+        }
+        if (std.learning_targets && std.learning_targets.length > 0) {
+          text += " | Learning Targets: " + std.learning_targets.join("; ");
+        }
+        return text;
       });
       const data = await api.brainstormLessonIdeas({
         standards: fullStandards,
@@ -3055,10 +3118,18 @@ ${signature}`;
     setPlannerLoading(true);
     setLessonVariations([]);
     try {
-      // Look up full standard objects from codes
+      // Look up full standard objects — include benchmark, vocabulary, and learning targets
       const fullStandards = selectedStandards.map((code) => {
         const std = standards.find((s) => s.code === code);
-        return std ? `${std.code}: ${std.benchmark}` : code;
+        if (!std) return code;
+        let text = std.code + ": " + std.benchmark;
+        if (std.vocabulary && std.vocabulary.length > 0) {
+          text += " | Key Vocabulary: " + std.vocabulary.join(", ");
+        }
+        if (std.learning_targets && std.learning_targets.length > 0) {
+          text += " | Learning Targets: " + std.learning_targets.join("; ");
+        }
+        return text;
       });
       // Build title: use provided title, selected idea title, or let AI generate from standards
       const standardCodes = selectedStandards.join(", ");
@@ -8085,28 +8156,48 @@ ${signature}`;
                             )}
                           </div>
                         </div>
-                        <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", tableLayout: "fixed" }}>
-                          <colgroup>
-                            <col style={{ width: "13%" }} />
-                            <col style={{ width: "15%" }} />
-                            <col style={{ width: "12%" }} />
-                            <col style={{ width: "7%" }} />
-                            <col style={{ width: "11%" }} />
-                            <col style={{ width: "14%" }} />
-                            <col style={{ width: "11%" }} />
-                            <col style={{ width: "17%" }} />
-                          </colgroup>
+                        <div style={{ overflowX: "auto" }} ref={(el) => { tableRef.current = el; if (el && !colWidths) initColWidths(); }}>
+                        <table style={{ width: colWidths ? colWidths.reduce((a, b) => a + b, 0) + "px" : "100%", tableLayout: "fixed" }}>
+                          {colWidths && (
+                            <colgroup>
+                              {colWidths.map((w, i) => (
+                                <col key={i} style={{ width: w + "px" }} />
+                              ))}
+                            </colgroup>
+                          )}
+                          {!colWidths && (
+                            <colgroup>
+                              {defaultColPercents.map((p, i) => (
+                                <col key={i} style={{ width: p + "%" }} />
+                              ))}
+                            </colgroup>
+                          )}
                           <thead>
                             <tr>
-                              <th>Student</th>
-                              <th>Assignment</th>
-                              <th>Time</th>
-                              <th style={{ textAlign: "center" }}>Score</th>
-                              <th style={{ textAlign: "center" }}>Grade</th>
-                              <th style={{ textAlign: "center" }}>Authenticity</th>
-                              <th style={{ textAlign: "center" }}>Email</th>
-                              <th style={{ textAlign: "center" }}>Actions</th>
+                              {["Student", "Assignment", "Time", "Score", "Grade", "Authenticity", "Email", "Actions"].map((label, i) => (
+                                <th key={label} style={{ textAlign: i >= 3 ? "center" : undefined, position: "relative", overflow: "visible" }}>
+                                  {label}
+                                  {i < 7 && (
+                                    <span
+                                      onMouseDown={(e) => handleResizeStart(e, i)}
+                                      style={{
+                                        position: "absolute",
+                                        right: -2,
+                                        top: 4,
+                                        bottom: 4,
+                                        width: "4px",
+                                        cursor: "col-resize",
+                                        borderRadius: "2px",
+                                        background: theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+                                        transition: "background 0.15s",
+                                        zIndex: 1,
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-primary)"; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.background = theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"; }}
+                                    />
+                                  )}
+                                </th>
+                              ))}
                             </tr>
                           </thead>
                           <tbody>
@@ -10038,12 +10129,14 @@ ${signature}`;
                           onClick={async () => {
                             setSavingApiKeys(true);
                             try {
+                              const authHdrs = await getAuthHeaders();
                               const response = await fetch(
                                 "/api/save-api-keys",
                                 {
                                   method: "POST",
                                   headers: {
                                     "Content-Type": "application/json",
+                                    ...authHdrs,
                                   },
                                   body: JSON.stringify({
                                     openai_key: apiKeys.openai || undefined,
@@ -10851,9 +10944,10 @@ ${signature}`;
                                     const base64 = e.target.result;
                                     setAddStudentModal({ show: true, loading: true, image: base64, student: null, error: null });
                                     try {
+                                      const authHdrs = await getAuthHeaders();
                                       const response = await fetch("/api/extract-student-from-image", {
                                         method: "POST",
-                                        headers: { "Content-Type": "application/json" },
+                                        headers: { "Content-Type": "application/json", ...authHdrs },
                                         body: JSON.stringify({ image: base64 }),
                                       });
                                       const data = await response.json();
@@ -10895,9 +10989,10 @@ ${signature}`;
                                 const base64 = ev.target.result;
                                 setAddStudentModal({ show: true, loading: true, image: base64, student: null, error: null });
                                 try {
+                                  const authHdrs = await getAuthHeaders();
                                   const response = await fetch("/api/extract-student-from-image", {
                                     method: "POST",
-                                    headers: { "Content-Type": "application/json" },
+                                    headers: { "Content-Type": "application/json", ...authHdrs },
                                     body: JSON.stringify({ image: base64 }),
                                   });
                                   const data = await response.json();
@@ -11778,8 +11873,10 @@ ${signature}`;
                           <button
                             onClick={async () => {
                               try {
+                                const authHdrs = await getAuthHeaders();
                                 const response = await fetch(
                                   "/api/ferpa/data-summary",
+                                  { headers: { ...authHdrs } },
                                 );
                                 const data = await response.json();
                                 alert(
@@ -11807,8 +11904,10 @@ ${signature}`;
                           <button
                             onClick={async () => {
                               try {
+                                const authHdrs2 = await getAuthHeaders();
                                 const response = await fetch(
                                   "/api/ferpa/export-data",
+                                  { headers: { ...authHdrs2 } },
                                 );
                                 const data = await response.json();
                                 const blob = new Blob(
@@ -11855,12 +11954,14 @@ ${signature}`;
                               }
 
                               try {
+                                const authHdrs3 = await getAuthHeaders();
                                 const response = await fetch(
                                   "/api/ferpa/delete-all-data",
                                   {
                                     method: "POST",
                                     headers: {
                                       "Content-Type": "application/json",
+                                      ...authHdrs3,
                                     },
                                     body: JSON.stringify({ confirm: true }),
                                   },
@@ -12824,9 +12925,10 @@ ${signature}`;
                                 return;
                               }
                               try {
+                                const authHdrs = await getAuthHeaders();
                                 const response = await fetch("/api/add-student-to-roster", {
                                   method: "POST",
-                                  headers: { "Content-Type": "application/json" },
+                                  headers: { "Content-Type": "application/json", ...authHdrs },
                                   body: JSON.stringify({ student: addStudentModal.student, period: addStudentModal.student.period }),
                                 });
                                 const data = await response.json();
@@ -19910,9 +20012,10 @@ ${signature}`;
                               (r.period || "All") === period),
                         );
 
+                        const authHdrs = await getAuthHeaders();
                         const response = await fetch("/api/export-focus-csv", {
                           method: "POST",
-                          headers: { "Content-Type": "application/json" },
+                          headers: { "Content-Type": "application/json", ...authHdrs },
                           body: JSON.stringify({
                             results: resultsToExport,
                             assignment,
