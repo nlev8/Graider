@@ -650,6 +650,57 @@ export async function migrateStudentNames() {
   })
 }
 
+// ============ Parent Contacts ============
+
+export async function previewParentContacts(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const authHeaders = await getAuthHeaders()
+  const response = await fetch('/api/preview-parent-contacts', {
+    method: 'POST',
+    headers: { ...authHeaders },
+    body: formData,
+  })
+  return response.json()
+}
+
+export async function saveParentContactMapping(mapping) {
+  return fetchApi('/api/save-parent-contact-mapping', {
+    method: 'POST',
+    body: JSON.stringify(mapping),
+  })
+}
+
+export async function getParentContacts() {
+  return fetchApi('/api/parent-contacts')
+}
+
+// ============ Focus Batch Export ============
+
+export async function exportFocusBatch(results = null, assignment = null) {
+  return fetchApi('/api/export-focus-batch', {
+    method: 'POST',
+    body: JSON.stringify({ results, assignment }),
+  })
+}
+
+export async function exportFocusComments(results = null, assignment = null) {
+  return fetchApi('/api/export-focus-comments', {
+    method: 'POST',
+    body: JSON.stringify({ results, assignment }),
+  })
+}
+
+// ============ Outlook Email Export ============
+
+export async function exportOutlookEmails(data = {}) {
+  return fetchApi('/api/export-outlook-emails', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -734,4 +785,11 @@ export default {
   deleteStudentHistory,
   deleteAllStudentHistory,
   migrateStudentNames,
+  // Parent Contacts & Exports
+  previewParentContacts,
+  saveParentContactMapping,
+  getParentContacts,
+  exportFocusBatch,
+  exportFocusComments,
+  exportOutlookEmails,
 }

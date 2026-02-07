@@ -5,6 +5,8 @@ Handles rubric configuration, global settings, file uploads, and accommodations.
 import os
 import json
 import csv
+import re
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
@@ -35,9 +37,11 @@ GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 ROSTERS_DIR = os.path.join(GRAIDER_DATA_DIR, "rosters")
 PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 DOCUMENTS_DIR = os.path.join(GRAIDER_DATA_DIR, "documents")
+PARENT_CONTACTS_FILE = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
+EXPORTS_DIR = os.path.expanduser("~/.graider_exports")
 
 # Ensure directories exist
-for dir_path in [GRAIDER_DATA_DIR, ROSTERS_DIR, PERIODS_DIR, DOCUMENTS_DIR]:
+for dir_path in [GRAIDER_DATA_DIR, ROSTERS_DIR, PERIODS_DIR, DOCUMENTS_DIR, EXPORTS_DIR]:
     os.makedirs(dir_path, exist_ok=True)
 
 ALLOWED_CSV_EXTENSIONS = {'csv', 'xlsx', 'xls'}
@@ -528,6 +532,455 @@ def delete_document():
         if os.path.exists(metadata_path):
             os.remove(metadata_path)
         return jsonify({"status": "deleted"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# PARENT CONTACTS IMPORT (from class_list Excel)
+# ══════════════════════════════════════════════════════════════
+
+def _is_email(value):
+    """Detect if a string looks like an email address."""
+    return bool(value and '@' in str(value))
+
+
+def _clean_phone(value):
+    """Return phone string or None."""
+    if not value:
+        return None
+    s = str(value).strip()
+    if '@' in s or not s:
+        return None
+    return s
+
+
+def _find_header_row(ws, max_search=10, min_cols=3):
+    """Find the first row in a worksheet that has at least min_cols non-empty values."""
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=max_search, values_only=True), start=1):
+        if row:
+            non_empty = sum(1 for v in row if v is not None and str(v).strip())
+            if non_empty >= min_cols:
+                return row_idx, [str(v).strip() if v is not None else '' for v in row]
+    return None, []
+
+
+def _suggest_mapping(headers, sample_rows):
+    """Auto-suggest column mapping based on header names and sample data."""
+    headers_lower = [h.lower() for h in headers]
+
+    # Name column: first header containing "name" or "last" or "first"
+    name_col = None
+    for h, hl in zip(headers, headers_lower):
+        if any(kw in hl for kw in ['last, first', 'last first', 'student name', 'name']):
+            name_col = h
+            break
+    if not name_col:
+        for h, hl in zip(headers, headers_lower):
+            if 'last' in hl or 'first' in hl:
+                name_col = h
+                break
+
+    # ID column: first header containing "id"
+    id_col = None
+    for h, hl in zip(headers, headers_lower):
+        if 'student id' in hl or 'id' in hl:
+            id_col = h
+            break
+
+    # Contact columns: headers containing contact-related keywords
+    contact_cols = []
+    for h, hl in zip(headers, headers_lower):
+        if any(kw in hl for kw in ['contact', 'email', 'phone', 'cell', 'parent', 'guardian']):
+            contact_cols.append(h)
+
+    # Name format: check if header or sample data suggests "Last, First"
+    name_format = 'first_last'
+    if name_col:
+        if 'last' in name_col.lower() and ('first' in name_col.lower() or ',' in name_col):
+            name_format = 'last_first'
+        elif sample_rows:
+            col_idx = headers.index(name_col)
+            for row in sample_rows[:5]:
+                if col_idx < len(row) and row[col_idx]:
+                    val = str(row[col_idx]).strip()
+                    if ',' in val:
+                        name_format = 'last_first'
+                    break
+
+    # ID strip digits: check if sample IDs are 9+ digits ending in grade-like suffix
+    id_strip_digits = 0
+    if id_col and sample_rows:
+        col_idx = headers.index(id_col)
+        grade_suffix_count = 0
+        total_checked = 0
+        for row in sample_rows[:10]:
+            if col_idx < len(row) and row[col_idx]:
+                try:
+                    raw_id = str(int(float(str(row[col_idx]))))
+                    if len(raw_id) >= 9:
+                        total_checked += 1
+                        suffix = raw_id[-2:]
+                        if suffix.isdigit() and 6 <= int(suffix) <= 12:
+                            grade_suffix_count += 1
+                except (ValueError, TypeError):
+                    pass
+        if total_checked > 0 and grade_suffix_count / total_checked > 0.5:
+            id_strip_digits = 2
+
+    # Period column
+    period_col = None
+    for h, hl in zip(headers, headers_lower):
+        if 'period' in hl or 'class' in hl or 'section' in hl:
+            period_col = h
+            break
+
+    return {
+        'name_col': name_col,
+        'id_col': id_col,
+        'contact_cols': contact_cols,
+        'id_strip_digits': id_strip_digits,
+        'name_format': name_format,
+        'period_col': period_col,
+    }
+
+
+@settings_bp.route('/api/preview-parent-contacts', methods=['POST'])
+def preview_parent_contacts():
+    """
+    Step 1: Upload class list file and return headers + suggested mapping.
+    Supports xlsx (multi-sheet) and csv (single sheet).
+    Does NOT process contacts — just previews the file structure.
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    filename = file.filename.lower()
+    if not filename.endswith(('.xlsx', '.xls', '.csv')):
+        return jsonify({"error": "Please upload an Excel (.xlsx) or CSV file"}), 400
+
+    try:
+        ext = filename.rsplit('.', 1)[1]
+        tmp_filename = "tmp_parent_contacts." + ext
+        tmp_path = os.path.join(GRAIDER_DATA_DIR, tmp_filename)
+        file.save(tmp_path)
+
+        sheets = []
+        all_headers = []
+        all_sample_rows = []
+
+        if ext in ('xlsx', 'xls'):
+            import openpyxl
+            wb = openpyxl.load_workbook(tmp_path, read_only=True, data_only=True)
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                header_row_idx, headers = _find_header_row(ws)
+                if not headers:
+                    continue
+                # Filter out empty headers
+                headers = [h for h in headers if h]
+
+                # Get sample data rows for auto-suggest
+                sample_rows = []
+                if header_row_idx:
+                    for row in ws.iter_rows(min_row=header_row_idx + 1, max_row=header_row_idx + 10, values_only=True):
+                        sample_rows.append(list(row))
+
+                # Count data rows
+                row_count = 0
+                if header_row_idx:
+                    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
+                        if row and any(v is not None and str(v).strip() for v in row[:3]):
+                            row_count += 1
+
+                sheets.append({
+                    'name': sheet_name,
+                    'headers': headers,
+                    'row_count': row_count,
+                })
+                if not all_headers:
+                    all_headers = headers
+                    all_sample_rows = sample_rows
+
+            wb.close()
+
+        else:
+            # CSV
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                raw_headers = next(reader, [])
+                headers = [h.strip() for h in raw_headers if h.strip()]
+                sample_rows = []
+                row_count = 0
+                for row in reader:
+                    if row and any(v.strip() for v in row[:3]):
+                        row_count += 1
+                        if len(sample_rows) < 10:
+                            sample_rows.append(row)
+            sheets.append({
+                'name': 'Sheet1',
+                'headers': headers,
+                'row_count': row_count,
+            })
+            all_headers = headers
+            all_sample_rows = sample_rows
+
+        if not sheets:
+            return jsonify({"error": "No data found in file"}), 400
+
+        suggested = _suggest_mapping(all_headers, all_sample_rows)
+
+        return jsonify({
+            "filename": os.path.basename(tmp_path),
+            "file_type": ext,
+            "sheets": sheets,
+            "suggested_mapping": suggested,
+        })
+
+    except ImportError:
+        return jsonify({"error": "openpyxl not installed. Run: pip install openpyxl"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/save-parent-contact-mapping', methods=['POST'])
+def save_parent_contact_mapping():
+    """
+    Step 2: Process the uploaded file using the teacher's confirmed column mapping.
+    Reads the temp file, extracts contacts per the mapping, saves parent_contacts.json.
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "No mapping data provided"}), 400
+
+    name_col = data.get('name_col')
+    name_format = data.get('name_format', 'last_first')
+    id_col = data.get('id_col')
+    id_strip_digits = int(data.get('id_strip_digits', 0))
+    contact_cols = data.get('contact_cols', [])
+    period_col = data.get('period_col')
+
+    if not name_col:
+        return jsonify({"error": "Name column is required"}), 400
+
+    # Find the temp file
+    tmp_path = None
+    for ext in ('xlsx', 'xls', 'csv'):
+        candidate = os.path.join(GRAIDER_DATA_DIR, "tmp_parent_contacts." + ext)
+        if os.path.exists(candidate):
+            tmp_path = candidate
+            break
+
+    if not tmp_path:
+        return jsonify({"error": "No uploaded file found. Please upload again."}), 404
+
+    try:
+        contacts = {}
+        total_students = 0
+        period_counts = {}
+
+        file_ext = tmp_path.rsplit('.', 1)[1].lower()
+
+        def _process_rows(headers, rows_iter, default_period):
+            """Process data rows using the confirmed mapping."""
+            nonlocal total_students
+
+            # Build column index map
+            col_map = {}
+            for i, h in enumerate(headers):
+                col_map[h] = i
+
+            name_idx = col_map.get(name_col)
+            id_idx = col_map.get(id_col) if id_col else None
+            contact_idxs = [col_map[c] for c in contact_cols if c in col_map]
+            period_idx = col_map.get(period_col) if period_col else None
+
+            if name_idx is None:
+                return
+
+            students_in_section = 0
+
+            for row in rows_iter:
+                if not row or name_idx >= len(row):
+                    continue
+
+                name_cell = row[name_idx]
+                if not name_cell or not str(name_cell).strip():
+                    continue
+
+                name_str = str(name_cell).strip()
+
+                # Parse name based on format
+                if name_format == 'last_first':
+                    if ',' in name_str:
+                        parts = name_str.split(',', 1)
+                        last_name = parts[0].strip()
+                        first_middle = parts[1].strip() if len(parts) > 1 else ''
+                    elif ';' in name_str:
+                        parts = name_str.split(';', 1)
+                        last_name = parts[0].strip()
+                        first_middle = parts[1].strip() if len(parts) > 1 else ''
+                    else:
+                        last_name = name_str
+                        first_middle = ''
+                    student_name = (first_middle + ' ' + last_name).strip() if first_middle else last_name
+                elif name_format == 'first_last':
+                    parts = name_str.split()
+                    if len(parts) >= 2:
+                        first_middle = ' '.join(parts[:-1])
+                        last_name = parts[-1]
+                    else:
+                        first_middle = name_str
+                        last_name = ''
+                    student_name = name_str
+                else:
+                    # single name
+                    student_name = name_str
+                    first_middle = name_str
+                    last_name = ''
+
+                # Student ID
+                raw_id = ''
+                if id_idx is not None and id_idx < len(row) and row[id_idx]:
+                    try:
+                        raw_id = str(int(float(str(row[id_idx]))))
+                    except (ValueError, TypeError):
+                        raw_id = str(row[id_idx]).strip()
+
+                roster_id = raw_id
+                if id_strip_digits > 0 and len(raw_id) > id_strip_digits:
+                    roster_id = raw_id[:-id_strip_digits]
+
+                # Use student name as key if no ID
+                key = roster_id if roster_id else student_name
+
+                # Scan contact columns
+                emails = set()
+                phones = []
+                for ci in contact_idxs:
+                    if ci < len(row) and row[ci]:
+                        val_str = str(row[ci]).strip()
+                        if _is_email(val_str):
+                            emails.add(val_str.lower())
+                        elif val_str:
+                            phone = _clean_phone(val_str)
+                            if phone and phone not in phones:
+                                phones.append(phone)
+
+                # Period
+                period = default_period
+                if period_idx is not None and period_idx < len(row) and row[period_idx]:
+                    period = str(row[period_idx]).strip()
+
+                total_students += 1
+                students_in_section += 1
+
+                if key in contacts:
+                    existing = contacts[key]
+                    existing['parent_emails'] = sorted(
+                        set(existing['parent_emails']) | emails
+                    )
+                    for p in phones:
+                        if p not in existing['parent_phones']:
+                            existing['parent_phones'].append(p)
+                else:
+                    contacts[key] = {
+                        'student_name': student_name,
+                        'period': period,
+                        'parent_emails': sorted(emails),
+                        'parent_phones': phones,
+                    }
+
+            return students_in_section
+
+        if file_ext in ('xlsx', 'xls'):
+            import openpyxl
+            wb = openpyxl.load_workbook(tmp_path, read_only=True, data_only=True)
+
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                header_row_idx, headers = _find_header_row(ws)
+                if not headers or name_col not in headers:
+                    continue
+
+                rows = list(ws.iter_rows(min_row=header_row_idx + 1, values_only=True))
+                count = _process_rows(headers, rows, sheet_name)
+                if count:
+                    period_counts[sheet_name] = count
+
+            wb.close()
+        else:
+            # CSV
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                raw_headers = next(reader, [])
+                headers = [h.strip() for h in raw_headers]
+                rows = list(reader)
+                count = _process_rows(headers, rows, 'Sheet1')
+                if count:
+                    period_counts['Sheet1'] = count
+
+        # Clean up temp file
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+        # Save to JSON (same format as before)
+        with open(PARENT_CONTACTS_FILE, 'w') as f:
+            json.dump(contacts, f, indent=2)
+
+        with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
+        without_email = sum(1 for c in contacts.values() if not c.get('parent_emails'))
+
+        return jsonify({
+            "status": "imported",
+            "total_students": total_students,
+            "unique_students": len(contacts),
+            "with_email": with_email,
+            "without_email": without_email,
+            "periods": period_counts,
+        })
+
+    except ImportError:
+        return jsonify({"error": "openpyxl not installed. Run: pip install openpyxl"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/parent-contacts')
+def get_parent_contacts():
+    """Return stored parent contacts with summary stats."""
+    if not os.path.exists(PARENT_CONTACTS_FILE):
+        return jsonify({"contacts": {}, "count": 0, "with_email": 0})
+
+    try:
+        with open(PARENT_CONTACTS_FILE, 'r') as f:
+            contacts = json.load(f)
+
+        with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
+
+        # Group by period
+        period_stats = {}
+        for c in contacts.values():
+            period = c.get('period', 'Unknown')
+            if period not in period_stats:
+                period_stats[period] = {'total': 0, 'with_email': 0}
+            period_stats[period]['total'] += 1
+            if c.get('parent_emails'):
+                period_stats[period]['with_email'] += 1
+
+        return jsonify({
+            "contacts": contacts,
+            "count": len(contacts),
+            "with_email": with_email,
+            "without_email": len(contacts) - with_email,
+            "period_stats": period_stats,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

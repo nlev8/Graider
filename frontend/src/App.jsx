@@ -30,7 +30,7 @@ import LoginScreen from "./components/LoginScreen";
 const TABS = [
   { id: "grade", label: "Grade", icon: "GraduationCap" },
   { id: "results", label: "Results", icon: "FileText" },
-  { id: "builder", label: "Builder", icon: "FileEdit" },
+  { id: "builder", label: "Grading Setup", icon: "FileEdit" },
   { id: "analytics", label: "Analytics", icon: "BarChart3" },
   { id: "planner", label: "Planner", icon: "BookOpen" },
   { id: "resources", label: "Resources", icon: "FolderOpen" },
@@ -640,6 +640,13 @@ function App() {
   // Focus Export state
   const [focusExportModal, setFocusExportModal] = useState(false);
   const [focusExportLoading, setFocusExportLoading] = useState(false);
+  // Parent contacts state
+  const [parentContacts, setParentContacts] = useState(null);
+  const [uploadingParentContacts, setUploadingParentContacts] = useState(false);
+  const [parentContactMapping, setParentContactMapping] = useState({ show: false, preview: null, mapping: null });
+  // Batch export state
+  const [batchExportLoading, setBatchExportLoading] = useState(false);
+  const [outlookExportLoading, setOutlookExportLoading] = useState(false);
 
   // Available EdTech tools that can be selected
   const EDTECH_TOOLS = [
@@ -1361,6 +1368,7 @@ function App() {
   const docHtmlRef = useRef(null);
   const rosterInputRef = useRef(null);
   const periodInputRef = useRef(null);
+  const parentContactsInputRef = useRef(null);
   const supportDocInputRef = useRef(null);
 
   // Track if initial load is complete (to avoid saving on first render)
@@ -7643,6 +7651,76 @@ ${signature}`;
                             <Icon name="Download" size={18} />
                             Focus Export
                           </button>
+                          <button
+                            onClick={async () => {
+                              setBatchExportLoading(true);
+                              try {
+                                const assignment = resultsAssignmentFilter || (status.results[0] && status.results[0].assignment) || 'Assignment';
+                                const resultsToExport = resultsAssignmentFilter
+                                  ? status.results.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
+                                  : status.results;
+
+                                const batchRes = await api.exportFocusBatch(resultsToExport, assignment);
+                                await api.exportFocusComments(resultsToExport, assignment);
+
+                                if (batchRes.error) {
+                                  addToast(batchRes.error, "error");
+                                } else {
+                                  var totalCount = batchRes.periods.reduce(function(sum, p) { return sum + p.count; }, 0);
+                                  addToast(
+                                    "Exported " + totalCount + " grades + comments to " + batchRes.periods.length + " period files",
+                                    "success"
+                                  );
+                                }
+                              } catch (err) {
+                                addToast("Batch export error: " + err.message, "error");
+                              } finally {
+                                setBatchExportLoading(false);
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            disabled={batchExportLoading || status.results.length === 0}
+                            title="Export per-period CSVs + comments to ~/.graider_exports/focus/"
+                          >
+                            <Icon name="FolderDown" size={18} />
+                            {batchExportLoading ? "Exporting..." : "Batch Focus"}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setOutlookExportLoading(true);
+                              try {
+                                const assignment = resultsAssignmentFilter || (status.results[0] && status.results[0].assignment) || 'Assignment';
+                                const resultsToExport = resultsAssignmentFilter
+                                  ? status.results.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
+                                  : status.results;
+
+                                var result = await api.exportOutlookEmails({
+                                  results: resultsToExport,
+                                  assignment: assignment,
+                                });
+
+                                if (result.error) {
+                                  addToast(result.error, "error");
+                                } else {
+                                  var msg = "Generated " + result.count + " parent emails";
+                                  if (result.no_contact && result.no_contact.length > 0) {
+                                    msg += " (" + result.no_contact.length + " missing parent email)";
+                                  }
+                                  addToast(msg, "success");
+                                }
+                              } catch (err) {
+                                addToast("Outlook export error: " + err.message, "error");
+                              } finally {
+                                setOutlookExportLoading(false);
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            disabled={outlookExportLoading || status.results.length === 0}
+                            title="Generate parent emails from contacts"
+                          >
+                            <Icon name="Mail" size={18} />
+                            {outlookExportLoading ? "Generating..." : "Parent Emails"}
+                          </button>
                           {/* Email Actions */}
                           <div style={{ borderLeft: "1px solid var(--glass-border)", height: "24px", margin: "0 5px" }} />
                           {/* Send by Period Dropdown */}
@@ -11648,6 +11726,126 @@ ${signature}`;
                         </p>
                       </div>
                     </div>
+
+                    {/* Parent Contacts Upload */}
+                    <div style={{ marginTop: "30px" }}>
+                      <h3
+                        style={{
+                          fontSize: "1.1rem",
+                          fontWeight: 700,
+                          marginBottom: "15px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <Icon
+                          name="Contact"
+                          size={20}
+                          style={{ color: "#f59e0b" }}
+                        />
+                        Parent Contacts
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Upload class list Excel file with parent email and phone
+                        columns. Used for Focus export and Outlook email generation.
+                      </p>
+
+                      <input
+                        ref={parentContactsInputRef}
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          var file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingParentContacts(true);
+                          try {
+                            var result = await api.previewParentContacts(file);
+                            if (result.error) {
+                              addToast(result.error, "error");
+                            } else {
+                              var suggested = result.suggested_mapping || {};
+                              setParentContactMapping({
+                                show: true,
+                                preview: result,
+                                mapping: {
+                                  name_col: suggested.name_col || "",
+                                  name_format: suggested.name_format || "last_first",
+                                  id_col: suggested.id_col || "",
+                                  id_strip_digits: suggested.id_strip_digits || 0,
+                                  contact_cols: suggested.contact_cols || [],
+                                  period_col: suggested.period_col || "",
+                                },
+                              });
+                            }
+                          } catch (err) {
+                            addToast("Upload failed: " + err.message, "error");
+                          }
+                          setUploadingParentContacts(false);
+                          e.target.value = "";
+                        }}
+                      />
+
+                      <button
+                        onClick={() => parentContactsInputRef.current?.click()}
+                        className="btn btn-secondary"
+                        disabled={uploadingParentContacts}
+                        style={{ marginBottom: "15px" }}
+                      >
+                        <Icon name="Upload" size={18} />
+                        {uploadingParentContacts ? "Reading file..." : "Upload Class List (.xlsx, .csv)"}
+                      </button>
+
+                      {parentContacts && parentContacts.count > 0 && (
+                        <div
+                          style={{
+                            padding: "12px 15px",
+                            background: "var(--input-bg)",
+                            borderRadius: "8px",
+                            border: "1px solid var(--glass-border)",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, marginBottom: "8px" }}>
+                            {parentContacts.count} students loaded
+                          </div>
+                          <div style={{ color: "var(--text-secondary)" }}>
+                            {parentContacts.with_email} with parent email
+                            {parentContacts.without_email > 0 && (
+                              <span style={{ color: "#f59e0b" }}>
+                                {" "}({parentContacts.without_email} missing email)
+                              </span>
+                            )}
+                          </div>
+                          {parentContacts.period_stats && (
+                            <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              {Object.entries(parentContacts.period_stats).map(function(entry) {
+                                return (
+                                  <span
+                                    key={entry[0]}
+                                    style={{
+                                      padding: "2px 8px",
+                                      background: "rgba(99,102,241,0.15)",
+                                      borderRadius: "4px",
+                                      fontSize: "0.75rem",
+                                    }}
+                                  >
+                                    {entry[0]}: {entry[1].total}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                       </>
                     )}
 
@@ -12773,6 +12971,226 @@ ${signature}`;
                         onClick={() =>
                           setRosterMappingModal({ show: false, roster: null })
                         }
+                        className="btn btn-secondary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Parent Contact Column Mapping Modal */}
+              {parentContactMapping.show && parentContactMapping.preview && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "var(--modal-bg)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000,
+                  }}
+                >
+                  <div
+                    className="glass-card"
+                    style={{
+                      width: "90%",
+                      maxWidth: "560px",
+                      maxHeight: "85vh",
+                      overflow: "auto",
+                      padding: "25px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
+                        Map Parent Contact Columns
+                      </h3>
+                      <button
+                        onClick={() => setParentContactMapping({ show: false, preview: null, mapping: null })}
+                        style={{ background: "none", border: "none", color: "var(--text-primary)", cursor: "pointer" }}
+                      >
+                        <Icon name="X" size={24} />
+                      </button>
+                    </div>
+
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                      {parentContactMapping.preview.sheets.length > 1
+                        ? parentContactMapping.preview.sheets.length + " sheets detected (each sheet = one period)"
+                        : parentContactMapping.preview.sheets[0].row_count + " rows detected"}
+                    </p>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "20px" }}>
+                      Graider auto-detects emails (contains @) and phone numbers in the selected contact columns.
+                    </p>
+
+                    {/* Name Column */}
+                    <div style={{ marginBottom: "15px" }}>
+                      <label className="label">Student Name Column</label>
+                      <select
+                        className="input"
+                        value={parentContactMapping.mapping?.name_col || ""}
+                        onChange={function(e) { setParentContactMapping(function(prev) { return Object.assign({}, prev, { mapping: Object.assign({}, prev.mapping, { name_col: e.target.value }) }); }); }}
+                      >
+                        <option value="">-- Select Column --</option>
+                        {(parentContactMapping.preview.sheets[0]?.headers || []).map(function(h) {
+                          return <option key={h} value={h}>{h}</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Name Format */}
+                    <div style={{ marginBottom: "15px" }}>
+                      <label className="label">Name Format</label>
+                      <div style={{ display: "flex", gap: "15px", marginTop: "4px" }}>
+                        {[
+                          { value: "last_first", label: "Last, First" },
+                          { value: "first_last", label: "First Last" },
+                          { value: "single", label: "Single name" },
+                        ].map(function(opt) {
+                          return (
+                            <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.85rem", cursor: "pointer" }}>
+                              <input
+                                type="radio"
+                                name="pcNameFormat"
+                                checked={parentContactMapping.mapping?.name_format === opt.value}
+                                onChange={function() { setParentContactMapping(function(prev) { return Object.assign({}, prev, { mapping: Object.assign({}, prev.mapping, { name_format: opt.value }) }); }); }}
+                              />
+                              {opt.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Student ID Column */}
+                    <div style={{ marginBottom: "15px" }}>
+                      <label className="label">Student ID Column (optional)</label>
+                      <select
+                        className="input"
+                        value={parentContactMapping.mapping?.id_col || ""}
+                        onChange={function(e) { setParentContactMapping(function(prev) { return Object.assign({}, prev, { mapping: Object.assign({}, prev.mapping, { id_col: e.target.value }) }); }); }}
+                      >
+                        <option value="">-- None --</option>
+                        {(parentContactMapping.preview.sheets[0]?.headers || []).map(function(h) {
+                          return <option key={h} value={h}>{h}</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Strip Digits */}
+                    {parentContactMapping.mapping?.id_col && (
+                      <div style={{ marginBottom: "15px" }}>
+                        <label className="label">Strip last N digits from Student ID (grade code)</label>
+                        <input
+                          type="number"
+                          className="input"
+                          min="0"
+                          max="4"
+                          value={parentContactMapping.mapping?.id_strip_digits || 0}
+                          onChange={function(e) {
+                            var val = Math.max(0, Math.min(4, parseInt(e.target.value) || 0));
+                            setParentContactMapping(function(prev) { return Object.assign({}, prev, { mapping: Object.assign({}, prev.mapping, { id_strip_digits: val }) }); });
+                          }}
+                          style={{ width: "80px" }}
+                        />
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                          Set to 2 if IDs have a 2-digit grade suffix (e.g., 12345678906 becomes 123456789)
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Contact Columns */}
+                    <div style={{ marginBottom: "15px" }}>
+                      <label className="label">Contact Columns (email and phone)</label>
+                      <div style={{ maxHeight: "150px", overflow: "auto", padding: "8px", background: "var(--input-bg)", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
+                        {(parentContactMapping.preview.sheets[0]?.headers || []).map(function(h) {
+                          var isChecked = (parentContactMapping.mapping?.contact_cols || []).indexOf(h) !== -1;
+                          return (
+                            <label key={h} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 0", fontSize: "0.85rem", cursor: "pointer" }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={function() {
+                                  setParentContactMapping(function(prev) {
+                                    var cols = prev.mapping?.contact_cols || [];
+                                    var updated = isChecked ? cols.filter(function(c) { return c !== h; }) : cols.concat([h]);
+                                    return Object.assign({}, prev, { mapping: Object.assign({}, prev.mapping, { contact_cols: updated }) });
+                                  });
+                                }}
+                              />
+                              {h}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Period Column (only for single-sheet files) */}
+                    {parentContactMapping.preview.sheets.length === 1 && (
+                      <div style={{ marginBottom: "15px" }}>
+                        <label className="label">Period Column (optional)</label>
+                        <select
+                          className="input"
+                          value={parentContactMapping.mapping?.period_col || ""}
+                          onChange={function(e) { setParentContactMapping(function(prev) { return Object.assign({}, prev, { mapping: Object.assign({}, prev.mapping, { period_col: e.target.value }) }); }); }}
+                        >
+                          <option value="">-- None --</option>
+                          {(parentContactMapping.preview.sheets[0]?.headers || []).map(function(h) {
+                            return <option key={h} value={h}>{h}</option>;
+                          })}
+                        </select>
+                      </div>
+                    )}
+
+                    {parentContactMapping.preview.sheets.length > 1 && (
+                      <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "15px", fontStyle: "italic" }}>
+                        Period will be set from sheet names: {parentContactMapping.preview.sheets.map(function(s) { return s.name; }).join(", ")}
+                      </p>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                      <button
+                        onClick={async function() {
+                          if (!parentContactMapping.mapping?.name_col) {
+                            addToast("Please select a name column", "error");
+                            return;
+                          }
+                          setUploadingParentContacts(true);
+                          try {
+                            var result = await api.saveParentContactMapping(parentContactMapping.mapping);
+                            if (result.error) {
+                              addToast(result.error, "error");
+                            } else {
+                              addToast(
+                                "Imported " + result.unique_students + " students (" + result.with_email + " with email)",
+                                "success"
+                              );
+                              var contactsData = await api.getParentContacts();
+                              setParentContacts(contactsData);
+                              setParentContactMapping({ show: false, preview: null, mapping: null });
+                            }
+                          } catch (err) {
+                            addToast("Import failed: " + err.message, "error");
+                          }
+                          setUploadingParentContacts(false);
+                        }}
+                        className="btn btn-primary"
+                        disabled={uploadingParentContacts}
+                      >
+                        <Icon name="Save" size={18} />
+                        {uploadingParentContacts ? "Importing..." : "Save & Import"}
+                      </button>
+                      <button
+                        onClick={function() { setParentContactMapping({ show: false, preview: null, mapping: null }); }}
                         className="btn btn-secondary"
                       >
                         Cancel
@@ -17225,37 +17643,34 @@ ${signature}`;
                           {/* Header */}
                           <div
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "flex-start",
                               marginBottom: "25px",
                               borderBottom: "1px solid var(--glass-border)",
                               paddingBottom: "20px",
                             }}
                           >
-                            <div>
-                              <h2
-                                style={{
-                                  fontSize: "1.8rem",
-                                  fontWeight: 700,
-                                  marginBottom: "10px",
-                                }}
-                              >
-                                {lessonPlan.title}
-                              </h2>
-                              <p
-                                style={{
-                                  color: "var(--text-secondary)",
-                                  lineHeight: "1.6",
-                                }}
-                              >
-                                {lessonPlan.overview}
-                              </p>
-                            </div>
+                            <h2
+                              style={{
+                                fontSize: "1.8rem",
+                                fontWeight: 700,
+                                marginBottom: "10px",
+                              }}
+                            >
+                              {lessonPlan.title}
+                            </h2>
+                            <p
+                              style={{
+                                color: "var(--text-secondary)",
+                                lineHeight: "1.6",
+                                marginBottom: "20px",
+                              }}
+                            >
+                              {lessonPlan.overview}
+                            </p>
                             <div
                               style={{
                                 display: "flex",
                                 gap: "10px",
+                                alignItems: "center",
                                 flexWrap: "wrap",
                               }}
                             >
@@ -17272,13 +17687,7 @@ ${signature}`;
                               >
                                 <Icon name="FolderPlus" size={16} /> Save to Unit
                               </button>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "8px",
-                                  alignItems: "center",
-                                }}
-                              >
+                              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                 <select
                                   value={assignmentType}
                                   onChange={(e) =>
@@ -17319,6 +17728,7 @@ ${signature}`;
                                   )}
                                 </button>
                               </div>
+                              <div style={{ flex: 1 }} />
                               <button
                                 onClick={() => {
                                   setLessonPlan(null);
@@ -17580,7 +17990,7 @@ ${signature}`;
                                     )}
                                   </div>
                                 </div>
-                                <div style={{ display: "flex", gap: "8px" }}>
+                                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                   <button
                                     onClick={async () => {
                                       try {
@@ -17663,6 +18073,54 @@ ${signature}`;
                                   >
                                     <Icon name="Play" size={16} />
                                     Interactive Preview
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      // Build answer key as grading notes
+                                      let gradingNotes = "ANSWER KEY for " + generatedAssignment.title + "\n\n";
+                                      (generatedAssignment.sections || []).forEach((section) => {
+                                        gradingNotes += "--- " + section.name + " (" + section.points + " pts) ---\n";
+                                        (section.questions || []).forEach((q) => {
+                                          gradingNotes += "Q" + q.number + ": " + q.answer + " (" + q.points + " pts)\n";
+                                        });
+                                        gradingNotes += "\n";
+                                      });
+                                      if (generatedAssignment.rubric?.criteria) {
+                                        gradingNotes += "--- Rubric ---\n";
+                                        generatedAssignment.rubric.criteria.forEach((c) => {
+                                          gradingNotes += c.name + " (" + c.points + " pts): " + c.description + "\n";
+                                        });
+                                      }
+
+                                      // Map sections to customMarkers
+                                      const markers = (generatedAssignment.sections || []).map((section) => ({
+                                        start: section.name + ":",
+                                        points: section.points || 10,
+                                        type: "written",
+                                      }));
+
+                                      setAssignment({
+                                        ...assignment,
+                                        title: generatedAssignment.title || "",
+                                        totalPoints: generatedAssignment.total_points || 100,
+                                        customMarkers: markers,
+                                        gradingNotes: gradingNotes.trim(),
+                                        useSectionPoints: true,
+                                        sectionTemplate: "Custom",
+                                      });
+                                      setLoadedAssignmentName("");
+                                      setActiveTab("builder");
+                                      addToast("Assignment loaded into Grading Setup with answer key and section markers", "success");
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{
+                                      padding: "8px 14px",
+                                      background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                    }}
+                                    title="Set up grading configuration for this assignment"
+                                  >
+                                    <Icon name="Settings" size={16} />
+                                    Set Up Grading
                                   </button>
                                   <button
                                     onClick={() => setGeneratedAssignment(null)}
@@ -20511,7 +20969,7 @@ ${signature}`;
                       setSaveLessonUnit('');
                       setNewUnitName('');
                       fetchSavedLessons();
-                      addToast('Lesson saved to ' + unitName + '!', 'success');
+                      addToast('Lesson saved to "' + unitName + '" — find it in the Resources tab under Content Sources', 'success');
                     }
                   } catch (err) {
                     addToast('Failed to save: ' + err.message, 'error');
