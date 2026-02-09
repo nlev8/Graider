@@ -1491,6 +1491,19 @@ function App() {
       .catch(console.error);
   }, []);
 
+  // Refresh saved assignments when switching to Builder tab
+  useEffect(() => {
+    if (activeTab === "builder") {
+      api
+        .listAssignments()
+        .then((data) => {
+          if (data.assignments) setSavedAssignments(data.assignments);
+          if (data.assignmentData) setSavedAssignmentData(data.assignmentData);
+        })
+        .catch(console.error);
+    }
+  }, [activeTab]);
+
   // Auto-save settings when they change (debounced)
   useEffect(() => {
     if (!settingsLoaded) return; // Don't save until initial load is complete
@@ -14647,6 +14660,26 @@ ${signature}`;
                                   )}
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                  {/* Download button for generated worksheets */}
+                                  {savedAssignmentData[name]?.worksheetDownloadUrl && (
+                                    <a
+                                      href={savedAssignmentData[name].worksheetDownloadUrl}
+                                      download
+                                      onClick={(e) => e.stopPropagation()}
+                                      style={{
+                                        padding: "4px",
+                                        background: "none",
+                                        border: "none",
+                                        color: "#6366f1",
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                      }}
+                                      title="Download worksheet (.docx)"
+                                    >
+                                      <Icon name="Download" size={14} />
+                                    </a>
+                                  )}
                                   {/* Star toggle for "counts towards grade" */}
                                   <button
                                     onClick={async (e) => {

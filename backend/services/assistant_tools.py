@@ -493,6 +493,64 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "generate_worksheet",
+        "description": "Generate a structured worksheet document (Cornell Notes, Fill-in-the-Blank, short-answer, vocabulary) from a reading or topic. Creates a downloadable Word document with an embedded invisible answer key for consistent AI grading. Automatically saved to Builder. Use when the teacher asks to create a worksheet, assignment, or activity from a reading, textbook page, or topic.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Worksheet title (e.g., 'Cornell Notes - Expanding into Native American Lands')"
+                },
+                "worksheet_type": {
+                    "type": "string",
+                    "enum": ["cornell-notes", "fill-in-blank", "short-answer", "vocabulary"],
+                    "description": "Type of worksheet to generate"
+                },
+                "vocab_terms": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "term": {"type": "string"},
+                            "definition": {"type": "string", "description": "Expected definition (for answer key)"}
+                        },
+                        "required": ["term"]
+                    },
+                    "description": "Vocabulary terms with expected definitions"
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question": {"type": "string"},
+                            "expected_answer": {"type": "string", "description": "Expected answer (for answer key)"},
+                            "points": {"type": "integer", "default": 10}
+                        },
+                        "required": ["question"]
+                    },
+                    "description": "Questions with expected answers"
+                },
+                "summary_prompt": {
+                    "type": "string",
+                    "description": "Instruction for the summary section (e.g., 'Summarize the reading in 3-5 sentences...')"
+                },
+                "summary_key_points": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Key points that should appear in a good summary"
+                },
+                "total_points": {
+                    "type": "integer",
+                    "default": 100,
+                    "description": "Total point value for the worksheet"
+                }
+            },
+            "required": ["title", "worksheet_type"]
+        }
+    },
+    {
         "name": "recommend_next_lesson",
         "description": "Analyze student performance and recommend what the next lesson should focus on. Provides DIFFERENTIATED recommendations by class level (advanced/standard/support periods) with DOK-appropriate standards. Also identifies IEP/504 accommodation patterns — whether accommodated students struggled differently and what modifications may help. Cross-references rubric breakdowns, unanswered questions, developing skills, and curriculum standards. Use when teacher asks 'what should I teach next?', 'what do students need to work on?', or 'how should I differentiate the next lesson?'.",
         "input_schema": {
@@ -1725,6 +1783,26 @@ def lookup_student_info(student_name=None, student_id=None, period=None):
     }
 
 
+def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=None,
+                            summary_prompt=None, summary_key_points=None, total_points=100):
+    """Generate a .docx worksheet with invisible answer key and save to Builder."""
+    try:
+        from backend.services.worksheet_generator import generate_worksheet
+        return generate_worksheet(
+            title=title,
+            worksheet_type=worksheet_type,
+            vocab_terms=vocab_terms,
+            questions=questions,
+            summary_prompt=summary_prompt,
+            summary_key_points=summary_key_points,
+            total_points=total_points
+        )
+    except ImportError:
+        return {"error": "python-docx not installed. Run: pip install python-docx"}
+    except Exception as e:
+        return {"error": "Failed to generate worksheet: " + str(e)}
+
+
 def get_missing_assignments(student_name=None, period=None, assignment_name=None):
     """Find missing/unsubmitted assignments.
 
@@ -1858,6 +1936,7 @@ TOOL_HANDLERS = {
     "recommend_next_lesson": recommend_next_lesson,
     "lookup_student_info": lookup_student_info,
     "get_missing_assignments": get_missing_assignments,
+    "generate_worksheet": generate_worksheet_tool,
 }
 
 

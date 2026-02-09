@@ -4,7 +4,7 @@ Handles saving, loading, listing, deleting, and exporting assignments.
 """
 import os
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 
 assignment_bp = Blueprint('assignment', __name__)
 
@@ -277,3 +277,12 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
         return jsonify({"error": "reportlab not installed. Run: pip3 install reportlab"})
     except Exception as e:
         return jsonify({"error": str(e)})
+
+
+@assignment_bp.route('/api/download-worksheet/<filename>')
+def download_worksheet(filename):
+    """Serve a generated worksheet for download."""
+    worksheets_dir = os.path.expanduser("~/Downloads/Graider/Worksheets")
+    if not os.path.exists(os.path.join(worksheets_dir, filename)):
+        return jsonify({"error": "Worksheet not found"}), 404
+    return send_from_directory(worksheets_dir, filename, as_attachment=True)

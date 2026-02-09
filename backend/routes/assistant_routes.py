@@ -6,10 +6,12 @@ Handles conversation management and VPortal credential storage.
 """
 
 import os
+import io
 import json
 import time
 import base64
 import uuid
+import tempfile
 import threading
 from datetime import datetime
 
@@ -40,6 +42,100 @@ conversations = {}
 CONVERSATION_TTL = 7200  # 2 hours
 
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
+
+
+def _extract_text_from_pdf(file_bytes):
+    """Extract text from PDF bytes using PyMuPDF."""
+    try:
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        pages = []
+        for page in doc:
+            pages.append(page.get_text())
+        doc.close()
+        return "\n\n".join(pages)
+    except ImportError:
+        return "[PDF extraction requires PyMuPDF: pip install pymupdf]"
+    except Exception as e:
+        return "[Error extracting PDF: " + str(e) + "]"
+
+
+def _extract_text_from_docx(file_bytes):
+    """Extract text from DOCX bytes using python-docx."""
+    try:
+        from docx import Document
+        from docx.text.paragraph import Paragraph
+        from docx.table import Table
+
+        doc = Document(io.BytesIO(file_bytes))
+        full_text = []
+        for element in doc.element.body:
+            if element.tag.endswith('p'):
+                para = Paragraph(element, doc)
+                if para.text.strip():
+                    full_text.append(para.text)
+            elif element.tag.endswith('tbl'):
+                table = Table(element, doc)
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            row_text.append(cell.text.strip())
+                    if row_text:
+                        full_text.append(' | '.join(row_text))
+        return '\n'.join(full_text)
+    except ImportError:
+        return "[DOCX extraction requires python-docx: pip install python-docx]"
+    except Exception as e:
+        return "[Error extracting DOCX: " + str(e) + "]"
+
+
+def _build_file_content_blocks(files):
+    """Convert uploaded file data into Claude API content blocks.
+
+    Args:
+        files: List of dicts with 'filename', 'media_type', 'data' (base64).
+
+    Returns:
+        List of content blocks for the Claude API message.
+    """
+    blocks = []
+    for file_info in files:
+        media_type = file_info.get("media_type", "application/octet-stream")
+        filename = file_info.get("filename", "file")
+        data_b64 = file_info.get("data", "")
+
+        if media_type.startswith("image/"):
+            blocks.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": data_b64
+                }
+            })
+        elif media_type == "application/pdf":
+            file_bytes = base64.b64decode(data_b64)
+            text = _extract_text_from_pdf(file_bytes)
+            blocks.append({
+                "type": "text",
+                "text": "[PDF Content - " + filename + "]:\n" + text
+            })
+        elif ("word" in media_type or "officedocument" in media_type
+              or filename.lower().endswith(".docx")):
+            file_bytes = base64.b64decode(data_b64)
+            text = _extract_text_from_docx(file_bytes)
+            blocks.append({
+                "type": "text",
+                "text": "[Document Content - " + filename + "]:\n" + text
+            })
+        else:
+            blocks.append({
+                "type": "text",
+                "text": "[Unsupported file type: " + filename + " (" + media_type + ")]"
+            })
+
+    return blocks
 
 
 def _build_system_prompt():
@@ -106,6 +202,7 @@ Available tools:
 - recommend_next_lesson: Analyze weaknesses and recommend what to teach next. Now includes DIFFERENTIATED recommendations by class level (advanced/standard/support) with DOK-appropriate standards, and IEP/504 accommodation analysis. Use when teacher asks "what should I teach next?", "how should I differentiate?", or "what lesson would help?"
 - lookup_student_info: Look up student roster and contact information — student IDs, local IDs, grade level, period, student email, parent emails, parent phone numbers. Search by name, ID, or list all students in a period. Use this when the teacher asks for contact info, emails, parent emails, phone numbers, or student IDs.
 - get_missing_assignments: Find missing/unsubmitted work. Search by student (what are they missing?), by period (who has missing work?), or by assignment (who hasn't turned in X?). Use this when teacher asks about missing work, incomplete submissions, or which students haven't turned in assignments.
+- generate_worksheet: Create downloadable worksheet documents (Cornell Notes, fill-in-blank, short-answer, vocabulary) with built-in answer keys for AI grading. Automatically saved to Builder. When the teacher uploads a textbook page or reading and asks for a worksheet, ALWAYS use this tool. Extract vocab terms, write questions with expected answers, and include summary key points. The worksheet will have an invisible answer key embedded for consistent grading.
 - create_focus_assignment: Create assignment in Focus gradebook (browser automation)
 - export_grades_csv: Export grades as Focus-compatible CSV files
 
@@ -158,6 +255,7 @@ def assistant_chat():
 
     session_id = data.get("session_id", str(uuid.uuid4()))
     user_messages = data["messages"]
+    uploaded_files = data.get("files", [])
 
     # Cleanup stale sessions periodically
     _cleanup_stale_sessions()
@@ -169,10 +267,19 @@ def assistant_chat():
     conv = conversations[session_id]
     conv["last_active"] = time.time()
 
+    # Build content blocks for files if any were uploaded
+    file_content_blocks = _build_file_content_blocks(uploaded_files) if uploaded_files else []
+
     # Append new user message(s)
     for msg in user_messages:
         if msg.get("role") == "user":
-            conv["messages"].append({"role": "user", "content": msg["content"]})
+            if file_content_blocks:
+                # Multimodal message: files + text
+                content_blocks = list(file_content_blocks)
+                content_blocks.append({"type": "text", "text": msg["content"]})
+                conv["messages"].append({"role": "user", "content": content_blocks})
+            else:
+                conv["messages"].append({"role": "user", "content": msg["content"]})
 
     _audit_log("assistant_query", f"session={session_id}")
 
@@ -244,7 +351,17 @@ def assistant_chat():
 
                     # Send tool result preview to client
                     preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
-                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': tb['name'], 'id': tb['id'], 'result_preview': preview})}\n\n"
+                    event_data = {'type': 'tool_result', 'tool': tb['name'], 'id': tb['id'], 'result_preview': preview}
+
+                    # Include download URL for worksheet generation
+                    if tb['name'] == 'generate_worksheet' and isinstance(result, dict):
+                        dl_url = result.get('download_url')
+                        dl_name = result.get('filename')
+                        if dl_url:
+                            event_data['download_url'] = dl_url
+                            event_data['download_filename'] = dl_name
+
+                    yield f"data: {json.dumps(event_data)}\n\n"
 
                     tool_results.append({
                         "type": "tool_result",

@@ -733,12 +733,12 @@ export async function outlookLogin() {
 
 // ============ Assistant ============
 
-export async function sendAssistantMessage(messages, sessionId) {
+export async function sendAssistantMessage(messages, sessionId, files = []) {
   const authHeaders = await getAuthHeaders()
   return fetch(API_BASE + '/api/assistant/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
-    body: JSON.stringify({ messages, session_id: sessionId }),
+    body: JSON.stringify({ messages, session_id: sessionId, files }),
   })
   // Returns raw Response for caller to read SSE stream
 }

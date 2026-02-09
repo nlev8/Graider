@@ -3107,8 +3107,21 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 
         openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-    # Check for empty/blank student submissions before sending to API
+    # Check for embedded Graider answer key (from worksheet generator)
     content = assignment_data.get("content", "")
+    embedded_answer_key = ""
+    if assignment_data.get("type") == "text" and content and "---GRAIDER_ANSWER_KEY_START---" in content:
+        try:
+            parts = content.split("---GRAIDER_ANSWER_KEY_START---")
+            content = parts[0].rstrip()  # Student work only
+            answer_key_raw = parts[1].split("---GRAIDER_ANSWER_KEY_END---")[0].strip()
+            embedded_answer_key = answer_key_raw
+            assignment_data = {**assignment_data, "content": content}
+            print(f"  📋 Detected embedded Graider answer key — using for grading reference")
+        except (IndexError, Exception) as e:
+            print(f"  ⚠️  Error parsing embedded answer key: {e}")
+
+    # Check for empty/blank student submissions before sending to API
     if assignment_data.get("type") == "text" and content:
         import re
 
@@ -3210,6 +3223,15 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 ---
 TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 {custom_ai_instructions}
+---
+"""
+
+    # Inject embedded answer key from worksheet generator
+    if embedded_answer_key:
+        custom_section += f"""
+---
+ANSWER KEY (use as grading reference — grade student responses against these expected answers):
+{embedded_answer_key}
 ---
 """
 

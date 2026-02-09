@@ -20,11 +20,22 @@ const MORE_PROMPTS = [
   "Show assignment statistics",
   "What are students' biggest strengths?",
   "Create a Focus assignment called Quiz 3 worth 100 points",
+  "Create a Cornell Notes worksheet about the American Revolution",
 ]
+
+const ACCEPTED_FILE_TYPES = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.docx'
 
 function renderMarkdown(text) {
   if (!text) return ''
   let html = text
+  // Markdown links [text](url) -> clickable links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, linkText, url) {
+    // Download worksheet links get a special style
+    if (url.indexOf('/api/download-worksheet/') !== -1) {
+      return '<a href="' + url + '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;text-decoration:none;font-weight:600;font-size:0.85em;margin:4px 0" download>' + linkText + '</a>'
+    }
+    return '<a href="' + url + '" style="color:var(--accent-light);text-decoration:underline" target="_blank" rel="noopener">' + linkText + '</a>'
+  })
   // Bold
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
   // Italic
@@ -43,14 +54,57 @@ function renderMarkdown(text) {
   return html
 }
 
+const STORAGE_KEY_MESSAGES = 'graider_assistant_messages'
+const STORAGE_KEY_SESSION = 'graider_assistant_session'
+
+function loadStoredMessages() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_MESSAGES)
+    if (stored) return JSON.parse(stored)
+  } catch (e) { /* ignore parse errors */ }
+  return []
+}
+
+function loadStoredSession() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_SESSION)
+    if (stored) return stored
+  } catch (e) { /* ignore */ }
+  return crypto.randomUUID()
+}
+
 export default function AssistantChat({ addToast }) {
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState(loadStoredMessages)
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [sessionId] = useState(() => crypto.randomUUID())
+  const [sessionId] = useState(loadStoredSession)
   const [showMorePrompts, setShowMorePrompts] = useState(false)
+  const [attachedFile, setAttachedFile] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const fileInputRef = useRef(null)
+
+  // Persist messages and session to localStorage
+  useEffect(() => {
+    try {
+      // Strip internal properties before saving
+      const toStore = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        toolCalls: m.toolCalls,
+        isError: m.isError,
+        downloadUrl: m.downloadUrl,
+        downloadFilename: m.downloadFilename,
+      }))
+      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(toStore))
+    } catch (e) { /* storage full or unavailable */ }
+  }, [messages])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SESSION, sessionId)
+    } catch (e) { /* ignore */ }
+  }, [sessionId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -60,27 +114,77 @@ export default function AssistantChat({ addToast }) {
     inputRef.current?.focus()
   }, [])
 
+  function handleFileSelect(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    // 20MB limit
+    if (file.size > 20 * 1024 * 1024) {
+      if (addToast) addToast('File too large. Maximum size is 20MB.', 'error')
+      return
+    }
+    setAttachedFile(file)
+    // Reset the input so the same file can be re-selected
+    e.target.value = ''
+  }
+
+  function removeAttachedFile() {
+    setAttachedFile(null)
+  }
+
+  async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result
+        const base64 = result.split(',')[1]
+        resolve({
+          filename: file.name,
+          media_type: file.type || 'application/octet-stream',
+          data: base64
+        })
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
   async function sendMessage(text) {
     const content = text || input.trim()
-    if (!content || isStreaming) return
+    if ((!content && !attachedFile) || isStreaming) return
+
+    const messageText = content || 'Please analyze this file.'
+    const currentFile = attachedFile
 
     setInput('')
-    const userMsg = { role: 'user', content }
+    setAttachedFile(null)
+
+    // Build user message display (show filename if attached)
+    const displayContent = currentFile
+      ? messageText + '\n[Attached: ' + currentFile.name + ']'
+      : messageText
+    const userMsg = { role: 'user', content: displayContent }
     setMessages(prev => [...prev, userMsg])
     setIsStreaming(true)
 
     // Add placeholder assistant message
-    const assistantIdx = messages.length + 1
     setMessages(prev => [...prev, { role: 'assistant', content: '', toolCalls: [] }])
 
     try {
+      // Convert file to base64 if attached
+      let files = []
+      if (currentFile) {
+        const fileData = await fileToBase64(currentFile)
+        files = [fileData]
+      }
+
       const authHeaders = await getAuthHeaders()
       const response = await fetch(API_BASE + '/api/assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
-          messages: [{ role: 'user', content }],
+          messages: [{ role: 'user', content: messageText }],
           session_id: sessionId,
+          files: files,
         }),
       })
 
@@ -153,7 +257,13 @@ export default function AssistantChat({ addToast }) {
                   const tools = (last.toolCalls || []).map(tc =>
                     tc.id === event.id ? { ...tc, status: 'done', preview: event.result_preview } : tc
                   )
-                  updated[updated.length - 1] = { ...last, toolCalls: tools }
+                  // Capture download URL from worksheet generation
+                  const newState = { ...last, toolCalls: tools }
+                  if (event.download_url) {
+                    newState.downloadUrl = event.download_url
+                    newState.downloadFilename = event.download_filename || 'worksheet.docx'
+                  }
+                  updated[updated.length - 1] = newState
                 }
                 return updated
               })
@@ -207,6 +317,11 @@ export default function AssistantChat({ addToast }) {
       // Ignore clear errors
     }
     setMessages([])
+    setAttachedFile(null)
+    try {
+      localStorage.removeItem(STORAGE_KEY_MESSAGES)
+      localStorage.removeItem(STORAGE_KEY_SESSION)
+    } catch (e) { /* ignore */ }
   }
 
   function handleKeyDown(e) {
@@ -228,9 +343,11 @@ export default function AssistantChat({ addToast }) {
     recommend_next_lesson: 'Analyzing for lesson recommendation',
     create_focus_assignment: 'Creating Focus assignment',
     export_grades_csv: 'Exporting CSV',
+    generate_worksheet: 'Generating worksheet',
   }
 
   const hasMessages = messages.length > 0
+  const canSend = !isStreaming && (input.trim() || attachedFile)
 
   return (
     <div className="fade-in" style={{
@@ -239,6 +356,15 @@ export default function AssistantChat({ addToast }) {
       height: '100%',
       maxHeight: 'calc(100vh - 120px)',
     }}>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_FILE_TYPES}
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
+
       {/* Header */}
       <div style={{
         display: 'flex',
@@ -300,7 +426,7 @@ export default function AssistantChat({ addToast }) {
                 Ask about your students
               </h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '400px' }}>
-                I can look up grades, show analytics, compare assignments, and help with Focus gradebook.
+                I can look up grades, show analytics, compare assignments, create worksheets from readings, and help with Focus gradebook.
               </p>
             </div>
             <div style={{
@@ -453,10 +579,37 @@ export default function AssistantChat({ addToast }) {
                         className={tc.status === 'running' ? 'spin' : ''}
                       />
                       {tc.status === 'done'
-                        ? (toolNameMap[tc.tool] || tc.tool).replace(/ing /, 'ed ').replace(/Querying/, 'Queried').replace(/Loading/, 'Loaded').replace(/Analyzing/, 'Analyzed').replace(/Getting/, 'Got').replace(/Listing/, 'Listed').replace(/Creating/, 'Created').replace(/Exporting/, 'Exported')
+                        ? (toolNameMap[tc.tool] || tc.tool).replace(/ing /, 'ed ').replace(/Querying/, 'Queried').replace(/Loading/, 'Loaded').replace(/Analyzing/, 'Analyzed').replace(/Getting/, 'Got').replace(/Listing/, 'Listed').replace(/Creating/, 'Created').replace(/Exporting/, 'Exported').replace(/Generating/, 'Generated')
                         : (toolNameMap[tc.tool] || tc.tool) + '...'}
                     </span>
                   ))}
+                </div>
+              )}
+              {/* Download button for generated worksheets */}
+              {msg.downloadUrl && (
+                <div style={{ margin: '8px 0' }}>
+                  <a
+                    href={msg.downloadUrl}
+                    download={msg.downloadFilename || 'worksheet.docx'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 18px',
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      color: '#fff',
+                      borderRadius: '12px',
+                      textDecoration: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      transition: 'opacity 0.2s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.85' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    <Icon name="Download" size={16} />
+                    Download {msg.downloadFilename || 'Worksheet'}
+                  </a>
                 </div>
               )}
               {msg.role === 'assistant' ? (
@@ -477,20 +630,81 @@ export default function AssistantChat({ addToast }) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* File preview chip */}
+      {attachedFile && (
+        <div style={{
+          padding: '6px 20px 0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 12px',
+            background: 'rgba(99, 102, 241, 0.15)',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: '12px',
+            fontSize: '0.8rem',
+            color: 'var(--accent-light)',
+          }}>
+            <Icon name="Paperclip" size={13} />
+            {attachedFile.name}
+            <button
+              onClick={removeAttachedFile}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '0 2px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <Icon name="X" size={13} />
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* Input Area */}
       <div style={{
         padding: '16px 20px',
-        borderTop: '1px solid var(--glass-border)',
+        borderTop: attachedFile ? 'none' : '1px solid var(--glass-border)',
         display: 'flex',
         gap: '10px',
         alignItems: 'flex-end',
       }}>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isStreaming}
+          title="Attach file (image, PDF, or DOCX)"
+          style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '50%',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            color: 'var(--text-secondary)',
+            cursor: isStreaming ? 'default' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: isStreaming ? 0.5 : 1,
+            transition: 'all 0.2s',
+            flexShrink: 0,
+          }}
+        >
+          <Icon name="Paperclip" size={18} />
+        </button>
         <textarea
           ref={inputRef}
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask about grades, students, or assignments..."
+          placeholder={attachedFile ? 'Describe what you want (e.g., "Create a worksheet from this reading")...' : 'Ask about grades, students, or assignments...'}
           disabled={isStreaming}
           rows={1}
           style={{
@@ -514,21 +728,21 @@ export default function AssistantChat({ addToast }) {
         />
         <button
           onClick={() => sendMessage()}
-          disabled={isStreaming || !input.trim()}
+          disabled={!canSend}
           style={{
             width: '42px',
             height: '42px',
             borderRadius: '50%',
-            background: isStreaming || !input.trim()
+            background: !canSend
               ? 'var(--glass-bg)'
               : 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
             border: 'none',
             color: '#fff',
-            cursor: isStreaming || !input.trim() ? 'default' : 'pointer',
+            cursor: !canSend ? 'default' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            opacity: isStreaming || !input.trim() ? 0.5 : 1,
+            opacity: !canSend ? 0.5 : 1,
             transition: 'all 0.2s',
             flexShrink: 0,
           }}
