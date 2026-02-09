@@ -99,14 +99,34 @@ def is_question_or_prompt(text: str) -> bool:
     ]
 
     text_lower = text.lower()
+    question_words = ('what ', 'what\'s', 'whats', 'how ', 'how\'s', 'hows',
+                      'why ', 'why\'s', 'whys', 'when ', 'when\'s', 'whens',
+                      'where ', 'where\'s', 'wheres', 'who ', 'who\'s', 'whos',
+                      'which ', 'which\'s')
+
     for starter in question_starters:
         if text_lower.startswith(starter):
-            # But check if there's actual content after the question
+            # But check if there's actual content after the question/prompt
             # e.g., "What year? 1803" should keep "1803" as the answer
+            # e.g., "Explain how... The cotton gin was..." should keep student content
             if '?' in text:
                 after_question = text.split('?', 1)[1].strip()
                 if after_question and len(after_question) > 2:
                     return False  # There's content after the question - not just a prompt
+            # Question-word starters (what/how/why/etc.) WITHOUT a question mark
+            # are likely statements, not questions — e.g. "How they did this was by..."
+            # Only flag as question if it's short (likely a bare prompt) or ends with ?
+            if starter in question_words and '?' not in text and len(text) > 30:
+                return False  # Long statement starting with question word — likely an answer
+            # For instruction starters (explain, describe, etc.) check for student
+            # content after the first sentence ending with a period
+            if starter.startswith(('explain', 'describe', 'summarize', 'discuss', 'analyze', 'compare', 'identify', 'list', 'define', 'write', 'in your', 'using', 'provide', 'give')):
+                # Find the end of the instruction sentence (first period)
+                period_pos = text.find('.')
+                if period_pos != -1 and period_pos < len(text) - 5:
+                    after_period = text[period_pos + 1:].strip()
+                    if after_period and len(after_period) > 10:
+                        return False  # Content after instruction — likely student answer
             return True
 
     # Check if it looks like a numbered question with no answer
@@ -152,7 +172,7 @@ def filter_questions_from_response(response_text: str) -> str:
         if not line:
             continue
 
-        # If line ends with ?, check if there's an answer after it
+        # If line contains ?, check if there's an answer after it
         if '?' in line:
             parts = line.split('?')
             # Get everything after the last question mark
@@ -160,9 +180,47 @@ def filter_questions_from_response(response_text: str) -> str:
             if after_question and len(after_question) > 2 and not is_question_or_prompt(after_question):
                 filtered_lines.append(after_question)
         elif not is_question_or_prompt(line):
-            filtered_lines.append(line)
+            # Check if this line starts with an instruction prompt (Explain, Describe, etc.)
+            # followed by a period and then student content — strip the prompt part
+            line_lower = line.lower()
+            instruction_starters = ('explain ', 'describe ', 'summarize ', 'discuss ',
+                                    'analyze ', 'compare ', 'identify ', 'list ', 'define ',
+                                    'write your ', 'write a ', 'using evidence', 'in your own words')
+            is_instruction_with_answer = False
+            for inst in instruction_starters:
+                if line_lower.startswith(inst):
+                    # Find the end of the instruction sentence (period)
+                    period_pos = line.find('.')
+                    if period_pos != -1 and period_pos < len(line) - 5:
+                        after_period = line[period_pos + 1:].strip()
+                        if after_period and len(after_period) > 2:
+                            filtered_lines.append(after_period)
+                            is_instruction_with_answer = True
+                    break
+            if not is_instruction_with_answer:
+                filtered_lines.append(line)
 
     return '\n'.join(filtered_lines).strip()
+
+
+def strip_emojis(text: str) -> str:
+    """Remove emojis and special unicode characters from text."""
+    import re
+    # Remove emojis (unicode ranges for emojis)
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F700-\U0001F77F"  # alchemical symbols
+        u"\U0001F780-\U0001F7FF"  # Geometric Shapes
+        u"\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
+        u"\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        u"\U0001FA00-\U0001FA6F"  # Chess Symbols
+        u"\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
+        u"\U00002702-\U000027B0"  # Dingbats
+        u"\U000024C2-\U0001F251"
+        "]+", flags=re.UNICODE)
+    return emoji_pattern.sub('', text).strip()
 
 
 def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int:
@@ -181,12 +239,37 @@ def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int
     if exact_pos != -1:
         return exact_pos
 
+    # Try matching with emojis stripped from both sides
+    marker_no_emoji = strip_emojis(marker_lower)
+    doc_no_emoji = strip_emojis(doc_lower)
+    if marker_no_emoji:
+        emoji_pos = doc_no_emoji.find(marker_no_emoji)
+        if emoji_pos != -1:
+            # Find the actual position in original doc by searching near this location
+            # Account for removed emojis by doing a fuzzy position find
+            search_start = max(0, emoji_pos - 20)
+            search_chunk = doc_lower[search_start:search_start + len(marker_lower) + 50]
+            actual_pos = search_chunk.find(marker_no_emoji)
+            if actual_pos != -1:
+                return search_start + actual_pos
+            return emoji_pos  # Fallback to stripped position
+
     # Try matching without extra whitespace/punctuation
     marker_normalized = ' '.join(marker_lower.split())  # Collapse whitespace
     marker_words = marker_normalized.split()
 
-    if len(marker_words) < 2:
-        return -1  # Too short for fuzzy matching
+    # For single-word markers (like "Summary", "Vocabulary"), try word boundary search
+    if len(marker_words) == 1:
+        # Look for the word with word boundaries
+        pattern = r'\b' + re.escape(marker_words[0]) + r'\b'
+        match = re.search(pattern, doc_lower)
+        if match:
+            return match.start()
+        # Also try with emoji-stripped doc
+        match = re.search(pattern, doc_no_emoji)
+        if match:
+            return match.start()
+        return -1
 
     # Try finding first 3-4 significant words (skip common words)
     skip_words = {'the', 'a', 'an', 'of', 'to', 'in', 'for', 'on', 'with', 'is', 'are'}
@@ -218,12 +301,220 @@ def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int
     return -1
 
 
-def extract_student_responses(document_text: str, custom_markers: list = None, exclude_markers: list = None) -> dict:
+def extract_fitb_by_template_comparison(student_text: str, template_text: str) -> list:
+    """
+    Extract fill-in-the-blank answers from student submission.
+
+    For FITB assignments, the student's completed text IS the answer.
+    This extracts content flexibly - works with:
+    - Numbered lines (1., 2., 3.)
+    - Lettered lines (a., b., c.)
+    - Timestamped lines (1. (0:00) ...)
+    - Plain paragraphs
+    - Any format where blanks were filled inline
+
+    Returns list of {"question": context, "answer": filled_text, "type": "fill_in_blank"}
+    """
+    if not student_text:
+        return []
+
+    extracted = []
+    student_lines = student_text.strip().split('\n')
+
+    # Skip patterns - these are template/header lines, not student answers
+    skip_patterns = [
+        r'^name\s*[:_]', r'^date\s*[:_]', r'^period\s*[:_]', r'^class\s*[:_]',
+        r'^directions?\s*:', r'^instructions?\s*:', r'^fill in', r'^watch the video',
+        r'^answer each', r'^complete the', r'^use evidence', r'^_{5,}$'
+    ]
+
+    item_number = 0
+    for student_line in student_lines:
+        student_line = student_line.strip()
+        if not student_line or len(student_line) < 10:
+            continue
+
+        # Skip header/template lines
+        line_lower = student_line.lower()
+        if any(re.match(p, line_lower) for p in skip_patterns):
+            continue
+
+        # Try to match various formats:
+        # 1. Numbered: "1.", "1)", "1:"
+        # 2. Lettered: "a.", "a)", "A."
+        # 3. With timestamp: "1. (0:00-0:25)"
+        # 4. Plain content lines
+
+        content = None
+        label = None
+
+        # Numbered with optional timestamp
+        num_match = re.match(r'^(\d+)[\.\)\:]\s*(\([^)]+\))?\s*(.+)', student_line)
+        if num_match:
+            label = f"Item {num_match.group(1)}"
+            if num_match.group(2):
+                label += f" {num_match.group(2)}"
+            content = num_match.group(3).strip()
+
+        # Lettered
+        if not content:
+            letter_match = re.match(r'^([a-zA-Z])[\.\)\:]\s*(.+)', student_line)
+            if letter_match:
+                label = f"Item {letter_match.group(1).upper()}"
+                content = letter_match.group(2).strip()
+
+        # Plain line with substance (not just a title)
+        if not content and len(student_line) > 20:
+            # Check if it looks like content (has filled blanks or is a complete sentence)
+            if '_' in student_line or student_line.endswith('.') or ',' in student_line:
+                item_number += 1
+                label = f"Response {item_number}"
+                content = student_line
+
+        if content and len(content) >= 10:
+            # Don't add if it's just the assignment title
+            if 'fill-in-the-blank' in content.lower() or 'activity' in content.lower()[:20]:
+                continue
+
+            extracted.append({
+                "question": label or f"Response {len(extracted) + 1}",
+                "answer": content,
+                "type": "fill_in_blank_sentence"
+            })
+
+    # Also extract any text wrapped in underscores _answer_ or __answer__
+    underscore_matches = re.findall(r'_+([^_\n]{1,80})_+', student_text)
+    for match in underscore_matches:
+        answer = match.strip()
+        if answer and len(answer) > 0:
+            # Skip common template words
+            if answer.lower() not in ['name', 'date', 'period', 'class', 'blank', 'answer', 'your answer']:
+                # Avoid duplicates
+                already_exists = any(answer.lower() in e.get('answer', '').lower() for e in extracted)
+                if not already_exists:
+                    extracted.append({
+                        "question": "Fill-in-blank",
+                        "answer": answer,
+                        "type": "fill_in_blank"
+                    })
+
+    return extracted
+
+
+def parse_numbered_questions(text: str) -> list:
+    """
+    Parse numbered questions and their answers from a text block.
+
+    Handles formats like:
+    - "1. Question text? Answer text"
+    - "1. Question text?\n   Answer text"
+    - "1) Question text? Answer text"
+
+    Returns list of {"question": "...", "answer": "..."} dicts.
+    Returns empty list if no numbered questions found.
+    """
+    if not text or len(text) < 20:
+        return []
+
+    # Pattern to find numbered questions: "1." or "1)" at start of line or after newline
+    # Captures: number, question text (up to ?), and everything after until next number
+    number_pattern = r'(?:^|\n)\s*(\d+)[.\)]\s*'
+
+    # Find all numbered items
+    matches = list(re.finditer(number_pattern, text))
+
+    if len(matches) < 2:
+        # Not enough numbered items to indicate a numbered list
+        return []
+
+    # Check if numbers are sequential (1, 2, 3, ...)
+    numbers = [int(m.group(1)) for m in matches]
+    if numbers[0] != 1:
+        return []  # Doesn't start with 1
+
+    # Allow some gaps but should be roughly sequential
+    is_sequential = all(numbers[i] <= numbers[i-1] + 2 for i in range(1, len(numbers)))
+    if not is_sequential:
+        return []
+
+    results = []
+
+    for i, match in enumerate(matches):
+        q_num = match.group(1)
+        q_start = match.end()  # Start of question text
+
+        # Find end of this question's content (start of next number or end of text)
+        if i + 1 < len(matches):
+            q_end = matches[i + 1].start()
+        else:
+            q_end = len(text)
+
+        content = text[q_start:q_end].strip()
+
+        if not content:
+            results.append({
+                "question": f"Question {q_num}",
+                "answer": "",
+                "is_blank": True
+            })
+            continue
+
+        # Split into question and answer
+        # The question ends at '?' and answer is everything after
+        question_mark_pos = content.find('?')
+
+        if question_mark_pos != -1:
+            question_text = content[:question_mark_pos + 1].strip()
+            answer_text = content[question_mark_pos + 1:].strip()
+        else:
+            # No question mark - might be a statement or instruction
+            # Look for newline as separator
+            newline_pos = content.find('\n')
+            if newline_pos != -1:
+                question_text = content[:newline_pos].strip()
+                answer_text = content[newline_pos:].strip()
+            else:
+                # Single line with no clear separator
+                question_text = content
+                answer_text = ""
+
+        # Clean up answer - remove leading/trailing whitespace and blank lines
+        answer_lines = [line.strip() for line in answer_text.split('\n') if line.strip()]
+
+        answer_text = '\n'.join(answer_lines)
+
+        # If there's any non-empty text after the question, it's an answer.
+        # Don't try to second-guess whether it "looks like" a question —
+        # content between two numbered items after the ? is the student's response.
+        if answer_text and len(answer_text.strip()) > 2:
+            results.append({
+                "question": f"{q_num}. {question_text}",
+                "answer": answer_text,
+                "is_blank": False
+            })
+        else:
+            results.append({
+                "question": f"{q_num}. {question_text}",
+                "answer": "",
+                "is_blank": True
+            })
+
+    return results
+
+
+def extract_student_responses(document_text: str, custom_markers: list = None, exclude_markers: list = None, template_text: str = None) -> dict:
     """
     Extract student responses from document using customMarkers from Builder.
 
+    Args:
+        document_text: The student's submitted document text
+        custom_markers: List of markers to look for
+        exclude_markers: List of markers to exclude from grading
+        template_text: Original assignment template (for fill-in-the-blank comparison)
+
     APPROACH (with fallbacks):
-    1. EXACT MATCH: Find markers exactly in document
+    1. TEMPLATE COMPARISON: If template provided, compare to find filled blanks
+    2. EXACT MATCH: Find markers exactly in document
     2. FUZZY MATCH: If exact fails, try fuzzy matching (~1-2ms)
     3. PATTERN MATCH: If all else fails, use regex patterns
 
@@ -248,6 +539,60 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
     blank_questions = []
     doc_lower = document_text.lower()
 
+    # Pre-compute normalized doc text (en-dash → hyphen, smart quotes → regular)
+    def normalize_for_search(text):
+        return text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+    doc_lower_normalized = normalize_for_search(doc_lower)
+
+    # PRIORITY 0: Fill-in-the-blank detection
+    # Only trigger FITB if the document/title explicitly mentions fill-in-the-blank
+    # Don't trigger just because there are underscores (Cornell Notes has blank lines too)
+    has_fitb_keyword = 'fill-in' in doc_lower or 'fill in the blank' in doc_lower or 'fillintheblank' in doc_lower.replace(' ', '').replace('-', '')
+    has_timestamps = bool(re.search(r'\d+\.\s*\(\d+:\d+', document_text))  # Has timestamps like "1. (0:00)"
+
+    # Only use underscores as indicator if FITB keyword is also present
+    is_fitb = has_fitb_keyword or has_timestamps
+
+    if is_fitb and not custom_markers:
+        print(f"  📝 Detected fill-in-the-blank format (no markers) - using FITB extraction")
+        fitb_results = extract_fitb_by_template_comparison(document_text, template_text)
+        if fitb_results:
+            # Filter out excluded sections and blank/template content
+            exclude_lower = [em.lower().strip() for em in exclude_markers] if exclude_markers else []
+            filtered_fitb = []
+            for resp in fitb_results:
+                question = resp.get('question', '').lower()
+                answer = resp.get('answer', '')
+                answer_lower = answer.lower()
+
+                # Skip blank underscore lines (e.g., "• _______________")
+                answer_stripped = re.sub(r'[_•\-\s]', '', answer)
+                if len(answer_stripped) < 5:
+                    continue
+
+                # Skip template instruction text
+                if any(kw in answer_lower for kw in ['use bullets', 'write important', 'add more notes', 'drawing']):
+                    continue
+
+                # Check if this response is from an excluded section
+                # Check both directions: exclude text in answer, AND answer in exclude text
+                is_excluded = False
+                for em in exclude_lower:
+                    # Original: exclude marker contained in answer (short marker, long answer)
+                    if em in answer_lower:
+                        is_excluded = True
+                        break
+                    # Reverse: answer contained in exclude marker (long marker, short answer)
+                    # Only for answers with enough length to avoid false positives
+                    if len(answer_lower) >= 15 and answer_lower in em:
+                        is_excluded = True
+                        break
+                if not is_excluded:
+                    filtered_fitb.append(resp)
+            fitb_results = filtered_fitb
+            extracted.extend(fitb_results)
+            print(f"      Found {len(fitb_results)} responses via FITB extraction")
+
     # PRIORITY 1: Use customMarkers from Builder (most reliable)
     # Markers can be:
     #   - String: "Summary (Bottom Section)" - extracts until next marker
@@ -270,30 +615,123 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             if not marker_clean:
                 continue
 
-            # Try exact match first
-            pos = doc_lower.find(marker_clean.lower())
+            # Split marker into lines for multi-line matching strategies
+            marker_lines = [l.strip() for l in marker_clean.split('\n') if l.strip()]
+            first_line = marker_lines[0] if marker_lines else marker_clean
+            marker_lower = marker_clean.lower()
+
+            pos = -1
+            match_type = None
+            content_end_pos = -1  # Where content actually starts (after all marker/prompt lines)
+
+            # Strategy 1: Full exact match (ideal — whole multi-line marker found as-is)
+            pos = doc_lower.find(marker_lower)
             if pos != -1:
-                exact_matches += 1
+                match_type = 'exact'
+                content_end_pos = pos + len(marker_clean)
+
+            # Strategy 2: First-line exact match + forward scan for subsequent lines
+            if pos == -1:
+                first_line_lower = first_line.lower()
+                matched_len = len(first_line)  # Track actual matched text length
+
+                # Try with original text
+                pos = doc_lower.find(first_line_lower)
+
+                # Try with normalized dashes/quotes
+                if pos == -1:
+                    first_normalized = normalize_for_search(first_line_lower)
+                    pos = doc_lower_normalized.find(first_normalized)
+
+                # Try without emojis (matched_len changes since emoji chars aren't in doc)
+                if pos == -1:
+                    first_no_emoji = strip_emojis(first_line_lower).strip()
+                    if first_no_emoji and len(first_no_emoji) >= 3:
+                        pos = doc_lower.find(first_no_emoji)
+                        if pos == -1:
+                            # Try normalized + emoji-stripped
+                            pos = doc_lower_normalized.find(normalize_for_search(first_no_emoji))
+                        if pos != -1:
+                            matched_len = len(first_no_emoji)  # Use stripped length
+
+                if pos != -1:
+                    match_type = 'first_line'
+                    # Find the actual end of the heading line in the document
+                    heading_newline = doc_lower.find('\n', pos)
+                    if heading_newline != -1 and heading_newline < pos + matched_len + 50:
+                        content_end_pos = heading_newline + 1  # Start of next line
+                    else:
+                        content_end_pos = pos + matched_len
+
+                    # Scan forward for instruction/prompt lines that come RIGHT AFTER
+                    # the heading — skip past them so content starts at student answers.
+                    # STOP scanning at numbered questions (1., 2.) since those contain
+                    # individual Q&A pairs that parse_numbered_questions will handle.
+                    if len(marker_lines) > 1:
+                        last_advance = content_end_pos
+                        search_to = min(last_advance + len(marker_clean) + 500, len(doc_lower))
+
+                        for mline in marker_lines[1:]:
+                            mline_lower = mline.lower().strip()
+
+                            # Stop at numbered questions — don't skip past them
+                            if re.match(r'^\d+[\.\)]\s', mline_lower):
+                                break
+
+                            mline_normalized = normalize_for_search(mline_lower)
+
+                            # Try finding this line near the current position
+                            line_pos = doc_lower.find(mline_lower, last_advance, search_to)
+                            if line_pos == -1:
+                                line_pos = doc_lower_normalized.find(mline_normalized, last_advance, search_to)
+                            if line_pos == -1:
+                                mline_no_emoji = strip_emojis(mline_lower).strip()
+                                if mline_no_emoji and len(mline_no_emoji) >= 5:
+                                    line_pos = doc_lower.find(mline_no_emoji, last_advance, search_to)
+                            if line_pos == -1:
+                                # Try first few words (handles table | format)
+                                mline_words = mline_lower.split()[:3]
+                                if len(mline_words) >= 2:
+                                    short_search = ' '.join(mline_words)
+                                    if len(short_search) >= 5:
+                                        line_pos = doc_lower.find(short_search, last_advance, search_to)
+
+                            if line_pos != -1:
+                                # Only advance if this line is CLOSE (no big gap with student content)
+                                if line_pos - last_advance > 200:
+                                    break  # Gap too large — student content in between
+                                newline_after = doc_lower.find('\n', line_pos)
+                                if newline_after != -1 and newline_after < search_to:
+                                    content_end_pos = max(content_end_pos, newline_after + 1)
+                                    last_advance = newline_after + 1
+                                else:
+                                    content_end_pos = max(content_end_pos, line_pos + len(mline_lower))
+                                    last_advance = content_end_pos
+                            else:
+                                break  # Line not found — stop scanning
+
+            # Strategy 3: Fuzzy match (fallback)
+            if pos == -1:
+                pos = fuzzy_find_marker(document_text, marker_clean)
+                if pos != -1:
+                    match_type = 'fuzzy'
+                    content_end_pos = pos + min(len(marker_clean), 100)
+
+            if pos != -1:
+                if match_type == 'exact':
+                    exact_matches += 1
+                elif match_type == 'first_line':
+                    exact_matches += 1  # First-line is reliable enough to count as exact
+                else:
+                    fuzzy_matches += 1
+
                 marker_positions.append({
                     'marker': marker_clean,
                     'start': pos,
-                    'end': pos + len(marker_clean),
+                    'end': content_end_pos,
                     'end_marker': end_marker,
-                    'match_type': 'exact'
+                    'match_type': match_type
                 })
-            else:
-                # Try fuzzy match
-                pos = fuzzy_find_marker(document_text, marker_clean)
-                if pos != -1:
-                    fuzzy_matches += 1
-                    # Estimate end position based on marker length
-                    marker_positions.append({
-                        'marker': marker_clean,
-                        'start': pos,
-                        'end': pos + min(len(marker_clean), 100),
-                        'end_marker': end_marker,
-                        'match_type': 'fuzzy'
-                    })
 
         # Sort by position in document
         marker_positions.sort(key=lambda x: x['start'])
@@ -307,6 +745,23 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             for em in exclude_markers:
                 exclude_markers_normalized.append(em.lower().strip())
 
+        # Track markers that were NOT found in the document at all
+        found_marker_names = set(mp['marker'].lower() for mp in marker_positions)
+        missing_sections = []
+        for marker in custom_markers:
+            if isinstance(marker, dict):
+                marker_name = marker.get('start', '').strip()
+            else:
+                marker_name = str(marker).strip()
+            if not marker_name:
+                continue
+            if marker_name.lower() not in found_marker_names:
+                # Don't flag excluded sections as missing
+                is_excluded = any(em in marker_name.lower() or marker_name.lower() in em
+                                for em in exclude_markers_normalized)
+                if not is_excluded:
+                    missing_sections.append(marker_name)
+
         # Extract response after each marker
         for i, mp in enumerate(marker_positions):
             marker_text = mp['marker']
@@ -315,10 +770,17 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
 
             # Check if this marker should be excluded from grading
             marker_lower = marker_text.lower().strip()
+            marker_first_line = marker_lower.split('\n')[0].strip()
+            marker_first_no_emoji = strip_emojis(marker_first_line).strip()
             is_excluded = False
             for em in exclude_markers_normalized:
-                # Check if exclude marker is contained in this marker or vice versa
-                if em in marker_lower or marker_lower in em:
+                em_first_line = em.split('\n')[0].strip()
+                em_first_no_emoji = strip_emojis(em_first_line).strip()
+                # Compare full text, first lines, and emoji-stripped first lines
+                if (em in marker_lower or marker_lower in em
+                    or em_first_line in marker_first_line or marker_first_line in em_first_line
+                    or (em_first_no_emoji and marker_first_no_emoji
+                        and (em_first_no_emoji in marker_first_no_emoji or marker_first_no_emoji in em_first_no_emoji))):
                     is_excluded = True
                     excluded_sections.append(marker_text[:80])
                     break
@@ -377,11 +839,56 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     if delim_pos != -1 and delim_pos > content_start:
                         content_end = delim_pos
 
+            # Also stop at exclude marker boundaries — don't capture excluded
+            # section content as part of an adjacent graded section's response
+            if exclude_markers_normalized:
+                for em in exclude_markers_normalized:
+                    # Try multiple search strategies (emoji/dash/encoding differences)
+                    em_lines = [l.strip() for l in em.split('\n') if l.strip()]
+                    search_terms = set()
+                    for el in em_lines[:3]:  # First 3 lines
+                        search_terms.add(el)
+                        # Without leading emoji/special chars
+                        stripped = re.sub(r'^[^a-zA-Z]*', '', el).strip()
+                        if stripped and len(stripped) >= 5:
+                            search_terms.add(stripped)
+                        # Normalized dashes/quotes
+                        normalized = el.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'")
+                        if normalized != el:
+                            search_terms.add(normalized)
+
+                    found_boundary = False
+                    for em_search in search_terms:
+                        if len(em_search) >= 5 and not found_boundary:
+                            em_pos = doc_lower.find(em_search, content_start, content_end)
+                            if em_pos == -1:
+                                # Also try in normalized doc text
+                                em_pos = doc_lower_normalized.find(em_search, content_start, content_end)
+                            if em_pos != -1 and em_pos > content_start:
+                                content_end = min(content_end, em_pos)
+                                found_boundary = True
+
             # Extract the response
             response = document_text[content_start:content_end].strip()
 
             # Clean up: remove leading colons, newlines
             response = re.sub(r'^[:\s\n]+', '', response).strip()
+
+            # Check if response contains numbered questions (1., 2., 3., etc.)
+            # If so, parse them individually instead of as one blob
+            numbered_items = parse_numbered_questions(response)
+            if numbered_items:
+                print(f"      📝 Found {len(numbered_items)} numbered questions in section")
+                for item in numbered_items:
+                    if item.get("is_blank") or not item.get("answer"):
+                        blank_questions.append(item.get("question", "Unknown"))
+                    else:
+                        extracted.append({
+                            "question": item["question"],
+                            "answer": item["answer"][:1000],
+                            "type": "numbered_question"
+                        })
+                continue  # Skip normal processing for this marker
 
             # Get a short label for the question (first 50 chars of marker)
             question_label = marker_text[:80] + '...' if len(marker_text) > 80 else marker_text
@@ -398,12 +905,29 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
 
                 # Remove lines that start with instructions/prompts
                 lines = [l.strip() for l in response_clean.split('\n') if l.strip()]
-                # Filter out blank placeholder lines only
+                # Filter out blank placeholder lines, track blank vocab terms
                 student_lines = []
                 for line in lines:
-                    # Skip lines that are just underscores (blank placeholders)
+                    # Skip lines that are just underscores/spaces (blank placeholders)
                     if line.replace('_', '').replace(' ', '') == '':
                         continue
+                    # Check if line has 3+ consecutive underscores (fill-in-the-blank format)
+                    if re.search(r'_{3,}', line):
+                        # Strip all underscores — if meaningful text remains, keep it
+                        text_only = re.sub(r'_+', ' ', line).strip()
+                        # Remove the term/label before colon too for checking
+                        if ':' in text_only:
+                            after_colon = text_only.split(':', 1)[1].strip()
+                        else:
+                            after_colon = text_only
+                        if len(after_colon) < 3:
+                            # Truly blank — if it looks like a vocab term (Term: ___), track it
+                            if ':' in text_only:
+                                term = text_only.split(':', 1)[0].strip()
+                                if term and len(term.split()) <= 4:
+                                    blank_questions.append(f"{term} (no definition)")
+                            continue
+                        # Otherwise student wrote something between/around the underscores — keep it
                     student_lines.append(line)
 
                 # If no student content remains, it's blank
@@ -422,15 +946,35 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
 
             if not is_blank:
                 # Check for blank vocab terms within this section (Term: with no definition)
-                for line in response.split('\n'):
+                resp_lines = response.split('\n')
+                for line_idx, line in enumerate(resp_lines):
                     line = line.strip()
                     if ':' in line and not line.startswith('http'):
                         parts = line.split(':', 1)
                         term = parts[0].strip()
                         defn = parts[1].strip() if len(parts) > 1 else ''
-                        # If term is short (vocab-like) and definition is empty, it's blank
+                        # If term is short (vocab-like) and definition is empty on this line,
+                        # check the NEXT line(s) — student may have put the definition there
                         if len(term.split()) <= 3 and not defn:
-                            blank_questions.append(f"{term} (no definition)")
+                            # Look ahead up to 2 lines for a definition
+                            has_next_line_content = False
+                            for look_ahead in range(1, 3):
+                                if line_idx + look_ahead < len(resp_lines):
+                                    next_line = resp_lines[line_idx + look_ahead].strip()
+                                    # Skip empty lines and underscore-only lines
+                                    if next_line and not re.match(r'^[_\s\-\.]+$', next_line) and len(next_line) > 3:
+                                        has_next_line_content = True
+                                        break
+                            if has_next_line_content:
+                                continue  # Definition is on the next line — not blank
+                            # Don't flag terms that match excluded section keywords
+                            term_lower = term.lower()
+                            is_from_excluded = any(
+                                term_lower in em or em.split('\n')[0].strip().endswith(term_lower)
+                                for em in exclude_markers_normalized
+                            ) if exclude_markers_normalized else False
+                            if not is_from_excluded:
+                                blank_questions.append(f"{term} (no definition)")
 
                 extracted.append({
                     "question": question_label,
@@ -439,6 +983,34 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 })
             else:
                 blank_questions.append(question_label)
+
+        # Post-processing: strip any excluded marker text that leaked into responses
+        if exclude_markers_normalized and extracted:
+            for resp in extracted:
+                answer = resp.get("answer", "")
+                if not answer:
+                    continue
+                answer_lower = answer.lower()
+                for em in exclude_markers_normalized:
+                    em_lines = [l.strip() for l in em.split('\n') if l.strip()]
+                    for em_line in em_lines[:3]:
+                        stripped_em = re.sub(r'^[^a-zA-Z]*', '', em_line).strip()
+                        # If the exclude marker line appears at the start of the answer, strip it and everything after
+                        for search_term in [em_line, stripped_em]:
+                            if search_term and len(search_term) >= 5:
+                                pos = answer_lower.find(search_term)
+                                if pos != -1:
+                                    answer = answer[:pos].strip()
+                                    answer_lower = answer.lower()
+                # Strip trailing emoji/whitespace/special chars left over
+                answer = answer.rstrip()
+                answer = re.sub(r'[\s\U00010000-\U0010ffff]+$', '', answer).strip()
+                if answer != resp["answer"]:
+                    resp["answer"] = answer
+                    if not answer or len(answer.strip()) < 5:
+                        # Answer was entirely excluded content — mark as blank
+                        extracted.remove(resp)
+                        blank_questions.append(resp.get("question", "Unknown"))
 
         # If we found markers, return results (skip pattern matching)
         if marker_positions:
@@ -449,9 +1021,12 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             summary = f"Extracted {len(extracted)} responses using {len(marker_positions)} markers ({match_summary})."
             if excluded_sections:
                 summary += f" Excluded {len(excluded_sections)} section(s) from grading."
+            if missing_sections:
+                summary += f" {len(missing_sections)} required section(s) MISSING from submission."
             return {
                 "extracted_responses": extracted,
                 "blank_questions": blank_questions,
+                "missing_sections": missing_sections,
                 "total_questions": total_q,
                 "answered_questions": len(extracted),
                 "extraction_summary": summary,
@@ -514,7 +1089,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 "type": "numbered_qa"
             })
 
-    # Fill-in-the-blank pattern 1: ___answer___ (wrapped in underscores)
+    # Fill-in-the-blank pattern 1a: ___answer___ (wrapped in 2+ underscores)
     blank_matches = re.findall(r'_{2,}([^_\n]{1,100})_{2,}', document_text)
     for match in blank_matches:
         answer = match.strip()
@@ -524,6 +1099,21 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 "answer": answer,
                 "type": "fill_in_blank"
             })
+
+    # Fill-in-the-blank pattern 1b: _answer_ (wrapped in single underscores)
+    # Common format: "_Meriwether_ Lewis" or "named _Pomp_"
+    single_blank_matches = re.findall(r'(?<![_\w])_([^_\n]{1,80})_(?![_\w])', document_text)
+    for match in single_blank_matches:
+        answer = match.strip()
+        # Filter out likely template placeholders vs actual answers
+        if answer and len(answer) > 0 and len(answer) < 60:
+            # Skip common template words
+            if answer.lower() not in ['name', 'date', 'period', 'class', 'blank', 'answer']:
+                extracted.append({
+                    "question": "Fill-in-blank",
+                    "answer": answer,
+                    "type": "fill_in_blank"
+                })
 
     # Fill-in-the-blank pattern 2: Numbered blanks where student replaced underscores
     # e.g., "1. Clark" or "5. Louisiana Purchase" (student replaced _____ with answer)
@@ -955,6 +1545,18 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
                     points_str = f" [LOSES {pts} points]"
                     break
             output.append(f"  • {q}{points_str}")
+
+    # Add missing sections (required by assignment but entirely absent from submission)
+    if extraction_result.get("missing_sections"):
+        output.append("-" * 50)
+        output.append("MISSING SECTIONS (required by assignment but not found in student submission):")
+        for section in extraction_result["missing_sections"]:
+            points_str = ""
+            for marker_key, pts in marker_points.items():
+                if marker_key in section.lower():
+                    points_str = f" [LOSES {pts} points]"
+                    break
+            output.append(f"  ✗ {section}{points_str} — ENTIRELY OMITTED")
 
     output.append("")
     output.append(f"SUMMARY: {extraction_result.get('extraction_summary', '')}")
@@ -1485,26 +2087,46 @@ def load_roster(roster_path: str) -> dict:
 def parse_filename(filename: str) -> dict:
     """
     Parse student info from filename.
-    
-    Expected format: FirstName_LastName_AssignmentName.docx
+
+    Expected formats:
+        FirstName_LastName_AssignmentName.docx
+        Last, First M._AssignmentName.docx
     Examples:
         A'kareah_West_Cornell Notes_ Political Parties.docx
         Eli_Long_Hamilton_Jefferson_Graphic_Organizer.docx
-        Gabriella_Bueno_Cornell Notes – The Louisiana Purchase.docx
-    
+        Deloach, Rylee M._Washington_Stations_Handout.docx
+
     Returns: {"first_name": ..., "last_name": ..., "assignment_part": ...}
     """
     # Remove extension
     name = Path(filename).stem
-    
-    # Split by underscore
+
+    # Handle "Last, First M._Assignment" format (comma before first underscore)
+    first_underscore = name.find('_')
+    if first_underscore > 0 and ',' in name[:first_underscore]:
+        name_part = name[:first_underscore]
+        assignment_part = name[first_underscore + 1:] if first_underscore < len(name) - 1 else ""
+        comma_parts = name_part.split(',')
+        last_name = comma_parts[0].strip()
+        # First name may include middle initial like "Rylee M."
+        first_full = comma_parts[1].strip() if len(comma_parts) > 1 else ""
+        first_name = first_full.split()[0] if first_full else ""
+
+        return {
+            "first_name": first_name,
+            "last_name": last_name,
+            "assignment_part": assignment_part,
+            "lookup_key": f"{first_name} {last_name}".lower()
+        }
+
+    # Standard format: FirstName_LastName_AssignmentName
     parts = name.split('_')
-    
+
     if len(parts) >= 2:
         first_name = parts[0].strip()
         last_name = parts[1].strip()
         assignment_part = '_'.join(parts[2:]) if len(parts) > 2 else ""
-        
+
         return {
             "first_name": first_name,
             "last_name": last_name,
@@ -1836,10 +2458,15 @@ def preprocess_for_ai_detection(text: str) -> str:
                     fill_in_answers.append(answer)
             continue  # Rest of line is template
 
+        # Strip "A: " prefix before checking template patterns so patterns match
+        check_text = line_stripped
+        if check_text.startswith('A: '):
+            check_text = check_text[3:].strip()
+
         # Check if this line matches a template pattern
         is_template = False
         for pattern in template_patterns:
-            if re.match(pattern, line_stripped, re.IGNORECASE):
+            if re.match(pattern, check_text, re.IGNORECASE):
                 is_template = True
                 break
 
@@ -1854,17 +2481,34 @@ def preprocess_for_ai_detection(text: str) -> str:
         if line_stripped.startswith('Q: '):
             continue
 
+        # Skip vocabulary definitions from template (Term | Definition format)
+        if ' | ' in check_text:
+            continue
+
+        # Skip quoted text (primary source quotes from the template)
+        if check_text.startswith('"') and check_text.endswith('"'):
+            continue
+
+        # Skip lines that are template fill-in-blank prompts (not the student's answer)
+        # These have the structure "The ___ did something ___" with underscores
+        underscore_count = check_text.count('_')
+        non_underscore = re.sub(r'_+', '', check_text).strip()
+        if underscore_count >= 3 and len(non_underscore) > 20:
+            # Line is mostly template text with blank slots — skip it
+            continue
+
         # Keep substantive student-written content (paragraphs, explanations)
         # Must be more than 30 chars to be considered "writing" vs labels
         # Exclude lines that are questions (end with ?) or instruction text
-        if len(line_stripped) > 30 and not line_stripped.endswith('?'):
+        if len(check_text) > 30 and not check_text.endswith('?'):
             # Skip lines that look like unanswered template text
             instruction_keywords = ['write a few sentences', 'explain in your own words',
                                    'how do you think', 'why do you think', 'what do you think',
-                                   'describe how', 'explain how', 'explain why']
-            is_instruction = any(kw in line_stripped.lower() for kw in instruction_keywords)
+                                   'describe how', 'explain how', 'explain why',
+                                   'student task:', 'final reflection']
+            is_instruction = any(kw in check_text.lower() for kw in instruction_keywords)
             if not is_instruction:
-                student_written.append(line_stripped)
+                student_written.append(check_text)
 
     # Build result
     result_parts = []
@@ -2001,7 +2645,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                         assignment_template: str = None, rubric_prompt: str = None,
                         custom_markers: list = None, exclude_markers: list = None,
                         marker_config: list = None, effort_points: int = 15,
-                        extraction_mode: str = 'structured') -> dict:
+                        extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
     """
     Grade assignment using multiple AI models and combine results.
 
@@ -2023,7 +2667,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
         return grade_with_parallel_detection(student_name, assignment_data, custom_ai_instructions,
                                              grade_level, subject, model, student_id,
                                              assignment_template, rubric_prompt, custom_markers, exclude_markers,
-                                             marker_config, effort_points)
+                                             marker_config, effort_points, extraction_mode, grading_style)
 
     print(f"  🎯 Ensemble grading with {len(ensemble_models)} models: {', '.join(ensemble_models)}")
 
@@ -2035,7 +2679,8 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
             future = executor.submit(
                 grade_assignment, student_name, assignment_data, custom_ai_instructions,
                 grade_level, subject, model, student_id, assignment_template, rubric_prompt,
-                custom_markers, exclude_markers, marker_config, effort_points
+                custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
+                grading_style
             )
             futures[future] = model
 
@@ -2112,7 +2757,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    assignment_template: str = None, rubric_prompt: str = None,
                                    custom_markers: list = None, exclude_markers: list = None,
                                    marker_config: list = None, effort_points: int = 15,
-                                   extraction_mode: str = 'structured') -> dict:
+                                   extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
@@ -2127,18 +2772,26 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     extracted_text = ""
 
     if assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
+        extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
         if extraction_result.get("extracted_responses"):
+            # Filter out FITB items — only send written responses to detection agent
+            # FITB answers (names, dates, facts) naturally match sources and should not be flagged
+            written_responses = [
+                r for r in extraction_result["extracted_responses"]
+                if 'fill_in_blank' not in r.get('type', '') and r.get('type') != 'fitb_full'
+            ]
+            # If no written responses (pure FITB), extracted_text stays empty → detection skipped
             extracted_text = "\n".join([
                 f"Q: {r.get('question', 'Unknown')}\nA: {r.get('answer', '')}"
-                for r in extraction_result["extracted_responses"]
+                for r in written_responses
             ])
 
     # If no extracted text, can't do parallel detection
     if not extracted_text:
         return grade_assignment(student_name, assignment_data, custom_ai_instructions,
                                grade_level, subject, ai_model, student_id, assignment_template, rubric_prompt,
-                               custom_markers, exclude_markers, marker_config, effort_points, extraction_mode)
+                               custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
+                               grading_style=grading_style)
 
     print(f"  🔄 Running parallel detection + grading...")
 
@@ -2152,7 +2805,8 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         grading_future = executor.submit(grade_assignment, student_name, assignment_data,
                                          custom_ai_instructions, grade_level, subject,
                                          ai_model, student_id, assignment_template, rubric_prompt,
-                                         custom_markers, exclude_markers, marker_config, effort_points)
+                                         custom_markers, exclude_markers, marker_config, effort_points,
+                                         extraction_mode, grading_style)
 
         # Wait for both to complete
         detection_result = detection_future.result()
@@ -2301,10 +2955,77 @@ The "score" field should equal the sum of all section_scores earned values.
 
 
 # =============================================================================
+# BILINGUAL FEEDBACK TRANSLATION (two-pass system for ELL students)
+# =============================================================================
+
+def _translate_feedback(feedback: str, target_language: str, ai_model: str = 'gpt-4o-mini') -> str:
+    """
+    Translate grading feedback into the target language using a dedicated API call.
+    This is a separate, focused call that produces consistent results because
+    translation is the ONLY task — no competing grading instructions.
+
+    Returns the translated text, or empty string on failure.
+    """
+    if not feedback or not target_language:
+        return ""
+
+    prompt = f"""Translate the following teacher feedback into {target_language}.
+Keep the same warm, encouraging tone. Do not add or remove content — translate everything faithfully.
+Do not include any English text in your response — only the {target_language} translation.
+
+FEEDBACK TO TRANSLATE:
+{feedback}"""
+
+    try:
+        if ai_model.startswith("claude"):
+            import anthropic
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            claude_model_map = {
+                "claude-haiku": "claude-3-5-haiku-latest",
+                "claude-sonnet": "claude-sonnet-4-20250514",
+                "claude-opus": "claude-opus-4-20250514",
+            }
+            model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
+            response = client.messages.create(
+                model=model,
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+
+        elif ai_model.startswith("gemini"):
+            import google.generativeai as genai
+            genai.configure(api_key=GEMINI_API_KEY)
+            gemini_model_map = {
+                "gemini-flash": "gemini-2.0-flash",
+                "gemini-pro": "gemini-2.0-pro-exp",
+            }
+            model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
+            client = genai.GenerativeModel(model)
+            response = client.generate_content(prompt)
+            return response.text.strip()
+
+        else:
+            from openai import OpenAI
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model=ai_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.3
+            )
+            return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        print(f"  ⚠️  Translation to {target_language} failed: {e}")
+        return ""
+
+
+# =============================================================================
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured') -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -2511,40 +3232,84 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
         except Exception as e:
             print(f"  Note: Could not load accommodations: {e}")
 
+    # Check if this is a fill-in-the-blank assignment
+    is_fitb = False
+    content_lower = content.lower() if content else ''
+    if 'fill-in' in content_lower or 'fill in the blank' in content_lower or 'fillintheblank' in content_lower.replace(' ', '').replace('-', ''):
+        is_fitb = True
+    # Also check custom AI instructions for FITB rubric type
+    if 'FILL-IN-THE-BLANK' in (custom_ai_instructions or '').upper():
+        is_fitb = True
+
     # PRE-EXTRACT student responses to prevent AI hallucination
     extraction_result = None
     extracted_responses_text = ''
     if assignment_data.get("type") == "text" and content:
-        # Debug: Log markers being used
-        marker_count = len(custom_markers) if custom_markers else 0
-        print(f"  🔍 Extraction using {marker_count} markers")
-        if custom_markers and marker_count > 0:
-            for i, m in enumerate(custom_markers[:3]):  # Show first 3
-                marker_text = m.get('start', m) if isinstance(m, dict) else m
-                print(f"      Marker {i+1}: {marker_text[:50]}...")
+        # FITB without markers: send full content (pure FITB, no sections to extract)
+        # FITB with markers: run normal extraction so written sections are separated
+        if is_fitb and not custom_markers:
+            print(f"  📝 Pure FITB assignment (no markers) - sending full content for grading")
+            extracted_responses_text = f"""
+==================================================
+FILL-IN-THE-BLANK SUBMISSION
+==================================================
 
-        extraction_result = extract_student_responses(content, custom_markers, exclude_markers)
-        if extraction_result:
-            extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config, extraction_mode)
-            answered = extraction_result.get("answered_questions", 0)
-            total = extraction_result.get("total_questions", 0)
-            print(f"  📋 Pre-extracted {answered}/{total} responses")
+STUDENT'S COMPLETED DOCUMENT:
+{content}
 
-            # If no responses found, return early with 0 score
-            if answered == 0:
-                print(f"  ⚠️  NO RESPONSES EXTRACTED - Document is blank or markers don't match")
-                return {
-                    "score": 0,
-                    "letter_grade": "INCOMPLETE",
-                    "breakdown": {
-                        "content_accuracy": 0,
-                        "completeness": 0,
-                        "critical_thinking": 0,
-                        "communication": 0
-                    },
-                    "feedback": "This assignment appears to be blank or incomplete. No student responses were found. Please complete the assignment and resubmit.",
+==================================================
+Grade based on:
+1. ACCURACY: Did the student fill in the blanks correctly?
+2. COMPLETENESS: Did the student attempt all blanks?
+Do NOT penalize for AI/plagiarism - these are factual answers.
+==================================================
+"""
+            extraction_result = {
+                "extracted_responses": [{"question": "Fill-in-the-blank", "answer": content, "type": "fitb_full"}],
+                "blank_questions": [],
+                "total_questions": 1,
+                "answered_questions": 1,
+                "extraction_summary": "FITB - full content submitted for grading"
+            }
+        else:
+            # Normal extraction for non-FITB assignments
+            # Debug: Log markers being used
+            marker_count = len(custom_markers) if custom_markers else 0
+            print(f"  🔍 Extraction using {marker_count} markers")
+            if custom_markers and marker_count > 0:
+                for i, m in enumerate(custom_markers[:3]):  # Show first 3
+                    marker_text = m.get('start', m) if isinstance(m, dict) else m
+                    print(f"      Marker {i+1}: {marker_text[:50]}...")
+
+            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+            if extraction_result:
+                extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config, extraction_mode)
+                answered = extraction_result.get("answered_questions", 0)
+                total = extraction_result.get("total_questions", 0)
+                print(f"  📋 Pre-extracted {answered}/{total} responses")
+
+                # DEBUG: Show what was extracted
+                for i, resp in enumerate(extraction_result.get("extracted_responses", [])):
+                    q_label = resp.get("question", "?")[:60]
+                    ans_preview = resp.get("answer", "")[:100].replace('\n', ' ')
+                    print(f"      [{i+1}] {q_label}...")
+                    print(f"          Answer: {ans_preview}...")
+
+                # If no responses found, return early with 0 score
+                if answered == 0:
+                    print(f"  ⚠️  NO RESPONSES EXTRACTED - Document is blank or markers don't match")
+                    return {
+                        "score": 0,
+                        "letter_grade": "INCOMPLETE",
+                        "breakdown": {
+                            "content_accuracy": 0,
+                            "completeness": 0,
+                            "critical_thinking": 0,
+                            "communication": 0
+                        },
+                        "feedback": "This assignment appears to be blank or incomplete. No student responses were found. Please complete the assignment and resubmit.",
                     "student_responses": [],
-                    "unanswered_questions": extraction_result.get("blank_questions", []),
+                    "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
                     "authenticity_flag": "clean",
                     "authenticity_reason": "",
                     "skills_demonstrated": {},
@@ -2655,74 +3420,71 @@ ONLY grade the responses that were explicitly extracted and shown to you.
 If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
 """
 
-    prompt_text = f"""
-{effective_rubric}
+    # Build grading style instructions
+    if grading_style == 'lenient':
+        grading_style_instructions = """
+GRADING APPROACH: LENIENT
+- Prioritize EFFORT over perfection. If a student attempted a section, they deserve significant credit.
+- Brief answers that show understanding should receive 70-80% credit even if not fully developed.
+- Do NOT penalize short answers if they demonstrate the student understood the material.
+- A student who attempts ALL sections with genuine effort should receive at minimum a B (80+).
+- Writing quality expectations should be relaxed - focus on content understanding, not eloquence.
+- One-sentence answers to open-ended questions are acceptable if they show comprehension.
+- Reserve grades below C only for students who clearly did not try or left sections truly blank/missing.
+"""
+    elif grading_style == 'strict':
+        grading_style_instructions = """
+GRADING APPROACH: STRICT
+- Hold students to high standards for their grade level.
+- Brief, underdeveloped answers to open-ended questions should be penalized.
+- Writing quality matters - expect complete sentences and proper grammar.
+- Full credit requires thorough, well-developed responses that demonstrate deep understanding.
+- Partial answers receive proportionally reduced credit.
+"""
+    else:
+        grading_style_instructions = """
+GRADING APPROACH: STANDARD
+- Balance accuracy, completeness, writing quality, and effort evenly per the rubric.
+- Brief answers should receive partial credit proportional to their quality.
+- Students should be encouraged but held to grade-level expectations.
+"""
 
-{section_rubric}
+    # Build authenticity/detection section — per-section FITB awareness
+    if is_fitb and not custom_markers:
+        # Pure FITB (no markers) — skip all detection
+        fitb_authenticity_section = f"""AUTHENTICITY CHECKS - FILL-IN-THE-BLANK EXEMPTION:
+This is a fill-in-the-blank assignment. Students are expected to write short factual answers (names, dates, places, vocabulary terms).
+These answers will naturally match textbook/source material — that is the CORRECT behavior, NOT plagiarism or AI use.
+DO NOT flag any answers for AI use or plagiarism. Set ai_detection to "none" and plagiarism_detection to "none".
+Focus ONLY on whether the answers are factually correct and complete.
 
-{ASSIGNMENT_INSTRUCTIONS}
-{custom_section}
-{accommodation_context}
-{history_context}
-{writing_style_context}
-{assignment_template_section}
----
+HARD CAPS FOR INCOMPLETE WORK (MANDATORY - each skipped section = one letter grade drop):
+Count the number of skipped/unanswered blanks or sections:
+- 0 skipped = eligible for A (up to 100)
+- 1 skipped = MAXIMUM 89 (B) - NO EXCEPTIONS
+- 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
+- 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
+- 4+ skipped = MAXIMUM 59 (F)
+- 5+ skipped = MAXIMUM 49 (F)
+- 6+ skipped = MAXIMUM 39 (F)
 
-STUDENT CONTEXT:
-- Grade Level: {grade_level}
-- Subject: {subject}
-- Expected Age Range: {age_range} years old
+NEARLY BLANK SUBMISSIONS - Score based on effort shown:
+- If student answered only 1-2 blanks out of 5+ = score 10-25 (F)
+- If student answered only 3-4 blanks out of 10+ = score 25-40 (F)
+- Empty or nearly empty = score in the 0-30 range"""
+    else:
+        # Full detection — with FITB exemption note for hybrid assignments
+        fitb_exemption_note = ""
+        if is_fitb:
+            fitb_exemption_note = """IMPORTANT - FILL-IN-THE-BLANK EXEMPTION:
+This assignment contains fill-in-the-blank sections mixed with written response sections.
+Fill-in-the-blank answers (short factual responses like names, dates, places, vocabulary terms) are EXEMPT from AI/plagiarism detection.
+These answers are EXPECTED to match textbook/source material — that is correct behavior, NOT cheating.
+ONLY apply AI/plagiarism checks to WRITTEN responses (paragraphs, reflections, summaries, explanations).
+Do NOT use fill-in-the-blank answers as evidence of AI use or plagiarism.
 
-{extracted_responses_section}
-
-{extraction_instructions}
-
-IMPORTANT: Only assess sections that appear in the extracted responses above.
-If a section (like "Notes Section") was NOT extracted, it means the teacher did NOT require it for grading.
-Do NOT penalize students for sections that were not marked for grading by the teacher.
-Only the extracted/marked sections count toward the grade.
-
-Your "student_responses" field MUST contain ONLY the raw answer text from each "STUDENT ANSWER:" line above.
-Do NOT include question numbers, section names, or labels like "[1] Summary:" - just the student's actual written text.
-Example: If the verified response shows 'STUDENT ANSWER: "The treaty was signed in 1803"', your student_responses should contain "The treaty was signed in 1803" - not "Summary: The treaty was signed in 1803".
-If no responses were extracted, the student gets a 0.
-
-For MATCHING exercises specifically:
-- Look for numbers placed next to vocabulary terms in the extracted responses
-- The number indicates which definition the student chose
-- Grade whether they matched correctly
-
-GRADING GUIDELINES:
-- Assess EVERY answer the student provided.
-- For fill-in-the-blank: check if the answer is factually correct or close enough.
-- Accept multiple valid answers and synonyms.
-- DO NOT penalize spelling mistakes if the meaning is clear.
-- Be age-appropriate - these are grade {grade_level} students ({age_range} years old).
-- IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
-
-CRITICAL - COMPLETENESS REQUIREMENTS:
-- ONLY check completeness for sections that appear in the EXTRACTED RESPONSES above.
-- If a section was NOT extracted (not listed above), the teacher did NOT require it - do NOT penalize for it.
-- For the sections that WERE extracted, check if the student answered them, especially:
-  * "Explain in your own words" sections - these require written responses, not blank
-  * "Reflection" or "Final Reflection" questions - these MUST be answered
-  * "Student Task" sections - these are major components requiring written responses
-  * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
-  * Summary sections (only if they were extracted/marked)
-  * Primary source analysis tasks (only if they were extracted/marked)
-- Skipping EXTRACTED/MARKED written sections shows AVOIDANCE OF EFFORT and must be penalized!
-- EACH SKIPPED SECTION LOWERS THE GRADE BY ONE FULL LETTER:
-  * 0 sections skipped = eligible for A (90-100)
-  * 1 section skipped = maximum B (80-89) - dropped one letter
-  * 2 sections skipped = maximum C (70-79) - dropped two letters
-  * 3 sections skipped = maximum D (60-69) - dropped three letters
-  * 4+ sections skipped = F (below 60) - shows no effort on written work
-- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum C (75)
-- An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses
-- This applies to ALL assignments - skipping reflections, explanations, or analysis tasks is unacceptable
-- List ALL skipped/unanswered questions in the "unanswered_questions" field
-
-CRITICAL - AUTHENTICITY CHECKS (YOU MUST CHECK THIS CAREFULLY!):
+"""
+        fitb_authenticity_section = f"""{fitb_exemption_note}CRITICAL - AUTHENTICITY CHECKS (YOU MUST CHECK THIS CAREFULLY!):
 
 1. AI DETECTION - Compare the student's simple answers to their written paragraphs:
 STEP 1: Look at their short answers (fill-in-blanks, one-word responses). Note the vocabulary level.
@@ -2816,7 +3578,113 @@ NEARLY BLANK SUBMISSIONS - Score based on effort shown:
 
 YOU MUST APPLY THESE CAPS. If a student skipped 2 written sections, their score CANNOT be above 79 even if their fill-in-the-blanks were perfect.
 
-The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39) = final cap is 39.
+The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39) = final cap is 39."""
+
+    # Load ELL designation for this student (teacher-controlled bilingual feedback)
+    ell_language = None
+    if student_id and student_id != "UNKNOWN":
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, 'r', encoding='utf-8') as f:
+                    ell_data = json.load(f)
+                ell_entry = ell_data.get(student_id, {})
+                lang = ell_entry.get("language")
+                if lang and lang != "none":
+                    ell_language = lang
+            except Exception:
+                pass
+
+    # Always grade in English only — bilingual translation is handled as a separate post-grading step
+    ell_instruction = "Write feedback in English only."
+
+    prompt_text = f"""
+{effective_rubric}
+
+{section_rubric}
+
+{ASSIGNMENT_INSTRUCTIONS}
+{custom_section}
+{grading_style_instructions}
+{accommodation_context}
+{history_context}
+{writing_style_context}
+{assignment_template_section}
+---
+
+STUDENT CONTEXT:
+- Grade Level: {grade_level}
+- Subject: {subject}
+- Expected Age Range: {age_range} years old
+
+{extracted_responses_section}
+
+{extraction_instructions}
+
+IMPORTANT: Assess ALL sections that appear in the EXTRACTED RESPONSES, UNANSWERED QUESTIONS, and MISSING SECTIONS above.
+If a section appears in MISSING SECTIONS, the student entirely omitted a required part of the assignment — penalize accordingly.
+If a section appears in UNANSWERED QUESTIONS, the student left a required section blank — penalize accordingly.
+Only the extracted/marked sections, unanswered questions, and missing sections count toward the grade.
+
+Your "student_responses" field MUST contain ONLY the raw answer text from each "STUDENT ANSWER:" line above.
+Do NOT include question numbers, section names, or labels like "[1] Summary:" - just the student's actual written text.
+Example: If the verified response shows 'STUDENT ANSWER: "The treaty was signed in 1803"', your student_responses should contain "The treaty was signed in 1803" - not "Summary: The treaty was signed in 1803".
+If no responses were extracted, the student gets a 0.
+
+For MATCHING exercises specifically:
+- Look for numbers placed next to vocabulary terms in the extracted responses
+- The number indicates which definition the student chose
+- Grade whether they matched correctly
+
+GRADING GUIDELINES:
+- Assess EVERY answer the student provided.
+- For fill-in-the-blank: check if the answer is factually correct or close enough.
+- Accept multiple valid answers and synonyms.
+- DO NOT penalize spelling mistakes if the meaning is clear.
+- Be age-appropriate - these are grade {grade_level} students ({age_range} years old).
+- IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
+
+CRITICAL - COMPLETENESS REQUIREMENTS:
+- Check the EXTRACTED RESPONSES, UNANSWERED QUESTIONS, and MISSING SECTIONS lists above.
+- MISSING SECTIONS are sections the teacher REQUIRED but the student ENTIRELY OMITTED from their submission.
+  Each missing section must be treated the SAME as a skipped section — it lowers the grade by one full letter.
+- UNANSWERED QUESTIONS are sections the student included but left blank — also penalize.
+- IMPORTANT: Individual vocabulary terms or bullet points WITHIN a section that HAS a student answer are NOT unanswered questions. Only count items explicitly listed in the UNANSWERED QUESTIONS section above.
+- For the sections that WERE extracted, check if the student answered them adequately, especially:
+  * "Explain in your own words" sections - these require written responses, not blank
+  * "Reflection" or "Final Reflection" questions - these MUST be answered
+  * "Student Task" sections - these are major components requiring written responses
+  * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
+  * Summary sections
+  * Primary source analysis tasks
+- Skipping or omitting written sections shows AVOIDANCE OF EFFORT and must be penalized!
+- Count total skipped = UNANSWERED QUESTIONS + MISSING SECTIONS.
+{f"""- LENIENT PENALTY SCALE (teacher selected lenient grading):
+  * 0 sections skipped/missing = eligible for A (90-100)
+  * 1 section skipped/missing = eligible for A/B (85-95) - minor deduction only
+  * 2 sections skipped/missing = maximum B (80-89)
+  * 3 sections skipped/missing = maximum C (70-79)
+  * 4+ sections skipped/missing = maximum D (60-69)
+- Students who attempt most sections with genuine effort should receive at minimum a C (70+).
+- An "A" grade (90+) is possible if ALL answered sections show genuine effort and understanding.""" if grading_style == 'lenient' else f"""- STRICT PENALTY SCALE (teacher selected strict grading):
+  * 0 sections skipped/missing = eligible for A (90-100)
+  * 1 section skipped/missing = maximum B- (80-85) - dropped one letter
+  * 2 sections skipped/missing = maximum C (70-75) - dropped two letters
+  * 3 sections skipped/missing = maximum D (60-65) - dropped three letters
+  * 4+ sections skipped/missing = F (below 60) - shows no effort
+- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum D (65)
+- An "A" grade (90+) is ONLY possible if ALL sections are completed with thorough, well-developed responses.""" if grading_style == 'strict' else """- STANDARD PENALTY SCALE:
+  * 0 sections skipped/missing = eligible for A (90-100)
+  * 1 section skipped/missing = maximum B (80-89) - dropped one letter
+  * 2 sections skipped/missing = maximum C (70-79) - dropped two letters
+  * 3 sections skipped/missing = maximum D (60-69) - dropped three letters
+  * 4+ sections skipped/missing = F (below 60) - shows no effort on written work
+- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum C (75)
+- An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses."""}
+- This applies to ALL assignments - skipping reflections, explanations, or analysis tasks is unacceptable
+- In the "unanswered_questions" field, ONLY list items from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above — do NOT invent new unanswered items from individual vocab terms or bullet points within answered sections
+
+{fitb_authenticity_section}
 
 Provide your response in the following JSON format ONLY (no other text):
 {{
@@ -2824,12 +3692,12 @@ Provide your response in the following JSON format ONLY (no other text):
     "letter_grade": "<A, B, C, D, or F - must match the capped score>",
     "breakdown": {{
         "content_accuracy": <points out of 40 - correctness of answers>,
-        "completeness": <points out of 25 - ALL sections must be attempted. Written responses (reflections, explanations, Student Tasks) count heavily! 0-5 if 2+ major sections skipped, 6-12 if 1 major section skipped, 13-20 if minor gaps only, 21-25 only if ALL parts fully completed>,
+        "completeness": <points out of 25 - ALL sections must be attempted. MISSING SECTIONS and UNANSWERED QUESTIONS both count as skipped. Written responses (reflections, explanations, Student Tasks) count heavily! 0-5 if 2+ major sections skipped/missing, 6-12 if 1 major section skipped/missing, 13-20 if minor gaps only, 21-25 only if ALL parts fully completed>,
         "writing_quality": <points out of 20>,
         "effort_engagement": <points out of 15>
     }},
     "student_responses": ["<EXTRACT ONLY the actual answer text that appears after 'STUDENT ANSWER:' in the verified responses above. Do NOT include the question/section name, number, or label. WRONG: 'Summary: The treaty was...' or '[1] Summary: The treaty...' - RIGHT: 'The treaty was signed in 1803 and...' - just the raw answer text the student wrote>"],
-    "unanswered_questions": ["<list ALL questions/sections the student left blank or didn't answer - especially written response sections like reflections, explanations, summaries>"],
+    "unanswered_questions": ["<ONLY list sections/questions from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above. Do NOT list individual vocab terms or bullet points that appear WITHIN a section the student completed — those are part of the student's response, not separate unanswered questions. If a section has a STUDENT ANSWER with content, it is NOT unanswered even if individual terms within it seem brief.>"],
     "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
     "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
     "skills_demonstrated": {{
@@ -2845,8 +3713,7 @@ Provide your response in the following JSON format ONLY (no other text):
         "flag": "<none, possible, or likely>",
         "reason": "<Brief explanation if not 'none', otherwise empty string>"
     }},
-    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant. 9) BILINGUAL FEEDBACK: ONLY provide bilingual feedback if the student ACTUALLY WROTE their answers in a non-English language. Do NOT assume language based on the student's name - a Hispanic surname does NOT mean the student needs Spanish feedback. Analyze the ACTUAL TEXT of their responses. If (and ONLY if) the student wrote answers in Spanish, Creole, Portuguese, etc., then provide feedback in BOTH English and their language. Format: [English feedback]\\n\\n---\\n\\n[Traducción / Translation]\\n[Same feedback in student's language].>",
-    "student_language": "<Detected language based on the ACTUAL TEXT of student's written responses (not their name): 'english', 'spanish', 'portuguese', 'creole', or other. Default to 'english' unless student clearly wrote in another language>"
+    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant. 9) BILINGUAL FEEDBACK: {ell_instruction}>"
 }}
 """
 
@@ -3082,6 +3949,22 @@ Provide your response in the following JSON format ONLY (no other text):
                 print(f"  ⚠️  Fixed saved to: {f.name}")
             raise
 
+        # Post-processing: strip any accidental bilingual sections from grading response
+        feedback = result.get("feedback", "")
+        if "\n---\n" in feedback:
+            feedback = feedback.split("\n---\n")[0].strip()
+            result["feedback"] = feedback
+
+        # Two-pass bilingual feedback: translate via separate dedicated API call
+        if ell_language and result.get("feedback"):
+            print(f"  🌐 Translating feedback to {ell_language}...")
+            translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+            if translated:
+                result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
+                print(f"  ✅ Bilingual feedback added ({ell_language})")
+            else:
+                print(f"  ⚠️  Translation failed, feedback remains English only")
+
         # Update student's writing profile (only if not flagged as AI)
         # This builds their baseline for future AI detection
         if student_id and student_id != "UNKNOWN" and current_writing_style:
@@ -3096,6 +3979,12 @@ Provide your response in the following JSON format ONLY (no other text):
         # Add style comparison info to result for transparency
         if style_comparison and style_comparison.get("ai_likelihood") in ["likely", "possible"]:
             result["writing_style_deviation"] = style_comparison
+
+        # Add audit trail data
+        result["_audit"] = {
+            "ai_input": extracted_responses_section,
+            "ai_response": original_text
+        }
 
         return result
 
@@ -3419,19 +4308,28 @@ def export_focus_csv(grades: list, output_folder: str, assignment_name: str) -> 
 
 def save_to_master_csv(grades: list, output_folder: str):
     """
-    Append grades to a master CSV file that tracks ALL grades over time.
+    Save grades to a master CSV file that tracks ALL grades over time.
     This enables progress tracking across the entire school year.
-    
+
+    DEDUPLICATION: If a student is re-graded on the same assignment,
+    the old row is REPLACED (not duplicated). The unique key is
+    (Student ID, Assignment).
+
     Columns:
     - Date, Student ID, Student Name, Period, Assignment, Unit, Quarter
     - Overall Score, Letter Grade
     - Content Accuracy, Completeness, Writing Quality, Effort & Engagement
     """
     master_file = Path(output_folder) / "master_grades.csv"
-    
-    # Check if file exists to determine if we need headers
-    file_exists = master_file.exists()
-    
+
+    HEADER = [
+        'Date', 'Student ID', 'Student Name', 'First Name', 'Last Name',
+        'Period', 'Assignment', 'Unit', 'Quarter',
+        'Overall Score', 'Letter Grade',
+        'Content Accuracy', 'Completeness', 'Writing Quality', 'Effort Engagement',
+        'Feedback'
+    ]
+
     # Determine current quarter based on date
     today = datetime.now()
     month = today.month
@@ -3443,27 +4341,58 @@ def save_to_master_csv(grades: list, output_folder: str):
         quarter = "Q3"
     else:
         quarter = "Q4"
-    
-    with open(master_file, 'a', newline='', encoding='utf-8') as f:
+
+    # Normalize assignment name for dedup matching
+    # Handles: trailing "(1)", ".docx", extra whitespace, etc.
+    def _normalize_assignment(name):
+        n = name.strip()
+        n = re.sub(r'\s*\(\d+\)\s*$', '', n)      # Remove trailing (1), (2), etc.
+        n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)  # Remove .docx/.doc
+        n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)    # Remove .pdf
+        n = n.strip().lower()
+        return n
+
+    # Build set of (student_id, normalized_assignment) keys being written now
+    new_keys = set()
+    for grade in grades:
+        sid = grade.get('student_id', '')
+        assignment = grade.get('assignment', '')
+        if sid and sid != "UNKNOWN" and assignment:
+            new_keys.add((sid, _normalize_assignment(assignment)))
+
+    # Read existing rows, filtering out any that will be replaced
+    existing_rows = []
+    if master_file.exists():
+        try:
+            with open(master_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)  # Skip header
+                for row in reader:
+                    if len(row) >= 7:
+                        row_sid = row[1]       # Student ID column
+                        row_assign = row[6]    # Assignment column
+                        if (row_sid, _normalize_assignment(row_assign)) in new_keys:
+                            continue  # Skip — will be replaced by new grade
+                    existing_rows.append(row)
+        except Exception as e:
+            print(f"  Note: Could not read existing master CSV: {e}")
+
+    # Write full file: header + existing (deduplicated) + new grades
+    with open(master_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        
-        # Write header if new file
-        if not file_exists:
-            writer.writerow([
-                'Date', 'Student ID', 'Student Name', 'First Name', 'Last Name',
-                'Period', 'Assignment', 'Unit', 'Quarter',
-                'Overall Score', 'Letter Grade',
-                'Content Accuracy', 'Completeness', 'Writing Quality', 'Effort Engagement',
-                'Feedback'
-            ])
-        
-        # Write each grade
+        writer.writerow(HEADER)
+
+        # Write back existing rows (minus duplicates)
+        for row in existing_rows:
+            writer.writerow(row)
+
+        # Write new grades
         for grade in grades:
             if grade.get('student_id') == "UNKNOWN":
                 continue
-            
+
             breakdown = grade.get('breakdown', {})
-            
+
             writer.writerow([
                 today.strftime('%Y-%m-%d'),
                 grade.get('student_id', ''),
@@ -3473,14 +4402,14 @@ def save_to_master_csv(grades: list, output_folder: str):
                 grade.get('period', ''),
                 grade.get('assignment', ''),
                 grade.get('unit', ''),
-                grade.get('grading_period', quarter),  # Use grading_period from settings, fallback to calculated
+                grade.get('grading_period', quarter),
                 grade.get('score', 0),
                 grade.get('letter_grade', ''),
                 breakdown.get('content_accuracy', 0),
                 breakdown.get('completeness', 0),
                 breakdown.get('writing_quality', 0),
                 breakdown.get('effort_engagement', 0),
-                grade.get('feedback', '')[:500]  # Truncate feedback for CSV
+                grade.get('feedback', '').replace('\r', ' ').replace('\n', ' ')[:500]
             ])
     
     print(f"📊 Updated master grades file: {master_file}")

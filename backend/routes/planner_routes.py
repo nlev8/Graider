@@ -794,11 +794,14 @@ Create a complete, ready-to-use assignment that:
 4. Is appropriate for grade {config.get('grade', '7')} students
 
 CRITICAL REQUIREMENTS:
+- THE ASSIGNMENT MUST BE 100% SELF-CONTAINED. Every resource referenced in the instructions (tables, charts, data sets, reading passages, maps, diagrams, timelines, primary sources) MUST be fully included in the assignment JSON. NEVER tell students to "complete the data table" or "analyze the chart" without providing the actual table data or chart data in the question object. If a question references a table, include "expected_data" with headers and pre-filled data. If it references a reading passage, include the full passage text in the question field.
+- For data_table questions: ALWAYS include "column_headers" (array of header strings), "row_labels" (array of row labels), and "expected_data" (2D array of correct values). The student sees the headers and row labels and fills in the values.
 - For Math: Use REAL numbers and actual problems (e.g., "Solve: 3/4 + 1/2 = ?"), not placeholders
 - All questions must be answerable based on the lesson content
 - Include clear, specific answer keys
 - Word problems should use realistic scenarios (shopping, cooking, sports) not fictional games or apps
 - Avoid vague or overly complex language for the grade level
+- NEVER use vague instructions like "analyze the data" without providing the data inline
 
 SPECIAL STEM QUESTION TYPES (use when appropriate):
 
@@ -812,7 +815,8 @@ SPECIAL STEM QUESTION TYPES (use when appropriate):
    - Student fills in a table with numerical data
    - System grades with tolerance (±5% for measurements)
    - Use for: science labs, statistics, recording observations
-   - Include "expected_data" with the correct values and "tolerance" (default 0.05)
+   - MUST include "column_headers" (e.g., ["Year", "Population", "Change"]), "row_labels" (e.g., ["1820", "1830", "1840"]), and "expected_data" (2D array of correct cell values)
+   - The table structure MUST be fully defined — never tell students to "complete a table" without providing the table
 
 3. COORDINATES (type: "coordinates"):
    - Student provides geographic coordinates (latitude, longitude)

@@ -13,11 +13,12 @@
 10. [Student Portal](#student-portal)
 11. [Teacher Dashboard](#teacher-dashboard)
 12. [Resources Tab](#resources-tab)
-13. [Settings](#settings)
-14. [IEP/504 Accommodations](#iep504-accommodations)
-15. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-16. [Student Progress Tracking](#student-progress-tracking)
-17. [Troubleshooting](#troubleshooting)
+13. [Assistant Tab](#assistant-tab)
+14. [Settings](#settings)
+15. [IEP/504 Accommodations](#iep504-accommodations)
+16. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+17. [Student Progress Tracking](#student-progress-tracking)
+18. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -891,6 +892,155 @@ These resources can enhance AI grading and lesson planning accuracy.
 
 ---
 
+## Assistant Tab
+
+### Overview
+
+The Graider Assistant is a built-in AI chat that can answer questions about your students, grades, and analytics using your actual grading data. Powered by Claude (Anthropic), it queries your local files and never sends student PII outside your machine.
+
+### Getting Started
+
+1. Go to the **Assistant** tab
+2. Type a question or click one of the suggested prompts
+3. The assistant streams its response in real-time
+4. Tool indicators show when data is being queried
+
+### What You Can Ask
+
+| Type of Question | Example |
+|-----------------|---------|
+| **Grade diagnostics** | "What caused the low grades on Cornell Notes?" |
+| **Omission impact** | "How much did incomplete sections affect scores?" |
+| **Lesson planning** | "Based on student performance, what should I teach next?" |
+| **Period comparison** | "Which period did best on this assignment?" |
+| **Feedback themes** | "What were the common feedback themes?" |
+| **Class overview** | "What's the class average?" |
+| **Student lookup** | "How is Maria doing?" |
+| **Grade filtering** | "Show students below 60 on Cornell Notes" |
+| **At-risk students** | "Which students need attention?" |
+| **Student strengths** | "What are students' biggest strengths?" |
+| **Assignment stats** | "What's the average on the Chapter 5 Quiz?" |
+| **List assignments** | "What assignments have been graded?" |
+| **Focus automation** | "Create a Focus assignment called Quiz 3 worth 100 points" |
+| **Export grades** | "Export grades for Period 3 as a Focus CSV" |
+
+### Available Tools
+
+The assistant has access to 7 tools that query your local grading data:
+
+| Tool | What It Does |
+|------|-------------|
+| **Query Grades** | Search and filter grades by student name, assignment, period, score range, or letter grade |
+| **Student Summary** | Get a comprehensive view of one student: all grades, average, trend (improving/declining/stable), category breakdowns, strengths and weaknesses |
+| **Class Analytics** | Class-wide stats: average, grade distribution (A/B/C/D/F), top performers, students needing attention |
+| **Assignment Stats** | Statistics for a specific assignment: count, mean, median, min, max, standard deviation |
+| **Analyze Grade Causes** | Deep analysis of WHY students got their grades: rubric category breakdowns, most commonly skipped questions, score impact of omissions, weakest areas |
+| **Feedback Patterns** | Aggregated analysis of feedback across an assignment: common strengths, areas for growth, skill frequency counts, feedback samples from high and low scorers |
+| **Compare Periods** | Side-by-side comparison of class periods: averages, grade distributions, category breakdowns, omission rates |
+| **Recommend Next Lesson** | Data-driven lesson recommendations: analyzes weaknesses, cross-references curriculum standards, identifies specific topics and skills to focus on |
+| **List Assignments** | Show all graded assignments with student counts and average scores |
+| **Create Focus Assignment** | Launch browser automation to create an assignment in Focus gradebook (requires VPortal credentials) |
+| **Export Grades CSV** | Generate Focus-compatible CSV files grouped by period |
+
+### Deep Analytics Examples
+
+The assistant's most powerful capability is analyzing **why** students performed the way they did:
+
+**"What caused the low grades on Cornell Notes Slavery and Resistance?"**
+> The assistant finds: writing_quality was weakest (avg 12.7), 64.8% of students had omissions, summary section was skipped most (15% of students), and students with omissions averaged 13.3 points lower than those who completed everything.
+
+**"Based on student performance, what should I teach next?"**
+> The assistant analyzes category weaknesses, unanswered questions, and developing skills, then cross-references your state's curriculum standards (FL US History) to recommend specific topics, essential questions, and learning targets for your next lesson.
+
+**"Compare my classes on the last assignment"**
+> Returns per-period averages, grade distributions, category scores, and omission rates so you can see exactly where each class struggled.
+
+### Tool Indicators
+
+While the assistant works, you'll see inline badges showing what's happening:
+
+- **"Querying grades..."** → The assistant is searching your grade data
+- **"Queried grades ✓"** → Data retrieved successfully, now composing response
+
+### Suggested Prompts
+
+When the chat is empty, four suggested prompts appear as clickable chips:
+- "What's the class average?"
+- "Which students need attention?"
+- "Show assignment statistics"
+- "Create a Focus assignment"
+
+Click any prompt to send it instantly.
+
+### Conversation Management
+
+- Click **Clear** in the top-right to start a fresh conversation
+- Conversations are stored in memory only (not saved to disk)
+- Sessions auto-expire after 2 hours of inactivity
+- Each browser session gets a unique conversation thread
+
+### Focus SIS Automation
+
+The assistant can create assignments directly in Focus gradebook:
+
+1. Ask something like: *"Create a Focus assignment called Quiz 3 worth 100 points for 02/14/2026"*
+2. The assistant confirms the details before proceeding
+3. A browser window opens and logs into VPortal automatically
+4. **Check your phone for 2FA approval**
+5. The form is filled out — review and click Save manually
+6. The browser stays open for 2 minutes for verification
+
+**Prerequisites:**
+- VPortal credentials configured in **Settings > Tools > District Portal**
+- Node.js installed on your computer
+- Playwright browser installed (`npx playwright install chromium`)
+
+### Setting Up VPortal Credentials
+
+1. Go to **Settings > Tools**
+2. Scroll to **District Portal (VPortal)**
+3. Enter your district email and password
+4. Click **Save Credentials**
+5. A green "Configured" indicator confirms they're saved
+
+Credentials are stored locally at `~/.graider_data/portal_credentials.json` with basic encoding. They never leave your machine.
+
+### FERPA Compliance
+
+The assistant is designed with FERPA in mind:
+
+| Concern | Protection |
+|---------|-----------|
+| **Data source** | All tools query local files only (`~/.graider_results.json`, `master_grades.csv`) |
+| **API calls** | Anthropic API does not use data for model training |
+| **Conversations** | In-memory only, cleared on server restart, auto-expire after 2 hours |
+| **Audit logging** | Every assistant query and tool call logged to `~/.graider_audit.log` |
+| **Student names** | The assistant is instructed to minimize PII and use first names only |
+
+### Requirements
+
+- `ANTHROPIC_API_KEY` set in your `.env` file (get one at [console.anthropic.com](https://console.anthropic.com))
+- Grading data available (at least some assignments graded)
+
+### Troubleshooting
+
+**"ANTHROPIC_API_KEY not set"**
+- Add `ANTHROPIC_API_KEY=sk-ant-...` to your `.env` file in the backend folder
+
+**"No grading data available"**
+- Grade some assignments first — the assistant queries your local results files
+
+**Streaming not working in development**
+- The Vite dev server proxies SSE correctly by default
+- If responses appear all at once instead of streaming, check browser DevTools for proxy issues
+
+**Focus automation fails**
+- Verify VPortal credentials are saved in Settings > Tools
+- Make sure `node focus-automation.js` runs from the project root
+- Run `npx playwright install chromium` if browser is missing
+
+---
+
 ## Settings
 
 ### Folder Configuration
@@ -1350,4 +1500,13 @@ Each student's file contains:
 
 ---
 
-*Last updated: February 2, 2026*
+- **AI Assistant (Claude)**: Built-in chat that queries your grading data — ask about class averages, student summaries, assignment stats, at-risk students
+- **Focus SIS Automation**: Create assignments in Focus gradebook via browser automation from the Assistant
+- **VPortal Credentials**: Save district portal login in Settings > Tools for Focus automation
+
+### UI Improvements
+
+- Assistant tab with streaming chat, tool indicators, and suggested prompts
+- VPortal credential management in Settings > Tools
+
+*Last updated: February 7, 2026*

@@ -75,11 +75,11 @@ export async function listFiles(folder) {
   })
 }
 
-export async function clearResults(assignment = null) {
+export async function clearResults(filenames = null) {
   return fetchApi('/api/clear-results', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assignment }),
+    body: JSON.stringify({ filenames }),
   })
 }
 
@@ -508,10 +508,10 @@ export async function getStudentAccommodation(studentId) {
   return fetchApi(`/api/student-accommodations/${encodeURIComponent(studentId)}`)
 }
 
-export async function setStudentAccommodation(studentId, presets, customNotes = '') {
+export async function setStudentAccommodation(studentId, presets, customNotes = '', studentName = '') {
   return fetchApi(`/api/student-accommodations/${encodeURIComponent(studentId)}`, {
     method: 'POST',
-    body: JSON.stringify({ presets, custom_notes: customNotes }),
+    body: JSON.stringify({ presets, custom_notes: customNotes, student_name: studentName }),
   })
 }
 
@@ -650,6 +650,19 @@ export async function migrateStudentNames() {
   })
 }
 
+// ============ ELL Students (Bilingual Feedback) ============
+
+export async function getEllStudents() {
+  return fetchApi('/api/ell-students')
+}
+
+export async function saveEllStudents(ellData) {
+  return fetchApi('/api/ell-students', {
+    method: 'POST',
+    body: JSON.stringify(ellData),
+  })
+}
+
 // ============ Parent Contacts ============
 
 export async function previewParentContacts(file) {
@@ -699,6 +712,53 @@ export async function exportOutlookEmails(data = {}) {
     method: 'POST',
     body: JSON.stringify(data),
   })
+}
+
+// ============ Outlook Playwright Sending ============
+
+export async function sendOutlookEmails(data = {}) {
+  return fetchApi('/api/send-outlook-emails', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getOutlookSendStatus() {
+  return fetchApi('/api/outlook-send/status')
+}
+
+export async function outlookLogin() {
+  return fetchApi('/api/outlook-login', { method: 'POST' })
+}
+
+// ============ Assistant ============
+
+export async function sendAssistantMessage(messages, sessionId) {
+  const authHeaders = await getAuthHeaders()
+  return fetch(API_BASE + '/api/assistant/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ messages, session_id: sessionId }),
+  })
+  // Returns raw Response for caller to read SSE stream
+}
+
+export async function clearAssistantSession(sessionId) {
+  return fetchApi('/api/assistant/clear', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId }),
+  })
+}
+
+export async function savePortalCredentials(email, password) {
+  return fetchApi('/api/assistant/credentials', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function getPortalCredentials() {
+  return fetchApi('/api/assistant/credentials')
 }
 
 export default {
@@ -785,6 +845,9 @@ export default {
   deleteStudentHistory,
   deleteAllStudentHistory,
   migrateStudentNames,
+  // ELL Students
+  getEllStudents,
+  saveEllStudents,
   // Parent Contacts & Exports
   previewParentContacts,
   saveParentContactMapping,
@@ -792,4 +855,13 @@ export default {
   exportFocusBatch,
   exportFocusComments,
   exportOutlookEmails,
+  // Outlook Sending
+  sendOutlookEmails,
+  getOutlookSendStatus,
+  outlookLogin,
+  // Assistant
+  sendAssistantMessage,
+  clearAssistantSession,
+  savePortalCredentials,
+  getPortalCredentials,
 }

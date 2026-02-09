@@ -118,18 +118,20 @@ def get_students_from_period_file(filepath):
                 first_col = next((h for h in reader.fieldnames if 'first' in h.lower()), None)
                 last_col = next((h for h in reader.fieldnames if 'last' in h.lower()), None)
                 name_col = next((h for h in reader.fieldnames if any(x in h.lower() for x in ['name', 'student'])), None)
+                id_col = next((h for h in reader.fieldnames if h.lower().strip() == 'student id'), None)
 
                 for row in reader:
+                    student_id = row.get(id_col, '').strip() if id_col else ''
                     if first_col and last_col:
                         first = row.get(first_col, '').strip()
                         last = row.get(last_col, '').strip()
                         if first or last:
-                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip()})
+                            students.append({"first": first, "last": last, "full": f"{first} {last}".strip(), "id": student_id})
                     elif name_col:
                         name = row.get(name_col, '').strip()
                         if name:
                             first, last = parse_student_name(name)
-                            students.append({"first": first, "last": last, "full": name})
+                            students.append({"first": first, "last": last, "full": name, "id": student_id})
     except Exception as e:
         print(f"Error reading period file {filepath}: {e}")
 
@@ -1035,6 +1037,22 @@ def get_all_student_accommodations():
     mappings = load_student_accommodations()
     presets = load_presets()
 
+    # Build student ID → name lookup from period CSVs for name resolution
+    id_to_name = {}
+    if os.path.exists(PERIODS_DIR):
+        for fname in os.listdir(PERIODS_DIR):
+            if fname.endswith(('.csv', '.xlsx', '.xls')) and not fname.startswith('.'):
+                try:
+                    students = get_students_from_period_file(os.path.join(PERIODS_DIR, fname))
+                    for s in students:
+                        sid = s.get("id", "")
+                        if sid:
+                            name = s.get("full") or ((s.get("first", "") + " " + s.get("last", "")).strip())
+                            if name:
+                                id_to_name[sid] = name
+                except Exception:
+                    pass
+
     # Enrich with preset details for display
     enriched = {}
     for student_id, data in mappings.items():
@@ -1047,9 +1065,13 @@ def get_all_student_accommodations():
                     "icon": presets[preset_id].get("icon", "FileText")
                 })
 
+        # Resolve name: stored name > period CSV lookup > empty
+        student_name = data.get("student_name", "") or id_to_name.get(student_id, "")
+
         enriched[student_id] = {
             "presets": preset_details,
             "custom_notes": data.get("custom_notes", ""),
+            "student_name": student_name,
             "updated": data.get("updated", "")
         }
 
@@ -1072,8 +1094,9 @@ def set_single_student_accommodation(student_id):
     data = request.json
     preset_ids = data.get('presets', [])
     custom_notes = data.get('custom_notes', '')
+    student_name = data.get('student_name', '')
 
-    if set_student_accommodation(student_id, preset_ids, custom_notes):
+    if set_student_accommodation(student_id, preset_ids, custom_notes, student_name):
         audit_log_accommodation("API_SET", f"Set accommodation for {student_id[:6]}...")
         return jsonify({"status": "saved"})
     else:

@@ -265,7 +265,7 @@ def reset_state(clear_results=False):
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard'):
     """Run the grading process in a background thread.
 
     Args:
@@ -759,30 +759,35 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     student_info = None
                     first_name_lower = parsed['first_name'].lower()
                     last_name_lower = parsed['last_name'].lower()
+                    # Strip apostrophes/special chars for comparison (Da'Jaun → dajaun)
+                    first_name_norm = first_name_lower.replace("'", "").replace("\u2019", "")
+                    last_name_norm = last_name_lower.replace("'", "").replace("\u2019", "")
+                    # Normalize spaces/hyphens (Salvador Guzman → salvadorguzman)
+                    last_name_collapsed = last_name_norm.replace(" ", "").replace("-", "")
 
                     for roster_key, roster_data in roster.items():
                         if isinstance(roster_data, dict):
                             roster_first = roster_data.get('first_name', '').lower()
                             roster_last = roster_data.get('last_name', '').lower()
+                            roster_first_norm = roster_first.replace("'", "").replace("\u2019", "")
+                            roster_last_norm = roster_last.replace("'", "").replace("\u2019", "")
+                            roster_last_collapsed = roster_last_norm.replace(" ", "").replace("-", "")
 
-                            # Match first name exactly
-                            if roster_first != first_name_lower and not roster_first.startswith(first_name_lower):
+                            # Match first name (strip apostrophes for comparison)
+                            if (roster_first_norm != first_name_norm
+                                    and not roster_first_norm.startswith(first_name_norm)):
                                 continue
 
-                            # Check various last name matching patterns:
-                            # 1. Exact match (already handled above)
-                            # 2. Last name initials (e.g., "K" matches "Kolas")
-                            # 3. Hyphenated names (e.g., "Kolas" matches "Kolas-Nowicki")
-                            # 4. First part of hyphenated name (e.g., "Kolas" matches "Kolas-Nowicki")
-                            # 5. Space-separated compound names (e.g., "Maloney" matches "Maloney Fox")
-                            roster_last_parts_hyphen = roster_last.split('-')
-                            roster_last_parts_space = roster_last.split(' ')
+                            # Check various last name matching patterns
+                            roster_last_parts_hyphen = roster_last_norm.split('-')
+                            roster_last_parts_space = roster_last_norm.split(' ')
                             if (
-                                roster_last.startswith(last_name_lower) or  # "k" matches "kolas"
-                                roster_last_parts_hyphen[0] == last_name_lower or  # "kolas" matches "kolas-nowicki"
-                                last_name_lower in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
-                                roster_last_parts_space[0] == last_name_lower or  # "maloney" matches "maloney fox"
-                                last_name_lower in roster_last_parts_space  # "fox" matches "maloney fox"
+                                roster_last_norm.startswith(last_name_norm) or  # "k" matches "kolas"
+                                roster_last_parts_hyphen[0] == last_name_norm or  # "kolas" matches "kolas-nowicki"
+                                last_name_norm in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
+                                roster_last_parts_space[0] == last_name_norm or  # "maloney" matches "maloney fox"
+                                last_name_norm in roster_last_parts_space or  # "fox" matches "maloney fox"
+                                roster_last_collapsed == last_name_collapsed  # "salvador guzman" matches "salvador-guzman"
                             ):
                                 student_info = roster_data.copy()
                                 student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
@@ -1107,7 +1112,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ensemble_models, student_info.get('student_id'),
                         assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode
+                        marker_config, effort_points, extraction_mode, grading_style
                     )
                 elif skip_detection:
                     # Trusted student or FITB: Use direct grading without detection
@@ -1115,7 +1120,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode
+                        marker_config, effort_points, extraction_mode, grading_style=grading_style
                     )
                     # Set detection to "none"
                     if is_trusted:
@@ -1129,7 +1134,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode
+                        marker_config, effort_points, extraction_mode, grading_style
                     )
 
                 # Check for errors
@@ -1313,7 +1318,9 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "baseline_deviation": result.get("baseline_deviation", {}),
                     "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
                     "marker_status": result.get("marker_status", "unverified"),
-                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
+                    "ai_response": grade_result.get('_audit', {}).get('ai_response', '')
                 })
 
         # Handle API error - stop and save
@@ -1344,6 +1351,26 @@ STANDARD CLASS GRADING EXPECTATIONS:
             # Master tracking CSV
             save_to_master_csv(all_grades, output_folder)
             grading_state["log"].append("  Master grades updated")
+
+            # Audit trail JSON
+            audit_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            audit_path = os.path.join(output_folder, f"Audit_{ASSIGNMENT_NAME}_{audit_timestamp}.json")
+            audit_data = []
+            for r in grading_state["results"]:
+                audit_data.append({
+                    "student_name": r["student_name"],
+                    "student_id": r["student_id"],
+                    "score": r["score"],
+                    "letter_grade": r["letter_grade"],
+                    "ai_input": r.get("ai_input", ""),
+                    "ai_response": r.get("ai_response", "")
+                })
+            try:
+                with open(audit_path, 'w') as f:
+                    json.dump(audit_data, f, indent=2)
+                grading_state["log"].append("  Audit trail saved")
+            except Exception as e:
+                grading_state["log"].append(f"  Audit trail error: {str(e)}")
 
         grading_state["log"].append("")
         grading_state["log"].append("=" * 50)
@@ -1427,6 +1454,9 @@ def start_grading():
     trusted_students = data.get('trustedStudents', [])
     print(f"🔐 Trusted students received: {trusted_students}")  # DEBUG
 
+    # Get grading style (lenient / standard / strict)
+    grading_style = data.get('gradingStyle', 'standard')
+
     if not os.path.exists(assignments_folder):
         return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
     if not os.path.exists(roster_file):
@@ -1441,7 +1471,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style)
     )
     thread.start()
 
@@ -1655,6 +1685,56 @@ def list_files():
         return jsonify({"files": [], "error": str(e)})
 
 
+def _remove_from_master_csv(result):
+    """Remove a deleted result from master_grades.csv so the Assistant sees fresh data."""
+    import re
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    master_file = os.path.join(output_folder, "master_grades.csv")
+    if not os.path.exists(master_file):
+        return
+
+    student_id = str(result.get('student_id', ''))
+    assignment = result.get('assignment', '')
+    if not student_id or not assignment:
+        return
+
+    def normalize(name):
+        n = name.strip()
+        n = re.sub(r'\s*\(\d+\)\s*$', '', n)
+        n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)
+        n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)
+        return n.strip().lower()
+
+    def matches(csv_assign, target):
+        csv_norm = normalize(csv_assign)
+        target_norm = normalize(target)
+        if csv_norm == target_norm:
+            return True
+        if len(csv_norm) >= 20 and target_norm.startswith(csv_norm):
+            return True
+        if len(target_norm) >= 20 and csv_norm.startswith(target_norm):
+            return True
+        return False
+
+    try:
+        with open(master_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            header = reader.fieldnames
+            rows = list(reader)
+
+        filtered = [row for row in rows
+                     if not (row.get('Student ID', '') == student_id
+                             and matches(row.get('Assignment', ''), assignment))]
+
+        if len(filtered) < len(rows):
+            with open(master_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=header)
+                writer.writeheader()
+                writer.writerows(filtered)
+    except Exception as e:
+        print(f"Could not remove from master_grades.csv: {e}")
+
+
 # ══════════════════════════════════════════════════════════════
 # DELETE SINGLE RESULT
 # ══════════════════════════════════════════════════════════════
@@ -1673,7 +1753,13 @@ def delete_single_result():
     if not filename:
         return jsonify({"error": "Filename is required"}), 400
 
-    # Find and remove the result from state
+    # Find the result before removing (need student_id + assignment for master CSV sync)
+    deleted_result = None
+    for r in grading_state["results"]:
+        if r.get('filename', '') == filename:
+            deleted_result = r
+            break
+
     original_count = len(grading_state["results"])
     grading_state["results"] = [
         r for r in grading_state["results"]
@@ -1686,6 +1772,10 @@ def delete_single_result():
 
     # Save updated results to file
     save_results(grading_state["results"])
+
+    # Also remove from master_grades.csv so the Assistant sees fresh data
+    if deleted_result:
+        _remove_from_master_csv(deleted_result)
 
     # FERPA: Audit log the deletion
     audit_log("DELETE_RESULT", f"Deleted result for file: {filename[:30]}...")

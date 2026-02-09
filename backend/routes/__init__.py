@@ -18,6 +18,7 @@ from .grading_routes import grading_bp, init_grading_routes
 from .assignment_player_routes import assignment_player_bp
 from .student_portal_routes import student_portal_bp
 from .lesson_routes import lesson_bp
+from .assistant_routes import assistant_bp
 
 
 def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None):
@@ -38,6 +39,7 @@ def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None)
     app.register_blueprint(assignment_player_bp)
     app.register_blueprint(student_portal_bp)
     app.register_blueprint(lesson_bp)
+    app.register_blueprint(assistant_bp)
 
 
 __all__ = [
@@ -50,5 +52,6 @@ __all__ = [
     'email_bp',
     'grading_bp',
     'init_grading_routes',
-    'lesson_bp'
+    'lesson_bp',
+    'assistant_bp'
 ]

@@ -44,6 +44,10 @@ def get_analytics():
         with open(master_file, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
+                # Skip corrupted rows (no student name)
+                if not row.get("Student Name"):
+                    continue
+
                 # Track all available periods
                 row_quarter = row.get("Quarter", "")
                 if row_quarter:

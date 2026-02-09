@@ -13,7 +13,12 @@ ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
 
 @assignment_bp.route('/api/save-assignment-config', methods=['POST'])
 def save_assignment_config():
-    """Save assignment configuration for grading."""
+    """Save assignment configuration for grading.
+
+    Uses merge-save: loads existing config first, then merges incoming data
+    on top. This prevents partial saves (e.g., from the grading tab's auto-save)
+    from wiping fields like excludeMarkers, aliases, rubricType, etc.
+    """
     data = request.json
     os.makedirs(ASSIGNMENTS_DIR, exist_ok=True)
 
@@ -23,8 +28,20 @@ def save_assignment_config():
     filepath = os.path.join(ASSIGNMENTS_DIR, f"{safe_title}.json")
 
     try:
+        # Load existing config to preserve fields not in the incoming data
+        existing = {}
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    existing = json.load(f)
+            except (json.JSONDecodeError, Exception):
+                existing = {}
+
+        # Merge: existing fields are preserved, incoming data overwrites
+        merged = {**existing, **data}
+
         with open(filepath, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(merged, f, indent=2)
         return jsonify({"status": "saved", "path": filepath})
     except Exception as e:
         return jsonify({"error": str(e)})

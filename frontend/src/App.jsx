@@ -25,6 +25,7 @@ import * as api from "./services/api";
 import { getAuthHeaders } from "./services/api";
 import { supabase } from "./services/supabase";
 import LoginScreen from "./components/LoginScreen";
+import AssistantChat from "./components/AssistantChat";
 
 // Tab configuration
 const TABS = [
@@ -34,6 +35,7 @@ const TABS = [
   { id: "analytics", label: "Analytics", icon: "BarChart3" },
   { id: "planner", label: "Planner", icon: "BookOpen" },
   { id: "resources", label: "Resources", icon: "FolderOpen" },
+  { id: "assistant", label: "Assistant", icon: "Sparkles" },
   { id: "settings", label: "Settings", icon: "Settings" },
 ];
 
@@ -648,6 +650,14 @@ function App() {
   const [batchExportLoading, setBatchExportLoading] = useState(false);
   const [outlookExportLoading, setOutlookExportLoading] = useState(false);
 
+  // VPortal credentials state
+  const [vportalEmail, setVportalEmail] = useState("");
+  const [vportalPassword, setVportalPassword] = useState("");
+  const [vportalConfigured, setVportalConfigured] = useState(false);
+  const [vportalSaving, setVportalSaving] = useState(false);
+  const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
+  const [outlookSendPolling, setOutlookSendPolling] = useState(false);
+
   // Available EdTech tools that can be selected
   const EDTECH_TOOLS = [
     // Microsoft & Google
@@ -1041,6 +1051,7 @@ function App() {
   const [gradeAssignment, setGradeAssignment] = useState({
     title: "",
     customMarkers: [],
+    excludeMarkers: [],
     gradingNotes: "",
     responseSections: [],
   });
@@ -1076,6 +1087,7 @@ function App() {
   const [reviewModal, setReviewModal] = useState({ show: false, index: -1 });
   const [reviewModalTab, setReviewModalTab] = useState("detected"); // "detected" or "raw"
   const [reviewModalRightTab, setReviewModalRightTab] = useState("edit"); // "edit" or "email"
+  const [showAIReasoning, setShowAIReasoning] = useState(false);
   const [emailPreview, setEmailPreview] = useState({ show: false, emails: [] });
   const [emailStatus, setEmailStatus] = useState({
     sending: false,
@@ -1331,6 +1343,12 @@ function App() {
     useState([]);
   const [accommodationCustomNotes, setAccommodationCustomNotes] = useState("");
 
+  // Accommodation modal: student selection state
+  const [accommPeriodFilter, setAccommPeriodFilter] = useState("");
+  const [accommStudentsList, setAccommStudentsList] = useState([]);
+  const [accommSelectedStudents, setAccommSelectedStudents] = useState({});
+  const [accommEllLanguage, setAccommEllLanguage] = useState("");
+
   // Student writing profiles/history state
   const [studentHistoryList, setStudentHistoryList] = useState([]);
   const [studentHistoryLoading, setStudentHistoryLoading] = useState(false);
@@ -1360,7 +1378,7 @@ function App() {
         description: "Did student show genuine effort?",
       },
     ],
-    generous: true,
+    gradingStyle: 'lenient',
   });
 
   const logRef = useRef(null);
@@ -1735,7 +1753,7 @@ function App() {
     }
   }, [config.state, config.grade_level, config.subject, activeTab]);
 
-  // Load assessment templates when settings tab is opened
+  // Load assessment templates and VPortal credentials when settings tab is opened
   useEffect(() => {
     if (activeTab === "settings") {
       api.getAssessmentTemplates()
@@ -1745,8 +1763,34 @@ function App() {
         .catch((e) => {
           console.error("Error loading assessment templates:", e);
         });
+      api.getPortalCredentials()
+        .then((data) => {
+          setVportalConfigured(data.configured || false);
+          if (data.email) setVportalEmail(data.email);
+        })
+        .catch(() => {});
     }
   }, [activeTab]);
+
+  // Outlook send polling
+  useEffect(() => {
+    if (!outlookSendPolling) return;
+    var interval = setInterval(async function() {
+      try {
+        var data = await api.getOutlookSendStatus();
+        setOutlookSendStatus(data);
+        if (data.status === "done" || data.status === "error" || data.status === "idle") {
+          setOutlookSendPolling(false);
+          if (data.status === "done") {
+            addToast("Outlook: Sent " + data.sent + " of " + data.total + " emails" + (data.failed > 0 ? " (" + data.failed + " failed)" : ""), data.failed > 0 ? "warning" : "success");
+          }
+        }
+      } catch (err) {
+        // ignore polling errors
+      }
+    }, 2000);
+    return function() { clearInterval(interval); };
+  }, [outlookSendPolling]);
 
   // Auto-scroll log
   useEffect(() => {
@@ -1777,33 +1821,32 @@ function App() {
 
   // Sync editedResults with status.results (preserve user edits)
   useEffect(() => {
-    if (status.results.length > 0) {
-      setEditedResults((prev) => {
-        // If we have fewer edited results than status results, add new ones
-        if (prev.length < status.results.length) {
-          const newResults = status.results.slice(prev.length).map((r) => ({
-            ...r,
-            edited: false,
-          }));
-          return [...prev, ...newResults];
-        }
-        // If same length, merge new data but preserve edits
-        if (prev.length === status.results.length) {
-          return prev.map((edited, i) => {
-            if (edited.edited) {
-              // Preserve user edits, only update non-edited fields
-              return { ...status.results[i], ...edited, edited: true };
-            }
-            return { ...status.results[i], edited: false };
-          });
-        }
-        // If status was cleared, reset
-        if (status.results.length === 0) {
-          return [];
-        }
-        return prev;
-      });
+    if (status.results.length === 0) {
+      setEditedResults([]);
+      return;
     }
+    setEditedResults((prev) => {
+      // If same length, merge new data but preserve edits
+      if (prev.length === status.results.length) {
+        return prev.map((edited, i) => {
+          if (edited.edited) {
+            return { ...status.results[i], ...edited, edited: true };
+          }
+          return { ...status.results[i], edited: false };
+        });
+      }
+      // Length changed (results added or deleted) — rebuild from status.results
+      // preserving any user edits by matching on filename
+      var editMap = {};
+      prev.forEach(function(er) {
+        if (er.edited) editMap[er.filename] = er;
+      });
+      return status.results.map(function(r) {
+        var existing = editMap[r.filename];
+        if (existing) return { ...r, ...existing, edited: true };
+        return { ...r, edited: false };
+      });
+    });
   }, [status.results]);
 
   // Auto-save edited results to backend (debounced)
@@ -2278,6 +2321,8 @@ function App() {
         ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
         // Pass trusted students list to skip AI/plagiarism detection
         trustedStudents: config.trustedStudents || [],
+        // Pass grading style (lenient / standard / strict)
+        gradingStyle: rubric.gradingStyle || 'standard',
       });
       setStatus((prev) => ({
         ...prev,
@@ -2563,7 +2608,8 @@ ${signature}`;
       const hasHighlights = html && html.includes('data-marker-id=');
       const hasMarkers = (assignment.customMarkers || []).length > 0;
 
-      if (hasHighlights && !hasMarkers) {
+      const hasExcludeMarkers = (assignment.excludeMarkers || []).length > 0;
+      if (hasHighlights && !hasMarkers && !hasExcludeMarkers) {
         html = removeAllHighlightsFromHtml(html);
         // Also update importedDoc to persist the cleanup
         setImportedDoc({ ...importedDoc, html });
@@ -2719,8 +2765,8 @@ ${signature}`;
       (m) => getMarkerText(m) !== markerText,
     );
 
-    // Re-apply highlights for remaining markers
-    const newHtml = applyAllHighlights(cleanHtml, remainingMarkers);
+    // Re-apply highlights for remaining markers AND exclude markers
+    const newHtml = applyAllHighlights(cleanHtml, remainingMarkers, assignment.excludeMarkers);
 
     setAssignment({
       ...assignment,
@@ -2760,6 +2806,7 @@ ${signature}`;
   };
 
   // Build a mapping from plain text positions to HTML positions
+  // Entity-aware: &amp; maps to a single plain text character (&)
   const buildTextToHtmlMap = (html) => {
     const map = []; // map[plainTextIndex] = htmlIndex
     let inTag = false;
@@ -2771,6 +2818,16 @@ ${signature}`;
       } else if (html[i] === '>') {
         inTag = false;
       } else if (!inTag) {
+        // HTML entity (e.g., &amp; &lt; &#123;) → one plain text char
+        if (html[i] === '&') {
+          const semiPos = html.indexOf(';', i);
+          if (semiPos !== -1 && semiPos - i <= 8) {
+            map[plainIndex] = i;
+            plainIndex++;
+            i = semiPos; // skip to ';' (loop will i++ past it)
+            continue;
+          }
+        }
         map[plainIndex] = i;
         plainIndex++;
       }
@@ -2779,18 +2836,53 @@ ${signature}`;
     return map;
   };
 
-  // Extract plain text from HTML
+  // Extract plain text from HTML (strips tags and decodes entities)
   const htmlToPlainText = (html) => {
-    return html.replace(/<[^>]*>/g, '');
+    let text = html.replace(/<[^>]*>/g, '');
+    // Decode common HTML entities so search text matches
+    text = text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+    return text;
   };
 
   // Highlight text in HTML with a colored span (handles multi-line markers)
-  const highlightTextInHtml = (html, text, color, markerId) => {
+  const highlightTextInHtml = (html, text, color, markerId, searchAfterPos = 0) => {
     if (!text || !html) return html;
 
     // Check if already highlighted
     if (html.includes(`data-marker-id="${markerId}"`)) {
       return html; // Already highlighted
+    }
+
+    // If text spans multiple lines, highlight each line separately
+    // This handles cross-paragraph selections where a single span wrapper breaks
+    // Split on newlines, carriage returns, or multiple spaces (browsers vary)
+    const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length > 1) {
+      let result = html;
+      let currentOffset = searchAfterPos;
+      for (let li = 0; li < lines.length; li++) {
+        // Find where this line matches BEFORE highlighting (to track position)
+        const plainBefore = htmlToPlainText(result);
+        const normalizedBefore = normalizeText(plainBefore).toLowerCase();
+        const lineNorm = normalizeText(lines[li]).replace(/\s+/g, ' ').trim().toLowerCase();
+        const linePos = normalizedBefore.indexOf(lineNorm, currentOffset);
+
+        result = highlightTextInHtml(result, lines[li], color, `${markerId}-line${li}`, currentOffset);
+
+        // Advance offset past this match so next line searches further in the document
+        if (linePos !== -1) {
+          currentOffset = linePos + lineNorm.length;
+        }
+      }
+      return result;
     }
 
     // Normalize the search text
@@ -2804,11 +2896,11 @@ ${signature}`;
     const textToHtmlMap = buildTextToHtmlMap(html);
 
     // Try to find the normalized search text in normalized plain text
-    // Use case-insensitive search
+    // Use case-insensitive search, starting from searchAfterPos
     const searchLower = normalizedSearchText.toLowerCase();
     const plainLower = normalizedPlainText.toLowerCase();
 
-    let matchStart = plainLower.indexOf(searchLower);
+    let matchStart = plainLower.indexOf(searchLower, searchAfterPos);
 
     // If exact match fails, try matching with flexible whitespace
     if (matchStart === -1) {
@@ -2816,10 +2908,13 @@ ${signature}`;
       const words = normalizedSearchText.split(/\s+/).filter(w => w.length > 0);
       if (words.length > 0) {
         const flexPattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
-        const flexRegex = new RegExp(flexPattern, 'i');
-        const flexMatch = normalizedPlainText.match(flexRegex);
-        if (flexMatch) {
-          matchStart = flexMatch.index;
+        const flexRegex = new RegExp(flexPattern, 'gi');
+        let flexMatch;
+        while ((flexMatch = flexRegex.exec(normalizedPlainText)) !== null) {
+          if (flexMatch.index >= searchAfterPos) {
+            matchStart = flexMatch.index;
+            break;
+          }
         }
       }
     }
@@ -2845,6 +2940,15 @@ ${signature}`;
           // Skip HTML tag
           while (htmlIdx < html.length && html[htmlIdx] !== '>') htmlIdx++;
           htmlIdx++; // Skip '>'
+        } else if (html[htmlIdx] === '&') {
+          // HTML entity — skip to closing ';'
+          const semiPos = html.indexOf(';', htmlIdx);
+          if (semiPos !== -1 && semiPos - htmlIdx <= 8) {
+            htmlIdx = semiPos + 1;
+          } else {
+            htmlIdx++;
+          }
+          plainIdx++;
         } else {
           plainIdx++;
           htmlIdx++;
@@ -2855,7 +2959,27 @@ ${signature}`;
       // Extract the HTML content to wrap
       const matchedHtml = html.substring(htmlStart, htmlEnd);
 
-      // Wrap with highlight span
+      // If matched range crosses block elements, extract the text content of each
+      // block and highlight them individually (a span can't validly wrap across <p> tags)
+      if (/<\/?(?:p|div|h[1-6]|li|br)\b/i.test(matchedHtml)) {
+        // Extract individual text segments from the matched HTML
+        const textSegments = matchedHtml
+          .replace(/<[^>]*>/g, '\n')  // Replace tags with newlines
+          .split('\n')
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+
+        if (textSegments.length > 1) {
+          // Re-highlight each text segment individually in the full HTML
+          let result = html;
+          for (let si = 0; si < textSegments.length; si++) {
+            result = highlightTextInHtml(result, textSegments[si], color, `${markerId}-seg${si}`);
+          }
+          return result;
+        }
+      }
+
+      // Single element — wrap normally
       const highlightSpan = `<span data-marker-id="${markerId}" style="background:${color.bg};border-bottom:2px solid ${color.border};padding:2px 0;">${matchedHtml}</span>`;
 
       return html.substring(0, htmlStart) + highlightSpan + html.substring(htmlEnd);
@@ -2883,23 +3007,32 @@ ${signature}`;
     return html.replace(/<span[^>]*data-marker-id="[^"]*"[^>]*>(.*?)<\/span>/gis, '$1');
   };
 
-  // Apply all marker highlights to HTML
-  const applyAllHighlights = (html, markers) => {
-    if (!html || !markers) return html;
+  // Apply all marker highlights to HTML (start, end, AND exclude markers)
+  const applyAllHighlights = (html, markers, excludeMarkers) => {
+    if (!html) return html;
 
     let result = html;
-    markers.forEach((marker, i) => {
-      const startText = getMarkerText(marker);
-      const endText = getEndMarker(marker);
+    if (markers) {
+      markers.forEach((marker, i) => {
+        const startText = getMarkerText(marker);
+        const endText = getEndMarker(marker);
 
-      // Highlight start marker in green
-      result = highlightTextInHtml(result, startText, HIGHLIGHT_COLORS.start, `start-${i}`);
+        // Highlight start marker in green
+        result = highlightTextInHtml(result, startText, HIGHLIGHT_COLORS.start, `start-${i}`);
 
-      // Highlight end marker in red (if exists)
-      if (endText) {
-        result = highlightTextInHtml(result, endText, HIGHLIGHT_COLORS.end, `end-${i}`);
-      }
-    });
+        // Highlight end marker in red (if exists)
+        if (endText) {
+          result = highlightTextInHtml(result, endText, HIGHLIGHT_COLORS.end, `end-${i}`);
+        }
+      });
+    }
+
+    // Re-apply exclude marker highlights (orange)
+    if (excludeMarkers) {
+      excludeMarkers.forEach((marker, i) => {
+        result = highlightTextInHtml(result, marker, HIGHLIGHT_COLORS.exclude, `exclude-${i}`);
+      });
+    }
     return result;
   };
 
@@ -2938,7 +3071,11 @@ ${signature}`;
       return;
     }
     try {
-      const dataToSave = { ...assignment, importedDoc };
+      // Use editedHtml if available (preserves marker highlights)
+      const docToSave = docEditorModal.editedHtml
+        ? { ...importedDoc, html: docEditorModal.editedHtml }
+        : importedDoc;
+      const dataToSave = { ...assignment, importedDoc: docToSave };
       await api.saveAssignmentConfig(dataToSave);
       addToast("Assignment saved!", "success");
       setLoadedAssignmentName(assignment.title);
@@ -2957,12 +3094,41 @@ ${signature}`;
       if (data.assignment) {
         // Set importedDoc FIRST to prevent race condition
         if (data.assignment.importedDoc) {
-          setImportedDoc(data.assignment.importedDoc);
+          let loadedHtml = data.assignment.importedDoc.html || "";
+          // Clean orphaned exclude marker spans
+          const loadedExcludes = data.assignment.excludeMarkers || [];
+          if (loadedHtml.includes('data-marker-id="exclude-')) {
+            if (loadedExcludes.length === 0) {
+              // No exclude markers at all — strip all exclude spans
+              while (loadedHtml.includes('data-marker-id="exclude-')) {
+                loadedHtml = loadedHtml.replace(/<span[^>]*data-marker-id="exclude-[^"]*"[^>]*>(.*?)<\/span>/gis, '$1');
+              }
+            } else {
+              // Has some exclude markers — strip any orphaned spans with index >= array length
+              const excludeIdRegex = /data-marker-id="exclude-(\d+)(?:-[^"]*)?"/g;
+              let idMatch;
+              const foundIndices = new Set();
+              while ((idMatch = excludeIdRegex.exec(loadedHtml)) !== null) {
+                foundIndices.add(parseInt(idMatch[1]));
+              }
+              for (const idx of foundIndices) {
+                if (idx >= loadedExcludes.length) {
+                  const orphanRegex = new RegExp(`<span[^>]*data-marker-id="exclude-${idx}(?:-[^"]*)?\"[^>]*>(.*?)<\\/span>`, 'gis');
+                  while (orphanRegex.test(loadedHtml)) {
+                    orphanRegex.lastIndex = 0;
+                    loadedHtml = loadedHtml.replace(orphanRegex, '$1');
+                  }
+                }
+              }
+            }
+          }
+          const cleanDoc = { ...data.assignment.importedDoc, html: loadedHtml };
+          setImportedDoc(cleanDoc);
           // Also restore the highlighted HTML to the editor
-          if (data.assignment.importedDoc.html) {
+          if (loadedHtml) {
             setDocEditorModal(prev => ({
               ...prev,
-              editedHtml: data.assignment.importedDoc.html
+              editedHtml: loadedHtml
             }));
           }
         } else {
@@ -4633,6 +4799,74 @@ ${signature}`;
                             }}
                           />
                         </div>
+
+                        {/* AI Reasoning - Collapsible */}
+                        <div style={{ marginTop: "4px" }}>
+                          <button
+                            onClick={() => setShowAIReasoning(!showAIReasoning)}
+                            style={{
+                              background: "none",
+                              border: "1px solid var(--glass-border)",
+                              borderRadius: "8px",
+                              color: "var(--text-secondary)",
+                              cursor: "pointer",
+                              padding: "8px 14px",
+                              fontSize: "0.85rem",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              width: "100%",
+                              transition: "all 0.2s",
+                            }}
+                          >
+                            <span style={{
+                              transform: showAIReasoning ? "rotate(90deg)" : "rotate(0deg)",
+                              transition: "transform 0.2s",
+                              display: "inline-block",
+                            }}>&#9654;</span>
+                            AI Reasoning
+                          </button>
+                          {showAIReasoning && (
+                            <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                              <div>
+                                <label className="label">Prompt Input (Sent to AI)</label>
+                                <pre style={{
+                                  whiteSpace: "pre-wrap",
+                                  wordWrap: "break-word",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.8rem",
+                                  lineHeight: "1.5",
+                                  color: "var(--text-secondary)",
+                                  background: "var(--glass-bg)",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: "1px solid var(--glass-border)",
+                                  maxHeight: "300px",
+                                  overflowY: "auto",
+                                  margin: 0,
+                                }}>{r.ai_input || "Not available"}</pre>
+                              </div>
+                              <div>
+                                <label className="label">Raw API Output (JSON)</label>
+                                <pre style={{
+                                  whiteSpace: "pre-wrap",
+                                  wordWrap: "break-word",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.8rem",
+                                  lineHeight: "1.5",
+                                  color: "var(--text-secondary)",
+                                  background: "var(--glass-bg)",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: "1px solid var(--glass-border)",
+                                  maxHeight: "300px",
+                                  overflowY: "auto",
+                                  margin: 0,
+                                }}>{r.ai_response || "Not available"}</pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div
@@ -5190,7 +5424,9 @@ ${signature}`;
                   <button
                     onClick={() => {
                       if (!confirm("Remove all markers and highlights?")) return;
-                      const cleanHtml = removeAllHighlightsFromHtml(docEditorModal.editedHtml);
+                      let cleanHtml = removeAllHighlightsFromHtml(docEditorModal.editedHtml);
+                      // Re-apply exclude marker highlights (preserve orange)
+                      cleanHtml = applyAllHighlights(cleanHtml, [], assignment.excludeMarkers);
                       setAssignment({ ...assignment, customMarkers: [] });
                       setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
                       setImportedDoc({ ...importedDoc, html: cleanHtml });
@@ -5321,12 +5557,11 @@ ${signature}`;
                     <button
                       onClick={() => {
                         if (!confirm("Remove all exclude markers?")) return;
-                        // Remove exclude highlights from HTML
+                        // Remove all exclude highlights from HTML (handles nested -line/-seg sub-IDs)
                         let cleanHtml = docEditorModal.editedHtml;
-                        (assignment.excludeMarkers || []).forEach((_, idx) => {
-                          const regex = new RegExp(`<span[^>]*data-marker-id="exclude-${idx}"[^>]*>(.*?)</span>`, 'gi');
-                          cleanHtml = cleanHtml.replace(regex, '$1');
-                        });
+                        while (cleanHtml.includes('data-marker-id="exclude-')) {
+                          cleanHtml = cleanHtml.replace(/<span[^>]*data-marker-id="exclude-[^"]*"[^>]*>(.*?)<\/span>/gis, '$1');
+                        }
                         setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
                         setAssignment({ ...assignment, excludeMarkers: [] });
                         addToast("All exclude markers cleared", "info");
@@ -5383,9 +5618,14 @@ ${signature}`;
                             // Remove this exclude marker
                             const newExcludeMarkers = [...(assignment.excludeMarkers || [])];
                             newExcludeMarkers.splice(i, 1);
-                            // Remove highlight from HTML
-                            const regex = new RegExp(`<span[^>]*data-marker-id="exclude-${i}"[^>]*>(.*?)</span>`, 'gi');
-                            const cleanHtml = docEditorModal.editedHtml.replace(regex, '$1');
+                            // Remove highlight from HTML (handles nested -line/-seg sub-IDs)
+                            const regex = new RegExp(`<span[^>]*data-marker-id="exclude-${i}(?:-[^"]*)?\"[^>]*>(.*?)<\\/span>`, 'gis');
+                            let cleanHtml = docEditorModal.editedHtml;
+                            // Run repeatedly to handle nested spans from multi-line/segment highlights
+                            while (regex.test(cleanHtml)) {
+                              regex.lastIndex = 0;
+                              cleanHtml = cleanHtml.replace(regex, '$1');
+                            }
                             setDocEditorModal({ ...docEditorModal, editedHtml: cleanHtml });
                             setAssignment({ ...assignment, excludeMarkers: newExcludeMarkers });
                             addToast("Exclude marker removed", "info");
@@ -6366,6 +6606,7 @@ ${signature}`;
                                   await api.loadAssignment(assignmentName);
                                 if (data.assignment) {
                                   setGradeAssignment({
+                                    ...data.assignment,
                                     title: data.assignment.title || "",
                                     customMarkers:
                                       data.assignment.customMarkers || [],
@@ -6373,6 +6614,8 @@ ${signature}`;
                                       data.assignment.gradingNotes || "",
                                     responseSections:
                                       data.assignment.responseSections || [],
+                                    excludeMarkers:
+                                      data.assignment.excludeMarkers || [],
                                   });
                                   if (data.assignment.importedDoc) {
                                     setGradeImportedDoc(
@@ -7365,7 +7608,7 @@ ${signature}`;
                         Grading Results (
                         {resultsFilter === "all" && !resultsPeriodFilter && !resultsAssignmentFilter
                           ? status.results.length
-                          : status.results.filter((r) => {
+                          : status.results.filter((r, idx) => {
                               if (resultsFilter === "handwritten" && !r.is_handwritten)
                                 return false;
                               if (resultsFilter === "typed" && r.is_handwritten)
@@ -7373,6 +7616,10 @@ ${signature}`;
                               if (resultsFilter === "verified" && r.marker_status !== "verified")
                                 return false;
                               if (resultsFilter === "unverified" && r.marker_status !== "verified")
+                                return false;
+                              if (resultsFilter === "approved" && emailApprovals[idx] !== "approved")
+                                return false;
+                              if (resultsFilter === "unapproved" && emailApprovals[idx] === "approved")
                                 return false;
                               if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
                                 return false;
@@ -7500,6 +7747,8 @@ ${signature}`;
                             }}
                           >
                             <option value="all">All Results</option>
+                            <option value="approved">Approved</option>
+                            <option value="unapproved">Needs Review</option>
                             <option value="handwritten">
                               Handwritten Only
                             </option>
@@ -7578,42 +7827,60 @@ ${signature}`;
                           </button>
                           <button
                             onClick={async () => {
-                              const filteredCount = resultsAssignmentFilter
-                                ? status.results.filter(r => r.assignment === resultsAssignmentFilter).length
-                                : status.results.length;
-                              const confirmMsg = resultsAssignmentFilter
-                                ? `Clear ${filteredCount} results for "${resultsAssignmentFilter}"? This cannot be undone.`
-                                : `Clear all ${filteredCount} grading results? This cannot be undone.`;
+                              const hasAnyFilter = resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter;
+
+                              // Collect filenames of currently visible results
+                              const visibleFilenames = [];
+                              status.results.forEach((r, idx) => {
+                                if (resultsFilter === "handwritten" && !r.is_handwritten) return;
+                                if (resultsFilter === "typed" && r.is_handwritten) return;
+                                if (resultsFilter === "verified" && r.marker_status !== "verified") return;
+                                if (resultsFilter === "unverified" && r.marker_status !== "unverified") return;
+                                if (resultsFilter === "mismatched" && !r.config_mismatch) return;
+                                if (resultsFilter === "approved" && emailApprovals[idx] !== "approved") return;
+                                if (resultsFilter === "unapproved" && emailApprovals[idx] === "approved") return;
+                                if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
+                                if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter) return;
+                                if (r.filename) visibleFilenames.push(r.filename);
+                              });
+
+                              const clearCount = hasAnyFilter ? visibleFilenames.length : status.results.length;
+                              const confirmMsg = hasAnyFilter
+                                ? "Clear " + clearCount + " filtered results? This cannot be undone."
+                                : "Clear all " + clearCount + " grading results? This cannot be undone.";
 
                               if (confirm(confirmMsg)) {
                                 try {
-                                  await api.clearResults(resultsAssignmentFilter || null);
-                                  if (resultsAssignmentFilter) {
-                                    // Only remove filtered results from state
+                                  if (hasAnyFilter && visibleFilenames.length > 0) {
+                                    // Clear only the visible results by filename
+                                    await api.clearResults(visibleFilenames);
+                                    const filenameSet = new Set(visibleFilenames);
                                     setStatus((prev) => ({
                                       ...prev,
-                                      results: prev.results.filter(r => r.assignment !== resultsAssignmentFilter),
+                                      results: prev.results.filter(r => !filenameSet.has(r.filename)),
                                     }));
                                     setEditedResults((prev) =>
-                                      prev.filter(r => r.assignment !== resultsAssignmentFilter)
+                                      prev.filter(r => !filenameSet.has(r.filename))
                                     );
-                                    // Clear approvals/emails for removed students
-                                    const removedStudents = status.results
-                                      .filter(r => r.assignment === resultsAssignmentFilter)
-                                      .map(r => r.student_id || r.student);
+                                    // Clear approvals/emails for removed results
+                                    const removedIndices = new Set();
+                                    status.results.forEach((r, i) => {
+                                      if (filenameSet.has(r.filename)) removedIndices.add(i);
+                                    });
                                     setEmailApprovals((prev) => {
                                       const updated = { ...prev };
-                                      removedStudents.forEach(id => delete updated[id]);
+                                      removedIndices.forEach(i => delete updated[i]);
                                       return updated;
                                     });
                                     setEditedEmails((prev) => {
                                       const updated = { ...prev };
-                                      removedStudents.forEach(id => delete updated[id]);
+                                      removedIndices.forEach(i => delete updated[i]);
                                       return updated;
                                     });
-                                    addToast(`Cleared ${filteredCount} results for "${resultsAssignmentFilter}"`, "success");
-                                  } else {
+                                    addToast("Cleared " + visibleFilenames.length + " results", "success");
+                                  } else if (!hasAnyFilter) {
                                     // Clear everything
+                                    await api.clearResults();
                                     setStatus((prev) => ({
                                       ...prev,
                                       results: [],
@@ -7637,7 +7904,7 @@ ${signature}`;
                             style={{ background: "rgba(239,68,68,0.2)" }}
                           >
                             <Icon name="Trash2" size={18} />
-                            {resultsAssignmentFilter ? "Clear Filtered" : "Clear All"}
+                            {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter) ? "Clear Filtered" : "Clear All"}
                           </button>
                           <button
                             onClick={() => setFocusExportModal(true)}
@@ -7655,10 +7922,11 @@ ${signature}`;
                             onClick={async () => {
                               setBatchExportLoading(true);
                               try {
-                                const assignment = resultsAssignmentFilter || (status.results[0] && status.results[0].assignment) || 'Assignment';
+                                const batchSource = editedResults.length > 0 ? editedResults : status.results;
+                                const assignment = resultsAssignmentFilter || (batchSource[0] && batchSource[0].assignment) || 'Assignment';
                                 const resultsToExport = resultsAssignmentFilter
-                                  ? status.results.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
-                                  : status.results;
+                                  ? batchSource.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
+                                  : batchSource;
 
                                 const batchRes = await api.exportFocusBatch(resultsToExport, assignment);
                                 await api.exportFocusComments(resultsToExport, assignment);
@@ -7720,6 +7988,42 @@ ${signature}`;
                           >
                             <Icon name="Mail" size={18} />
                             {outlookExportLoading ? "Generating..." : "Parent Emails"}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              var assignment = resultsAssignmentFilter || (status.results[0] && status.results[0].assignment) || 'Assignment';
+                              var resultsToSend = resultsAssignmentFilter
+                                ? status.results.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
+                                : status.results;
+                              if (!confirm("Send " + resultsToSend.length + " parent emails via Outlook?" + String.fromCharCode(10) + String.fromCharCode(10) + "A browser window will open to send from your school account.")) return;
+                              try {
+                                var result = await api.sendOutlookEmails({
+                                  results: resultsToSend,
+                                  assignment: assignment,
+                                  type: "parent",
+                                  teacher_name: config.teacher_name,
+                                  email_signature: config.email_signature,
+                                  include_secondary: true,
+                                });
+                                if (result.error) {
+                                  addToast(result.error, "error");
+                                } else {
+                                  setOutlookSendPolling(true);
+                                  setOutlookSendStatus({ status: "running", sent: 0, total: result.total, failed: 0, message: "Starting..." });
+                                  addToast("Outlook sending started (" + result.total + " emails)", "info");
+                                }
+                              } catch (err) {
+                                addToast("Outlook send error: " + err.message, "error");
+                              }
+                            }}
+                            className="btn btn-primary"
+                            disabled={outlookSendStatus.status === "running" || status.results.length === 0 || !vportalConfigured}
+                            title={vportalConfigured ? "Send parent emails from your Outlook account" : "Configure VPortal credentials in Settings first"}
+                          >
+                            <Icon name="Send" size={18} />
+                            {outlookSendStatus.status === "running"
+                              ? "Sending " + outlookSendStatus.sent + "/" + outlookSendStatus.total + "..."
+                              : "Send via Outlook"}
                           </button>
                           {/* Email Actions */}
                           <div style={{ borderLeft: "1px solid var(--glass-border)", height: "24px", margin: "0 5px" }} />
@@ -7834,6 +8138,39 @@ ${signature}`;
                         </div>
                       )}
                     </div>
+
+                    {/* Outlook Send Progress */}
+                    {outlookSendStatus.status === "running" && (
+                      <div style={{
+                        padding: "12px 16px",
+                        background: "var(--input-bg)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--glass-border)",
+                        marginTop: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "0.85rem", marginBottom: "6px", color: "var(--text-secondary)" }}>
+                            {outlookSendStatus.message}
+                          </div>
+                          <div style={{ height: "6px", background: "var(--glass-border)", borderRadius: "3px", overflow: "hidden" }}>
+                            <div style={{
+                              height: "100%",
+                              width: (outlookSendStatus.total > 0 ? (outlookSendStatus.sent / outlookSendStatus.total * 100) : 0) + "%",
+                              background: "var(--primary)",
+                              borderRadius: "3px",
+                              transition: "width 0.3s ease",
+                            }} />
+                          </div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                            {outlookSendStatus.sent + " of " + outlookSendStatus.total + " sent"}
+                            {outlookSendStatus.failed > 0 ? " (" + outlookSendStatus.failed + " failed)" : ""}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Authenticity Summary Alert */}
                     {status.results.length > 0 &&
@@ -8071,6 +8408,8 @@ ${signature}`;
                                     if (resultsFilter === "typed" && r.is_handwritten) return;
                                     if (resultsFilter === "verified" && r.marker_status !== "verified") return;
                                     if (resultsFilter === "unverified" && r.marker_status !== "verified") return;
+                                    if (resultsFilter === "approved" && emailApprovals[i] !== "approved") return;
+                                    if (resultsFilter === "unapproved" && emailApprovals[i] === "approved") return;
                                     if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
                                     if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter) return;
                                     approvals[i] = "approved";
@@ -8311,6 +8650,13 @@ ${signature}`;
                                   !r.config_mismatch
                                 )
                                   return false;
+                                // Apply approval filter
+                                if (resultsFilter === "approved" || resultsFilter === "unapproved") {
+                                  const idx = status.results.findIndex((orig) => orig.filename === r.filename);
+                                  const isApproved = emailApprovals[idx] === "approved";
+                                  if (resultsFilter === "approved" && !isApproved) return false;
+                                  if (resultsFilter === "unapproved" && isApproved) return false;
+                                }
                                 // Apply period filter
                                 if (resultsPeriodFilter && r.period !== resultsPeriodFilter)
                                   return false;
@@ -8678,15 +9024,56 @@ ${signature}`;
                                                 ? "Clear"
                                                 : auth.plag.flag}
                                             </span>
-                                            {/* Trust button for flagged students */}
+                                            {/* Trust button for flagged students — adds to trusted list AND regrades */}
                                             {isFlagged && (
                                               <button
-                                                onClick={() => {
+                                                onClick={async () => {
+                                                  var newTrusted = [...(config.trustedStudents || []), studentId];
                                                   setConfig(prev => ({
                                                     ...prev,
-                                                    trustedStudents: [...(prev.trustedStudents || []), studentId]
+                                                    trustedStudents: newTrusted
                                                   }));
-                                                  addToast(`Added ${r.student} to trusted writers list`, "success");
+                                                  addToast("Trusting " + r.student_name + " and regrading...", "info");
+                                                  try {
+                                                    await api.deleteResult(r.filename);
+                                                    setStatus(function(prev) { return { ...prev, results: prev.results.filter(function(res) { return res.filename !== r.filename; }) }; });
+                                                    var filename = r.original_filename || r.filename;
+                                                    await api.startGrading({
+                                                      assignments_folder: config.assignments_folder,
+                                                      output_folder: config.output_folder,
+                                                      roster_file: config.roster_file,
+                                                      grading_period: config.grading_period,
+                                                      grade_level: config.grade_level,
+                                                      subject: config.subject,
+                                                      teacher_name: config.teacher_name,
+                                                      school_name: config.school_name,
+                                                      ai_model: config.ai_model,
+                                                      extraction_mode: config.extraction_mode,
+                                                      selectedFiles: [filename],
+                                                      globalAINotes: globalAINotes,
+                                                      classPeriod: r.period || '',
+                                                      ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
+                                                      trustedStudents: newTrusted,
+                                                      gradingStyle: rubric.gradingStyle || 'standard',
+                                                    });
+                                                    var checkInterval = setInterval(async function() {
+                                                      var st = await api.getStatus();
+                                                      if (!st.is_running) {
+                                                        clearInterval(checkInterval);
+                                                        if (st.results && st.results.length > 0) {
+                                                          var newResult = st.results.find(function(res) {
+                                                            return res.student_name === r.student_name && (res.assignment === r.assignment || res.filename === filename);
+                                                          });
+                                                          if (newResult) {
+                                                            setStatus(function(prev) { return { ...prev, results: [...prev.results, newResult] }; });
+                                                            addToast(r.student_name + " regraded: " + newResult.letter_grade + " (" + newResult.score + "%)", "success");
+                                                          }
+                                                        }
+                                                      }
+                                                    }, 1000);
+                                                  } catch (err) {
+                                                    addToast("Regrade failed: " + err.message, "error");
+                                                  }
                                                 }}
                                                 title="Mark as trusted writer - this student writes well naturally"
                                                 style={{
@@ -8838,8 +9225,9 @@ ${signature}`;
                                               classPeriod: r.period || '',
                                               ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
                                               trustedStudents: config.trustedStudents || [],
+                                              gradingStyle: rubric.gradingStyle || 'standard',
                                             });
-                                            // Poll for completion
+                                            // Poll for completion and update results
                                             const checkStatus = setInterval(async () => {
                                               const st = await api.getStatus();
                                               if (!st.is_running) {
@@ -8850,6 +9238,7 @@ ${signature}`;
                                                     (res.assignment === r.assignment || res.filename === filename)
                                                   );
                                                   if (newResult) {
+                                                    setStatus(prev => ({ ...prev, results: [...prev.results, newResult] }));
                                                     addToast(`Regraded ${r.student_name}: ${newResult.letter_grade} (${newResult.score}%)`, "success");
                                                   }
                                                 }
@@ -9442,6 +9831,23 @@ ${signature}`;
                           <option value="Q4">Quarter 4 (Q4)</option>
                           <option value="S1">Semester 1 (S1)</option>
                           <option value="S2">Semester 2 (S2)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label">Grading Style</label>
+                        <select
+                          className="input"
+                          value={rubric.gradingStyle || 'standard'}
+                          onChange={(e) =>
+                            setRubric((prev) => ({
+                              ...prev,
+                              gradingStyle: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="lenient">Lenient — Reward effort and attempt</option>
+                          <option value="standard">Standard — Balanced grading</option>
+                          <option value="strict">Strict — Penalize brevity and weak answers</option>
                         </select>
                       </div>
                     </div>
@@ -10806,6 +11212,111 @@ ${signature}`;
                         </div>
                       )}
                     </div>
+
+                    {/* District Portal (VPortal) Credentials */}
+                    <div>
+                      <h3 style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        marginTop: "25px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}>
+                        <Icon name="Building2" size={20} style={{ color: "#6366f1" }} />
+                        District Portal (VPortal)
+                      </h3>
+                      <p style={{
+                        fontSize: "0.85rem",
+                        color: "var(--text-secondary)",
+                        marginBottom: "15px",
+                      }}>
+                        Save your VPortal credentials to enable Focus gradebook automation and Outlook email sending.
+                        Credentials are stored securely on the server and never shared externally.
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "400px" }}>
+                        <div>
+                          <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            value={vportalEmail}
+                            onChange={(e) => setVportalEmail(e.target.value)}
+                            placeholder="you@district.edu"
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              background: "var(--input-bg)",
+                              border: "1px solid var(--input-border)",
+                              borderRadius: "10px",
+                              color: "var(--text-primary)",
+                              fontSize: "0.9rem",
+                              outline: "none",
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            value={vportalPassword}
+                            onChange={(e) => setVportalPassword(e.target.value)}
+                            placeholder={vportalConfigured ? "••••••••" : "Enter password"}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              background: "var(--input-bg)",
+                              border: "1px solid var(--input-border)",
+                              borderRadius: "10px",
+                              color: "var(--text-primary)",
+                              fontSize: "0.9rem",
+                              outline: "none",
+                            }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <button
+                            onClick={async () => {
+                              if (!vportalEmail || !vportalPassword) {
+                                addToast("Please enter both email and password", "error");
+                                return;
+                              }
+                              setVportalSaving(true);
+                              try {
+                                await api.savePortalCredentials(vportalEmail, vportalPassword);
+                                setVportalConfigured(true);
+                                setVportalPassword("");
+                                addToast("VPortal credentials saved", "success");
+                              } catch (err) {
+                                addToast("Failed to save credentials: " + err.message, "error");
+                              }
+                              setVportalSaving(false);
+                            }}
+                            className="btn btn-primary"
+                            style={{ padding: "8px 16px" }}
+                            disabled={vportalSaving}
+                          >
+                            {vportalSaving ? "Saving..." : "Save Credentials"}
+                          </button>
+                          {vportalConfigured && (
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "0.8rem",
+                              color: "var(--success)",
+                            }}>
+                              <Icon name="CheckCircle2" size={14} />
+                              Configured
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                       </>
                     )}
 
@@ -11481,13 +11992,10 @@ ${signature}`;
                                     <div
                                       style={{
                                         fontWeight: 600,
-                                        fontSize: "0.85rem",
+                                        fontSize: "0.9rem",
                                       }}
                                     >
-                                      Student ID:{" "}
-                                      {studentId.length > 20
-                                        ? studentId.slice(0, 20) + "..."
-                                        : studentId}
+                                      {data.student_name || "ID: " + studentId}
                                     </div>
                                     <div
                                       style={{
@@ -11503,8 +12011,13 @@ ${signature}`;
                                           style={{
                                             padding: "2px 8px",
                                             background:
-                                              "rgba(244, 114, 182, 0.15)",
-                                            color: "#f472b6",
+                                              preset.id === "ell_support"
+                                                ? "rgba(96, 165, 250, 0.15)"
+                                                : "rgba(244, 114, 182, 0.15)",
+                                            color:
+                                              preset.id === "ell_support"
+                                                ? "#60a5fa"
+                                                : "#f472b6",
                                             borderRadius: "4px",
                                             fontSize: "0.7rem",
                                             fontWeight: 500,
@@ -11532,13 +12045,32 @@ ${signature}`;
                                   </div>
                                   <div style={{ display: "flex", gap: "6px" }}>
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         setSelectedAccommodationPresets(
                                           data.presets.map((p) => p.id),
                                         );
                                         setAccommodationCustomNotes(
                                           data.custom_notes || "",
                                         );
+                                        // Load ELL language if ELL Support is active
+                                        if (
+                                          data.presets.some(
+                                            (p) => p.id === "ell_support",
+                                          )
+                                        ) {
+                                          try {
+                                            const ellData =
+                                              await api.getEllStudents();
+                                            setAccommEllLanguage(
+                                              ellData?.[studentId]?.language ||
+                                                "",
+                                            );
+                                          } catch (e) {
+                                            setAccommEllLanguage("");
+                                          }
+                                        } else {
+                                          setAccommEllLanguage("");
+                                        }
                                         setAccommodationModal({
                                           show: true,
                                           studentId,
@@ -11879,8 +12411,9 @@ ${signature}`;
                         }}
                       >
                         Graider is designed for FERPA compliance. Student names
-                        are sanitized before AI processing, and all data is
-                        stored locally on your computer.
+                        are sanitized before AI processing. Your data is stored
+                        securely on Graider's server and is never shared with
+                        third-party vendors or aggregated across districts.
                       </p>
 
                       {/* Privacy Features */}
@@ -11955,7 +12488,7 @@ ${signature}`;
                             <span
                               style={{ fontWeight: 600, fontSize: "0.9rem" }}
                             >
-                              Local Storage Only
+                              No Third-Party Sharing
                             </span>
                           </div>
                           <p
@@ -11965,8 +12498,8 @@ ${signature}`;
                               margin: 0,
                             }}
                           >
-                            All data stays on your computer. No cloud storage of
-                            student information
+                            Student data is never sold, shared with vendors, or
+                            aggregated across districts
                           </p>
                         </div>
 
@@ -12004,8 +12537,8 @@ ${signature}`;
                               margin: 0,
                             }}
                           >
-                            OpenAI API does not use submitted data to train
-                            models (per their policy)
+                            OpenAI and Anthropic APIs do not use submitted data
+                            to train models (per their policies)
                           </p>
                         </div>
 
@@ -12043,8 +12576,8 @@ ${signature}`;
                               margin: 0,
                             }}
                           >
-                            All data access is logged locally for compliance
-                            tracking
+                            All data access is logged for compliance
+                            tracking and FERPA audit trails
                           </p>
                         </div>
                       </div>
@@ -13429,6 +13962,11 @@ ${signature}`;
                           });
                           setSelectedAccommodationPresets([]);
                           setAccommodationCustomNotes("");
+                          setAccommEllLanguage("");
+                          setAccommSelectedStudents({});
+
+                          setAccommPeriodFilter("");
+                          setAccommStudentsList([]);
                         }}
                         style={{
                           background: "none",
@@ -13461,16 +13999,107 @@ ${signature}`;
                       never student names or IDs.
                     </p>
 
-                    {/* Student ID Input (for new students) */}
+                    {/* Student Selection (for new students) */}
                     {!accommodationModal.studentId && (
                       <div style={{ marginBottom: "20px" }}>
-                        <label className="label">Student ID</label>
-                        <input
-                          type="text"
+                        <label className="label">Select Students</label>
+                        {/* Period selector */}
+                        <select
                           className="input"
-                          placeholder="Enter student ID from roster..."
-                          id="accommodation-student-id"
-                        />
+                          value={accommPeriodFilter}
+                          onChange={async (e) => {
+                            const val = e.target.value;
+                            setAccommPeriodFilter(val);
+                            setAccommSelectedStudents({});
+                            if (val) {
+                              try {
+                                const data =
+                                  await api.getPeriodStudents(val);
+                                if (data.students)
+                                  setAccommStudentsList(data.students);
+                              } catch (err) {
+                                setAccommStudentsList([]);
+                              }
+                            } else {
+                              setAccommStudentsList([]);
+                            }
+                          }}
+                          style={{ marginBottom: "8px" }}
+                        >
+                          <option value="">Choose a period...</option>
+                          {sortedPeriods.map((p) => (
+                            <option key={p.filename} value={p.filename}>
+                              {p.period_name} ({p.student_count} students)
+                            </option>
+                          ))}
+                        </select>
+                        {/* Student checkbox list */}
+                        {accommStudentsList.length > 0 && (
+                          <div
+                            style={{
+                              maxHeight: "200px",
+                              overflowY: "auto",
+                              border: "1px solid var(--input-border)",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            {accommStudentsList.map((s) => {
+                              const sid = s.id || s.student_id || "";
+                              const name = (
+                                s.full ||
+                                (s.first || "") + " " + (s.last || "")
+                              ).trim();
+                              const checked = !!accommSelectedStudents[sid];
+                              return (
+                                <label
+                                  key={sid}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "8px 12px",
+                                    borderBottom:
+                                      "1px solid var(--input-border)",
+                                    cursor: "pointer",
+                                    background: checked
+                                      ? "rgba(96,165,250,0.1)"
+                                      : "transparent",
+                                    fontSize: "0.85rem",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      setAccommSelectedStudents((prev) => {
+                                        const next = { ...prev };
+                                        if (e.target.checked) {
+                                          next[sid] = name;
+                                        } else {
+                                          delete next[sid];
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                  {name}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {Object.keys(accommSelectedStudents).length > 0 && (
+                          <div
+                            style={{
+                              marginTop: "6px",
+                              fontSize: "0.8rem",
+                              color: "#60a5fa",
+                            }}
+                          >
+                            {Object.keys(accommSelectedStudents).length}{" "}
+                            student(s) selected
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -13563,6 +14192,58 @@ ${signature}`;
                       </div>
                     </div>
 
+                    {/* ELL Language selector — shown when ELL Support preset is selected */}
+                    {selectedAccommodationPresets.includes("ell_support") && (
+                      <div style={{ marginBottom: "20px" }}>
+                        <label className="label">
+                          Home Language (for bilingual feedback)
+                        </label>
+                        <select
+                          className="input"
+                          value={accommEllLanguage}
+                          onChange={(e) =>
+                            setAccommEllLanguage(e.target.value)
+                          }
+                        >
+                          <option value="">English only (no translation)</option>
+                          <option value="spanish">Spanish</option>
+                          <option value="portuguese">Portuguese</option>
+                          <option value="haitian creole">Haitian Creole</option>
+                          <option value="french">French</option>
+                          <option value="arabic">Arabic</option>
+                          <option value="chinese (simplified)">Chinese (Simplified)</option>
+                          <option value="chinese (traditional)">Chinese (Traditional)</option>
+                          <option value="vietnamese">Vietnamese</option>
+                          <option value="korean">Korean</option>
+                          <option value="tagalog">Tagalog</option>
+                          <option value="russian">Russian</option>
+                          <option value="hindi">Hindi</option>
+                          <option value="urdu">Urdu</option>
+                          <option value="bengali">Bengali</option>
+                          <option value="japanese">Japanese</option>
+                          <option value="german">German</option>
+                          <option value="italian">Italian</option>
+                          <option value="polish">Polish</option>
+                          <option value="somali">Somali</option>
+                          <option value="swahili">Swahili</option>
+                          <option value="burmese">Burmese</option>
+                          <option value="nepali">Nepali</option>
+                          <option value="gujarati">Gujarati</option>
+                          <option value="amharic">Amharic</option>
+                        </select>
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--text-muted)",
+                            marginTop: "6px",
+                          }}
+                        >
+                          If set, feedback will be provided in both English and
+                          the selected language.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Custom Notes */}
                     <div style={{ marginBottom: "20px" }}>
                       <label className="label">
@@ -13599,13 +14280,16 @@ ${signature}`;
                     >
                       <button
                         onClick={async () => {
-                          const studentId =
-                            accommodationModal.studentId ||
-                            document.getElementById("accommodation-student-id")
-                              ?.value;
+                          // Single edit mode vs multi-select mode
+                          const studentIds = accommodationModal.studentId
+                            ? [accommodationModal.studentId]
+                            : Object.keys(accommSelectedStudents);
 
-                          if (!studentId) {
-                            addToast("Please enter a student ID", "warning");
+                          if (studentIds.length === 0) {
+                            addToast(
+                              "Please select at least one student",
+                              "warning",
+                            );
                             return;
                           }
 
@@ -13621,23 +14305,89 @@ ${signature}`;
                           }
 
                           try {
-                            await api.setStudentAccommodation(
-                              studentId,
-                              selectedAccommodationPresets,
-                              accommodationCustomNotes,
-                            );
+                            // Save accommodation for each selected student
+                            for (const sid of studentIds) {
+                              const name =
+                                accommSelectedStudents[sid] || "";
+                              await api.setStudentAccommodation(
+                                sid,
+                                selectedAccommodationPresets,
+                                accommodationCustomNotes,
+                                name,
+                              );
+                            }
+
+                            // Save ELL language if ELL Support selected
+                            if (
+                              selectedAccommodationPresets.includes(
+                                "ell_support",
+                              ) &&
+                              accommEllLanguage
+                            ) {
+                              try {
+                                const existing =
+                                  await api.getEllStudents();
+                                const ellData =
+                                  existing && typeof existing === "object"
+                                    ? existing
+                                    : {};
+                                for (const sid of studentIds) {
+                                  ellData[sid] = {
+                                    student_name:
+                                      accommSelectedStudents[sid] || sid,
+                                    language: accommEllLanguage,
+                                  };
+                                }
+                                await api.saveEllStudents(ellData);
+                              } catch (ellErr) {
+                                // Non-blocking
+                              }
+                            }
+
+                            // If editing single student & ELL Support removed, clear ELL entry
+                            if (
+                              accommodationModal.studentId &&
+                              !selectedAccommodationPresets.includes(
+                                "ell_support",
+                              )
+                            ) {
+                              try {
+                                const existing =
+                                  await api.getEllStudents();
+                                if (
+                                  existing &&
+                                  existing[accommodationModal.studentId]
+                                ) {
+                                  delete existing[
+                                    accommodationModal.studentId
+                                  ];
+                                  await api.saveEllStudents(existing);
+                                }
+                              } catch (ellErr) {
+                                // Non-blocking
+                              }
+                            }
 
                             // Reload accommodations
                             const data = await api.getStudentAccommodations();
                             if (data.accommodations)
                               setStudentAccommodations(data.accommodations);
 
+                            addToast(
+                              studentIds.length +
+                                " student(s) updated",
+                              "success",
+                            );
                             setAccommodationModal({
                               show: false,
                               studentId: null,
                             });
                             setSelectedAccommodationPresets([]);
                             setAccommodationCustomNotes("");
+                            setAccommEllLanguage("");
+                            setAccommSelectedStudents({});
+                            setAccommPeriodFilter("");
+                            setAccommStudentsList([]);
                           } catch (err) {
                             addToast(
                               "Error saving accommodation: " + err.message,
@@ -13658,6 +14408,11 @@ ${signature}`;
                           });
                           setSelectedAccommodationPresets([]);
                           setAccommodationCustomNotes("");
+                          setAccommEllLanguage("");
+                          setAccommSelectedStudents({});
+
+                          setAccommPeriodFilter("");
+                          setAccommStudentsList([]);
                         }}
                         className="btn btn-secondary"
                       >
@@ -13667,6 +14422,15 @@ ${signature}`;
                   </div>
                 </div>
               )}
+
+              {/* Assistant Tab — always mounted so chat persists across tab switches */}
+              <div className={activeTab === "assistant" ? "fade-in glass-card" : ""} style={{
+                padding: 0,
+                overflow: "hidden",
+                display: activeTab === "assistant" ? "block" : "none",
+              }}>
+                <AssistantChat addToast={addToast} />
+              </div>
 
               {/* Builder Tab */}
               {activeTab === "builder" && (
@@ -20462,8 +21226,9 @@ ${signature}`;
                           document.getElementById("focus-period")?.value ||
                           "all";
 
-                        // Filter results
-                        let resultsToExport = status.results.filter(
+                        // Filter results (use editedResults if available, to include curves/edits)
+                        const sourceResults = editedResults.length > 0 ? editedResults : status.results;
+                        let resultsToExport = sourceResults.filter(
                           (r) =>
                             (r.assignment || "Unknown") === assignment &&
                             (period === "all" ||

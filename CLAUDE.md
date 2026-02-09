@@ -1,15 +1,30 @@
 # CLAUDE.md - Graider Development Guide
 
+## Virtual Environment
+The Python venv is at: `/Users/alexc/Downloads/Graider/venv/`
+Activate with: `source venv/bin/activate`
+Always use this venv for running Python commands, installing packages, and starting the backend.
+
+## CRITICAL: Active Frontend
+
+**The active frontend is `frontend/src/App.jsx`** (React + Vite, served via `backend/app.py`).
+
+**`graider_app.py` is the LEGACY frontend** — it contains an old embedded React UI that is NOT in use.
+**NEVER edit `graider_app.py` for UI changes.** All frontend work goes in `frontend/src/`.
+
+- Backend entry point: `backend/app.py` (serves the Vite-built frontend from `backend/static/`)
+- Frontend source: `frontend/src/App.jsx` and `frontend/src/` directory
+
 ## Project Overview
 
-Graider is an AI-powered grading assistant for educators. It's a Flask application with an embedded React frontend that uses OpenAI's GPT-4 API to grade student assignments.
+Graider is an AI-powered grading assistant for educators. It's a Flask application with a React frontend that uses OpenAI's GPT-4 API to grade student assignments.
 
 ## Architecture
 
 ### File Structure
 ```
 graider/
-├── graider_app.py          # Main Flask app + embedded React UI (~280KB)
+├── graider_app.py          # LEGACY - old embedded React UI, DO NOT EDIT for UI changes
 ├── assignment_grader.py    # Core grading logic, file parsing, OpenAI calls
 ├── email_sender.py         # Email functionality for sending feedback
 ├── sharepoint_watcher.py   # OneDrive/SharePoint file watching

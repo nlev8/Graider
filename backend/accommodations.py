@@ -21,6 +21,7 @@ from typing import Optional
 
 # Local storage directories
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
+ELL_STUDENTS_FILE = os.path.join(GRAIDER_DATA_DIR, "ell_students.json")
 ACCOMMODATIONS_DIR = os.path.join(GRAIDER_DATA_DIR, "accommodations")
 PRESETS_FILE = os.path.join(ACCOMMODATIONS_DIR, "presets.json")
 STUDENT_ACCOMMODATIONS_FILE = os.path.join(ACCOMMODATIONS_DIR, "student_accommodations.json")
@@ -156,12 +157,12 @@ DEFAULT_PRESETS = {
     },
     # ══════════════════════════════════════════════════════════════
     # ELL (English Language Learner) ACCOMMODATION
-    # Note: Bilingual feedback is automatic when student writes in another language
+    # Bilingual feedback controlled by teacher-set language per student
     # ══════════════════════════════════════════════════════════════
     "ell_support": {
         "id": "ell_support",
         "name": "ELL Support",
-        "description": "Simplified English, no grammar penalties for ELL students",
+        "description": "Simplified English, no grammar penalties, optional bilingual feedback",
         "icon": "Globe",
         "ai_instructions": """ACCOMMODATION - ELL (English Language Learner) SUPPORT:
 - Use basic, high-frequency vocabulary only
@@ -174,8 +175,7 @@ DEFAULT_PRESETS = {
 - Do NOT penalize for grammar or spelling errors related to language learning
 - Do NOT penalize for L1-influenced patterns (missing articles, verb tense, word order)
 - Focus grading on CONTENT understanding, not language accuracy
-- Celebrate effort and participation
-- Note: Bilingual feedback is provided automatically when student writes in another language"""
+- Celebrate effort and participation"""
     }
 }
 
@@ -282,7 +282,7 @@ def save_student_accommodations(mappings: dict) -> bool:
         return False
 
 
-def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: str = "") -> bool:
+def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: str = "", student_name: str = "") -> bool:
     """
     Assign accommodation presets to a student.
 
@@ -290,14 +290,21 @@ def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: s
         student_id: The student's ID (stored locally only)
         preset_ids: List of preset IDs to apply
         custom_notes: Additional custom accommodation notes
+        student_name: Display name (stored locally, never sent to AI)
     """
     mappings = load_student_accommodations()
 
-    mappings[student_id] = {
+    entry = {
         "presets": preset_ids,
         "custom_notes": custom_notes,
         "updated": datetime.now().isoformat()
     }
+    if student_name:
+        entry["student_name"] = student_name
+    elif student_id in mappings and mappings[student_id].get("student_name"):
+        entry["student_name"] = mappings[student_id]["student_name"]
+
+    mappings[student_id] = entry
 
     audit_log_accommodation("SET_STUDENT_ACCOMMODATION",
                            f"Student {student_id[:6]}... assigned {len(preset_ids)} presets")
@@ -335,6 +342,22 @@ def remove_student_accommodation(student_id: str) -> bool:
 # ══════════════════════════════════════════════════════════════
 # AI PROMPT GENERATION (FERPA-COMPLIANT)
 # ══════════════════════════════════════════════════════════════
+
+def _get_ell_language(student_id: str) -> Optional[str]:
+    """Get the ELL language for a student, or None if not set."""
+    if not os.path.exists(ELL_STUDENTS_FILE):
+        return None
+    try:
+        with open(ELL_STUDENTS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        entry = data.get(student_id, {})
+        lang = entry.get("language")
+        if lang and lang != "none":
+            return lang
+    except Exception:
+        pass
+    return None
+
 
 def build_accommodation_prompt(student_id: str) -> str:
     """
@@ -383,6 +406,9 @@ def build_accommodation_prompt(student_id: str) -> str:
         prompt_parts.append("ADDITIONAL ACCOMMODATION NOTES:")
         prompt_parts.append(custom_notes)
         prompt_parts.append("")
+
+    # Note: Bilingual feedback translation is handled as a separate post-grading API call
+    # in assignment_grader.py — no need to instruct the grading AI about translation here.
 
     prompt_parts.append("═══════════════════════════════════════════════════════════")
     prompt_parts.append("")

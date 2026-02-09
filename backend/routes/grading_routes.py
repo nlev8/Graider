@@ -7,10 +7,19 @@ due to tight coupling with global state. Full extraction planned for Phase 3.
 """
 import os
 import csv
+import json
 from pathlib import Path
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 grading_bp = Blueprint('grading', __name__)
+
+EXPORTS_DIR = os.path.expanduser("~/.graider_exports")
+FOCUS_EXPORTS_DIR = os.path.join(EXPORTS_DIR, "focus")
+OUTLOOK_EXPORTS_DIR = os.path.join(EXPORTS_DIR, "outlook")
+
+for _dir in [EXPORTS_DIR, FOCUS_EXPORTS_DIR, OUTLOOK_EXPORTS_DIR]:
+    os.makedirs(_dir, exist_ok=True)
 
 # These will be set by app.py during initialization
 grading_state = None
@@ -97,31 +106,160 @@ def stop_grading():
 
 @grading_bp.route('/api/clear-results', methods=['POST'])
 def clear_results():
-    """Clear all grading results (keeps student history intact)."""
+    """Clear grading results. Optionally filter by assignment name."""
     if grading_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
 
     if grading_state["is_running"]:
         return jsonify({"error": "Cannot clear results while grading is in progress"}), 400
 
-    # Clear results in state
-    grading_state["results"] = []
-    grading_state["log"] = []
-    grading_state["complete"] = False
+    data = request.get_json() or {}
+    filenames_filter = data.get("filenames")  # Optional: only clear specific filenames
 
-    # Clear saved results file
     import os
+    import json
     results_file = os.path.expanduser("~/.graider_results.json")
-    if os.path.exists(results_file):
-        try:
-            os.remove(results_file)
-        except:
-            pass
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    master_file = os.path.join(output_folder, "master_grades.csv")
 
-    return jsonify({"status": "cleared"})
+    if filenames_filter and isinstance(filenames_filter, list):
+        # Clear only results matching specific filenames
+        filenames_set = set(filenames_filter)
+        original_count = len(grading_state.get("results", []))
+
+        grading_state["results"] = [
+            r for r in grading_state.get("results", [])
+            if r.get("filename") not in filenames_set
+        ]
+        cleared_count = original_count - len(grading_state["results"])
+
+        # Also update the saved JSON file
+        if os.path.exists(results_file):
+            try:
+                with open(results_file, 'r') as f:
+                    saved_results = json.load(f)
+                saved_results = [r for r in saved_results if r.get("filename") not in filenames_set]
+                with open(results_file, 'w') as f:
+                    json.dump(saved_results, f)
+            except:
+                pass
+
+        # Also remove from master_grades.csv
+        if os.path.exists(master_file) and filenames_set:
+            try:
+                rows_to_keep = []
+                with open(master_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    fieldnames = reader.fieldnames
+                    for row in reader:
+                        if row.get('Filename') not in filenames_set:
+                            rows_to_keep.append(row)
+
+                with open(master_file, 'w', encoding='utf-8', newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(rows_to_keep)
+                print(f"Removed {cleared_count} entries from master_grades.csv")
+            except Exception as e:
+                print(f"Could not update master_grades.csv: {e}")
+
+        return jsonify({"status": "cleared", "cleared_count": cleared_count})
+    else:
+        # Clear all results
+        cleared_count = len(grading_state.get("results", []))
+        grading_state["results"] = []
+        grading_state["log"] = []
+        grading_state["complete"] = False
+
+        # Clear saved results file
+        if os.path.exists(results_file):
+            try:
+                os.remove(results_file)
+            except:
+                pass
+
+        # Also clear master_grades.csv so files can be regraded
+        if os.path.exists(master_file):
+            try:
+                os.remove(master_file)
+                print(f"🗑️ Removed master_grades.csv")
+            except Exception as e:
+                print(f"⚠️ Could not remove master_grades.csv: {e}")
+
+        return jsonify({"status": "cleared", "cleared_count": cleared_count})
 
 
 # NOTE: delete-result route is in app.py to avoid duplication
+
+
+def _normalize_assign_for_csv(name):
+    """Normalize assignment name for CSV matching — strips (1), .docx, .pdf suffixes."""
+    import re
+    n = name.strip()
+    n = re.sub(r'\s*\(\d+\)\s*$', '', n)
+    n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)
+    n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)
+    return n.strip().lower()
+
+
+def _match_assignment_in_csv(csv_assign, target_assign):
+    """Match assignment names, handling truncated CSV names.
+    Returns True if csv_assign matches target_assign (exact or prefix)."""
+    csv_norm = _normalize_assign_for_csv(csv_assign)
+    target_norm = _normalize_assign_for_csv(target_assign)
+    if csv_norm == target_norm:
+        return True
+    # Handle truncated CSV names: if CSV name is a prefix of the target (min 20 chars)
+    if len(csv_norm) >= 20 and target_norm.startswith(csv_norm):
+        return True
+    if len(target_norm) >= 20 and csv_norm.startswith(target_norm):
+        return True
+    return False
+
+
+def _sync_result_to_master_csv(result):
+    """Sync an updated result back to master_grades.csv so the Assistant sees fresh data."""
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    master_file = os.path.join(output_folder, "master_grades.csv")
+    if not os.path.exists(master_file):
+        return
+
+    student_id = str(result.get('student_id', ''))
+    assignment = result.get('assignment', '')
+    if not student_id or not assignment:
+        return
+
+    breakdown = result.get('breakdown', {})
+    score = result.get('score', 0)
+    letter_grade = result.get('letter_grade', '')
+    feedback = result.get('feedback', '')
+
+    try:
+        with open(master_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            header = reader.fieldnames
+            rows = list(reader)
+
+        updated = False
+        for row in rows:
+            if row.get('Student ID', '') == student_id and _match_assignment_in_csv(row.get('Assignment', ''), assignment):
+                row['Overall Score'] = str(score)
+                row['Letter Grade'] = letter_grade
+                row['Content Accuracy'] = str(breakdown.get('content_accuracy', row.get('Content Accuracy', '')))
+                row['Completeness'] = str(breakdown.get('completeness', row.get('Completeness', '')))
+                row['Writing Quality'] = str(breakdown.get('writing_quality', row.get('Writing Quality', '')))
+                row['Effort Engagement'] = str(breakdown.get('effort_engagement', row.get('Effort Engagement', '')))
+                row['Feedback'] = feedback
+                updated = True
+                break
+
+        if updated:
+            with open(master_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=header)
+                writer.writeheader()
+                writer.writerows(rows)
+    except Exception as e:
+        print(f"Could not sync to master_grades.csv: {e}")
 
 
 @grading_bp.route('/api/update-result', methods=['POST'])
@@ -164,23 +302,21 @@ def update_result():
             'D' if score >= 60 else 'F'
         )
 
-    # Save to file
+    # Save to results JSON
     results_file = os.path.expanduser("~/.graider_results.json")
     try:
         with open(results_file, 'w', encoding='utf-8') as f:
             json.dump(grading_state["results"], f, indent=2)
-    except Exception as e:
+    except Exception:
         pass
+
+    # Sync updated fields to master_grades.csv so the Assistant sees fresh data
+    updated_result = grading_state["results"][result_index]
+    _sync_result_to_master_csv(updated_result)
 
     return jsonify({
         "status": "updated",
-        "result": grading_state["results"][result_index]
-    })
-
-    return jsonify({
-        "status": "deleted",
-        "filename": filename,
-        "remaining_count": len(grading_state["results"])
+        "result": updated_result
     })
 
 
@@ -370,14 +506,33 @@ def export_focus_csv():
             try:
                 with open(f, 'r') as csvfile:
                     reader = csv.DictReader(csvfile)
+                    if not reader.fieldnames:
+                        continue
+                    id_col = None
+                    name_col = None
+                    for col in reader.fieldnames:
+                        col_lower = col.strip().lower()
+                        if col_lower in ('student id', 'student_id', 'id'):
+                            id_col = col
+                        if col_lower in ('student', 'student_name', 'student name', 'name'):
+                            name_col = col
                     for row in reader:
-                        # Try common column names for ID and name
-                        student_id = row.get('Student_ID') or row.get('student_id') or row.get('ID') or row.get('id') or ''
-                        name = row.get('Student_Name') or row.get('student_name') or row.get('Name') or row.get('name') or ''
-                        first = row.get('First_Name') or row.get('first_name') or row.get('First') or ''
-                        last = row.get('Last_Name') or row.get('last_name') or row.get('Last') or ''
-                        if first and last:
-                            name = f"{first} {last}"
+                        student_id = row.get(id_col, '').strip() if id_col else ''
+                        name = ''
+                        if name_col:
+                            raw_name = row.get(name_col, '').strip()
+                            if ';' in raw_name:
+                                parts = raw_name.split(';', 1)
+                                last = parts[0].strip()
+                                first = parts[1].strip().split()[0] if parts[1].strip() else ''
+                                name = f"{first} {last}"
+                            else:
+                                name = raw_name
+                        if not name:
+                            first = row.get('First_Name') or row.get('first_name') or row.get('First') or ''
+                            last = row.get('Last_Name') or row.get('last_name') or row.get('Last') or ''
+                            if first and last:
+                                name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
             except:
@@ -389,13 +544,36 @@ def export_focus_csv():
             try:
                 with open(f, 'r') as csvfile:
                     reader = csv.DictReader(csvfile)
+                    if not reader.fieldnames:
+                        continue
+                    # Find the ID column (handles "Student ID" with space, "Student_ID", etc.)
+                    id_col = None
+                    name_col = None
+                    for col in reader.fieldnames:
+                        col_lower = col.strip().lower()
+                        if col_lower in ('student id', 'student_id', 'id'):
+                            id_col = col
+                        if col_lower in ('student', 'student_name', 'student name', 'name'):
+                            name_col = col
                     for row in reader:
-                        student_id = row.get('Student_ID') or row.get('student_id') or row.get('ID') or row.get('id') or ''
-                        name = row.get('Student_Name') or row.get('student_name') or row.get('Name') or row.get('name') or ''
-                        first = row.get('First_Name') or row.get('first_name') or row.get('First') or ''
-                        last = row.get('Last_Name') or row.get('last_name') or row.get('Last') or ''
-                        if first and last:
-                            name = f"{first} {last}"
+                        student_id = row.get(id_col, '').strip() if id_col else ''
+                        # Try dedicated name columns first, then fall back to generic lookups
+                        name = ''
+                        if name_col:
+                            raw_name = row.get(name_col, '').strip()
+                            # Handle "Last; First Middle" format from Focus SIS
+                            if ';' in raw_name:
+                                parts = raw_name.split(';', 1)
+                                last = parts[0].strip()
+                                first = parts[1].strip().split()[0] if parts[1].strip() else ''
+                                name = f"{first} {last}"
+                            else:
+                                name = raw_name
+                        if not name:
+                            first = row.get('First_Name') or row.get('first_name') or row.get('First') or ''
+                            last = row.get('Last_Name') or row.get('last_name') or row.get('Last') or ''
+                            if first and last:
+                                name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
             except:
@@ -407,25 +585,87 @@ def export_focus_csv():
         student_name = r.get('student_name', '')
         student_id = r.get('student_id', '')
         score = r.get('score', 0)
-        if student_id:
+        # Treat "UNKNOWN" as no ID so it triggers re-matching
+        if student_id and student_id != 'UNKNOWN':
             students_to_match.append({'name': student_name, 'id': student_id, 'score': score})
         else:
             students_to_match.append({'name': student_name, 'id': None, 'score': score})
 
-    # Use Claude to match names to IDs if we have roster data and missing IDs
-    needs_matching = [s for s in students_to_match if not s['id']]
+    # --- Local fuzzy matching first (fast, no API call) ---
+    import re as re_mod
+    from difflib import SequenceMatcher
 
-    if needs_matching and roster_students and api_key:
+    def _normalize_name(n):
+        return re_mod.sub(r'[^a-z ]', '', n.lower()).strip()
+
+    def _fuzzy_match_student(name, roster):
+        """Match a student name against the roster using multiple strategies."""
+        norm = _normalize_name(name)
+        norm_words = set(norm.split())
+
+        best_match = None
+        best_score = 0
+
+        for rs in roster:
+            rn = _normalize_name(rs['name'])
+            rn_words = set(rn.split())
+
+            # Exact match
+            if norm == rn:
+                return rs['id']
+
+            # All words from the shorter name appear in the longer name
+            if norm_words and rn_words:
+                if norm_words.issubset(rn_words) or rn_words.issubset(norm_words):
+                    return rs['id']
+
+            # SequenceMatcher for fuzzy matching (handles misspellings)
+            ratio = SequenceMatcher(None, norm, rn).ratio()
+            if ratio > best_score:
+                best_score = ratio
+                best_match = rs['id']
+
+            # Word-level prefix matching (handles "breden" -> "brenden")
+            if len(norm_words) >= 2 and len(rn_words) >= 2:
+                match_count = 0
+                for nw in norm_words:
+                    for rw in rn_words:
+                        if nw[:3] == rw[:3] and SequenceMatcher(None, nw, rw).ratio() > 0.7:
+                            match_count += 1
+                            break
+                if match_count == len(norm_words):
+                    if best_score < 0.85:
+                        best_score = 0.85
+                        best_match = rs['id']
+
+        # Only accept fuzzy match if confidence is high enough
+        if best_score >= 0.75:
+            return best_match
+        return None
+
+    needs_matching = [s for s in students_to_match if not s['id']]
+    still_unmatched = []
+
+    for s in needs_matching:
+        matched_id = _fuzzy_match_student(s['name'], roster_students)
+        if matched_id:
+            s['id'] = matched_id
+        else:
+            still_unmatched.append(s)
+
+    # --- Fall back to Claude AI for remaining unmatched ---
+    if still_unmatched and roster_students and api_key:
         try:
             client = anthropic.Anthropic(api_key=api_key)
 
             prompt = f"""Match these student names from grading results to their Student IDs from the roster.
+Names may be misspelled, truncated, or in different order.
 
 ROSTER (Student_ID, Name):
-{chr(10).join(f"{s['id']}, {s['name']}" for s in roster_students[:100])}
+{chr(10).join(f"{s['id']}, {s['name']}" for s in roster_students)}
 
 STUDENTS TO MATCH:
-{chr(10).join(s['name'] for s in needs_matching)}
+{chr(10).join(s['name'] for s in still_unmatched)}
 
 Return ONLY a JSON object mapping each student name to their ID. If no match found, use "UNMATCHED".
 Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMATCHED"}}"""
@@ -436,14 +676,10 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            # Parse response
             response_text = message.content[0].text
-            # Extract JSON from response
-            import re
-            json_match = re.search(r'\{[^{}]+\}', response_text, re.DOTALL)
+            json_match = re_mod.search(r'\{[^{}]+\}', response_text, re_mod.DOTALL)
             if json_match:
                 matches = json.loads(json_match.group())
-                # Apply matches
                 for s in students_to_match:
                     if not s['id'] and s['name'] in matches:
                         matched_id = matches[s['name']]
@@ -457,7 +693,7 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
     csv_lines = ['Student_ID,Score']
     matched_count = 0
     for s in students_to_match:
-        if s['id'] and s['id'] != 'UNMATCHED':
+        if s['id'] and s['id'] not in ('UNMATCHED', 'UNKNOWN'):
             csv_lines.append(f"{s['id']},{s['score']}")
             matched_count += 1
         else:
@@ -479,9 +715,181 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
     })
 
 
+@grading_bp.route('/api/export-focus-batch', methods=['POST'])
+def export_focus_batch():
+    """
+    Export grades as per-period CSV files for Focus SIS bulk import.
+
+    Format per file: "Student ID,Score" (space in header per Focus requirement).
+    Files written to ~/.graider_exports/focus/
+
+    Input JSON: { results?, assignment? }
+    Defaults to grading_state["results"] if results not provided.
+    """
+    data = request.json or {}
+    results = data.get('results') or (grading_state.get("results", []) if grading_state else [])
+    assignment = data.get('assignment', 'Assignment')
+
+    if not results:
+        return jsonify({"error": "No results to export"}), 400
+
+    # Group by period
+    by_period = {}
+    for r in results:
+        period = r.get('period', 'All')
+        if period not in by_period:
+            by_period[period] = []
+        by_period[period].append(r)
+
+    safe_assignment = ''.join(
+        c if c.isalnum() or c in ' -_' else '' for c in assignment
+    ).strip().replace(' ', '_')
+
+    period_results = []
+    for period, period_items in by_period.items():
+        safe_period = period.replace(' ', '_').replace('/', '-')
+        filename = f"{safe_assignment}_{safe_period}.csv"
+        filepath = os.path.join(FOCUS_EXPORTS_DIR, filename)
+
+        matched = 0
+        unmatched = 0
+        csv_lines = ['Student ID,Score']  # Note: space in "Student ID" per Focus
+
+        for r in period_items:
+            student_id = r.get('student_id', '')
+            score = r.get('score', 0)
+            if student_id:
+                csv_lines.append(f"{student_id},{score}")
+                matched += 1
+            else:
+                # Comment out unmatched students
+                name = r.get('student_name', 'Unknown')
+                csv_lines.append(f"# {name},{score}")
+                unmatched += 1
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(csv_lines))
+
+        period_results.append({
+            "period": period,
+            "file": filename,
+            "count": matched,
+            "unmatched": unmatched,
+        })
+
+    # Write manifest
+    manifest = {
+        "assignment": assignment,
+        "exported_at": datetime.now().isoformat(),
+        "periods": period_results,
+        "export_dir": FOCUS_EXPORTS_DIR,
+    }
+
+    manifest_path = os.path.join(FOCUS_EXPORTS_DIR, "manifest.json")
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+
+    return jsonify(manifest)
+
+
+@grading_bp.route('/api/export-focus-comments', methods=['POST'])
+def export_focus_comments():
+    """
+    Export per-student comments/feedback for Focus SIS.
+    Writes per-period JSON files to ~/.graider_exports/focus/
+
+    Input JSON: { results?, assignment? }
+    """
+    data = request.json or {}
+    results = data.get('results') or (grading_state.get("results", []) if grading_state else [])
+    assignment = data.get('assignment', 'Assignment')
+
+    if not results:
+        return jsonify({"error": "No results to export"}), 400
+
+    # Group by period
+    by_period = {}
+    for r in results:
+        period = r.get('period', 'All')
+        if period not in by_period:
+            by_period[period] = []
+        by_period[period].append({
+            "student_id": r.get('student_id', ''),
+            "student_name": r.get('student_name', ''),
+            "comment": r.get('feedback', ''),
+            "score": r.get('score', 0),
+            "letter_grade": r.get('letter_grade', ''),
+        })
+
+    safe_assignment = ''.join(
+        c if c.isalnum() or c in ' -_' else '' for c in assignment
+    ).strip().replace(' ', '_')
+
+    period_results = []
+    for period, students in by_period.items():
+        safe_period = period.replace(' ', '_').replace('/', '-')
+        filename = f"comments_{safe_assignment}_{safe_period}.json"
+        filepath = os.path.join(FOCUS_EXPORTS_DIR, filename)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(students, f, indent=2)
+
+        period_results.append({
+            "period": period,
+            "file": filename,
+            "count": len(students),
+        })
+
+    manifest = {
+        "assignment": assignment,
+        "type": "comments",
+        "exported_at": datetime.now().isoformat(),
+        "periods": period_results,
+        "export_dir": FOCUS_EXPORTS_DIR,
+    }
+
+    manifest_path = os.path.join(FOCUS_EXPORTS_DIR, "comments_manifest.json")
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+
+    return jsonify(manifest)
+
+
 # ══════════════════════════════════════════════════════════════
 # STUDENT HISTORY MANAGEMENT
 # ══════════════════════════════════════════════════════════════
+
+ELL_DATA_FILE = os.path.expanduser("~/.graider_data/ell_students.json")
+
+
+@grading_bp.route('/api/ell-students', methods=['GET'])
+def get_ell_students():
+    """Get all ELL student designations."""
+    if os.path.exists(ELL_DATA_FILE):
+        try:
+            with open(ELL_DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return jsonify(data)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({})
+
+
+@grading_bp.route('/api/ell-students', methods=['POST'])
+def save_ell_students():
+    """Save ELL student designations."""
+    data = request.json
+    if data is None:
+        return jsonify({"error": "No data provided"}), 400
+
+    os.makedirs(os.path.dirname(ELL_DATA_FILE), exist_ok=True)
+    try:
+        with open(ELL_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return jsonify({"status": "saved", "count": len(data)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @grading_bp.route('/api/student-history', methods=['GET'])
 def list_student_history():
