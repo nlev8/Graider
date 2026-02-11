@@ -1,10 +1,9 @@
 """
 Worksheet Generator Service
 ============================
-Creates structured .docx worksheets with an invisible answer key layer.
-The visible layer is what students see when printing. The invisible layer
-contains the answer key as white 1pt text, readable by Graider's text
-extraction but invisible on white paper.
+Creates structured .docx worksheets for students.
+Expected answers are stored in the assignment config's gradingNotes field,
+not embedded in the document itself.
 """
 
 import os
@@ -16,6 +15,10 @@ from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+from backend.services.document_generator import (
+    _parse_markdown_runs, load_style, DEFAULT_STYLE, _apply_style_to_heading
+)
+
 
 WORKSHEETS_DIR = os.path.expanduser("~/Downloads/Graider/Worksheets")
 ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
@@ -23,7 +26,7 @@ ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
 
 def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
                           questions, summary_prompt, summary_key_points,
-                          total_points):
+                          total_points, style=None):
     """Create a .docx worksheet with visible student layer and invisible answer key.
 
     Args:
@@ -35,7 +38,14 @@ def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
         summary_prompt: Instruction text for the summary section
         summary_key_points: List of strings - key points for a good summary
         total_points: Total point value of the worksheet
+        style: Optional style dict (from load_style). Uses DEFAULT_STYLE if None.
     """
+    if style is None:
+        style = dict(DEFAULT_STYLE)
+
+    body_font = style.get("body_font_name", "Calibri")
+    body_size = style.get("body_font_size", 11)
+
     doc = Document()
 
     # === VISIBLE LAYER ===
@@ -43,6 +53,10 @@ def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
     # Title
     heading = doc.add_heading(title, level=1)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in heading.runs:
+        run.font.name = style.get("title_font_name", "Georgia")
+        run.font.size = Pt(style.get("title_font_size", 24))
+        run.bold = style.get("title_bold", True)
 
     # Header fields (Name / Date / Period)
     for field in ['Name', 'Date', 'Period']:
@@ -50,140 +64,158 @@ def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
         run = p.add_run(field + ': ')
         run.bold = True
         run.font.size = Pt(12)
-        p.add_run('_' * 50)
+        run.font.name = body_font
+        fill_run = p.add_run('_' * 50)
+        fill_run.font.name = body_font
 
     doc.add_paragraph()  # spacing
 
     # Vocabulary Section
     if vocab_terms:
-        doc.add_heading('VOCABULARY', level=2)
+        vh = doc.add_heading('VOCABULARY', level=2)
+        _apply_style_to_heading(vh, 2, style)
         for item in vocab_terms:
             p = doc.add_paragraph()
-            run = p.add_run(item.get('term', '') + ': ')
+            term_text = item.get('term', '') + ': '
+            run = p.add_run(term_text)
             run.bold = True
-            run.font.size = Pt(11)
-            p.add_run('_' * 60)
+            run.font.size = Pt(body_size)
+            run.font.name = body_font
+            fill_run = p.add_run('_' * 60)
+            fill_run.font.name = body_font
 
         doc.add_paragraph()  # spacing
 
     # Questions Section
     if questions:
-        doc.add_heading('QUESTIONS', level=2)
+        qh = doc.add_heading('QUESTIONS', level=2)
+        _apply_style_to_heading(qh, 2, style)
         for i, q in enumerate(questions, 1):
             pts = q.get('points', 10)
             question_text = q.get('question', '')
 
             # Question line with point value
             p = doc.add_paragraph()
-            run = p.add_run(str(i) + ') ')
-            run.bold = True
-            run.font.size = Pt(11)
-            p.add_run(question_text)
+            num_run = p.add_run(str(i) + ') ')
+            num_run.bold = True
+            num_run.font.size = Pt(body_size)
+            num_run.font.name = body_font
+            _parse_markdown_runs(p, question_text, body_font, body_size)
             pts_run = p.add_run('  (' + str(pts) + ' pts)')
             pts_run.font.size = Pt(9)
+            pts_run.font.name = body_font
             pts_run.font.color.rgb = RGBColor(128, 128, 128)
 
             # Response lines
             p = doc.add_paragraph()
             run = p.add_run('Response: ')
             run.bold = True
-            run.font.size = Pt(11)
-            p.add_run('_' * 55)
-            doc.add_paragraph('_' * 65)
+            run.font.size = Pt(body_size)
+            run.font.name = body_font
+            fill_run = p.add_run('_' * 55)
+            fill_run.font.name = body_font
+            line_p = doc.add_paragraph()
+            line_run = line_p.add_run('_' * 65)
+            line_run.font.name = body_font
             doc.add_paragraph()  # spacing between questions
 
     # Summary Section
     if summary_prompt:
-        doc.add_heading('SUMMARY', level=2)
-        doc.add_paragraph(summary_prompt)
+        sh = doc.add_heading('SUMMARY', level=2)
+        _apply_style_to_heading(sh, 2, style)
+        sp = doc.add_paragraph()
+        _parse_markdown_runs(sp, summary_prompt, body_font, body_size)
         for _ in range(5):
-            doc.add_paragraph('_' * 70)
-
-    # === INVISIBLE LAYER (answer key for AI grading) ===
-    doc.add_page_break()
-    answer_key_text = _build_answer_key(
-        title, worksheet_type, vocab_terms, questions,
-        summary_key_points, total_points
-    )
-    _add_invisible_text(doc, answer_key_text)
+            line_p = doc.add_paragraph()
+            line_run = line_p.add_run('_' * 70)
+            line_run.font.name = body_font
 
     doc.save(filepath)
 
 
-def _add_invisible_text(doc, text):
-    """Add white 1pt text that is invisible when printed but readable by text extraction."""
-    p = doc.add_paragraph()
-    run = p.add_run(text)
-    run.font.size = Pt(1)
-    run.font.color.rgb = RGBColor(255, 255, 255)
+def _build_document_text(title, vocab_terms, questions, summary_prompt,
+                         summary_key_points, total_points):
+    """Build plain-text version of the worksheet matching what read_docx_file extracts.
 
-
-def _build_answer_key(title, worksheet_type, vocab_terms, questions,
-                      summary_key_points, total_points):
-    """Build structured answer key text for the invisible layer."""
-    lines = [
-        "---GRAIDER_ANSWER_KEY_START---",
-        "TITLE: " + title,
-        "TYPE: " + worksheet_type,
-        "TOTAL_POINTS: " + str(total_points),
-        ""
-    ]
+    This is stored in importedDoc.text so Grading Setup can display the template
+    and the grading engine can use it for template comparison.
+    """
+    lines = [title, '', 'Name: ' + '_' * 50, 'Date: ' + '_' * 50,
+             'Period: ' + '_' * 50, '']
 
     if vocab_terms:
-        lines.append("VOCABULARY_ANSWERS:")
-        for v in vocab_terms:
-            lines.append("  " + v.get('term', '') + ": " + v.get('definition', ''))
-        lines.append("")
+        lines.append('VOCABULARY')
+        for item in vocab_terms:
+            lines.append(item.get('term', '') + ': ' + '_' * 60)
+        lines.append('')
 
     if questions:
-        lines.append("QUESTION_ANSWERS:")
+        lines.append('QUESTIONS')
         for i, q in enumerate(questions, 1):
-            lines.append("  Q" + str(i) + ": " + q.get('expected_answer', ''))
-            lines.append("  Q" + str(i) + "_POINTS: " + str(q.get('points', 10)))
-        lines.append("")
+            pts = q.get('points', 10)
+            lines.append(str(i) + ') ' + q.get('question', '') + '  (' + str(pts) + ' pts)')
+            lines.append('Response: ' + '_' * 55)
+            lines.append('_' * 65)
+            lines.append('')
 
-    if summary_key_points:
-        lines.append("SUMMARY_KEY_POINTS:")
-        for kp in summary_key_points:
-            lines.append("  - " + kp)
-        lines.append("")
+    if summary_prompt:
+        lines.append('SUMMARY')
+        lines.append(summary_prompt)
+        for _ in range(5):
+            lines.append('_' * 70)
 
-    lines.append("---GRAIDER_ANSWER_KEY_END---")
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def generate_worksheet(title, worksheet_type, vocab_terms=None, questions=None,
                        summary_prompt=None, summary_key_points=None,
-                       total_points=100):
-    """Generate a .docx worksheet and save its config to Builder.
+                       total_points=100, subject=None, style_name=None):
+    """Generate a .docx worksheet and save its config to Grading Setup.
 
     Returns dict with status, filepath, download_url, etc.
     """
     os.makedirs(WORKSHEETS_DIR, exist_ok=True)
+
+    # Load visual style
+    style = load_style(style_name)
 
     # Match naming convention used by assignment_routes.py (spaces, not underscores)
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
     filename = safe_title + '.docx'
     filepath = os.path.join(WORKSHEETS_DIR, filename)
 
+    vterms = vocab_terms or []
+    qs = questions or []
+    skp = summary_key_points or []
+
     create_worksheet_docx(
         filepath=filepath,
         title=title,
         worksheet_type=worksheet_type,
-        vocab_terms=vocab_terms or [],
-        questions=questions or [],
+        vocab_terms=vterms,
+        questions=qs,
         summary_prompt=summary_prompt,
-        summary_key_points=summary_key_points or [],
-        total_points=total_points
+        summary_key_points=skp,
+        total_points=total_points,
+        style=style
     )
 
-    # Save assignment config to Builder
+    # Build plain-text representation matching what read_docx_file extracts
+    doc_text = _build_document_text(title, vterms, qs, summary_prompt, skp, total_points)
+
+    # Save assignment config to Grading Setup
     download_url = "/api/download-worksheet/" + quote(filename)
     config = _build_assignment_config(
-        title, worksheet_type, vocab_terms or [], questions or [],
-        summary_prompt, summary_key_points or [], total_points
+        title, worksheet_type, vterms, qs,
+        summary_prompt, skp, total_points, subject
     )
     config["worksheetDownloadUrl"] = download_url
+    config["importedDoc"] = {
+        "text": doc_text,
+        "html": "",
+        "filename": filename,
+        "loading": False
+    }
     os.makedirs(ASSIGNMENTS_DIR, exist_ok=True)
     config_path = os.path.join(ASSIGNMENTS_DIR, safe_title + '.json')
     with open(config_path, 'w', encoding='utf-8') as f:
@@ -195,13 +227,15 @@ def generate_worksheet(title, worksheet_type, vocab_terms=None, questions=None,
         "filename": filename,
         "download_url": "/api/download-worksheet/" + quote(filename),
         "saved_to_builder": True,
-        "config_name": safe_title
+        "config_name": safe_title,
+        "style_used": style_name or "default",
     }
 
 
 def _build_assignment_config(title, worksheet_type, vocab_terms, questions,
-                             summary_prompt, summary_key_points, total_points):
-    """Build a Builder-compatible assignment config from worksheet data."""
+                             summary_prompt, summary_key_points, total_points,
+                             subject=None):
+    """Build a Grading Setup-compatible assignment config from worksheet data."""
     rubric_map = {
         "cornell-notes": "cornell-notes",
         "fill-in-blank": "fill-in-blank",
@@ -238,7 +272,7 @@ def _build_assignment_config(title, worksheet_type, vocab_terms, questions,
 
     return {
         "title": title,
-        "subject": "",
+        "subject": subject or "",
         "totalPoints": total_points,
         "instructions": "",
         "aliases": [],
@@ -253,6 +287,6 @@ def _build_assignment_config(title, worksheet_type, vocab_terms, questions,
         "effortPoints": 15,
         "completionOnly": False,
         "countsTowardsGrade": True,
-        "importedDoc": None,
+        "importedDoc": None,  # Populated by generate_worksheet() after file creation
         "worksheetDownloadUrl": None
     }

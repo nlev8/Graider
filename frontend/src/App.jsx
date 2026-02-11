@@ -3204,7 +3204,7 @@ ${signature}`;
   };
 
   const deleteAssignment = async (name) => {
-    if (!confirm(`Delete "${name}"?`)) return;
+    if (!confirm(`Delete "${name}"?\n\nThis will permanently remove the assignment config, grading notes, answer key, and all grading setup. This cannot be undone.`)) return;
     try {
       await api.deleteAssignment(name);
       setSavedAssignments(savedAssignments.filter((a) => a !== name));
@@ -7097,55 +7097,7 @@ ${signature}`;
                       </div>
                     )}
 
-                    {/* Grading Notes - Quick notes for this grading session */}
-                    <div
-                      className="glass-card"
-                      style={{
-                        padding: "20px",
-                        marginBottom: "20px",
-                        background: "rgba(251,191,36,0.05)",
-                        border: "1px solid rgba(251,191,36,0.2)",
-                      }}
-                    >
-                      <label
-                        className="label"
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <Icon
-                          name="FileEdit"
-                          size={16}
-                          style={{ color: "#fbbf24" }}
-                        />
-                        Grading Notes (Optional)
-                      </label>
-                      <textarea
-                        className="input"
-                        value={gradeAssignment.gradingNotes}
-                        onChange={(e) =>
-                          setGradeAssignment({
-                            ...gradeAssignment,
-                            gradingNotes: e.target.value,
-                          })
-                        }
-                        placeholder="Special instructions for this grading session..."
-                        style={{ minHeight: "80px" }}
-                      />
-                      <p
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--text-muted)",
-                          marginTop: "8px",
-                        }}
-                      >
-                        For full assignment setup (markers, imported docs), use
-                        the Builder tab and select via "Filter by Assignment"
-                        above.
-                      </p>
-                    </div>
+                    {/* Grading Notes removed from Grade tab — use Grading Setup (Builder) instead */}
 
                     {/* Individual Upload - For Paper/Handwritten Assignments */}
                     <div
@@ -14570,9 +14522,17 @@ ${signature}`;
 
                                     // If there's an imported doc, open the editor modal
                                     if (data.assignment.importedDoc?.html || data.assignment.importedDoc?.text) {
+                                      // Use HTML if available, otherwise convert plain text to simple HTML
+                                      let docHtml = data.assignment.importedDoc.html || '';
+                                      if (!docHtml && data.assignment.importedDoc.text) {
+                                        docHtml = data.assignment.importedDoc.text
+                                          .split('\n')
+                                          .map(line => '<p>' + line.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>')
+                                          .join('');
+                                      }
                                       setDocEditorModal({
                                         show: true,
-                                        editedHtml: data.assignment.importedDoc.html || '',
+                                        editedHtml: docHtml,
                                         viewMode: 'formatted'
                                       });
                                       const markerCount = (data.assignment.questions?.length || 0) + (data.assignment.customMarkers?.length || 0);

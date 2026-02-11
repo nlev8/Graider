@@ -281,6 +281,93 @@ CMD ["gunicorn", "backend.app:app", "--bind", "0.0.0.0:8000"]
 
 ---
 
+## AI Grading Factors Reference
+
+Every grading decision accounts for the following factors. All factors must reach the AI grader — dropping any factor produces incorrect or generic results.
+
+### Per-Question Grading Factors
+
+| # | Factor | Source | Description |
+|---|--------|--------|-------------|
+| 1 | **Global AI Instructions** | Settings tab | Teacher's global notes applied to all assignments (e.g., "Be lenient on spelling", "These are ELL students") |
+| 2 | **Assignment Grading Notes** | Grading Setup / Builder | Per-assignment notes with expected answers, vocabulary definitions, summary key points |
+| 3 | **Custom Rubric** | Settings tab | Teacher's custom rubric categories, weights, and descriptions (e.g., Content Accuracy: 40pts, Completeness: 25pts) |
+| 4 | **Rubric Type Override** | Assignment config | Per-assignment rubric type (cornell-notes, fill-in-blank, standard) that adjusts grading behavior |
+| 5 | **Grading Style** | Settings tab | lenient / standard / strict — affects AI prompt instructions and post-grading score caps |
+| 6 | **IEP/504 Accommodations** | Accommodations config | Per-student accommodations (modified instructions, simplified language, adjusted expectations) |
+| 7 | **Student History** | Auto-tracked | Past assignment scores, improvement streaks, trend context for personalized feedback |
+| 8 | **Class Period Differentiation** | Period rosters | Different grading expectations per class period (e.g., honors vs regular) |
+| 9 | **Expected Answers** | Grading notes | Parsed from gradingNotes, matched to questions by number, text, term name, or index |
+| 10 | **Grade Level** | Grading config | Student's grade level — sets age-appropriate expectations |
+| 11 | **Subject** | Assignment config | Assignment subject area (Social Studies, ELA, Science, etc.) |
+| 12 | **Section Type** | Extraction | Whether this is a vocab term, numbered question, FITB, summary, or written response — each type has specific grading criteria |
+| 13 | **Section Name** | Markers | The marker section this belongs to (VOCABULARY, QUESTIONS, SUMMARY) |
+| 14 | **Points Possible** | Marker config / distribution | Per-question point allocation with score anchors |
+
+### Feedback Generation Factors
+
+| # | Factor | Description |
+|---|--------|-------------|
+| 15 | **Student Actual Answers** | The literal text students wrote — AI quotes specifics in feedback |
+| 16 | **ELL Language** | If student is ELL, feedback is translated to their native language |
+| 17 | **Per-Question Results** | Scores, reasoning, and quality labels from the grading pass |
+
+### Score Aggregation Factors
+
+| # | Factor | Description |
+|---|--------|-------------|
+| 18 | **Effort Points** | Configurable points for effort/engagement (default 15 of 100) |
+| 19 | **Completeness Caps** | Missing sections cap the maximum achievable score (e.g., 1 blank = max 89) |
+| 20 | **Marker Config** | Section-based point distribution and section grading types |
+
+### AI / Plagiarism Detection Factors
+
+| # | Factor | Description |
+|---|--------|-------------|
+| 21 | **FITB Exemption** | Fill-in-the-blank answers exempt from AI/plagiarism detection (matching source text is expected) |
+| 22 | **Writing Style Profile** | Student's historical writing patterns compared against current submission |
+
+### Extraction Factors
+
+| # | Factor | Description |
+|---|--------|-------------|
+| 23 | **Assignment Template** | The original worksheet template — used to strip prompt/instruction text from extracted student responses |
+| 24 | **Custom Markers** | Section markers (VOCABULARY, QUESTIONS, SUMMARY) that define extractable regions |
+| 25 | **Exclude Markers** | Markers to skip during extraction |
+
+### Data Flow (Multipass Pipeline)
+
+```
+app.py builds file_ai_notes (factors 1-2, 4, 6-8)
+    + rubric_prompt (factor 3)
+    + grading_style (factor 5)
+         |
+         v
+grade_with_parallel_detection()
+    |                    |
+    v                    v
+grade_multipass()    detect_ai_plagiarism()
+    |
+    |-- extract_student_responses() (factors 23-25)
+    |-- _parse_expected_answers() (factor 9)
+    |-- effective_instructions = ai_notes + rubric_prompt
+    |
+    |-- grade_per_question() x N  (factors 1-14, parallel)
+    |       receives: effective_instructions, grading_style,
+    |       expected_answer, grade_level, subject, section info
+    |
+    |-- Aggregate scores (factors 18-20)
+    |
+    |-- generate_feedback() (factors 15-17)
+    |       receives: effective_instructions, student_responses,
+    |       question_results, ell_language
+    |
+    v
+Final result with score, feedback, detection flags, audit trail
+```
+
+---
+
 ## Privacy & Security
 
 - **FERPA Compliant Design** - Student data stored locally by default

@@ -64,12 +64,12 @@ def list_assignments():
             try:
                 with open(os.path.join(ASSIGNMENTS_DIR, f), 'r') as af:
                     data = json.load(af)
-                    imported_doc = data.get("importedDoc", {})
+                    imported_doc = data.get("importedDoc") or {}
                     assignment_data[name] = {
                         "aliases": data.get("aliases", []),
                         "title": data.get("title", name),
                         "completionOnly": data.get("completionOnly", False),
-                        "rubricType": data.get("rubricType", "standard"),
+                        "rubricType": data.get("rubricType") or "standard",
                         "countsTowardsGrade": data.get("countsTowardsGrade", True),  # Default to True
                         "importedFilename": imported_doc.get("filename", ""),  # Original filename for matching
                     }
@@ -279,6 +279,15 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
         return jsonify({"error": str(e)})
 
 
+@assignment_bp.route('/api/download-document/<filename>')
+def download_document(filename):
+    """Serve a generated document for download."""
+    docs_dir = os.path.expanduser("~/Downloads/Graider/Documents")
+    if not os.path.exists(os.path.join(docs_dir, filename)):
+        return jsonify({"error": "Document not found"}), 404
+    return send_from_directory(docs_dir, filename, as_attachment=True)
+
+
 @assignment_bp.route('/api/download-worksheet/<filename>')
 def download_worksheet(filename):
     """Serve a generated worksheet for download."""
@@ -286,3 +295,12 @@ def download_worksheet(filename):
     if not os.path.exists(os.path.join(worksheets_dir, filename)):
         return jsonify({"error": "Worksheet not found"}), 404
     return send_from_directory(worksheets_dir, filename, as_attachment=True)
+
+
+@assignment_bp.route('/api/download-export/<filename>')
+def download_export(filename):
+    """Serve an exported CSV file for download."""
+    exports_dir = os.path.expanduser("~/.graider_exports/focus")
+    if not os.path.exists(os.path.join(exports_dir, filename)):
+        return jsonify({"error": "Export not found"}), 404
+    return send_from_directory(exports_dir, filename, as_attachment=True)

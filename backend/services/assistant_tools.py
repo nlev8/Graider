@@ -452,7 +452,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "lookup_student_info",
-        "description": "Look up student contact and roster information. Returns student ID, local ID, grade level, period, student email, parent emails, and parent phone numbers. Search by student name or ID. Can also list all students in a period.",
+        "description": "Look up student contact and roster information. Returns student ID, local ID, grade level, period, student email, parent emails, and parent phone numbers. Search by student name, ID, or period. Supports BATCH lookup via student_ids array — use this to get parent contacts for multiple students in one call (e.g., after querying grades to find failing students).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -462,7 +462,12 @@ TOOL_DEFINITIONS = [
                 },
                 "student_id": {
                     "type": "string",
-                    "description": "Student ID number to look up directly"
+                    "description": "Single student ID number to look up directly"
+                },
+                "student_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of student ID numbers for batch lookup. Use this to get contacts for multiple students at once."
                 },
                 "period": {
                     "type": "string",
@@ -494,7 +499,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "generate_worksheet",
-        "description": "Generate a structured worksheet document (Cornell Notes, Fill-in-the-Blank, short-answer, vocabulary) from a reading or topic. Creates a downloadable Word document with an embedded invisible answer key for consistent AI grading. Automatically saved to Builder. Use when the teacher asks to create a worksheet, assignment, or activity from a reading, textbook page, or topic.",
+        "description": "Generate a structured worksheet document (Cornell Notes, Fill-in-the-Blank, short-answer, vocabulary) from a reading or topic. Creates a downloadable Word document with an embedded invisible answer key for consistent AI grading. Automatically saved to Grading Setup. Use when the teacher asks to create a worksheet, assignment, or activity from a reading, textbook page, or topic.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -545,10 +550,83 @@ TOOL_DEFINITIONS = [
                     "type": "integer",
                     "default": 100,
                     "description": "Total point value for the worksheet"
+                },
+                "style_name": {
+                    "type": "string",
+                    "description": "Name of a saved visual style to apply. Omit to use defaults."
                 }
             },
             "required": ["title", "worksheet_type"]
         }
+    },
+    {
+        "name": "generate_document",
+        "description": "Generate a formatted Word document (.docx) with rich typography. Use for study guides, reference sheets, parent letters, lesson outlines, rubrics, or any document the teacher requests. NOT for gradeable worksheets (use generate_worksheet for those).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Document title (main heading)"
+                },
+                "content": {
+                    "type": "array",
+                    "description": "Ordered content blocks. Text supports **bold** and *italic* markdown.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string", "enum": ["heading", "paragraph", "bullet_list", "numbered_list", "table"]},
+                            "text": {"type": "string", "description": "Text content (heading/paragraph)"},
+                            "level": {"type": "integer", "description": "Heading level 1-3"},
+                            "items": {"type": "array", "items": {"type": "string"}, "description": "List items"},
+                            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Table rows (first = header)"}
+                        },
+                        "required": ["type"]
+                    }
+                },
+                "style_name": {
+                    "type": "string",
+                    "description": "Name of a saved visual style to apply. Omit to use defaults."
+                },
+                "save_to_builder": {
+                    "type": "boolean",
+                    "description": "If true, also save this document to Grading Setup for grading. Only set true if the teacher confirms they want it saved."
+                }
+            },
+            "required": ["title", "content"]
+        }
+    },
+    {
+        "name": "save_document_style",
+        "description": "Save a visual style (fonts, sizes, colors, spacing) so future documents of this type always look the same. Use when the teacher says they like how a document looks and want to reuse that formatting.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Style name (e.g., 'cornell-notes', 'parent-letter')"},
+                "style": {
+                    "type": "object",
+                    "description": "Visual properties to save",
+                    "properties": {
+                        "title_font_name": {"type": "string"},
+                        "title_font_size": {"type": "integer"},
+                        "title_bold": {"type": "boolean"},
+                        "heading_font_name": {"type": "string"},
+                        "heading_sizes": {"type": "object"},
+                        "body_font_name": {"type": "string"},
+                        "body_font_size": {"type": "integer"},
+                        "line_spacing": {"type": "number"},
+                        "table_header_bg": {"type": "string"},
+                        "accent_color": {"type": "string"}
+                    }
+                }
+            },
+            "required": ["name", "style"]
+        }
+    },
+    {
+        "name": "list_document_styles",
+        "description": "List saved document visual styles. Use before generating a document to check if a matching style exists.",
+        "input_schema": {"type": "object", "properties": {}}
     },
     {
         "name": "recommend_next_lesson",
@@ -612,6 +690,7 @@ def query_grades(student_name=None, assignment=None, period=None,
 
         filtered.append({
             "student_name": row["student_name"],
+            "student_id": row.get("student_id", ""),
             "assignment": row["assignment"],
             "score": row["score"],
             "letter_grade": row["letter_grade"],
@@ -943,15 +1022,30 @@ def export_grades_csv(assignment=None, period=None):
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write('\n'.join(csv_lines))
 
-        exported_files.append({"file": filename, "period": p, "rows": matched})
+        exported_files.append({
+            "file": filename,
+            "period": p,
+            "rows": matched,
+            "download_url": "/api/download-export/" + filename,
+        })
         total_rows += matched
 
-    return {
+    download_urls = [{"url": f["download_url"], "filename": f["file"]} for f in exported_files]
+
+    result = {
         "status": "exported",
         "export_dir": EXPORTS_DIR,
         "files": exported_files,
-        "total_rows": total_rows
+        "total_rows": total_rows,
+        "download_urls": download_urls,
     }
+
+    # Single-file convenience: set top-level download_url for the simple download button path
+    if len(exported_files) == 1:
+        result["download_url"] = exported_files[0]["download_url"]
+        result["filename"] = exported_files[0]["file"]
+
+    return result
 
 
 def analyze_grade_causes(assignment_name, period=None, score_threshold=None):
@@ -1697,8 +1791,9 @@ def _load_parent_contacts():
         return {}
 
 
-def lookup_student_info(student_name=None, student_id=None, period=None):
-    """Look up student roster and contact information."""
+def lookup_student_info(student_name=None, student_id=None, student_ids=None, period=None):
+    """Look up student roster and contact information.
+    Supports batch lookup via student_ids (list of IDs)."""
     roster = _load_roster()
     parent_contacts = _load_parent_contacts()
     results_json = _load_results()
@@ -1714,37 +1809,15 @@ def lookup_student_info(student_name=None, student_id=None, period=None):
     if not roster and not parent_contacts:
         return {"error": "No student roster data found. Import class lists in Period CSVs folder or upload parent contacts in Settings."}
 
-    # Filter roster
-    matches = roster
-    if student_id:
-        matches = [s for s in matches if s["student_id"] == student_id]
-    if student_name:
-        search = student_name.lower()
-        matches = [s for s in matches if search in s["name"].lower()]
-    if period:
-        # Normalize period input: "1" -> matches "Period 1", "Period 1" -> matches "Period 1"
-        period_lower = period.lower().strip()
-        matches = [s for s in matches
-                   if period_lower in s["period"].lower()
-                   or (period_lower.isdigit() and f"period {period_lower}" in s["period"].lower())]
-
-    if not matches and student_id:
-        # Try parent contacts as fallback (has student_id keys even without roster)
-        contact = parent_contacts.get(student_id)
-        if contact:
-            matches = [{
-                "name": contact.get("student_name", "Unknown"),
-                "student_id": student_id,
-                "local_id": "",
-                "grade": "",
-                "period": contact.get("period", ""),
-            }]
-
-    if not matches and student_name:
-        # Try parent contacts by name
-        search = student_name.lower()
-        for sid, contact in parent_contacts.items():
-            if search in contact.get("student_name", "").lower():
+    # Batch lookup by student_ids list
+    if student_ids and isinstance(student_ids, list):
+        id_set = set(str(sid) for sid in student_ids)
+        matches = [s for s in roster if s["student_id"] in id_set]
+        # Also check parent contacts for IDs not found in roster
+        found_ids = set(s["student_id"] for s in matches)
+        for sid in id_set - found_ids:
+            contact = parent_contacts.get(sid)
+            if contact:
                 matches.append({
                     "name": contact.get("student_name", "Unknown"),
                     "student_id": sid,
@@ -1752,15 +1825,63 @@ def lookup_student_info(student_name=None, student_id=None, period=None):
                     "grade": "",
                     "period": contact.get("period", ""),
                 })
+    else:
+        # Single lookup mode
+        matches = roster
+        if student_id:
+            matches = [s for s in matches if s["student_id"] == str(student_id)]
+        if student_name:
+            search = student_name.lower()
+            matches = [s for s in matches if search in s["name"].lower()]
+        if period:
+            # Normalize period input: "1" -> matches "Period 1", "Period 1" -> matches "Period 1"
+            period_lower = period.lower().strip()
+            matches = [s for s in matches
+                       if period_lower in s["period"].lower()
+                       or (period_lower.isdigit() and f"period {period_lower}" in s["period"].lower())]
+
+        if not matches and student_id:
+            # Try parent contacts as fallback (has student_id keys even without roster)
+            contact = parent_contacts.get(str(student_id))
+            if contact:
+                matches = [{
+                    "name": contact.get("student_name", "Unknown"),
+                    "student_id": str(student_id),
+                    "local_id": "",
+                    "grade": "",
+                    "period": contact.get("period", ""),
+                }]
+
+        if not matches and student_name:
+            # Try parent contacts by name
+            search = student_name.lower()
+            for sid, contact in parent_contacts.items():
+                if search in contact.get("student_name", "").lower():
+                    matches.append({
+                        "name": contact.get("student_name", "Unknown"),
+                        "student_id": sid,
+                        "local_id": "",
+                        "grade": "",
+                        "period": contact.get("period", ""),
+                    })
 
     if not matches:
-        return {"error": f"No students found matching the search criteria.", "searched": {
-            "name": student_name, "id": student_id, "period": period
+        return {"error": "No students found matching the search criteria.", "searched": {
+            "name": student_name, "id": student_id, "ids": student_ids, "period": period
         }}
+
+    # Deduplicate by student_id (batch mode may have overlap)
+    seen_ids = set()
+    unique_matches = []
+    for s in matches:
+        sid = s["student_id"]
+        if sid not in seen_ids:
+            seen_ids.add(sid)
+            unique_matches.append(s)
 
     # Enrich each match with contact info and email
     students = []
-    for s in matches:
+    for s in unique_matches:
         sid = s["student_id"]
         contact = parent_contacts.get(sid, {})
         student_email = email_lookup.get(sid, "")
@@ -1784,10 +1905,15 @@ def lookup_student_info(student_name=None, student_id=None, period=None):
 
 
 def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=None,
-                            summary_prompt=None, summary_key_points=None, total_points=100):
-    """Generate a .docx worksheet with invisible answer key and save to Builder."""
+                            summary_prompt=None, summary_key_points=None,
+                            total_points=100, style_name=None):
+    """Generate a .docx worksheet and save to Grading Setup."""
     try:
         from backend.services.worksheet_generator import generate_worksheet
+        # Load subject from teacher settings
+        settings = _load_settings()
+        config = settings.get('config', {})
+        subject = config.get('subject', '')
         return generate_worksheet(
             title=title,
             worksheet_type=worksheet_type,
@@ -1795,12 +1921,46 @@ def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=N
             questions=questions,
             summary_prompt=summary_prompt,
             summary_key_points=summary_key_points,
-            total_points=total_points
+            total_points=total_points,
+            subject=subject,
+            style_name=style_name
         )
     except ImportError:
         return {"error": "python-docx not installed. Run: pip install python-docx"}
     except Exception as e:
         return {"error": "Failed to generate worksheet: " + str(e)}
+
+
+def generate_document_tool(title, content, style_name=None, save_to_builder=False):
+    """Generate a formatted Word document with rich typography."""
+    try:
+        from backend.services.document_generator import generate_document
+        return generate_document(
+            title=title, content=content,
+            style_name=style_name, save_to_builder=save_to_builder
+        )
+    except ImportError:
+        return {"error": "python-docx not installed. Run: pip install python-docx"}
+    except Exception as e:
+        return {"error": "Failed to generate document: " + str(e)}
+
+
+def save_document_style_tool(name, style):
+    """Save a named visual style for documents."""
+    try:
+        from backend.services.document_generator import save_style
+        return save_style(name=name, style_dict=style)
+    except Exception as e:
+        return {"error": "Failed to save style: " + str(e)}
+
+
+def list_document_styles_tool():
+    """List saved document visual styles."""
+    try:
+        from backend.services.document_generator import list_styles
+        return list_styles()
+    except Exception as e:
+        return {"error": "Failed to list styles: " + str(e)}
 
 
 def get_missing_assignments(student_name=None, period=None, assignment_name=None):
@@ -1937,6 +2097,9 @@ TOOL_HANDLERS = {
     "lookup_student_info": lookup_student_info,
     "get_missing_assignments": get_missing_assignments,
     "generate_worksheet": generate_worksheet_tool,
+    "generate_document": generate_document_tool,
+    "save_document_style": save_document_style_tool,
+    "list_document_styles": list_document_styles_tool,
 }
 
 

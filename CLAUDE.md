@@ -57,6 +57,45 @@ graider/
 
 ---
 
+## AI Grading Factors (CRITICAL — Never Drop Any Factor)
+
+The multipass grading pipeline (`grade_multipass` → `grade_per_question` → `generate_feedback`) must account for ALL of these factors. Dropping any factor produces incorrect scores or generic feedback.
+
+### How factors flow through the pipeline:
+- **`file_ai_notes`** (built in `app.py`): Accumulates global AI instructions, assignment grading notes, rubric type overrides, IEP/504 accommodations, student history, class period differentiation into ONE string. Passed as `custom_ai_instructions` → `teacher_instructions`.
+- **`rubric_prompt`** (from Settings): Teacher's custom rubric categories/weights. Appended to `effective_instructions` in `grade_multipass()` so per-question graders see it.
+- **`grading_style`** (lenient/standard/strict): Included in `grade_per_question()` prompt AND used for score caps in `grade_multipass()`.
+
+### Complete factor list:
+1. **Global AI Instructions** — Teacher's global notes from Settings
+2. **Assignment Grading Notes** — Per-assignment expected answers, vocab definitions, summary key points
+3. **Custom Rubric** — Categories, weights, descriptions from Settings
+4. **Rubric Type Override** — cornell-notes, fill-in-blank, standard (per assignment)
+5. **Grading Style** — lenient/standard/strict (affects AI prompt + score caps)
+6. **IEP/504 Accommodations** — Per-student modified expectations
+7. **Student History** — Past scores, streaks, improvement trends
+8. **Class Period Differentiation** — Honors vs regular expectations
+9. **Expected Answers** — Matched by question number, text, term, or index
+10. **Grade Level & Subject** — Age-appropriate expectations
+11. **Section Type** — vocab_term, numbered_question, fitb, summary, written
+12. **Section Name & Points** — Marker section + per-question point allocation
+13. **Student Actual Answers** — Literal text for specific feedback
+14. **ELL Language** — Feedback translation for ELL students
+15. **Effort Points & Completeness Caps** — Missing sections cap max score
+16. **Assignment Template** — Strips prompt text from extracted responses
+17. **FITB Exemption** — Fill-in-blank exempt from AI/plagiarism detection
+18. **Writing Style Profile** — Historical patterns for detection
+
+### Key code locations:
+- Factor accumulation: `backend/app.py` lines 982-1126 (`file_ai_notes`)
+- Rubric formatting: `backend/app.py` `format_rubric_for_prompt()`
+- Per-question grading: `assignment_grader.py` `grade_per_question()`
+- Feedback generation: `assignment_grader.py` `generate_feedback()`
+- Multipass orchestration: `assignment_grader.py` `grade_multipass()`
+- Single-pass (Claude/Gemini): `assignment_grader.py` `grade_assignment()`
+
+---
+
 ## Code Style
 
 ### JavaScript (Embedded React)

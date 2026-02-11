@@ -200,9 +200,12 @@ Available tools:
 - get_feedback_patterns: Analyze feedback text and skills across an assignment — common strengths, areas for growth, feedback samples from high/low scorers. Use when asked about patterns or common issues.
 - compare_periods: Compare performance across class periods — averages, grade distributions, category breakdowns, omission rates per period.
 - recommend_next_lesson: Analyze weaknesses and recommend what to teach next. Now includes DIFFERENTIATED recommendations by class level (advanced/standard/support) with DOK-appropriate standards, and IEP/504 accommodation analysis. Use when teacher asks "what should I teach next?", "how should I differentiate?", or "what lesson would help?"
-- lookup_student_info: Look up student roster and contact information — student IDs, local IDs, grade level, period, student email, parent emails, parent phone numbers. Search by name, ID, or list all students in a period. Use this when the teacher asks for contact info, emails, parent emails, phone numbers, or student IDs.
+- lookup_student_info: Look up student roster and contact information — student IDs, local IDs, grade level, period, student email, parent emails, parent phone numbers. Search by name, ID, or list all students in a period. Supports BATCH lookup via student_ids array. Use this when the teacher asks for contact info, emails, parent emails, phone numbers, or student IDs. IMPORTANT: query_grades results include student_id — when you need parent emails for multiple students (e.g., failing students), first use query_grades to get their student_ids, then use lookup_student_info with the student_ids array to get all their contacts in one call.
 - get_missing_assignments: Find missing/unsubmitted work. Search by student (what are they missing?), by period (who has missing work?), or by assignment (who hasn't turned in X?). Use this when teacher asks about missing work, incomplete submissions, or which students haven't turned in assignments.
-- generate_worksheet: Create downloadable worksheet documents (Cornell Notes, fill-in-blank, short-answer, vocabulary) with built-in answer keys for AI grading. Automatically saved to Builder. When the teacher uploads a textbook page or reading and asks for a worksheet, ALWAYS use this tool. Extract vocab terms, write questions with expected answers, and include summary key points. The worksheet will have an invisible answer key embedded for consistent grading.
+- generate_worksheet: Create downloadable worksheet documents (Cornell Notes, fill-in-blank, short-answer, vocabulary) with built-in answer keys for AI grading. Automatically saved to Grading Setup. When the teacher uploads a textbook page or reading and asks for a worksheet, ALWAYS use this tool. Extract vocab terms, write questions with expected answers, and include summary key points. The worksheet will have an invisible answer key embedded for consistent grading.
+- generate_document: Create formatted Word documents with rich typography (headings, bold, italic, lists, tables). Use for study guides, reference sheets, parent letters, lesson outlines, rubrics, or any document. NOT for gradeable worksheets.
+- save_document_style: Save the visual formatting of a document (fonts, sizes, colors) as a reusable style. Use when the teacher says they like how a document looks and want that same look for future documents of that type.
+- list_document_styles: Check what saved visual styles exist. Use before generating a document to see if a matching style is available.
 - create_focus_assignment: Create assignment in Focus gradebook (browser automation)
 - export_grades_csv: Export grades as Focus-compatible CSV files
 
@@ -212,7 +215,11 @@ When a teacher asks "what should I teach next?" or "what lesson would help with 
 
 DIFFERENTIATION: recommend_next_lesson now returns a class_level_breakdown with separate analysis for advanced, standard, and support periods. Each level gets DOK-appropriate standard recommendations (DOK 1-2 for support, DOK 1-3 for standard, DOK 1-4 for advanced). When presenting lesson recommendations, ALWAYS address each class level separately if the data shows different levels. Suggest scaffolded activities for support classes, grade-level work for standard, and extension/analytical work for advanced.
 
-IEP/504 AWARENESS: recommend_next_lesson also returns accommodation_analysis showing how IEP/504 students performed compared to non-accommodated peers. If there is a score gap or distinct weakness pattern, mention it and suggest modifications (extended time, simplified prompts, graphic organizers, chunked assignments, etc.). Always handle accommodation data sensitively — never list individual IEP student names, only aggregate patterns."""
+IEP/504 AWARENESS: recommend_next_lesson also returns accommodation_analysis showing how IEP/504 students performed compared to non-accommodated peers. If there is a score gap or distinct weakness pattern, mention it and suggest modifications (extended time, simplified prompts, graphic organizers, chunked assignments, etc.). Always handle accommodation data sensitively — never list individual IEP student names, only aggregate patterns.
+
+DOCUMENT GENERATION: When generating any document or worksheet, first call list_document_styles to check if a matching saved style exists, and if so, pass the style_name parameter. Use generate_document for non-gradeable documents (study guides, reference sheets, parent letters, lesson outlines). Use generate_worksheet for gradeable assignments. Both support rich formatting: **bold**, *italic*, and ***bold+italic*** in text content. When the teacher says they like a document's formatting, use save_document_style to save it for future reuse.
+
+SAVING DOCUMENTS: After generating a document with generate_document, always ask the teacher: "Would you like me to save this to your assignments in Grading Setup?" If they say yes, call generate_document again with the same content and save_to_builder=true. Worksheets created with generate_worksheet are always saved to Grading Setup automatically."""
 
 
 def _audit_log(action, details=""):
@@ -353,13 +360,16 @@ def assistant_chat():
                     preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
                     event_data = {'type': 'tool_result', 'tool': tb['name'], 'id': tb['id'], 'result_preview': preview}
 
-                    # Include download URL for worksheet generation
-                    if tb['name'] == 'generate_worksheet' and isinstance(result, dict):
+                    # Include download URL(s) from any tool that generates files
+                    if isinstance(result, dict):
                         dl_url = result.get('download_url')
                         dl_name = result.get('filename')
                         if dl_url:
                             event_data['download_url'] = dl_url
                             event_data['download_filename'] = dl_name
+                        dl_urls = result.get('download_urls')
+                        if dl_urls:
+                            event_data['download_urls'] = dl_urls
 
                     yield f"data: {json.dumps(event_data)}\n\n"
 

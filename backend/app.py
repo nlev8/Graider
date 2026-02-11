@@ -262,6 +262,56 @@ def reset_state(clear_results=False):
 
 
 # ══════════════════════════════════════════════════════════════
+# POST-BATCH CALIBRATION
+# ══════════════════════════════════════════════════════════════
+
+def _check_batch_calibration(results: list) -> dict:
+    """Check if grading results have anomalous distribution.
+
+    Runs after a full class is graded to catch systematic issues.
+    Returns dict with calibrated flag and any concerns.
+    """
+    raw_scores = [r.get("score", 0) for r in results
+                  if r.get("letter_grade") not in ("ERROR", "MANUAL REVIEW", "INCOMPLETE")]
+    # Safely coerce scores to float (AI may return strings like "85")
+    scores = []
+    for s in raw_scores:
+        try:
+            scores.append(float(s))
+        except (ValueError, TypeError):
+            pass
+    if len(scores) < 5:
+        return {"calibrated": True, "concerns": []}
+
+    import statistics
+    mean = statistics.mean(scores)
+    stdev = statistics.stdev(scores) if len(scores) > 1 else 0
+    ai_flagged = sum(1 for r in results
+                     if r.get("ai_detection", {}).get("flag") in ("possible", "likely")
+                     or r.get("plagiarism_detection", {}).get("flag") in ("possible", "likely"))
+
+    concerns = []
+    if mean > 95:
+        concerns.append(f"Mean score is {mean:.0f} — unusually high, grading may be too lenient")
+    elif mean < 55:
+        concerns.append(f"Mean score is {mean:.0f} — unusually low, check rubric or extraction")
+
+    if stdev < 5 and len(scores) > 10:
+        concerns.append(f"Standard deviation is only {stdev:.1f} — scores are suspiciously uniform")
+
+    if ai_flagged > len(results) * 0.3:
+        concerns.append(f"{ai_flagged}/{len(results)} flagged for AI/plagiarism — detection may be oversensitive")
+
+    return {
+        "calibrated": len(concerns) == 0,
+        "mean": round(mean, 1),
+        "stdev": round(stdev, 1),
+        "concerns": concerns,
+        "ai_flagged_count": ai_flagged
+    }
+
+
+# ══════════════════════════════════════════════════════════════
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
@@ -351,7 +401,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     def extract_content_fingerprints(config_data):
         """Extract unique phrases from assignment's imported document for content matching."""
         fingerprints = set()
-        imported_doc = config_data.get('importedDoc', {})
+        imported_doc = config_data.get('importedDoc') or {}
         doc_text = imported_doc.get('text', '')
 
         if doc_text:
@@ -427,16 +477,40 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         """Find matching config for a filename, with alias and fuzzy matching."""
         filename_lower = filename.lower()
 
-        # Extract assignment part from filename
-        if ' - ' in filename_lower:
-            assignment_part = filename_lower.split(' - ', 1)[1]
-        elif '_' in filename_lower:
-            parts = filename_lower.split('_')
-            assignment_part = '_'.join(parts[2:]) if len(parts) > 2 else filename_lower
-        else:
-            assignment_part = filename_lower
+        # Extract assignment part from filename.
+        # Filenames follow pattern: FirstName_LastName_Assignment Title.ext
+        # or FirstName_LastName_Assignment Title - Details (N).ext
+        # Strip the student name prefix first, then use the full remaining
+        # assignment title (which may itself contain ' - ').
+        assignment_candidates = []
 
-        assignment_part = os.path.splitext(assignment_part)[0]
+        # Strategy 1: Strip student name prefix (underscore-separated)
+        if '_' in filename_lower:
+            parts = filename_lower.split('_')
+            if len(parts) > 2:
+                full_assignment = '_'.join(parts[2:])
+                full_assignment = os.path.splitext(full_assignment)[0]
+                assignment_candidates.append(full_assignment)
+                # Also strip trailing " (N)" version numbers
+                import re
+                stripped = re.sub(r'\s*\(\d+\)\s*$', '', full_assignment).strip()
+                if stripped != full_assignment:
+                    assignment_candidates.append(stripped)
+
+        # Strategy 2: Split on ' - ' (legacy: assumes student_name - assignment)
+        if ' - ' in filename_lower:
+            after_dash = filename_lower.split(' - ', 1)[1]
+            after_dash = os.path.splitext(after_dash)[0]
+            if after_dash not in assignment_candidates:
+                assignment_candidates.append(after_dash)
+
+        # Strategy 3: Full filename as fallback
+        fallback = os.path.splitext(filename_lower)[0]
+        if fallback not in assignment_candidates:
+            assignment_candidates.append(fallback)
+
+        # Use the first candidate as primary (best quality extraction)
+        assignment_part = assignment_candidates[0] if assignment_candidates else fallback
 
         best_match = None
         best_score = 0
@@ -446,53 +520,55 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             config_title = config_data.get('title', '').lower()
             aliases = [a.lower() for a in config_data.get('aliases', [])]
 
-            # 1. Exact name/title match (highest priority)
-            if config_name == assignment_part or config_title == assignment_part:
-                return config_data  # Perfect match, return immediately
+            # Try all assignment candidates (full title, stripped version, dash-split, etc.)
+            for candidate in assignment_candidates:
+                # 1. Exact name/title match (highest priority)
+                if config_name == candidate or config_title == candidate:
+                    return config_data  # Perfect match, return immediately
 
-            # 2. Substring match on name/title
-            if config_name in assignment_part or assignment_part in config_name:
-                score = len(config_name) + 50
-                if score > best_score:
-                    best_score = score
-                    best_match = config_data
-                    match_reason = f"name match: {config_name}"
-
-            if config_title and (config_title in assignment_part or assignment_part in config_title):
-                score = len(config_title) + 50
-                if score > best_score:
-                    best_score = score
-                    best_match = config_data
-                    match_reason = f"title match: {config_title}"
-
-            # 3. Alias matching (check all aliases)
-            for alias in aliases:
-                if alias in assignment_part or assignment_part in alias:
-                    score = len(alias) + 40
+                # 2. Substring match on name/title
+                if config_name in candidate or candidate in config_name:
+                    score = len(config_name) + 50
                     if score > best_score:
                         best_score = score
                         best_match = config_data
-                        match_reason = f"alias match: {alias}"
+                        match_reason = f"name match: {config_name}"
 
-                # Fuzzy match on alias
-                fuzzy = fuzzy_match_score(alias, assignment_part)
-                if fuzzy > 50 and fuzzy + 20 > best_score:
-                    best_score = fuzzy + 20
+                if config_title and (config_title in candidate or candidate in config_title):
+                    score = len(config_title) + 50
+                    if score > best_score:
+                        best_score = score
+                        best_match = config_data
+                        match_reason = f"title match: {config_title}"
+
+                # 3. Alias matching (check all aliases)
+                for alias in aliases:
+                    if alias in candidate or candidate in alias:
+                        score = len(alias) + 40
+                        if score > best_score:
+                            best_score = score
+                            best_match = config_data
+                            match_reason = f"alias match: {alias}"
+
+                    # Fuzzy match on alias
+                    fuzzy = fuzzy_match_score(alias, candidate)
+                    if fuzzy > 50 and fuzzy + 20 > best_score:
+                        best_score = fuzzy + 20
+                        best_match = config_data
+                        match_reason = f"fuzzy alias: {alias}"
+
+                # 4. Fuzzy matching on name/title
+                fuzzy_name = fuzzy_match_score(config_name, candidate)
+                if fuzzy_name > 50 and fuzzy_name > best_score:
+                    best_score = fuzzy_name
                     best_match = config_data
-                    match_reason = f"fuzzy alias: {alias}"
+                    match_reason = f"fuzzy name: {config_name}"
 
-            # 4. Fuzzy matching on name/title
-            fuzzy_name = fuzzy_match_score(config_name, assignment_part)
-            if fuzzy_name > 50 and fuzzy_name > best_score:
-                best_score = fuzzy_name
-                best_match = config_data
-                match_reason = f"fuzzy name: {config_name}"
-
-            fuzzy_title = fuzzy_match_score(config_title, assignment_part)
-            if fuzzy_title > 50 and fuzzy_title > best_score:
-                best_score = fuzzy_title
-                best_match = config_data
-                match_reason = f"fuzzy title: {config_title}"
+                fuzzy_title = fuzzy_match_score(config_title, candidate)
+                if fuzzy_title > 50 and fuzzy_title > best_score:
+                    best_score = fuzzy_title
+                    best_match = config_data
+                    match_reason = f"fuzzy title: {config_title}"
 
         # 5. Content fingerprinting (if no good match found and file content provided)
         if best_score < 50 and file_content:
@@ -799,7 +875,10 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                                        "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
 
                 # Match assignment config
+                print(f"  🔍 Matching config for: {filepath.name}")
+                print(f"  🔍 Available configs: {list(all_configs.keys())}")
                 matched_config = find_matching_config(filepath.name)
+                print(f"  🔍 Match result: {'FOUND - ' + matched_config.get('title', '?') if matched_config else 'NONE'}")
                 if not matched_config:
                     try:
                         temp_file_data = read_assignment_file(filepath)
@@ -819,11 +898,13 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     file_exclude_markers = matched_config.get('excludeMarkers', [])
                     file_notes = matched_config.get('gradingNotes', '')
                     file_sections = matched_config.get('responseSections', [])
+                    print(f"  ✅ Config matched: {matched_config.get('title', '?')}")
+                    print(f"  ✅ Grading notes: {len(file_notes)} chars, LENIENT={'YES' if 'LENIENT' in file_notes.upper() else 'NO'}")
                     matched_title = matched_config.get('title', 'Unknown')
                     is_completion_only = matched_config.get('completionOnly', False)
-                    imported_doc = matched_config.get('importedDoc', {})
+                    imported_doc = matched_config.get('importedDoc') or {}
                     assignment_template_local = imported_doc.get('text', '')
-                    rubric_type = matched_config.get('rubricType', 'standard')
+                    rubric_type = matched_config.get('rubricType') or 'standard'
                     custom_rubric = matched_config.get('customRubric', None)
                     # Section-based point configuration - only use when toggle is enabled
                     use_section_points = matched_config.get('useSectionPoints', False)
@@ -1305,7 +1386,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "filepath": str(filepath),
                     "assignment": result["matched_title"],
                     "period": result["student_period"],
-                    "score": grade_result.get('score', 0),
+                    "score": int(float(grade_result.get('score', 0) or 0)),
                     "letter_grade": grade_result.get('letter_grade', 'N/A'),
                     "feedback": grade_result.get('feedback', ''),
                     "student_content": student_content,
@@ -1383,6 +1464,13 @@ STANDARD CLASS GRADING EXPECTATIONS:
 
         grading_state["log"].append(f"Results saved to: {output_folder}")
         grading_state["complete"] = True
+
+        # Post-batch calibration check
+        calibration = _check_batch_calibration(grading_state["results"])
+        if not calibration["calibrated"]:
+            for concern in calibration["concerns"]:
+                grading_state["log"].append(f"⚠️ CALIBRATION: {concern}")
+            grading_state["calibration"] = calibration
 
         # Save results to file for persistence across restarts
         save_results(grading_state["results"])
@@ -1532,7 +1620,7 @@ def grade_individual():
         if assignment_config.get('gradingNotes'):
             file_ai_notes = assignment_config['gradingNotes'] + '\n\n' + file_ai_notes
         # Get assignment template for question context
-        imported_doc = assignment_config.get('importedDoc', {})
+        imported_doc = assignment_config.get('importedDoc') or {}
         assignment_template = imported_doc.get('text', '')
         # Get exclude markers
         file_exclude_markers = assignment_config.get('excludeMarkers', [])
@@ -1595,7 +1683,7 @@ def grade_individual():
             "student_name": student_name,
             "filename": file.filename,
             "assignment": assignment_config.get('title', 'Individual Upload') if assignment_config else 'Individual Upload',
-            "score": grade_result.get('score', 0),
+            "score": int(float(grade_result.get('score', 0) or 0)),
             "letter_grade": grade_result.get('letter_grade', 'N/A'),
             "feedback": grade_result.get('feedback', ''),
             "breakdown": grade_result.get('breakdown', {}),

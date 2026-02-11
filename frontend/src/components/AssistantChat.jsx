@@ -31,7 +31,7 @@ function renderMarkdown(text) {
   // Markdown links [text](url) -> clickable links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, linkText, url) {
     // Download worksheet links get a special style
-    if (url.indexOf('/api/download-worksheet/') !== -1) {
+    if (url.indexOf('/api/download-worksheet/') !== -1 || url.indexOf('/api/download-document/') !== -1) {
       return '<a href="' + url + '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;text-decoration:none;font-weight:600;font-size:0.85em;margin:4px 0" download>' + linkText + '</a>'
     }
     return '<a href="' + url + '" style="color:var(--accent-light);text-decoration:underline" target="_blank" rel="noopener">' + linkText + '</a>'
@@ -79,7 +79,7 @@ export default function AssistantChat({ addToast }) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [sessionId] = useState(loadStoredSession)
   const [showMorePrompts, setShowMorePrompts] = useState(false)
-  const [attachedFile, setAttachedFile] = useState(null)
+  const [attachedFiles, setAttachedFiles] = useState([])
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -95,6 +95,7 @@ export default function AssistantChat({ addToast }) {
         isError: m.isError,
         downloadUrl: m.downloadUrl,
         downloadFilename: m.downloadFilename,
+        downloadUrls: m.downloadUrls,
       }))
       localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(toStore))
     } catch (e) { /* storage full or unavailable */ }
@@ -115,20 +116,29 @@ export default function AssistantChat({ addToast }) {
   }, [])
 
   function handleFileSelect(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    // 20MB limit
-    if (file.size > 20 * 1024 * 1024) {
-      if (addToast) addToast('File too large. Maximum size is 20MB.', 'error')
-      return
+    const selected = Array.from(e.target.files)
+    if (!selected.length) return
+    const tooLarge = selected.filter(f => f.size > 20 * 1024 * 1024)
+    if (tooLarge.length) {
+      if (addToast) addToast('File too large: ' + tooLarge.map(f => f.name).join(', ') + '. Maximum size is 20MB per file.', 'error')
     }
-    setAttachedFile(file)
+    const valid = selected.filter(f => f.size <= 20 * 1024 * 1024)
+    if (valid.length) {
+      setAttachedFiles(prev => {
+        const combined = [...prev, ...valid]
+        if (combined.length > 10) {
+          if (addToast) addToast('Maximum 10 files allowed. Only the first 10 were kept.', 'warning')
+          return combined.slice(0, 10)
+        }
+        return combined
+      })
+    }
     // Reset the input so the same file can be re-selected
     e.target.value = ''
   }
 
-  function removeAttachedFile() {
-    setAttachedFile(null)
+  function removeAttachedFile(index) {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   async function fileToBase64(file) {
@@ -150,17 +160,17 @@ export default function AssistantChat({ addToast }) {
 
   async function sendMessage(text) {
     const content = text || input.trim()
-    if ((!content && !attachedFile) || isStreaming) return
+    if ((!content && attachedFiles.length === 0) || isStreaming) return
 
-    const messageText = content || 'Please analyze this file.'
-    const currentFile = attachedFile
+    const messageText = content || 'Please analyze ' + (attachedFiles.length === 1 ? 'this file.' : 'these files.')
+    const currentFiles = [...attachedFiles]
 
     setInput('')
-    setAttachedFile(null)
+    setAttachedFiles([])
 
-    // Build user message display (show filename if attached)
-    const displayContent = currentFile
-      ? messageText + '\n[Attached: ' + currentFile.name + ']'
+    // Build user message display (show filenames if attached)
+    const displayContent = currentFiles.length > 0
+      ? messageText + '\n[Attached: ' + currentFiles.map(f => f.name).join(', ') + ']'
       : messageText
     const userMsg = { role: 'user', content: displayContent }
     setMessages(prev => [...prev, userMsg])
@@ -170,11 +180,10 @@ export default function AssistantChat({ addToast }) {
     setMessages(prev => [...prev, { role: 'assistant', content: '', toolCalls: [] }])
 
     try {
-      // Convert file to base64 if attached
+      // Convert files to base64 if attached
       let files = []
-      if (currentFile) {
-        const fileData = await fileToBase64(currentFile)
-        files = [fileData]
+      if (currentFiles.length > 0) {
+        files = await Promise.all(currentFiles.map(f => fileToBase64(f)))
       }
 
       const authHeaders = await getAuthHeaders()
@@ -257,11 +266,14 @@ export default function AssistantChat({ addToast }) {
                   const tools = (last.toolCalls || []).map(tc =>
                     tc.id === event.id ? { ...tc, status: 'done', preview: event.result_preview } : tc
                   )
-                  // Capture download URL from worksheet generation
+                  // Capture download URL(s) from any file-generating tool
                   const newState = { ...last, toolCalls: tools }
                   if (event.download_url) {
                     newState.downloadUrl = event.download_url
-                    newState.downloadFilename = event.download_filename || 'worksheet.docx'
+                    newState.downloadFilename = event.download_filename || 'file'
+                  }
+                  if (event.download_urls) {
+                    newState.downloadUrls = [...(last.downloadUrls || []), ...event.download_urls]
                   }
                   updated[updated.length - 1] = newState
                 }
@@ -317,7 +329,7 @@ export default function AssistantChat({ addToast }) {
       // Ignore clear errors
     }
     setMessages([])
-    setAttachedFile(null)
+    setAttachedFiles([])
     try {
       localStorage.removeItem(STORAGE_KEY_MESSAGES)
       localStorage.removeItem(STORAGE_KEY_SESSION)
@@ -344,10 +356,13 @@ export default function AssistantChat({ addToast }) {
     create_focus_assignment: 'Creating Focus assignment',
     export_grades_csv: 'Exporting CSV',
     generate_worksheet: 'Generating worksheet',
+    generate_document: 'Generating document',
+    save_document_style: 'Saving document style',
+    list_document_styles: 'Checking saved styles',
   }
 
   const hasMessages = messages.length > 0
-  const canSend = !isStreaming && (input.trim() || attachedFile)
+  const canSend = !isStreaming && (input.trim() || attachedFiles.length > 0)
 
   return (
     <div className="fade-in" style={{
@@ -362,6 +377,7 @@ export default function AssistantChat({ addToast }) {
         type="file"
         accept={ACCEPTED_FILE_TYPES}
         onChange={handleFileSelect}
+        multiple
         style={{ display: 'none' }}
       />
 
@@ -585,12 +601,12 @@ export default function AssistantChat({ addToast }) {
                   ))}
                 </div>
               )}
-              {/* Download button for generated worksheets */}
-              {msg.downloadUrl && (
-                <div style={{ margin: '8px 0' }}>
+              {/* Download buttons for generated files (worksheets, CSV exports, etc.) */}
+              {(msg.downloadUrls || (msg.downloadUrl ? [{ url: msg.downloadUrl, filename: msg.downloadFilename }] : [])).map((dl, di) => (
+                <div key={di} style={{ margin: '4px 0' }}>
                   <a
-                    href={msg.downloadUrl}
-                    download={msg.downloadFilename || 'worksheet.docx'}
+                    href={dl.url}
+                    download={dl.filename || 'file'}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -608,10 +624,10 @@ export default function AssistantChat({ addToast }) {
                     onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
                   >
                     <Icon name="Download" size={16} />
-                    Download {msg.downloadFilename || 'Worksheet'}
+                    Download {dl.filename || 'File'}
                   </a>
                 </div>
-              )}
+              ))}
               {msg.role === 'assistant' ? (
                 <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
               ) : (
@@ -630,49 +646,52 @@ export default function AssistantChat({ addToast }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* File preview chip */}
-      {attachedFile && (
+      {/* File preview chips */}
+      {attachedFiles.length > 0 && (
         <div style={{
           padding: '6px 20px 0',
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           gap: '8px',
         }}>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '5px 12px',
-            background: 'rgba(99, 102, 241, 0.15)',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-            borderRadius: '12px',
-            fontSize: '0.8rem',
-            color: 'var(--accent-light)',
-          }}>
-            <Icon name="Paperclip" size={13} />
-            {attachedFile.name}
-            <button
-              onClick={removeAttachedFile}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                padding: '0 2px',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <Icon name="X" size={13} />
-            </button>
-          </span>
+          {attachedFiles.map((file, i) => (
+            <span key={i} style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              background: 'rgba(99, 102, 241, 0.15)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              borderRadius: '12px',
+              fontSize: '0.8rem',
+              color: 'var(--accent-light)',
+            }}>
+              <Icon name="Paperclip" size={13} />
+              {file.name}
+              <button
+                onClick={() => removeAttachedFile(i)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '0 2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Icon name="X" size={13} />
+              </button>
+            </span>
+          ))}
         </div>
       )}
 
       {/* Input Area */}
       <div style={{
         padding: '16px 20px',
-        borderTop: attachedFile ? 'none' : '1px solid var(--glass-border)',
+        borderTop: attachedFiles.length > 0 ? 'none' : '1px solid var(--glass-border)',
         display: 'flex',
         gap: '10px',
         alignItems: 'flex-end',
@@ -704,7 +723,7 @@ export default function AssistantChat({ addToast }) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={attachedFile ? 'Describe what you want (e.g., "Create a worksheet from this reading")...' : 'Ask about grades, students, or assignments...'}
+          placeholder={attachedFiles.length > 0 ? 'Describe what you want (e.g., "Create a worksheet from this reading")...' : 'Ask about grades, students, or assignments...'}
           disabled={isStreaming}
           rows={1}
           style={{

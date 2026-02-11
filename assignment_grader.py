@@ -29,6 +29,52 @@ import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+from typing import List, Optional
+
+# Structured output models for reliable JSON responses from OpenAI
+from pydantic import BaseModel
+
+
+class GradingBreakdown(BaseModel):
+    content_accuracy: int
+    completeness: int
+    writing_quality: int
+    effort_engagement: int
+
+
+class SkillsDemonstrated(BaseModel):
+    strengths: List[str]
+    developing: List[str]
+
+
+class AiDetectionResult(BaseModel):
+    flag: str  # "none", "unlikely", "possible", "likely"
+    confidence: int
+    reason: str
+
+
+class PlagiarismDetectionResult(BaseModel):
+    flag: str  # "none", "possible", "likely"
+    reason: str
+
+
+class GradingResponse(BaseModel):
+    score: int
+    letter_grade: str
+    breakdown: GradingBreakdown
+    student_responses: List[str]
+    unanswered_questions: List[str]
+    excellent_answers: List[str]
+    needs_improvement: List[str]
+    skills_demonstrated: SkillsDemonstrated
+    ai_detection: AiDetectionResult
+    plagiarism_detection: PlagiarismDetectionResult
+    feedback: str
+
+
+class DetectionResponse(BaseModel):
+    ai_detection: AiDetectionResult
+    plagiarism_detection: PlagiarismDetectionResult
 
 # Import student history for personalized feedback
 try:
@@ -60,94 +106,147 @@ def is_question_or_prompt(text: str) -> bool:
     Check if text looks like a question or instruction prompt rather than a student response.
     Returns True if the text should NOT be treated as a student response.
 
-    This prevents the common error where questions are detected as responses
-    when students leave sections blank.
+    Uses a SCORING approach with positive signals (instruction-like) and negative signals
+    (student-content-like) so it generalizes to any assignment without needing specific keywords.
     """
     if not text or not text.strip():
         return True  # Empty is not a valid response
 
     text = text.strip()
-
-    # If text ends with a question mark, it's likely a question, not a response
-    if text.rstrip().endswith('?'):
-        return True
-
-    # Check if text starts with common question/instruction words
-    question_starters = [
-        'what ', 'what\'s', 'whats',
-        'how ', 'how\'s', 'hows',
-        'why ', 'why\'s', 'whys',
-        'when ', 'when\'s', 'whens',
-        'where ', 'where\'s', 'wheres',
-        'who ', 'who\'s', 'whos',
-        'which ', 'which\'s',
-        'explain ', 'explain:',
-        'describe ', 'describe:',
-        'list ', 'list:',
-        'define ', 'define:',
-        'identify ', 'identify:',
-        'compare ', 'compare:',
-        'analyze ', 'analyze:',
-        'discuss ', 'discuss:',
-        'summarize ', 'summarize:',
-        'write your ', 'write a ',
-        'in your own words',
-        'using evidence',
-        'provide evidence',
-        'give an example',
-        'give examples',
-    ]
-
     text_lower = text.lower()
-    question_words = ('what ', 'what\'s', 'whats', 'how ', 'how\'s', 'hows',
-                      'why ', 'why\'s', 'whys', 'when ', 'when\'s', 'whens',
-                      'where ', 'where\'s', 'wheres', 'who ', 'who\'s', 'whos',
-                      'which ', 'which\'s')
 
-    for starter in question_starters:
-        if text_lower.startswith(starter):
-            # But check if there's actual content after the question/prompt
-            # e.g., "What year? 1803" should keep "1803" as the answer
-            # e.g., "Explain how... The cotton gin was..." should keep student content
-            if '?' in text:
-                after_question = text.split('?', 1)[1].strip()
-                if after_question and len(after_question) > 2:
-                    return False  # There's content after the question - not just a prompt
-            # Question-word starters (what/how/why/etc.) WITHOUT a question mark
-            # are likely statements, not questions — e.g. "How they did this was by..."
-            # Only flag as question if it's short (likely a bare prompt) or ends with ?
-            if starter in question_words and '?' not in text and len(text) > 30:
-                return False  # Long statement starting with question word — likely an answer
-            # For instruction starters (explain, describe, etc.) check for student
-            # content after the first sentence ending with a period
-            if starter.startswith(('explain', 'describe', 'summarize', 'discuss', 'analyze', 'compare', 'identify', 'list', 'define', 'write', 'in your', 'using', 'provide', 'give')):
-                # Find the end of the instruction sentence (first period)
-                period_pos = text.find('.')
-                if period_pos != -1 and period_pos < len(text) - 5:
-                    after_period = text[period_pos + 1:].strip()
-                    if after_period and len(after_period) > 10:
-                        return False  # Content after instruction — likely student answer
-            return True
+    # === QUICK CHECKS ===
 
-    # Check if it looks like a numbered question with no answer
-    # e.g., "1. What was the cause?" or "2) How did..."
-    num_question_pattern = r'^\d+[\.\)]\s*(what|how|why|when|where|who|which|explain|describe|list|define)\b'
-    if re.match(num_question_pattern, text_lower):
+    # Ends with question mark → question
+    if text.rstrip().endswith('?'):
+        # But if there's an answer after a question mark on the same line, it's a response
+        # e.g., "What year? 1803"
+        if '?' in text:
+            after_q = text.split('?', 1)[1].strip()
+            if after_q and len(after_q) > 2:
+                return False
         return True
 
-    # Check for instruction-only patterns
-    instruction_patterns = [
-        r'^answer\s*(the\s*)?(following|below|these)',
-        r'^complete\s*(the\s*)?(following|below|these)',
-        r'^fill\s*in\s*(the\s*)?blank',
-        r'^use\s*(the\s*)?(reading|text|passage)',
-        r'^\d+[\.\)]\s*$',  # Just a number with no content
-    ]
-    for pattern in instruction_patterns:
-        if re.match(pattern, text_lower):
-            return True
+    # Just a number with period/paren (bare question number)
+    if re.match(r'^\d+[\.\)]\s*$', text_lower):
+        return True
 
-    return False
+    # === SCORING-BASED DETECTION ===
+    # Positive score = instruction/prompt, Negative score = student response
+    score = 0
+
+    # --- POSITIVE SIGNALS (instruction-like) ---
+
+    # Signal 1: Starts with imperative verb (the most reliable signal)
+    # These are verbs used to give instructions, in base form without a subject
+    imperative_starts = re.match(
+        r'^(summarize|include|write|explain|describe|identify|compare|analyze|'
+        r'discuss|list|define|name|state|create|draw|use|provide|give|think|'
+        r'consider|refer|remember|note|evaluate|assess|determine|select|choose|'
+        r'complete|answer|fill|circle|underline|highlight|review|read|examine|'
+        r'outline|support|justify|predict|infer|contrast|classify|organize|'
+        r'paraphrase|restate|cite|mention|address|respond|demonstrate|illustrate|'
+        r'show|prove|argue|defend|critique|interpret|apply|connect|relate|'
+        r'be sure|make sure|don\'t forget|do not forget)\b',
+        text_lower
+    )
+    if imperative_starts:
+        score += 3
+
+    # Signal 2: Starts with question word (what/how/why/etc.)
+    question_start = re.match(
+        r'^(what|how|why|when|where|who|which)\b', text_lower
+    )
+    if question_start:
+        # Question words WITHOUT ? and long text are often student statements
+        # "How they resolved the issue was by..." is a student response
+        if '?' not in text and len(text) > 40:
+            score -= 1  # Likely a student statement
+        else:
+            score += 3  # Likely a question prompt
+
+    # Signal 3: Contains quantifier/requirement language
+    # "in 3-4 sentences", "at least 2 examples", "a 5-paragraph essay"
+    if re.search(r'\d+[\-–]\d+\s*(sentences?|words?|paragraphs?|examples?|reasons?|points?)', text_lower):
+        score += 3
+    if re.search(r'at least\s+\d+', text_lower):
+        score += 2
+
+    # Signal 4: Contains assignment meta-language (addresses the student about the task)
+    meta_phrases = (
+        'your answer', 'your response', 'your own words', 'your summary',
+        'the text', 'the reading', 'the passage', 'the chapter', 'the article',
+        'the space below', 'the lines below', 'the box below',
+        'from the reading', 'from the text', 'from the passage',
+        'using evidence', 'using details', 'using examples', 'using information',
+        'based on the', 'refer to the', 'according to the',
+        'key reasons', 'key points', 'key events', 'key figures', 'key details',
+        'main ideas', 'main causes', 'main points', 'main events',
+        'supporting details', 'supporting evidence', 'textual evidence',
+    )
+    meta_count = sum(1 for phrase in meta_phrases if phrase in text_lower)
+    score += min(meta_count * 2, 4)  # Cap at +4
+
+    # Signal 5: Short text (< 100 chars) starting with imperative = very likely instruction
+    if imperative_starts and len(text) < 100:
+        score += 1
+
+    # Signal 6: Contains "you" / "your" addressing the student
+    if re.search(r'\byou(r)?\b', text_lower):
+        score += 1
+
+    # Signal 7: Instruction structure patterns
+    if re.match(r'^(in\s+\d+|after\s+reading|before\s+reading|based\s+on|using\s+the)\b', text_lower):
+        score += 3
+
+    # --- NEGATIVE SIGNALS (student-response-like) ---
+
+    # Counter 1: Contains specific historical dates (1700s-2000s)
+    year_matches = re.findall(r'\b(1[5-9]\d{2}|20\d{2})\b', text)
+    if year_matches:
+        score -= 2
+
+    # Counter 2: Past tense narrative verbs (student writing about events)
+    past_verbs = re.findall(
+        r'\b(was|were|had|did|led|fought|signed|began|ended|caused|resulted|'
+        r'believed|wanted|decided|became|created|established|passed|declared|'
+        r'invaded|conquered|defeated|surrendered|negotiated|agreed|refused|'
+        r'moved|settled|built|discovered|explored|traveled|arrived|died|killed|'
+        r'escaped|captured|freed|enslaved|governed|ruled|elected|appointed)\b',
+        text_lower
+    )
+    if len(past_verbs) >= 2:
+        score -= 3
+    elif len(past_verbs) == 1:
+        score -= 1
+
+    # Counter 3: Proper nouns mid-sentence (names of people, places, events)
+    # Only a strong signal when combined with past tense verbs (narrative writing)
+    # Instructions can also mention proper nouns ("Describe the impact on Native Americans")
+    words = text.split()
+    if len(words) > 3:
+        proper_nouns = sum(1 for w in words[1:] if w[0:1].isupper() and not w.isupper()
+                          and w not in ('I', 'I\'m', 'I\'ll', 'I\'ve', 'I\'d'))
+        if proper_nouns >= 2 and len(past_verbs) >= 1:
+            score -= 2  # Proper nouns + past tense = strong student response signal
+        elif proper_nouns >= 3 and not imperative_starts:
+            score -= 1  # Many proper nouns without imperative start
+
+    # Counter 4: Contains because/since/therefore (reasoning = student work)
+    if re.search(r'\b(because|since|therefore|however|although|furthermore|moreover|consequently)\b', text_lower):
+        score -= 2
+
+    # Counter 5: Long text (>150 chars) with no meta-language is likely student content
+    if len(text) > 150 and meta_count == 0 and not imperative_starts:
+        score -= 2
+
+    # Counter 6: Definition patterns ("X means...", "X is defined as...", "X refers to...")
+    if re.search(r'\b(means|is defined as|refers to|is when|is the|is a |are the|are a )\b', text_lower):
+        score -= 2
+
+    # === DECISION ===
+    # score >= 3 means instruction/prompt
+    return score >= 3
 
 
 def filter_questions_from_response(response_text: str) -> str:
@@ -180,27 +279,98 @@ def filter_questions_from_response(response_text: str) -> str:
             if after_question and len(after_question) > 2 and not is_question_or_prompt(after_question):
                 filtered_lines.append(after_question)
         elif not is_question_or_prompt(line):
-            # Check if this line starts with an instruction prompt (Explain, Describe, etc.)
-            # followed by a period and then student content — strip the prompt part
+            filtered_lines.append(line)
+        else:
+            # Line IS a prompt/instruction — but check if student content follows
+            # the instruction on the same line (after a period)
             line_lower = line.lower()
-            instruction_starters = ('explain ', 'describe ', 'summarize ', 'discuss ',
-                                    'analyze ', 'compare ', 'identify ', 'list ', 'define ',
-                                    'write your ', 'write a ', 'using evidence', 'in your own words')
-            is_instruction_with_answer = False
-            for inst in instruction_starters:
-                if line_lower.startswith(inst):
-                    # Find the end of the instruction sentence (period)
-                    period_pos = line.find('.')
-                    if period_pos != -1 and period_pos < len(line) - 5:
-                        after_period = line[period_pos + 1:].strip()
-                        if after_period and len(after_period) > 2:
-                            filtered_lines.append(after_period)
-                            is_instruction_with_answer = True
-                    break
-            if not is_instruction_with_answer:
-                filtered_lines.append(line)
+            period_pos = line.find('.')
+            if period_pos != -1 and period_pos < len(line) - 5:
+                after_period = line[period_pos + 1:].strip()
+                if after_period and len(after_period) > 10 and not is_question_or_prompt(after_period):
+                    filtered_lines.append(after_period)
 
     return '\n'.join(filtered_lines).strip()
+
+
+def _strip_template_lines(response: str, marker_text: str, template_text: str) -> str:
+    """Remove template/prompt lines from extracted response by comparing with template.
+
+    After the marker heading (e.g., 'SUMMARY'), the template may contain instruction
+    text like 'Summarize the key events in 4-5 sentences.' which appears in the student
+    doc but is NOT student work. This function strips those template lines.
+    """
+    if not template_text or not response:
+        return response
+
+    # Find the marker section in the template
+    marker_lower = marker_text.lower().strip()
+    template_lower = template_text.lower()
+    marker_pos = template_lower.find(marker_lower)
+    if marker_pos == -1:
+        return response
+
+    # Extract template content after this marker
+    template_after = template_text[marker_pos + len(marker_text):]
+    # Stop at the next likely section marker (all-caps word on its own line)
+    template_section_lines = []
+    for line in template_after.split('\n'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Stop if we hit another section marker (all-caps word, 3+ chars)
+        if stripped.isupper() and len(stripped) >= 3 and stripped.isalpha():
+            break
+        template_section_lines.append(stripped)
+
+    if not template_section_lines:
+        return response
+
+    # Build set of normalized template lines (lowered, stripped of underscores/whitespace)
+    template_line_set = set()
+    template_word_sets = []  # For fuzzy matching
+    for tl in template_section_lines:
+        cleaned = re.sub(r'[_\s]+', ' ', tl).strip().lower()
+        if len(cleaned) >= 10:  # Only match substantial lines
+            template_line_set.add(cleaned)
+            # Also store word sets for fuzzy overlap matching
+            words = set(re.findall(r'[a-z]{3,}', cleaned))
+            if len(words) >= 3:
+                template_word_sets.append(words)
+
+    # Filter response lines: remove any that match template lines
+    response_lines = response.split('\n')
+    filtered = []
+    for line in response_lines:
+        line_cleaned = re.sub(r'[_\s]+', ' ', line).strip().lower()
+        is_template = False
+
+        # Exact / substring match
+        for tl in template_line_set:
+            if line_cleaned == tl or (len(line_cleaned) >= 15 and line_cleaned in tl) or (len(tl) >= 15 and tl in line_cleaned):
+                is_template = True
+                break
+
+        # Fuzzy match: high word overlap with any template line (catches rephrased prompts)
+        if not is_template and len(line_cleaned) >= 15:
+            line_words = set(re.findall(r'[a-z]{3,}', line_cleaned))
+            if len(line_words) >= 3:
+                for tw_set in template_word_sets:
+                    overlap = len(line_words & tw_set)
+                    # If 60%+ of the response line's words appear in a template line,
+                    # it's likely template text (possibly reworded)
+                    if overlap >= max(3, len(line_words) * 0.6):
+                        is_template = True
+                        break
+
+        if not is_template:
+            filtered.append(line)
+
+    result = '\n'.join(filtered).strip()
+    if result != response.strip():
+        stripped_count = len(response_lines) - len(filtered)
+        print(f"      🧹 Stripped {stripped_count} template line(s) from {marker_text[:30]} response")
+    return result
 
 
 def strip_emojis(text: str) -> str:
@@ -498,6 +668,92 @@ def parse_numbered_questions(text: str) -> list:
                 "answer": "",
                 "is_blank": True
             })
+
+    return results
+
+
+def parse_vocab_terms(text: str) -> list:
+    """
+    Parse vocabulary Term: definition pairs from a text block.
+
+    Handles formats like:
+    - "Assimilate: to adopt the customs of another group"
+    - "Indian Removal Act: 1830 law signed by Jackson"
+    - "Term: _______________" (blank)
+    - "Term:" followed by definition on next line
+
+    Returns list of {"term": "...", "answer": "...", "is_blank": bool} dicts.
+    Returns empty list if no vocab terms detected.
+    """
+    if not text or len(text) < 10:
+        return []
+
+    lines = text.strip().split('\n')
+    results = []
+
+    # Skip header keywords that aren't vocab terms
+    skip_keywords = {'vocabulary', 'questions', 'summary', 'notes', 'section',
+                     'directions', 'instructions', 'response', 'name', 'date',
+                     'period', 'write your', 'use bullets', 'define the',
+                     'in your own words', 'total', 'points'}
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        i += 1
+
+        if not line or line.replace('_', '').replace(' ', '').replace('-', '') == '':
+            continue
+
+        # Check for "Term: definition" or "Term:" pattern
+        if ':' not in line:
+            continue
+
+        parts = line.split(':', 1)
+        term = parts[0].strip()
+        defn = parts[1].strip() if len(parts) > 1 else ''
+
+        # Validate it looks like a vocab term (not a header/instruction)
+        if not term or len(term) < 2 or len(term) > 60:
+            continue
+        if len(term.split()) > 5:
+            continue
+
+        term_lower = term.lower()
+        if any(kw in term_lower for kw in skip_keywords):
+            continue
+
+        # Skip if term starts with a number (likely a numbered question, not vocab)
+        if re.match(r'^\d+[\.\)]\s', term):
+            continue
+
+        # Check if definition is blank (underscores, empty, dashes)
+        defn_clean = re.sub(r'[_\-\s\.]+', '', defn)
+        if len(defn_clean) < 3:
+            # Check next line(s) for definition
+            found_defn = False
+            for look in range(i, min(i + 2, len(lines))):
+                next_line = lines[look].strip()
+                next_clean = re.sub(r'[_\-\s\.]+', '', next_line)
+                if next_clean and len(next_clean) >= 3 and ':' not in next_line:
+                    # Next line has content without a colon — it's the definition
+                    defn = next_line
+                    defn_clean = next_clean
+                    found_defn = True
+                    i = look + 1  # Skip past the definition line
+                    break
+                elif next_clean and ':' in next_line:
+                    break  # Next line is another term — this one is blank
+
+            if not found_defn or len(defn_clean) < 3:
+                results.append({"term": term, "answer": "", "is_blank": True})
+                continue
+
+        results.append({"term": term, "answer": defn, "is_blank": False})
+
+    # Only return results if we found at least 2 vocab terms (avoid false positives)
+    if len(results) < 2:
+        return []
 
     return results
 
@@ -880,15 +1136,61 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             if numbered_items:
                 print(f"      📝 Found {len(numbered_items)} numbered questions in section")
                 for item in numbered_items:
-                    if item.get("is_blank") or not item.get("answer"):
+                    answer = item.get("answer", "")
+
+                    # Clean template artifacts from numbered question answers:
+                    # "(25 pts)", "Response: ___", "_____" lines are template text, not student content
+                    if answer:
+                        cleaned_lines = []
+                        for aline in answer.split('\n'):
+                            stripped = aline.strip()
+                            # Skip point value markers like "(20 pts)" or "(25 pts)"
+                            if re.match(r'^\(\s*\d+\s*(?:pts?|points?)\s*\)\s*$', stripped, re.IGNORECASE):
+                                continue
+                            # Skip "Response:" with only underscores after it
+                            if re.match(r'^Response\s*:\s*[_\s]*$', stripped, re.IGNORECASE):
+                                continue
+                            # Skip lines that are only underscores/dashes/spaces
+                            if re.match(r'^[_\-\s]+$', stripped) or not stripped:
+                                continue
+                            # Skip "Response:" prefix but keep any actual text after it
+                            resp_match = re.match(r'^Response\s*:\s*(.+)', stripped, re.IGNORECASE)
+                            if resp_match:
+                                actual = resp_match.group(1).strip()
+                                if actual and not re.match(r'^[_\-\s]+$', actual):
+                                    cleaned_lines.append(actual)
+                                continue
+                            cleaned_lines.append(stripped)
+                        answer = '\n'.join(cleaned_lines).strip()
+
+                    if not answer or len(answer) < 3:
                         blank_questions.append(item.get("question", "Unknown"))
                     else:
                         extracted.append({
                             "question": item["question"],
-                            "answer": item["answer"][:1000],
+                            "answer": answer[:1000],
                             "type": "numbered_question"
                         })
                 continue  # Skip normal processing for this marker
+
+            # Check if this is a VOCABULARY section with Term: definition pairs
+            # Parse each vocab term individually for better grading granularity
+            marker_name_lower = marker_text.lower().split('\n')[0].strip()
+            is_vocab_section = 'vocab' in marker_name_lower
+            if is_vocab_section:
+                vocab_items = parse_vocab_terms(response)
+                if vocab_items:
+                    print(f"      📖 Found {len(vocab_items)} vocab terms in section")
+                    for vitem in vocab_items:
+                        if vitem.get("is_blank"):
+                            blank_questions.append(vitem["term"] + " (no definition)")
+                        else:
+                            extracted.append({
+                                "question": vitem["term"],
+                                "answer": vitem["answer"][:1000],
+                                "type": "vocab_term"
+                            })
+                    continue  # Skip normal blob processing
 
             # Get a short label for the question (first 50 chars of marker)
             question_label = marker_text[:80] + '...' if len(marker_text) > 80 else marker_text
@@ -936,6 +1238,12 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 else:
                     # Use filtered response
                     response = '\n'.join(student_lines)
+
+            # CRITICAL: Strip template lines from response using original template
+            # This removes instruction/prompt text that appears between the marker
+            # heading and the student's actual response (e.g., "Summarize the key events...")
+            if not is_blank and template_text:
+                response = _strip_template_lines(response, marker_text, template_text)
 
             # CRITICAL: Filter out questions/prompts from response
             # This prevents detecting "What was the cause?" as a student answer
@@ -2243,6 +2551,10 @@ def read_assignment_file(filepath: str) -> dict:
     if extension == '.docx':
         content = read_docx_file(filepath)
         if content:
+            # Strip embedded answer key from generated worksheets (handles -- and --- variants)
+            if "GRAIDER_ANSWER_KEY_START" in content:
+                content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+                print(f"  🧹 Stripped embedded answer key at file read")
             return {"type": "text", "content": content}
         return None
     
@@ -2608,28 +2920,36 @@ Respond ONLY with this JSON (no other text):
 }}"""
 
     try:
+        # Use structured output for guaranteed schema
+        try:
+            response = client.beta.chat.completions.parse(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": detection_prompt}],
+                response_format=DetectionResponse,
+                max_tokens=500,
+                temperature=0,
+                seed=42
+            )
+            parsed = response.choices[0].message.parsed
+            if parsed:
+                return parsed.model_dump()
+        except Exception:
+            pass  # Fall through to text fallback
+
+        # Text fallback if structured output fails
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Fast and cheap for detection
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": detection_prompt}],
             max_tokens=500,
-            temperature=0.1  # Low temperature for consistent detection
+            temperature=0,
+            seed=42
         )
-
         response_text = response.choices[0].message.content.strip()
+        result = _try_parse_json_fallback(response_text)
+        if result:
+            return result
 
-        # Clean markdown if present
-        if response_text.startswith("```"):
-            lines = response_text.split('\n')
-            start = 1 if lines[0].startswith("```") else 0
-            end = len(lines)
-            for i in range(len(lines)-1, -1, -1):
-                if lines[i].strip() == "```":
-                    end = i
-                    break
-            response_text = '\n'.join(lines[start:end])
-
-        result = json.loads(response_text)
-        return result
+        return json.loads(response_text)
 
     except Exception as e:
         print(f"  ⚠️  Detection error: {e}")
@@ -2771,14 +3091,21 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     content = assignment_data.get("content", "")
     extracted_text = ""
 
+    # Strip embedded answer key before extraction (handles -- and --- variants)
+    if content and "GRAIDER_ANSWER_KEY_START" in content:
+        content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+        assignment_data = {**assignment_data, "content": content}
+        print(f"  🧹 Stripped embedded answer key from document")
+
     if assignment_data.get("type") == "text" and content:
         extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
         if extraction_result.get("extracted_responses"):
-            # Filter out FITB items — only send written responses to detection agent
-            # FITB answers (names, dates, facts) naturally match sources and should not be flagged
+            # Filter out FITB and vocab items — only send written responses to detection
+            # FITB answers (names, dates, facts) and vocab definitions naturally match sources
+            skip_types = {'fitb_full', 'vocab_term'}
             written_responses = [
                 r for r in extraction_result["extracted_responses"]
-                if 'fill_in_blank' not in r.get('type', '') and r.get('type') != 'fitb_full'
+                if 'fill_in_blank' not in r.get('type', '') and r.get('type') not in skip_types
             ]
             # If no written responses (pure FITB), extracted_text stays empty → detection skipped
             extracted_text = "\n".join([
@@ -2793,7 +3120,13 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
                                grading_style=grading_style)
 
-    print(f"  🔄 Running parallel detection + grading...")
+    # Determine grading strategy: multi-pass for OpenAI, single-pass for Claude/Gemini
+    use_multipass = not ai_model.startswith("claude") and not ai_model.startswith("gemini")
+
+    if use_multipass:
+        print(f"  🔄 Running parallel detection + multi-pass grading...")
+    else:
+        print(f"  🔄 Running parallel detection + single-pass grading...")
 
     # Preprocess text for AI detection (removes template text, focuses on student writing)
     detection_text = preprocess_for_ai_detection(extracted_text)
@@ -2802,15 +3135,28 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         # Submit both tasks
         detection_future = executor.submit(detect_ai_plagiarism, detection_text, grade_level)
-        grading_future = executor.submit(grade_assignment, student_name, assignment_data,
-                                         custom_ai_instructions, grade_level, subject,
-                                         ai_model, student_id, assignment_template, rubric_prompt,
-                                         custom_markers, exclude_markers, marker_config, effort_points,
-                                         extraction_mode, grading_style)
+
+        if use_multipass:
+            grading_future = executor.submit(grade_multipass, student_name, assignment_data,
+                                             custom_ai_instructions, grade_level, subject,
+                                             ai_model, student_id, assignment_template, rubric_prompt,
+                                             custom_markers, exclude_markers, marker_config, effort_points,
+                                             extraction_mode, grading_style)
+        else:
+            grading_future = executor.submit(grade_assignment, student_name, assignment_data,
+                                             custom_ai_instructions, grade_level, subject,
+                                             ai_model, student_id, assignment_template, rubric_prompt,
+                                             custom_markers, exclude_markers, marker_config, effort_points,
+                                             extraction_mode, grading_style)
 
         # Wait for both to complete
         detection_result = detection_future.result()
         grading_result = grading_future.result()
+
+    # Skip detection merging for blank/incomplete submissions — nothing to detect
+    if grading_result.get("letter_grade") == "INCOMPLETE" and grading_result.get("score", 0) == 0:
+        print(f"  📝 Blank/incomplete submission — skipping AI/plagiarism detection merge")
+        return grading_result
 
     # Merge detection results into grading results
     # Detection agent's flags override grading agent's (more specialized)
@@ -2879,15 +3225,22 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     # But NOT for blank submissions (they get their own feedback)
     ai_confidence = grading_result.get("ai_detection", {}).get("confidence", 0)
     student_responses = grading_result.get("student_responses", [])
-    # Empty list = blank submission, UNLESS we recovered from JSON error (then we don't know)
-    is_blank = not student_responses and not grading_result.get("json_recovery")
+    ai_score = grading_result.get("score", 0)
+    # Only treat as blank if: no student_responses AND AI gave score 0 AND no JSON recovery.
+    # Previously this fired whenever student_responses was empty, which could override
+    # legitimate grades if the AI simply didn't populate that field.
+    is_blank = (not student_responses and not grading_result.get("json_recovery")
+                and (ai_score == 0 or ai_score is None))
 
     if is_blank:
-        # Blank submission - use clear feedback, skip academic integrity check
-        grading_result["feedback"] = "You submitted a blank assignment. Please resubmit a completed version."
+        # Blank submission — zero score, clear feedback, no AI/plagiarism flags
+        grading_result["feedback"] = "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher."
         grading_result["score"] = 0
-        grading_result["letter_grade"] = "F"
-        print(f"  📝 Blank submission detected")
+        grading_result["letter_grade"] = "INCOMPLETE"
+        grading_result["ai_detection"] = {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."}
+        grading_result["plagiarism_detection"] = {"flag": "none", "reason": "Blank submission — no content to evaluate."}
+        grading_result.pop("academic_integrity_flag", None)
+        print(f"  📝 Blank submission detected — scored as 0/INCOMPLETE")
     elif ai_confidence >= 50 or plag_flag in ["possible", "likely"]:
         grading_result["original_feedback"] = grading_result.get("feedback", "")
         grading_result["feedback"] = "Please resubmit using your own words. Copying and pasting from Google (plagiarism) or use of AI is considered a violation of academic integrity."
@@ -2895,6 +3248,747 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         print(f"  🚨 Academic integrity concern - feedback replaced")
 
     return grading_result
+
+
+# =============================================================================
+# MULTI-PASS GRADING PIPELINE
+# =============================================================================
+
+class QuestionGrade(BaseModel):
+    score: int
+    possible: int
+    reasoning: str
+    is_correct: bool
+    quality: str  # "excellent", "good", "adequate", "developing", "insufficient"
+
+
+class PerQuestionResponse(BaseModel):
+    grade: QuestionGrade
+    excellent: bool
+    improvement_note: str
+
+
+class FeedbackResponse(BaseModel):
+    feedback: str
+    excellent_answers: List[str]
+    needs_improvement: List[str]
+    skills_demonstrated: SkillsDemonstrated
+
+
+def _parse_expected_answers(custom_instructions: str) -> dict:
+    """Parse expected answers from gradingNotes/custom instructions.
+
+    Returns dict mapping question index (int) or question text (str) to expected answer.
+    """
+    answers = {}
+    if not custom_instructions:
+        return answers
+
+    # Parse "Q1: answer" or "- Q1: answer" patterns
+    for match in re.finditer(r'(?:^|\n)\s*-?\s*Q(\d+)\s*:\s*(.+)', custom_instructions):
+        idx = int(match.group(1)) - 1  # 0-indexed
+        answers[idx] = match.group(2).strip()
+
+    # Parse "VOCABULARY EXPECTED DEFINITIONS:" section
+    in_vocab = False
+    for line in custom_instructions.split('\n'):
+        line = line.strip()
+        if 'EXPECTED' in line.upper() and ('DEFINITION' in line.upper() or 'ANSWER' in line.upper()):
+            in_vocab = True
+            continue
+        if in_vocab and line.startswith('- '):
+            parts = line[2:].split(':', 1)
+            if len(parts) == 2:
+                answers[parts[0].strip()] = parts[1].strip()
+        elif in_vocab and not line:
+            in_vocab = False
+
+    return answers
+
+
+def _distribute_points(responses: list, marker_config: list, total_points: int) -> list:
+    """Distribute point values and section metadata across extracted responses.
+
+    Uses marker_config if available, otherwise distributes evenly.
+    Returns list of dicts with 'points', 'section_name', and 'section_type' per response.
+    """
+    if not responses:
+        return []
+
+    # Build lookup: marker_name_lower -> {points, name, type}
+    marker_meta = {}
+    if marker_config:
+        for m in marker_config:
+            if isinstance(m, dict):
+                marker_meta[m.get('start', '').lower()] = {
+                    'points': m.get('points', 10),
+                    'name': m.get('start', 'Section'),
+                    'type': m.get('type', 'written')
+                }
+            elif isinstance(m, str):
+                marker_meta[m.lower()] = {
+                    'points': 10,
+                    'name': m,
+                    'type': 'written'
+                }
+
+    result = []
+    default_pts = total_points // max(len(responses), 1)
+
+    for resp in responses:
+        question = resp.get("question", "").lower()
+        matched = None
+        for marker_key, meta in marker_meta.items():
+            if marker_key in question:
+                matched = meta
+                break
+
+        if matched:
+            result.append({
+                'points': matched['points'],
+                'section_name': matched['name'],
+                'section_type': matched['type']
+            })
+        else:
+            result.append({
+                'points': default_pts,
+                'section_name': '',
+                'section_type': 'written'
+            })
+
+    return result
+
+
+def grade_per_question(question: str, student_answer: str, expected_answer: str,
+                       points: int, grade_level: str, subject: str,
+                       teacher_instructions: str, grading_style: str,
+                       ai_model: str = 'gpt-4o',
+                       response_type: str = 'marker_response',
+                       section_name: str = '', section_type: str = 'written') -> dict:
+    """Grade a single question/response pair with full section-aware context.
+
+    Args:
+        teacher_instructions: FULL untruncated instructions from app.py. Contains:
+            global AI notes, assignment-specific gradingNotes, rubric type overrides,
+            accommodation prompts, student history, period differentiation + rubric
+            weight adjustments. This is the same string the single-pass gets.
+        response_type: One of 'vocab_term', 'numbered_question', 'marker_response', 'fitb_full', 'fill_in_blank'
+        section_name: The marker/section this response belongs to (e.g., 'VOCABULARY', 'SUMMARY')
+        section_type: The section grading type from marker_config (e.g., 'written', 'fill-in-blank')
+
+    Returns dict with score, reasoning, quality label.
+    """
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    # Build section-specific grading instructions based on response type
+    type_instructions = ""
+    if response_type == 'vocab_term':
+        type_instructions = """SECTION TYPE: VOCABULARY DEFINITION
+- The student was asked to define a vocabulary term
+- Grade based on whether the definition captures the correct meaning
+- Accept age-appropriate paraphrasing — do NOT require textbook-exact definitions
+- A definition that shows understanding of the concept = full credit
+- A partially correct definition = partial credit
+- A blank or completely wrong definition = 0
+- IMPORTANT: Check the TEACHER'S GRADING INSTRUCTIONS below — if the teacher has modified
+  how vocabulary should be scored (e.g., requesting leniency, accepting general definitions,
+  going easy on vocab, relaxing requirements), follow the teacher's instructions INSTEAD of
+  these defaults. The teacher knows their students and their intent overrides default rubric."""
+    elif response_type == 'numbered_question':
+        type_instructions = """SECTION TYPE: NUMBERED QUESTION
+- The student answered a specific numbered question from the assignment
+- Grade based on content accuracy and completeness of the answer
+- Accept age-appropriate language and reasoning"""
+    elif response_type in ('fitb_full', 'fill_in_blank'):
+        type_instructions = """SECTION TYPE: FILL-IN-THE-BLANK
+- The student filled in blanks in a structured worksheet
+- Grade based on factual correctness of each filled-in answer
+- Accept synonyms and alternate phrasings that are factually correct
+- Spelling errors should NOT be penalized if the meaning is clear"""
+    elif section_name and 'summary' in section_name.lower():
+        type_instructions = """SECTION TYPE: SUMMARY / WRITTEN RESPONSE
+- The student wrote a summary or extended response
+- Grade based on: Does it capture the key ideas? Is it in their own words?
+- Look for evidence of understanding, not just copying
+- Evaluate completeness — did they address the main points?"""
+    elif section_type == 'written' and section_name:
+        type_instructions = f"""SECTION TYPE: WRITTEN RESPONSE ({section_name})
+- Grade based on quality, completeness, and demonstrated understanding
+- Look for genuine engagement with the material"""
+
+    excellent_min = int(points * 0.9)
+    good_min = int(points * 0.75)
+    adequate_min = int(points * 0.6)
+    developing_min = int(points * 0.4)
+
+    # Build grading style instructions (matches single-pass behavior)
+    if grading_style == 'lenient':
+        style_instructions = """GRADING APPROACH: LENIENT
+- Prioritize EFFORT over perfection. If a student attempted this, give significant credit.
+- Brief answers that show understanding should receive 70-80% of points.
+- Do NOT penalize short answers if they demonstrate understanding.
+- When in doubt, give the student the benefit of the doubt."""
+    elif grading_style == 'strict':
+        style_instructions = """GRADING APPROACH: STRICT
+- Hold students to high standards for their grade level.
+- Brief, underdeveloped answers should be penalized.
+- Full credit requires thorough responses demonstrating deep understanding.
+- Partial answers receive proportionally reduced credit."""
+    else:
+        style_instructions = """GRADING APPROACH: STANDARD
+- Balance accuracy, completeness, and effort evenly.
+- Brief answers receive partial credit proportional to quality.
+- Hold to grade-level expectations."""
+
+    section_context = f"\nSECTION: {section_name}" if section_name else ""
+
+    prompt = f"""Grade this single student response.
+{section_context}
+QUESTION: {question}
+STUDENT ANSWER: "{student_answer}"
+{f'EXPECTED ANSWER: {expected_answer}' if expected_answer else ''}
+POINTS POSSIBLE: {points}
+
+{type_instructions}
+
+{style_instructions}
+
+CONTEXT: Grade {grade_level} {subject} student.
+
+DEFAULT SCORE ANCHORS for {points} points (teacher instructions below may override these):
+- Excellent ({excellent_min}-{points}): Correct, complete, shows understanding
+- Good ({good_min}-{excellent_min - 1}): Mostly correct, minor gaps
+- Adequate ({adequate_min}-{good_min - 1}): Partial understanding shown
+- Developing ({developing_min}-{adequate_min - 1}): Minimal understanding
+- Insufficient (0-{developing_min - 1}): Incorrect or no meaningful attempt
+
+RULES:
+- Accept synonyms and age-appropriate language
+- Do NOT penalize spelling if meaning is clear
+- Grade the CONTENT, not the writing style
+- If blank/empty, score is 0
+
+---
+TEACHER'S GRADING INSTRUCTIONS — these are the HIGHEST PRIORITY and override the score anchors above.
+Read these FIRST, then score accordingly:
+{teacher_instructions}
+---"""
+
+    try:
+        response = client.beta.chat.completions.parse(
+            model=ai_model,
+            messages=[
+                {"role": "system", "content": f"You are a grade {grade_level} {subject} teacher grading student work. IMPORTANT: The teacher has provided custom grading instructions in the prompt. You MUST follow them exactly — they override all default scoring rules and anchors. If the teacher says to be lenient, score generously. If the teacher says to accept basic answers, do not penalize simplicity."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format=PerQuestionResponse,
+            max_tokens=300,
+            temperature=0,
+            seed=42
+        )
+        parsed = response.choices[0].message.parsed
+        if parsed:
+            return parsed.model_dump()
+    except Exception as e:
+        print(f"    ⚠️ Per-question grading error: {e}")
+
+    return {
+        "grade": {"score": int(points * 0.7), "possible": points,
+                  "reasoning": "Grading error - default score applied",
+                  "is_correct": True, "quality": "adequate"},
+        "excellent": False,
+        "improvement_note": ""
+    }
+
+
+def generate_feedback(question_results: list, total_score: int, total_possible: int,
+                      letter_grade: str, grade_level: str, subject: str,
+                      teacher_instructions: str = '', ell_language: str = None,
+                      ai_model: str = 'gpt-4o-mini',
+                      student_responses: list = None,
+                      rubric_breakdown: dict = None,
+                      blank_questions: list = None,
+                      missing_sections: list = None) -> dict:
+    """Generate encouraging, improvement-focused teacher feedback from per-question grades.
+
+    Args:
+        question_results: Per-question grading results with scores and reasoning.
+        student_responses: List of dicts with 'question' and 'answer' keys — the actual
+            student text, so the AI can quote specific answers in feedback.
+        teacher_instructions: FULL untruncated custom_ai_instructions from app.py.
+            Contains student history, accommodations, period differentiation, etc.
+        rubric_breakdown: Dict with rubric category scores (content_accuracy, completeness,
+            writing_quality, effort_engagement) so feedback can reference rubric performance.
+        blank_questions: List of questions the student left blank/unanswered.
+        missing_sections: List of required sections entirely missing from submission.
+    """
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    summary_lines = []
+    responses_list = student_responses or []
+    for i, qr in enumerate(question_results, 1):
+        if not qr:
+            continue
+        g = qr.get("grade", {})
+        # Include the student's actual answer so the AI can quote it
+        student_answer = ""
+        if i - 1 < len(responses_list):
+            resp = responses_list[i - 1]
+            student_answer = resp.get("answer", "")[:400]
+        line = f"Q{i}: {g.get('score', 0)}/{g.get('possible', 10)} ({g.get('quality', 'unknown')})"
+        line += f"\n  Reasoning: {g.get('reasoning', '')[:150]}"
+        if student_answer:
+            line += f"\n  Student wrote: \"{student_answer}\""
+        summary_lines.append(line)
+
+    # Build grade-scaled feedback instructions
+    # ALL grades: encouraging tone, always focused on what the student needs to improve.
+    # Higher grades = more time on strengths, but still point to growth areas.
+    # Lower grades = more time on improvement guidance, but still acknowledge effort.
+    if letter_grade == 'A':
+        tone_instructions = """FEEDBACK STRUCTURE FOR AN A (90-100):
+Paragraph 1: Celebrate specific strong answers — highlight 2-3 answers that were excellent and explain WHY (e.g., "Your definition of Treaty of Moultrie Creek showed you understood not just what it was, but why it mattered — that's higher-level thinking!").
+Paragraph 2: Even A students need growth targets. Identify 1-2 specific areas where they could push deeper or refine their work. Quote their answer and show what a next-level response would look like. Focus on helping them develop more advanced skills (analysis, connections between events, stronger evidence use).
+Paragraph 3: If student history is available, connect this to their trajectory and set a challenge for next time.
+BALANCE: ~40% strengths, ~60% improvement guidance. An A student should leave knowing exactly what to work on next."""
+    elif letter_grade == 'B':
+        tone_instructions = """FEEDBACK STRUCTURE FOR A B (80-89):
+Paragraph 1: Acknowledge solid work with 1-2 specific strong answers. Quote what they wrote and explain what made it good.
+Paragraph 2: Focus here — identify 2-3 specific answers where points were lost. Quote what the student wrote, explain what was missing or incomplete, and tell them exactly what a full-credit answer would have included. Be specific: "You wrote that the Treaty was 'an agreement between the US and Seminoles,' but to earn full credit you needed to mention it was supposed to give them control of millions of acres of Florida land in exchange for allowing roads."
+Paragraph 3: Give 1-2 concrete goals for next time. Reference history if available ("You've been hovering around a B — here's what will push you to an A").
+BALANCE: ~30% strengths, ~70% improvement guidance."""
+    elif letter_grade == 'C':
+        tone_instructions = """FEEDBACK STRUCTURE FOR A C (70-79):
+Paragraph 1: Briefly acknowledge 1-2 things the student did right. Quote a specific answer that showed some understanding.
+Paragraph 2: Main focus — walk through 3-4 specific answers that lost significant points. For each: quote what they wrote, explain what was wrong or missing, and provide the correct information. Example: "For the question about Andrew Jackson's role, you wrote 'he was a president,' but the answer needed to explain that he led troops into Florida during the First Seminole War and later pressured the Seminoles to relocate as president."
+Paragraph 3: Give 2-3 specific, actionable steps to improve (re-read specific pages, focus on cause-and-effect, use details from the text). Reference history if available.
+BALANCE: ~20% strengths, ~80% improvement guidance. The student needs to understand exactly where they went wrong and what to do differently."""
+    elif letter_grade == 'D':
+        tone_instructions = """FEEDBACK STRUCTURE FOR A D (60-69):
+Paragraph 1: Acknowledge the effort of attempting the assignment, then identify the 2-3 biggest gaps — incomplete answers, missing sections, or incorrect content. Quote specific answers and explain what the correct response should have been.
+Paragraph 2: Walk through the most important questions they missed. For each: show what they wrote (or that it was blank), then teach them the answer. This feedback should help them actually learn the material: "The question asked about the causes of the First Seminole War. The key causes were attacks on white settlers, alliances with escaped enslaved people, and southern plantation owners' anger over the Seminole practice of harboring runaways."
+Paragraph 3: Give specific recovery steps — re-read certain pages, redo specific questions, come in for help. If history shows a declining trend, address it encouragingly ("I know you can do better — your [previous grade] on [previous assignment] showed you're capable of stronger work").
+BALANCE: ~10% strengths, ~90% improvement guidance. Be warm but make sure they leave with the knowledge they were missing."""
+    else:  # F or INCOMPLETE
+        tone_instructions = """FEEDBACK STRUCTURE FOR AN F (below 60):
+Paragraph 1: Identify what went wrong — blank sections, incorrect answers, or missing content. Quote 2-3 specific answers that were wrong or missing and teach the correct answer for each one. The student should learn from reading this feedback.
+Paragraph 2: If there is anything the student got partially right, acknowledge it and build on it. Use it as a bridge: "You mentioned 'U.S. efforts to reclaim runaway slaves' as a cause of the First Seminole War — that's a start. To complete the picture, you also needed to include the border conflicts with white settlers and the anger over the Seminole practice of harboring escaped enslaved people."
+Paragraph 3: Provide a clear, specific study plan. What pages to re-read, what questions to retry, what concepts to focus on. Make it feel achievable, not overwhelming.
+Paragraph 4: If history shows a pattern, address it with care and a path forward ("I've noticed the last few assignments have been tough. Let's figure out what's getting in the way — I'm here to help you turn this around").
+BALANCE: ~5% strengths, ~95% improvement guidance. Every sentence should either teach the student something they missed or give them a concrete step to improve. Be encouraging — but the encouragement comes from showing them exactly HOW to do better, not from empty praise."""
+
+    # Build rubric performance summary
+    rubric_summary = ""
+    if rubric_breakdown:
+        rb = rubric_breakdown
+        rubric_summary = f"""
+RUBRIC BREAKDOWN (address each area in your feedback):
+- Content Accuracy: {rb.get('content_accuracy', {}).get('score', 0)}/{rb.get('content_accuracy', {}).get('possible', 40)} — How factually correct were the answers?
+- Completeness: {rb.get('completeness', {}).get('score', 0)}/{rb.get('completeness', {}).get('possible', 25)} — Did the student attempt all sections?
+- Writing Quality: {rb.get('writing_quality', {}).get('score', 0)}/{rb.get('writing_quality', {}).get('possible', 20)} — Was the writing clear and well-developed?
+- Effort & Engagement: {rb.get('effort_engagement', {}).get('score', 0)}/{rb.get('effort_engagement', {}).get('possible', 15)} — Did the student show genuine effort?
+"""
+
+    # Build blank/missing sections summary
+    blanks_list = blank_questions or []
+    missing_list = missing_sections or []
+    missing_summary = ""
+    if blanks_list or missing_list:
+        missing_parts = []
+        if missing_list:
+            missing_parts.append("MISSING SECTIONS (entire sections not found in submission):")
+            for s in missing_list:
+                missing_parts.append(f"  - {s}")
+        if blanks_list:
+            missing_parts.append("BLANK/UNANSWERED QUESTIONS (student left these empty):")
+            for q in blanks_list:
+                missing_parts.append(f"  - {q}")
+        missing_summary = "\n" + "\n".join(missing_parts) + "\n"
+
+    prompt = f"""Write personalized, encouraging teacher feedback for a grade {grade_level} {subject} student. Focus on what the student needs to know to improve.
+
+SCORE: {total_score}/{total_possible} ({letter_grade})
+{rubric_summary}{missing_summary}
+PER-QUESTION RESULTS (with the student's actual answers):
+{chr(10).join(summary_lines)}
+
+---
+TEACHER'S INSTRUCTIONS & STUDENT CONTEXT (includes student history if available):
+{teacher_instructions}
+---
+NOTE ON TEACHER LENIENCY: If the per-question reasoning above says "Teacher accepts general definitions"
+for vocabulary terms, do NOT criticize those vocab answers as "too basic" or "lacking context" in your
+feedback. Briefly acknowledge them positively, then move on to the questions and sections that actually
+need improvement. The teacher's leniency applies ONLY to vocabulary — you must STILL provide full,
+detailed constructive feedback on all other sections (questions, summary, missing work, etc.).
+
+{tone_instructions}
+
+UNIVERSAL RULES:
+- Quote or paraphrase the student's SPECIFIC answers — never give generic feedback
+- For every wrong answer you mention, explain what the correct answer is or what was missing
+- MISSING WORK: If there are blank questions or missing sections listed above, you MUST call them out specifically in your feedback. Name the exact questions or sections that were left blank and explain what the student should have written. Example: "You left the SUMMARY section blank — this section asked you to summarize the key events of the Seminole Wars in 4-5 sentences. To complete it, you'd want to cover the three wars (1817-1858), the role of Andrew Jackson, and the eventual forced relocation to Indian Territory."
+- Reference the actual assignment content (topic, questions, vocabulary terms)
+- If student history/past scores are in the context above, ALWAYS reference their trajectory (improving, declining, consistent) and compare to previous performance
+- RUBRIC PERFORMANCE: Address the student's performance on ALL aspects of the rubric — content accuracy, completeness, writing quality, and effort/engagement. For each rubric area, note whether it was a strength or weakness and explain why. Example: "Your content accuracy was strong — most of your answers were factually correct. But your completeness needs work — you left two questions blank, which cost you a full letter grade."
+- Do NOT use the student's name — say "you" or "your"
+- Sound like a real teacher — use contractions, natural language
+- Write feedback in English only
+- The feedback must be USEFUL — a parent reading this should understand exactly what their child got right, what they got wrong, and what they need to do to improve
+
+Also identify:
+- Excellent answers: Quote 1-4 specific student answers that earned high marks (fewer for low grades)
+- Areas needing improvement: Quote 1-4 specific answers that lost points, with what the correct answer should include
+- Strengths: 1-4 specific skills the student demonstrated (tied to rubric areas)
+- Developing: 1-3 specific skills the student needs to work on (tied to rubric areas)"""
+
+    try:
+        response = client.beta.chat.completions.parse(
+            model=ai_model,
+            messages=[
+                {"role": "system", "content": f"You are an encouraging grade {grade_level} {subject} teacher writing specific, actionable feedback focused on helping the student improve. Always reference actual student answers. Scale the balance of praise vs improvement guidance based on the grade, but every grade level should focus primarily on what the student needs to do to get better."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format=FeedbackResponse,
+            max_tokens=2000,
+            temperature=0,
+            seed=42
+        )
+        parsed = response.choices[0].message.parsed
+        if parsed:
+            result = parsed.model_dump()
+            if ell_language and result.get("feedback"):
+                translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                if translated:
+                    result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
+            return result
+    except Exception as e:
+        print(f"  ⚠️ Feedback generation error: {e}")
+
+    return {
+        "feedback": "Good effort on this assignment. Keep working hard!",
+        "excellent_answers": [],
+        "needs_improvement": [],
+        "skills_demonstrated": {"strengths": [], "developing": []}
+    }
+
+
+def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
+                    grade_level: str = '6', subject: str = 'Social Studies',
+                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
+                    assignment_template: str = None, rubric_prompt: str = None,
+                    custom_markers: list = None, exclude_markers: list = None,
+                    marker_config: list = None, effort_points: int = 15,
+                    extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
+    """Multi-pass grading pipeline for consistent, robust scoring.
+
+    Pass 1: Extract responses (reuses existing extraction logic)
+    Pass 2: Grade each question individually (parallel, structured output)
+    Pass 3: Generate feedback (cheaper model)
+    Final: Aggregate scores, apply caps, build result
+    """
+    content = assignment_data.get("content", "")
+
+    # === EXTRACTION (reuse existing logic) ===
+    extraction_result = None
+    if assignment_data.get("type") == "text" and content:
+        extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+        if extraction_result:
+            answered = extraction_result.get("answered_questions", 0)
+            total = extraction_result.get("total_questions", 0)
+            print(f"  📋 Multi-pass: Extracted {answered}/{total} responses")
+
+            if answered == 0:
+                return {
+                    "score": 0, "letter_grade": "INCOMPLETE",
+                    "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                    "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
+                    "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                    "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+                    "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
+                    "skills_demonstrated": {"strengths": [], "developing": []},
+                    "excellent_answers": [], "needs_improvement": []
+                }
+
+    if not extraction_result or not extraction_result.get("extracted_responses"):
+        # Fall back to single-pass for edge cases
+        print(f"  ⚠️ Multi-pass: No extracted responses, falling back to single-pass")
+        return grade_assignment(student_name, assignment_data, custom_ai_instructions,
+                               grade_level, subject, ai_model, student_id, assignment_template,
+                               rubric_prompt, custom_markers, exclude_markers, marker_config,
+                               effort_points, extraction_mode, grading_style)
+
+    responses = extraction_result["extracted_responses"]
+
+    # Build expected answers lookup from gradingNotes within custom_ai_instructions
+    expected_answers = _parse_expected_answers(custom_ai_instructions)
+
+    # NOTE: accommodation context, student history, period differentiation, and rubric
+    # type overrides are ALREADY embedded in custom_ai_instructions by app.py (lines 975-1119).
+    # We pass the full string untruncated to each per-question call.
+
+    # Append the custom rubric prompt (from Settings) so per-question graders see it.
+    # In single-pass, rubric_prompt overrides GRADING_RUBRIC. In multipass, we append it
+    # to the teacher instructions so each per-question call gets the rubric categories/weights.
+    effective_instructions = custom_ai_instructions
+    if rubric_prompt:
+        effective_instructions += "\n\n" + rubric_prompt
+
+    # === PASS 2: PER-QUESTION GRADING (parallel) ===
+    total_content_points = 100 - effort_points
+    question_meta = _distribute_points(responses, marker_config, total_content_points)
+
+    # Use the selected model for per-question grading (no auto-upgrade)
+    grading_model = ai_model
+
+    print(f"  🔄 Multi-pass: Grading {len(responses)} questions with {grading_model}...")
+
+    # Submit all questions in parallel, track by index
+    question_results = [None] * len(responses)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_idx = {}
+        for i, resp in enumerate(responses):
+            question = resp.get("question", f"Question {i+1}")
+            answer = resp.get("answer", "")
+            resp_type = resp.get("type", "marker_response")
+            meta = question_meta[i] if i < len(question_meta) else {'points': 10, 'section_name': '', 'section_type': 'written'}
+
+            # Match expected answer by multiple strategies:
+            # 1. Question number from text (e.g., "1) What was..." → Q1 → index 0)
+            # 2. Term/question text match (for vocab: "Seminole Wars" → key match)
+            # 3. Section name match
+            # 4. Response list index (only works if no vocab terms shift indices)
+            expected = ""
+
+            # Strategy 1: Extract question number and match to Q-index
+            q_num_match = re.match(r'^(\d+)', question.strip())
+            if q_num_match:
+                q_idx = int(q_num_match.group(1)) - 1  # "1)" → index 0
+                expected = expected_answers.get(q_idx, "") or expected_answers.get(f"Q{q_num_match.group(1)}", "")
+
+            # Strategy 2: Match by term/question text or section name
+            if not expected:
+                expected = (expected_answers.get(question, "") or
+                            expected_answers.get(question.split(':')[0].strip(), "") or
+                            expected_answers.get(meta['section_name'], ""))
+
+            # Strategy 3: Fall back to list index
+            if not expected:
+                expected = expected_answers.get(i, "")
+
+            f = executor.submit(
+                grade_per_question,
+                question=question,
+                student_answer=answer,
+                expected_answer=expected,
+                points=meta['points'],
+                grade_level=grade_level,
+                subject=subject,
+                teacher_instructions=effective_instructions,  # FULL — includes rubric
+                grading_style=grading_style,
+                ai_model=grading_model,
+                response_type=resp_type,
+                section_name=meta['section_name'],
+                section_type=meta['section_type']
+            )
+            future_to_idx[f] = i
+
+        for future in concurrent.futures.as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                question_results[idx] = future.result()
+            except Exception as e:
+                print(f"    ⚠️ Question {idx+1} grading failed: {e}")
+                meta = question_meta[idx] if idx < len(question_meta) else {'points': 10}
+                question_results[idx] = {
+                    "grade": {"score": int(meta['points'] * 0.7), "possible": meta['points'],
+                              "reasoning": "Error during grading", "is_correct": True, "quality": "adequate"},
+                    "excellent": False, "improvement_note": ""
+                }
+
+    # === TEACHER LENIENCY POST-PROCESSING ===
+    # If the teacher requested leniency for specific section types, apply score floors in code.
+    # This is more reliable than prompt engineering — the AI scores normally, then we adjust.
+    _ei_lower = (effective_instructions or '').lower()
+    _has_vocab_leniency = any(phrase in _ei_lower for phrase in [
+        'lenient', 'accept general', 'accept basic', 'go easy', 'be generous',
+        'not strict', 'relaxed', 'don\'t be harsh', 'accept simple'
+    ]) and any(w in _ei_lower for w in ['vocab', 'definition', 'terms'])
+
+    if _has_vocab_leniency:
+        adjusted_count = 0
+        for i, resp in enumerate(responses):
+            if resp.get("type") == "vocab_term" and resp.get("answer", "").strip():
+                qr = question_results[i]
+                if qr:
+                    grade = qr.get("grade", {})
+                    pts = grade.get("possible", 9)
+                    current_score = grade.get("score", 0)
+                    min_score = int(pts * 0.65)  # At least 65% for any non-blank vocab answer
+                    if current_score < min_score:
+                        grade["score"] = min_score
+                        grade["quality"] = "adequate"
+                        # REPLACE reasoning entirely — the old reasoning says "too basic"
+                        # and the feedback generator echoes it. Clean reasoning = clean feedback.
+                        term = resp.get("question", "this term")
+                        grade["reasoning"] = f"Student provided a basic definition for {term} that shows general understanding. Teacher accepts general/dictionary-level definitions for vocabulary on this assignment."
+                        adjusted_count += 1
+        if adjusted_count > 0:
+            print(f"  📌 Vocab leniency: adjusted {adjusted_count} vocab scores to minimum 65%")
+
+    # === AGGREGATE SCORES ===
+    total_earned = sum(qr.get("grade", {}).get("score", 0) for qr in question_results if qr)
+    total_possible = sum(qr.get("grade", {}).get("possible", 10) for qr in question_results if qr)
+
+    blank_count = len(extraction_result.get("blank_questions", [])) + len(extraction_result.get("missing_sections", []))
+    if blank_count == 0:
+        effort_earned = effort_points
+    elif blank_count == 1:
+        effort_earned = int(effort_points * 0.7)
+    elif blank_count == 2:
+        effort_earned = int(effort_points * 0.4)
+    else:
+        effort_earned = int(effort_points * 0.2)
+
+    raw_score = int(round((total_earned / max(total_possible, 1)) * (100 - effort_points) + effort_earned))
+    raw_score = max(0, min(100, raw_score))
+
+    # Completeness caps by grading style
+    if grading_style == 'strict':
+        caps = {0: 100, 1: 85, 2: 75, 3: 65}
+    elif grading_style == 'lenient':
+        caps = {0: 100, 1: 95, 2: 89, 3: 79}
+    else:
+        caps = {0: 100, 1: 89, 2: 79, 3: 69}
+    cap = caps.get(min(blank_count, 3), 60 if blank_count >= 4 else 69)
+    final_score = min(raw_score, cap)
+
+    if final_score >= 90: letter_grade = "A"
+    elif final_score >= 80: letter_grade = "B"
+    elif final_score >= 70: letter_grade = "C"
+    elif final_score >= 60: letter_grade = "D"
+    else: letter_grade = "F"
+
+    per_q_scores = [qr.get("grade", {}).get("score", 0) for qr in question_results if qr]
+    print(f"  📊 Per-question: {per_q_scores}")
+    print(f"  📊 Raw: {raw_score}, Cap: {cap}, Final: {final_score} ({letter_grade})")
+
+    # === PASS 3: FEEDBACK GENERATION ===
+    ell_language = None
+    if student_id and student_id != "UNKNOWN":
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, 'r', encoding='utf-8') as f:
+                    ell_data = json.load(f)
+                ell_entry = ell_data.get(student_id, {})
+                lang = ell_entry.get("language")
+                if lang and lang != "none":
+                    ell_language = lang
+            except Exception:
+                pass
+
+    # === BUILD BREAKDOWN (before feedback so we can pass rubric scores) ===
+    content_pts = int(round((total_earned / max(total_possible, 1)) * 40))
+    completeness_pts = max(0, 25 - (blank_count * 6))
+    qualities = [qr.get("grade", {}).get("quality", "adequate") for qr in question_results if qr]
+    if qualities.count("excellent") + qualities.count("good") > len(qualities) * 0.7:
+        writing_pts = 18
+    elif qualities.count("developing") + qualities.count("insufficient") > len(qualities) * 0.5:
+        writing_pts = 10
+    else:
+        writing_pts = 15
+
+    rubric_breakdown = {
+        "content_accuracy": {"score": content_pts, "possible": 40},
+        "completeness": {"score": completeness_pts, "possible": 25},
+        "writing_quality": {"score": writing_pts, "possible": 20},
+        "effort_engagement": {"score": effort_earned, "possible": effort_points},
+    }
+
+    # Collect blank/missing info for feedback
+    blank_questions = extraction_result.get("blank_questions", [])
+    missing_sections = extraction_result.get("missing_sections", [])
+
+    print(f"  🔄 Multi-pass: Generating feedback...")
+    feedback_result = generate_feedback(
+        question_results=question_results,
+        total_score=final_score, total_possible=100,
+        letter_grade=letter_grade,
+        grade_level=grade_level, subject=subject,
+        teacher_instructions=effective_instructions,
+        ell_language=ell_language,
+        ai_model='gpt-4o-mini',
+        student_responses=responses,
+        rubric_breakdown=rubric_breakdown,
+        blank_questions=blank_questions,
+        missing_sections=missing_sections
+    )
+
+    # === BUILD RESULT ===
+    student_response_texts = [resp.get("answer", "")[:500] for resp in responses if resp.get("answer")]
+
+    result = {
+        "score": final_score,
+        "letter_grade": letter_grade,
+        "breakdown": {
+            "content_accuracy": min(content_pts, 40),
+            "completeness": min(completeness_pts, 25),
+            "writing_quality": min(writing_pts, 20),
+            "effort_engagement": effort_earned
+        },
+        "student_responses": student_response_texts,
+        "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+        "excellent_answers": feedback_result.get("excellent_answers", []),
+        "needs_improvement": feedback_result.get("needs_improvement", []),
+        "skills_demonstrated": feedback_result.get("skills_demonstrated", {"strengths": [], "developing": []}),
+        "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+        "plagiarism_detection": {"flag": "none", "reason": ""},
+        "feedback": feedback_result.get("feedback", ""),
+        "multipass_grading": True,
+        "per_question_scores": [
+            {"question": responses[i].get("question", "")[:60],
+             "score": qr.get("grade", {}).get("score", 0),
+             "possible": qr.get("grade", {}).get("possible", 10),
+             "quality": qr.get("grade", {}).get("quality", "")}
+            for i, qr in enumerate(question_results) if qr
+        ]
+    }
+
+    # Add audit trail for AI Reasoning / Raw API Output
+    audit_input_parts = []
+    for i, resp in enumerate(responses):
+        q = resp.get("question", f"Q{i+1}")[:80]
+        a = resp.get("answer", "")[:300]
+        audit_input_parts.append(f"[{q}]\n{a}")
+    audit_response_parts = []
+    for i, qr in enumerate(question_results):
+        if qr:
+            g = qr.get("grade", {})
+            audit_response_parts.append(
+                f"Q{i+1}: {g.get('score', 0)}/{g.get('possible', 10)} "
+                f"({g.get('quality', 'N/A')}) - {g.get('reasoning', '')[:200]}"
+            )
+    result["_audit"] = {
+        "ai_input": "\n\n".join(audit_input_parts),
+        "ai_response": "\n".join(audit_response_parts) + "\n\n--- FEEDBACK ---\n" + feedback_result.get("feedback", "")
+    }
+
+    # Update writing profile
+    if student_id and student_id != "UNKNOWN" and content:
+        current_writing_style = analyze_writing_style(content)
+        if current_writing_style:
+            ai_flag = result.get("ai_detection", {}).get("flag", "none")
+            if ai_flag not in ["likely", "possible"]:
+                try:
+                    update_writing_profile(student_id, current_writing_style, student_name)
+                except Exception:
+                    pass
+
+    print(f"  ✅ Multi-pass grading complete: {final_score} ({letter_grade})")
+    return result
 
 
 # =============================================================================
@@ -3022,6 +4116,97 @@ FEEDBACK TO TRANSLATE:
 
 
 # =============================================================================
+# JSON PARSING HELPERS
+# =============================================================================
+
+def _try_parse_json_fallback(text: str) -> dict:
+    """Attempt to parse JSON from LLM response text with repair logic.
+
+    Used as fallback for Claude/Gemini responses and OpenAI text fallback.
+    Returns parsed dict or None if unrecoverable.
+    """
+    if not text:
+        return None
+
+    # First try direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strip markdown code blocks
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split('\n')
+        start = 1 if lines[0].startswith("```") else 0
+        end = len(lines)
+        for i in range(len(lines) - 1, -1, -1):
+            if lines[i].strip() == "```":
+                end = i
+                break
+        cleaned = '\n'.join(lines[start:end]).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Repair common LLM JSON issues
+    fixed = cleaned
+
+    # Fix malformed "reason" fields
+    fixed = re.sub(r'"reason":\s*"[^"]*\\n[^"]*"', '"reason": ""', fixed)
+    fixed = re.sub(r'"reason":\s*"[\s\n]*\}', '"reason": ""}', fixed)
+    fixed = re.sub(r'"reason":\s*"[\s\n]*,', '"reason": "",', fixed)
+    fixed = re.sub(r'"reason":\s*"[^"]*\{[^"]*"', '"reason": ""', fixed)
+
+    # Remove parenthetical comments after closing quotes
+    fixed = re.sub(r'"\s*\([^)]+\)', '"', fixed)
+
+    # Add missing commas
+    fixed = re.sub(r'"\s*\n(\s*)"', r'",\n\1"', fixed)
+    fixed = re.sub(r'(\d)\s*\n(\s*)"', r'\1,\n\2"', fixed)
+    fixed = re.sub(r'(true|false|null)\s*\n(\s*)"', r'\1,\n\2"', fixed)
+    fixed = re.sub(r'(\]|\})\s*\n(\s*)"', r'\1,\n\2"', fixed)
+
+    # Escape unescaped newlines inside strings
+    result_chars = []
+    in_string = False
+    i = 0
+    while i < len(fixed):
+        char = fixed[i]
+        if char == '\\' and i + 1 < len(fixed):
+            result_chars.append(char)
+            result_chars.append(fixed[i + 1])
+            i += 2
+            continue
+        if char == '"':
+            in_string = not in_string
+            result_chars.append(char)
+            i += 1
+            continue
+        if in_string:
+            if char == '\n':
+                result_chars.append('\\n')
+            elif char == '\r':
+                pass
+            elif char == '\t':
+                result_chars.append('\\t')
+            else:
+                result_chars.append(char)
+        else:
+            result_chars.append(char)
+        i += 1
+
+    fixed = ''.join(result_chars)
+
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        return None
+
+
+# =============================================================================
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
@@ -3107,19 +4292,13 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 
         openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-    # Check for embedded Graider answer key (from worksheet generator)
     content = assignment_data.get("content", "")
-    embedded_answer_key = ""
-    if assignment_data.get("type") == "text" and content and "---GRAIDER_ANSWER_KEY_START---" in content:
-        try:
-            parts = content.split("---GRAIDER_ANSWER_KEY_START---")
-            content = parts[0].rstrip()  # Student work only
-            answer_key_raw = parts[1].split("---GRAIDER_ANSWER_KEY_END---")[0].strip()
-            embedded_answer_key = answer_key_raw
-            assignment_data = {**assignment_data, "content": content}
-            print(f"  📋 Detected embedded Graider answer key — using for grading reference")
-        except (IndexError, Exception) as e:
-            print(f"  ⚠️  Error parsing embedded answer key: {e}")
+
+    # Strip embedded answer key from generated worksheets (handles -- and --- variants)
+    if content and "GRAIDER_ANSWER_KEY_START" in content:
+        content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+        assignment_data = {**assignment_data, "content": content}
+        print(f"  🧹 Stripped embedded answer key from document")
 
     # Check for empty/blank student submissions before sending to API
     if assignment_data.get("type") == "text" and content:
@@ -3205,9 +4384,11 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
                     "critical_thinking": 0,
                     "communication": 0
                 },
-                "feedback": f"This assignment appears to be incomplete or blank. {len(unanswered_questions)} question(s) were found without responses. Please complete the assignment and resubmit, or see your teacher if you need help.",
+                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
                 "student_responses": [],
-                "unanswered_questions": unanswered_questions[:10],  # Limit to first 10
+                "unanswered_questions": unanswered_questions[:10],
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+                "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
                 "authenticity_flag": "clean",
                 "authenticity_reason": "",
                 "skills_demonstrated": {}
@@ -3223,15 +4404,6 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 ---
 TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
 {custom_ai_instructions}
----
-"""
-
-    # Inject embedded answer key from worksheet generator
-    if embedded_answer_key:
-        custom_section += f"""
----
-ANSWER KEY (use as grading reference — grade student responses against these expected answers):
-{embedded_answer_key}
 ---
 """
 
@@ -3329,14 +4501,16 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
                             "critical_thinking": 0,
                             "communication": 0
                         },
-                        "feedback": "This assignment appears to be blank or incomplete. No student responses were found. Please complete the assignment and resubmit.",
-                    "student_responses": [],
-                    "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
-                    "authenticity_flag": "clean",
-                    "authenticity_reason": "",
-                    "skills_demonstrated": {},
-                    "extraction_result": extraction_result
-                }
+                        "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
+                        "student_responses": [],
+                        "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                        "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+                        "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
+                        "authenticity_flag": "clean",
+                        "authenticity_reason": "",
+                        "skills_demonstrated": {},
+                        "extraction_result": extraction_result
+                    }
 
     # Analyze current submission's writing style for AI detection
     writing_style_context = ''
@@ -3620,6 +4794,19 @@ The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39)
     # Always grade in English only — bilingual translation is handled as a separate post-grading step
     ell_instruction = "Write feedback in English only."
 
+    # Repeat teacher instructions at end of prompt — placed here so the AI sees them LAST
+    # before generating its response. Earlier placement gets buried under 80+ lines of default rules.
+    teacher_override_section = ""
+    if custom_ai_instructions and custom_ai_instructions.strip():
+        teacher_override_section = f"""
+
+FINAL AUTHORITY — TEACHER'S GRADING INSTRUCTIONS (repeated here because they override ALL defaults above):
+{custom_ai_instructions}
+
+^^^ THESE INSTRUCTIONS OVERRIDE the default scoring rules. If the teacher says to be lenient, be lenient.
+If the teacher says to accept general definitions, accept them. Do NOT contradict the teacher's instructions
+in your scoring or feedback. The teacher knows their students better than any rubric."""
+
     prompt_text = f"""
 {effective_rubric}
 
@@ -3707,7 +4894,7 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
 - In the "unanswered_questions" field, ONLY list items from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above — do NOT invent new unanswered items from individual vocab terms or bullet points within answered sections
 
 {fitb_authenticity_section}
-
+{teacher_override_section}
 Provide your response in the following JSON format ONLY (no other text):
 {{
     "score": <FIRST calculate raw score, THEN apply the caps above. If 2 sections skipped, max is 79>,
@@ -3820,7 +5007,7 @@ Provide your response in the following JSON format ONLY (no other text):
 
             response = claude_client.messages.create(
                 model=actual_model,
-                max_tokens=1500,
+                max_tokens=2000,
                 messages=[{"role": "user", "content": claude_content}]
             )
             response_text = response.content[0].text.strip()
@@ -3856,123 +5043,91 @@ Provide your response in the following JSON format ONLY (no other text):
                         raise  # Re-raise if not rate limit or out of retries
 
         else:
-            # OpenAI API call
-            response = openai_client.chat.completions.create(
-                model=ai_model,
-                messages=messages,
-                max_tokens=1500,
-                temperature=0.3
-            )
-            response_text = response.choices[0].message.content.strip()
-
-        # Clean up response (remove markdown code blocks if present)
-        if response_text.startswith("```"):
-            lines = response_text.split('\n')
-            start = 1 if lines[0].startswith("```") else 0
-            end = len(lines)
-            for i in range(len(lines)-1, -1, -1):
-                if lines[i].strip() == "```":
-                    end = i
-                    break
-            response_text = '\n'.join(lines[start:end])
-        response_text = response_text.strip()
-
-        # Fix Claude's malformed JSON:
-        # 1. Remove parenthetical comments after string values
-        # 2. Add missing commas between properties
-        # 3. Escape unescaped newlines inside strings
-        import re
-
-        def fix_claude_json(text):
-            # First check if already valid
+            # OpenAI API call with structured output for guaranteed schema
             try:
-                json.loads(text)
-                return text
-            except json.JSONDecodeError:
-                pass
-
-            # Fix 0: Handle malformed "reason" fields where AI didn't close the string
-            # The AI sometimes outputs: "reason": "\n    },\n    "next_field"
-            # This replaces any "reason" field that contains },  or starts with whitespace/newline
-            # with an empty string
-            fixed = re.sub(r'"reason":\s*"[^"]*\\n[^"]*"', '"reason": ""', text)
-            fixed = re.sub(r'"reason":\s*"[\s\n]*\}', '"reason": ""}', fixed)
-            fixed = re.sub(r'"reason":\s*"[\s\n]*,', '"reason": "",', fixed)
-            # Also fix cases where reason value contains JSON-like content
-            fixed = re.sub(r'"reason":\s*"[^"]*\{[^"]*"', '"reason": ""', fixed)
-
-            # Fix 1: Remove parenthetical comments after closing quotes
-            fixed = re.sub(r'"\s*\([^)]+\)', '"', fixed)
-
-            # Fix 2: Remove double quotes (Claude sometimes outputs "" instead of ")
-            fixed = re.sub(r'""', '"', fixed)
-
-            # Fix 3: Add missing commas - pattern: "value"\n    "key" → "value",\n    "key"
-            fixed = re.sub(r'"\s*\n(\s*)"', r'",\n\1"', fixed)
-
-            # Fix 4: Add missing commas after numbers/booleans before string keys
-            fixed = re.sub(r'(\d)\s*\n(\s*)"', r'\1,\n\2"', fixed)
-            fixed = re.sub(r'(true|false|null)\s*\n(\s*)"', r'\1,\n\2"', fixed)
-
-            # Fix 5: Add missing commas after ] or } before "key"
-            fixed = re.sub(r'(\]|\})\s*\n(\s*)"', r'\1,\n\2"', fixed)
-
-            # Fix 6: Escape newlines inside strings (character-by-character)
-            result = []
-            in_string = False
-            i = 0
-            while i < len(fixed):
-                char = fixed[i]
-                if char == '\\' and i + 1 < len(fixed):
-                    result.append(char)
-                    result.append(fixed[i + 1])
-                    i += 2
-                    continue
-                if char == '"':
-                    in_string = not in_string
-                    result.append(char)
-                    i += 1
-                    continue
-                if in_string:
-                    if char == '\n':
-                        result.append('\\n')
-                    elif char == '\r':
-                        pass
-                    elif char == '\t':
-                        result.append('\\t')
-                    else:
-                        result.append(char)
+                response = openai_client.beta.chat.completions.parse(
+                    model=ai_model,
+                    messages=messages,
+                    response_format=GradingResponse,
+                    max_tokens=2000,
+                    temperature=0,
+                    seed=42
+                )
+                parsed = response.choices[0].message.parsed
+                if parsed:
+                    result = parsed.model_dump()
+                    original_text = json.dumps(result)
+                    print(f"  ✅ Structured output parsed successfully")
+                    # Skip all JSON cleanup — jump straight to post-processing below
                 else:
-                    result.append(char)
-                i += 1
+                    # Model refused or structured parse failed — fall back to text
+                    response_text = response.choices[0].message.content or ""
+                    print(f"  ⚠️  Structured output empty, falling back to text parse")
+                    result = None
+            except Exception as structured_err:
+                # Structured output not supported for this model — fall back to standard call
+                print(f"  ⚠️  Structured output failed ({structured_err}), falling back to standard API")
+                response = openai_client.chat.completions.create(
+                    model=ai_model,
+                    messages=messages,
+                    max_tokens=2000,
+                    temperature=0,
+                    seed=42
+                )
+                response_text = response.choices[0].message.content.strip()
+                result = None
 
-            return ''.join(result)
+            # If structured output succeeded, skip text parsing
+            if result is not None:
+                pass  # result already set from parsed.model_dump()
+            else:
+                # Text fallback: clean up and parse JSON manually
+                if response_text.startswith("```"):
+                    lines = response_text.split('\n')
+                    start = 1 if lines[0].startswith("```") else 0
+                    end = len(lines)
+                    for i in range(len(lines)-1, -1, -1):
+                        if lines[i].strip() == "```":
+                            end = i
+                            break
+                    response_text = '\n'.join(lines[start:end])
+                response_text = response_text.strip()
+                original_text = response_text
 
-        original_text = response_text
-        response_text = fix_claude_json(response_text)
+                try:
+                    result = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Try basic JSON repair for text fallback
+                    result = _try_parse_json_fallback(response_text)
+                    if result is None:
+                        raise
 
-        try:
-            result = json.loads(response_text)
-        except json.JSONDecodeError as e:
-            # Debug: show what we're trying to parse
-            print(f"  ⚠️  JSON parse error: {e}")
-            print(f"  ⚠️  Error at position {e.pos}, showing context:")
-            start = max(0, e.pos - 100)
-            end = min(len(response_text), e.pos + 100)
-            print(f"  ⚠️  ...{repr(response_text[start:end])}...")
+        # For Claude/Gemini providers, parse their text response
+        if provider in ("anthropic", "gemini"):
+            # Clean up response (remove markdown code blocks if present)
+            if response_text.startswith("```"):
+                lines = response_text.split('\n')
+                start = 1 if lines[0].startswith("```") else 0
+                end = len(lines)
+                for i in range(len(lines)-1, -1, -1):
+                    if lines[i].strip() == "```":
+                        end = i
+                        break
+                response_text = '\n'.join(lines[start:end])
+            response_text = response_text.strip()
+            original_text = response_text
 
-            # Save both original and fixed for comparison
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='_original.json', delete=False) as f:
-                f.write(original_text)
-                print(f"  ⚠️  Original saved to: {f.name}")
-            with tempfile.NamedTemporaryFile(mode='w', suffix='_fixed.json', delete=False) as f:
-                f.write(response_text)
-                print(f"  ⚠️  Fixed saved to: {f.name}")
-            raise
+            result = _try_parse_json_fallback(response_text)
+            if result is None:
+                raise json.JSONDecodeError("Failed to parse response", response_text, 0)
 
-        # Post-processing: strip any accidental bilingual sections from grading response
+        # Post-processing: fix double-escaped newlines from some AI providers
         feedback = result.get("feedback", "")
+        if "\\n" in feedback:
+            feedback = feedback.replace("\\n", "\n")
+            result["feedback"] = feedback
+
+        # Strip any accidental bilingual sections from grading response
         if "\n---\n" in feedback:
             feedback = feedback.split("\n---\n")[0].strip()
             result["feedback"] = feedback
