@@ -338,21 +338,38 @@ def _strip_template_lines(response: str, marker_text: str, template_text: str) -
             if len(words) >= 3:
                 template_word_sets.append(words)
 
-    # Filter response lines: remove any that match template lines
+    # Filter response lines: remove template text, preserving student answers
+    # that may appear on the same line after a template prompt
     response_lines = response.split('\n')
     filtered = []
     for line in response_lines:
         line_cleaned = re.sub(r'[_\s]+', ' ', line).strip().lower()
         is_template = False
+        partial_strip = None  # Student content remaining after template prefix
 
         # Exact / substring match
         for tl in template_line_set:
-            if line_cleaned == tl or (len(line_cleaned) >= 15 and line_cleaned in tl) or (len(tl) >= 15 and tl in line_cleaned):
+            if line_cleaned == tl or (len(line_cleaned) >= 15 and line_cleaned in tl):
+                # Whole line is template or line is inside a longer template line
                 is_template = True
+                break
+            if len(tl) >= 15 and tl in line_cleaned:
+                # Template text is a prefix/substring of this line — the student
+                # may have typed their answer on the same line after the prompt.
+                # Strip the template portion and keep the rest.
+                tl_pos = line_cleaned.find(tl)
+                remainder = line_cleaned[tl_pos + len(tl):].strip()
+                # Only keep if there's meaningful student content after the template
+                if len(remainder) >= 10:
+                    # Find the same position in the original (non-lowered) line
+                    orig_cleaned = re.sub(r'[_\s]+', ' ', line).strip()
+                    partial_strip = orig_cleaned[tl_pos + len(tl):].strip()
+                else:
+                    is_template = True
                 break
 
         # Fuzzy match: high word overlap with any template line (catches rephrased prompts)
-        if not is_template and len(line_cleaned) >= 15:
+        if not is_template and partial_strip is None and len(line_cleaned) >= 15:
             line_words = set(re.findall(r'[a-z]{3,}', line_cleaned))
             if len(line_words) >= 3:
                 for tw_set in template_word_sets:
@@ -363,7 +380,9 @@ def _strip_template_lines(response: str, marker_text: str, template_text: str) -
                         is_template = True
                         break
 
-        if not is_template:
+        if partial_strip is not None:
+            filtered.append(partial_strip)
+        elif not is_template:
             filtered.append(line)
 
     result = '\n'.join(filtered).strip()
@@ -1002,7 +1021,25 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 exclude_markers_normalized.append(em.lower().strip())
 
         # Track markers that were NOT found in the document at all
-        found_marker_names = set(mp['marker'].lower() for mp in marker_positions)
+        # Build a set of found marker names using multiple representations
+        # (full text, first line, emoji-stripped) so multi-line or emoji markers
+        # are correctly matched against the config
+        found_marker_names = set()
+        for mp in marker_positions:
+            m = mp['marker'].lower()
+            found_marker_names.add(m)
+            # Also add first line (for multi-line markers found by first-line strategy)
+            first_line_found = m.split('\n')[0].strip()
+            if first_line_found:
+                found_marker_names.add(first_line_found)
+            # Also add emoji-stripped versions
+            m_no_emoji = strip_emojis(m).strip()
+            if m_no_emoji:
+                found_marker_names.add(m_no_emoji)
+            first_no_emoji = strip_emojis(first_line_found).strip()
+            if first_no_emoji:
+                found_marker_names.add(first_no_emoji)
+
         missing_sections = []
         for marker in custom_markers:
             if isinstance(marker, dict):
@@ -1011,7 +1048,16 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 marker_name = str(marker).strip()
             if not marker_name:
                 continue
-            if marker_name.lower() not in found_marker_names:
+            # Check multiple representations of the marker name
+            marker_lower = marker_name.lower()
+            marker_first_line = marker_lower.split('\n')[0].strip()
+            marker_no_emoji = strip_emojis(marker_lower).strip()
+            marker_first_no_emoji = strip_emojis(marker_first_line).strip()
+            is_found = (marker_lower in found_marker_names
+                       or marker_first_line in found_marker_names
+                       or marker_no_emoji in found_marker_names
+                       or marker_first_no_emoji in found_marker_names)
+            if not is_found:
                 # Don't flag excluded sections as missing
                 is_excluded = any(em in marker_name.lower() or marker_name.lower() in em
                                 for em in exclude_markers_normalized)
