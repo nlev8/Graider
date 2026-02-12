@@ -73,7 +73,7 @@ def notify_signup():
 
     if not admin_email or not resend_key:
         logger.warning("ADMIN_EMAIL or RESEND_API_KEY not configured, skipping signup notification")
-        return jsonify({"status": "skipped"})
+        return jsonify({"status": "skipped", "has_admin": bool(admin_email), "has_resend": bool(resend_key)})
 
     try:
         full_name = (first_name + " " + last_name).strip() or email
