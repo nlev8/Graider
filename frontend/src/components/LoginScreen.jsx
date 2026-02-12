@@ -8,6 +8,7 @@ export default function LoginScreen({ onLogin }) {
   const [error, setError] = useState('')
   const [showForgot, setShowForgot] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -175,19 +176,30 @@ export default function LoginScreen({ onLogin }) {
             </div>
             <div style={{ marginBottom: '24px' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password" required
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: 'white',
-                  fontSize: '0.95rem',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }} />
+              <div style={{ position: 'relative' }}>
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password" required
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    paddingRight: '44px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                    fontSize: '0.95rem',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem', lineHeight: 1,
+                  }}
+                  aria-label="Toggle password visibility"
+                >{showPassword ? String.fromCodePoint(0x1F441) : String.fromCodePoint(0x1F441, 0x200D, 0x1F5E8)}</button>
+              </div>
             </div>
             <button type="submit" disabled={loading}
               style={{

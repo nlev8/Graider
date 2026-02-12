@@ -547,6 +547,8 @@ function PasswordResetScreen({ onDone }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -606,13 +608,25 @@ function PasswordResetScreen({ onDone }) {
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>New Password</label>
-              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password" required minLength={6} style={inputStyle} />
+              <div style={{ position: 'relative' }}>
+                <input type={showNew ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password" required minLength={6} style={{ ...inputStyle, paddingRight: 44 }} />
+                <button type="button" onClick={() => setShowNew(!showNew)}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem', lineHeight: 1 }}
+                  aria-label="Toggle password visibility"
+                >{showNew ? String.fromCodePoint(0x1F441) : String.fromCodePoint(0x1F441, 0x200D, 0x1F5E8)}</button>
+              </div>
             </div>
             <div style={{ marginBottom: 24 }}>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Confirm Password</label>
-              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm new password" required minLength={6} style={inputStyle} />
+              <div style={{ position: 'relative' }}>
+                <input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password" required minLength={6} style={{ ...inputStyle, paddingRight: 44 }} />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem', lineHeight: 1 }}
+                  aria-label="Toggle password visibility"
+                >{showConfirm ? String.fromCodePoint(0x1F441) : String.fromCodePoint(0x1F441, 0x200D, 0x1F5E8)}</button>
+              </div>
             </div>
             <button type="submit" disabled={loading} style={{
               width: '100%', padding: 14, borderRadius: 12, border: 'none',
