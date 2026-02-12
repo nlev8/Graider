@@ -15,6 +15,12 @@ Always use this venv for running Python commands, installing packages, and start
 - Backend entry point: `backend/app.py` (serves the Vite-built frontend from `backend/static/`)
 - Frontend source: `frontend/src/App.jsx` and `frontend/src/` directory
 
+## Deployment
+
+- **Backend (app.graider.live)**: Railway — auto-deploys from `git push origin main`. Env vars configured in Railway dashboard.
+- **Landing page (graider.live)**: Vercel — deploy with `cd landing && npx vercel --prod`. Separate Vercel project.
+- **Frontend**: Built with `cd frontend && npm run build`, output goes to `backend/static/`. Deployed with the backend via Railway.
+
 ## Project Overview
 
 Graider is an AI-powered grading assistant for educators. It's a Flask application with a React frontend that uses OpenAI's GPT-4 API to grade student assignments.
