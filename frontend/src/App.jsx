@@ -541,6 +541,92 @@ const getPlagFlagColor = (flag) => {
   }
 };
 
+function PasswordResetScreen({ onDone }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return; }
+    setLoading(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    setLoading(false);
+    if (updateError) { setError(updateError.message); return; }
+    setSuccess(true);
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '12px 16px', borderRadius: 12,
+    border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)',
+    color: 'white', fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', padding: 20,
+    }}>
+      <div style={{
+        width: '100%', maxWidth: 400, background: 'rgba(255,255,255,0.03)',
+        backdropFilter: 'blur(20px)', borderRadius: 20,
+        border: '1px solid rgba(255,255,255,0.1)', padding: 40,
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <h1 style={{
+            fontSize: '2rem', fontWeight: 800,
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8,
+          }}>Graider</h1>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.95rem' }}>Set your new password</p>
+        </div>
+        {error && (
+          <div style={{
+            background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 12, padding: '12px 16px', marginBottom: 20, color: '#f87171', fontSize: '0.9rem',
+          }}>{error}</div>
+        )}
+        {success ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>{String.fromCodePoint(0x2705)}</div>
+            <p style={{ color: '#4ade80', marginBottom: 16, fontSize: '1.05rem', fontWeight: 600 }}>
+              Password updated successfully!
+            </p>
+            <button onClick={onDone} style={{
+              width: '100%', padding: 14, borderRadius: 12, border: 'none',
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: 'white', cursor: 'pointer', fontSize: '1rem', fontWeight: 600,
+            }}>Continue to App</button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>New Password</label>
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password" required minLength={6} style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Confirm Password</label>
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password" required minLength={6} style={inputStyle} />
+            </div>
+            <button type="submit" disabled={loading} style={{
+              width: '100%', padding: 14, borderRadius: 12, border: 'none',
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: 'white', cursor: loading ? 'wait' : 'pointer',
+              fontSize: '1rem', fontWeight: 600, opacity: loading ? 0.7 : 1,
+            }}>{loading ? 'Updating...' : 'Set New Password'}</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // Check if this is the student portal route
   if (window.location.pathname.startsWith("/join")) {
@@ -551,6 +637,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userApproved, setUserApproved] = useState(null); // null=loading, true/false
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
@@ -566,8 +653,11 @@ function App() {
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowPasswordReset(true);
+      }
     });
 
     function handleAuthExpired() {
@@ -4101,6 +4191,10 @@ ${signature}`;
 
   if (!user) {
     return <LoginScreen onLogin={setUser} />;
+  }
+
+  if (showPasswordReset) {
+    return <PasswordResetScreen onDone={() => { setShowPasswordReset(false); window.history.replaceState(null, '', window.location.pathname); }} />;
   }
 
   if (userApproved === false) {
