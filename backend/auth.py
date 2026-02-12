@@ -13,7 +13,9 @@ PUBLIC_PREFIXES = [
 ]
 
 PUBLIC_EXACT = [
-    '/api/status',         # Grading status polling (used before auth check completes)
+    '/api/status',              # Grading status polling (used before auth check completes)
+    '/api/stripe/webhook',      # Stripe webhook (verified via Stripe-Signature header)
+    '/api/auth/notify-signup',  # Public signup notification (no JWT needed)
 ]
 
 
@@ -89,3 +91,12 @@ def init_auth(app):
         # Attach user info to Flask's g object for use in route handlers
         g.user_id = payload.get('sub')
         g.user_email = payload.get('email', '')
+
+        # Approval gate — skip for the approval-status endpoint itself
+        if request.path != '/api/auth/approval-status':
+            user_meta = payload.get('user_metadata', {})
+            if not user_meta.get('approved'):
+                return jsonify({
+                    'error': 'Account pending approval',
+                    'code': 'NOT_APPROVED',
+                }), 403

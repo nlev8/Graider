@@ -38,6 +38,14 @@ async function fetchApi(endpoint, options = {}) {
       throw new Error('Session expired. Please log in again.')
     }
 
+    if (response.status === 403) {
+      const errData = await response.json().catch(() => ({}))
+      if (errData.code === 'NOT_APPROVED') {
+        window.dispatchEvent(new Event('account-not-approved'))
+      }
+      throw new Error(errData.error || 'Access denied')
+    }
+
     if (!response.ok) {
       throw new Error('API error: ' + response.status)
     }
@@ -761,6 +769,22 @@ export async function getPortalCredentials() {
   return fetchApi('/api/assistant/credentials')
 }
 
+// Stripe Billing
+export async function getSubscriptionStatus() {
+  return fetchApi('/api/stripe/subscription-status')
+}
+
+export async function createCheckoutSession(plan) {
+  return fetchApi('/api/stripe/create-checkout-session', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  })
+}
+
+export async function createPortalSession() {
+  return fetchApi('/api/stripe/create-portal-session', { method: 'POST' })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -864,4 +888,8 @@ export default {
   clearAssistantSession,
   savePortalCredentials,
   getPortalCredentials,
+  // Stripe Billing
+  getSubscriptionStatus,
+  createCheckoutSession,
+  createPortalSession,
 }

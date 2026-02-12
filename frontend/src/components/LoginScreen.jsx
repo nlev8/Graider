@@ -39,7 +39,7 @@ export default function LoginScreen({ onLogin }) {
     setLoading(true)
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: 'https://app.graider.live',
     })
 
     setLoading(false)

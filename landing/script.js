@@ -207,6 +207,13 @@ function handleSignup(event) {
             return;
         }
 
+        // Notify admin of new signup (fire-and-forget)
+        fetch('https://app.graider.live/api/auth/notify-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, first_name: firstName, last_name: lastName }),
+        }).catch(function() {});
+
         // Show confirmation message
         var formContent = event.target.parentElement;
         formContent.innerHTML = '<div style="text-align:center;padding:20px 0;">' +

@@ -26,6 +26,7 @@ import { getAuthHeaders } from "./services/api";
 import { supabase } from "./services/supabase";
 import LoginScreen from "./components/LoginScreen";
 import AssistantChat from "./components/AssistantChat";
+import OnboardingWizard from "./components/OnboardingWizard";
 
 // Tab configuration
 const TABS = [
@@ -549,6 +550,7 @@ function App() {
   // Auth state
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [userApproved, setUserApproved] = useState(null); // null=loading, true/false
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
@@ -579,6 +581,46 @@ function App() {
       window.removeEventListener('auth-expired', handleAuthExpired);
     };
   }, []);
+
+  // Approval gate check
+  useEffect(() => {
+    if (!user || isLocalhost) {
+      setUserApproved(true);
+      return;
+    }
+
+    // Check local JWT metadata first (instant, no API call)
+    if (user.user_metadata && user.user_metadata.approved) {
+      setUserApproved(true);
+      return;
+    }
+
+    // JWT metadata may be stale — call backend for fresh check via admin API
+    async function checkApproval() {
+      try {
+        const { getAuthHeaders } = await import('./services/api');
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/auth/approval-status', {
+          headers: { ...headers },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUserApproved(data.approved === true);
+        } else {
+          setUserApproved(false);
+        }
+      } catch {
+        setUserApproved(false);
+      }
+    }
+    checkApproval();
+
+    function handleNotApproved() {
+      setUserApproved(false);
+    }
+    window.addEventListener('account-not-approved', handleNotApproved);
+    return () => window.removeEventListener('account-not-approved', handleNotApproved);
+  }, [user, isLocalhost]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -924,7 +966,10 @@ function App() {
   });
 
   const [activeTab, setActiveTab] = useState("grade");
-  const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy, billing
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [analytics, setAnalytics] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
@@ -1525,6 +1570,45 @@ function App() {
 
     return () => clearTimeout(saveTimeout);
   }, [rubric, settingsLoaded]);
+
+  // Show onboarding wizard on first run
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    if (!config.onboarding_completed) {
+      setShowOnboardingWizard(true);
+    }
+  }, [settingsLoaded]);
+
+  // Load subscription status when Billing tab is selected
+  useEffect(() => {
+    if (settingsTab !== "billing") return;
+    setSubscriptionLoading(true);
+    api.getSubscriptionStatus()
+      .then((res) => { if (!res.error) setSubscription(res); })
+      .catch(() => {})
+      .finally(() => setSubscriptionLoading(false));
+  }, [settingsTab]);
+
+  // Handle Stripe redirect URL params (?billing=success or ?billing=cancel)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billingParam = params.get("billing");
+    if (billingParam === "success") {
+      addToast("Subscription activated successfully!", "success");
+      setActiveTab("settings");
+      setSettingsTab("billing");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (billingParam === "cancel") {
+      addToast("Checkout cancelled", "info");
+      setActiveTab("settings");
+      setSettingsTab("billing");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (billingParam === "portal-return") {
+      setActiveTab("settings");
+      setSettingsTab("billing");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   // Auto-save Builder assignment when it changes (debounced)
   useEffect(() => {
@@ -4019,8 +4103,80 @@ ${signature}`;
     return <LoginScreen onLogin={setUser} />;
   }
 
+  if (userApproved === false) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        color: '#fff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}>
+        <div style={{
+          textAlign: 'center',
+          maxWidth: 440,
+          padding: '48px 32px',
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          border: '1px solid rgba(255,255,255,0.1)',
+          backdropFilter: 'blur(12px)',
+        }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>{String.fromCodePoint(0x23F3)}</div>
+          <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Account Pending Approval</h2>
+          <p style={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, marginBottom: 28 }}>
+            {"Your account has been created successfully. An administrator will review and approve your access shortly. You'll receive an email once approved."}
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 24px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#6366f1',
+                color: '#fff',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >Check Again</button>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '10px 24px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'transparent',
+                color: 'rgba(255,255,255,0.7)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >Sign Out</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", padding: "20px" }}>
+      {/* Onboarding Wizard */}
+      {showOnboardingWizard && (
+        <OnboardingWizard
+          config={config}
+          setConfig={setConfig}
+          rubric={rubric}
+          setRubric={setRubric}
+          apiKeys={apiKeys}
+          setApiKeys={setApiKeys}
+          onComplete={() => setShowOnboardingWizard(false)}
+          addToast={addToast}
+        />
+      )}
+
       {/* Email Preview Modal */}
       {emailPreview.show && (
         <div
@@ -9428,6 +9584,7 @@ ${signature}`;
                       { id: "classroom", label: "Classroom", icon: "Users" },
                       { id: "integration", label: "Tools", icon: "Laptop" },
                       { id: "privacy", label: "Privacy", icon: "Shield" },
+                      { id: "billing", label: "Billing", icon: "CreditCard" },
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -9687,6 +9844,21 @@ ${signature}`;
                           </div>
                         </div>
                       </label>
+                    </div>
+
+                    <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--glass-border)" }}>
+                      <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 6 }}>Setup Wizard</h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 12 }}>
+                        Re-run the initial setup to update your core settings.
+                      </p>
+                      <button
+                        onClick={() => setShowOnboardingWizard(true)}
+                        className="btn btn-secondary"
+                        style={{ display: "flex", alignItems: "center", gap: 6 }}
+                      >
+                        <Icon name="RefreshCw" size={16} />
+                        Run Setup Wizard Again
+                      </button>
                     </div>
                       </>
                     )}
@@ -13114,6 +13286,109 @@ ${signature}`;
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
+
+                    {/* Billing Tab */}
+                    {settingsTab === "billing" && (
+                      <>
+                        <div>
+                          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
+                            <Icon name="CreditCard" size={20} style={{ color: "#6366f1" }} />
+                            Subscription & Billing
+                          </h3>
+                          <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                            Manage your Graider subscription plan and billing details.
+                          </p>
+
+                          {subscriptionLoading ? (
+                            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                              Loading subscription status...
+                            </div>
+                          ) : subscription && subscription.status === "active" ? (
+                            <div style={{ background: "var(--input-bg)", borderRadius: "12px", padding: "20px", marginBottom: "20px", border: "1px solid var(--glass-border)" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                                <span style={{ background: "#10b981", color: "white", padding: "3px 10px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 600 }}>Active</span>
+                                <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                                  {subscription.plan === "month" ? "Monthly" : subscription.plan === "year" ? "Annual" : subscription.plan} Plan
+                                </span>
+                              </div>
+                              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "4px" }}>
+                                {subscription.cancel_at_period_end
+                                  ? "Cancels on: "
+                                  : "Renews on: "}
+                                {new Date(subscription.current_period_end * 1000).toLocaleDateString()}
+                              </p>
+                              {subscription.cancel_at_period_end && (
+                                <p style={{ fontSize: "0.8rem", color: "#f59e0b", marginTop: "8px" }}>
+                                  Your subscription will not renew. You can resubscribe anytime.
+                                </p>
+                              )}
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await api.createPortalSession();
+                                    if (res.portal_url) window.location.href = res.portal_url;
+                                    else addToast(res.error || "Failed to open portal", "error");
+                                  } catch { addToast("Failed to open billing portal", "error"); }
+                                }}
+                                style={{ marginTop: "16px", padding: "10px 20px", borderRadius: "8px", border: "none", background: "var(--accent-primary)", color: "white", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem" }}
+                              >
+                                Manage Subscription
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ background: "var(--input-bg)", borderRadius: "12px", padding: "20px", marginBottom: "20px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                                  <span style={{ background: "var(--text-secondary)", color: "white", padding: "3px 10px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 600 }}>No Active Plan</span>
+                                </div>
+                                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                                  Subscribe to unlock all Graider features.
+                                </p>
+                                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const res = await api.createCheckoutSession("monthly");
+                                        if (res.checkout_url) window.location.href = res.checkout_url;
+                                        else addToast(res.error || "Failed to start checkout", "error");
+                                      } catch { addToast("Failed to start checkout", "error"); }
+                                    }}
+                                    style={{ padding: "10px 20px", borderRadius: "8px", border: "1px solid var(--accent-primary)", background: "transparent", color: "var(--accent-primary)", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem" }}
+                                  >
+                                    Subscribe Monthly
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const res = await api.createCheckoutSession("annual");
+                                        if (res.checkout_url) window.location.href = res.checkout_url;
+                                        else addToast(res.error || "Failed to start checkout", "error");
+                                      } catch { addToast("Failed to start checkout", "error"); }
+                                    }}
+                                    style={{ padding: "10px 20px", borderRadius: "8px", border: "none", background: "var(--accent-primary)", color: "white", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem" }}
+                                  >
+                                    Subscribe Annual
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setSubscriptionLoading(true);
+                              api.getSubscriptionStatus()
+                                .then((res) => { if (!res.error) setSubscription(res); })
+                                .catch(() => {})
+                                .finally(() => setSubscriptionLoading(false));
+                            }}
+                            style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem" }}
+                          >
+                            Refresh Status
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>

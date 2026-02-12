@@ -24,6 +24,9 @@ antlr4-python3-runtime==4.11.*
 matplotlib>=3.7.0
 numpy>=1.24.0
 
+# HTTP requests (admin notifications)
+requests>=2.28.0
+
 # Email Service
 resend>=0.7.0
 
@@ -32,6 +35,9 @@ supabase>=2.0.0
 
 # Auth (JWT validation)
 PyJWT>=2.8.0
+
+# Stripe (Billing)
+stripe>=7.0.0
 
 # Browser Automation (Outlook email sending)
 playwright>=1.40.0
