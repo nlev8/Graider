@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../services/supabase'
 
 export default function LoginScreen({ onLogin }) {
@@ -8,6 +8,20 @@ export default function LoginScreen({ onLogin }) {
   const [error, setError] = useState('')
   const [showForgot, setShowForgot] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
+  const [showResetPassword, setShowResetPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [resetSuccess, setResetSuccess] = useState(false)
+
+  // Detect recovery token in URL hash (from Supabase password reset email)
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash && hash.includes('type=recovery')) {
+      // Supabase JS client auto-picks up the token from the hash.
+      // We just need to show the new password form.
+      setShowResetPassword(true)
+    }
+  }, [])
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -52,6 +66,35 @@ export default function LoginScreen({ onLogin }) {
     setForgotSent(true)
   }
 
+  async function handleSetNewPassword(e) {
+    e.preventDefault()
+    setError('')
+
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    setLoading(true)
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+    setLoading(false)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    setResetSuccess(true)
+    // Clear the hash so refreshing doesn't re-trigger recovery mode
+    window.history.replaceState(null, '', window.location.pathname)
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -80,7 +123,7 @@ export default function LoginScreen({ onLogin }) {
             marginBottom: '8px',
           }}>Graider</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.95rem' }}>
-            {showForgot ? 'Reset your password' : 'Sign in to continue'}
+            {showResetPassword ? 'Set your new password' : showForgot ? 'Reset your password' : 'Sign in to continue'}
           </p>
         </div>
 
@@ -96,7 +139,80 @@ export default function LoginScreen({ onLogin }) {
           }}>{error}</div>
         )}
 
-        {showForgot ? (
+        {showResetPassword ? (
+          resetSuccess ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>{String.fromCodePoint(0x2705)}</div>
+              <p style={{ color: '#4ade80', marginBottom: '16px', fontSize: '1.05rem', fontWeight: 600 }}>
+                Password updated successfully!
+              </p>
+              <button onClick={() => { setShowResetPassword(false); setResetSuccess(false) }}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                }}>
+                Sign In
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSetNewPassword}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>New Password</label>
+                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password" required minLength={6}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                    fontSize: '0.95rem',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }} />
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>Confirm Password</label>
+                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password" required minLength={6}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                    fontSize: '0.95rem',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }} />
+              </div>
+              <button type="submit" disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: 'white',
+                  cursor: loading ? 'wait' : 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  opacity: loading ? 0.7 : 1,
+                }}>
+                {loading ? 'Updating...' : 'Set New Password'}
+              </button>
+            </form>
+          )
+        ) : showForgot ? (
           forgotSent ? (
             <div style={{ textAlign: 'center' }}>
               <p style={{ color: '#4ade80', marginBottom: '16px' }}>
