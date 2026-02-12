@@ -651,7 +651,11 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userApproved, setUserApproved] = useState(null); // null=loading, true/false
-  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  // Check URL hash for recovery token BEFORE Supabase consumes it
+  const [showPasswordReset, setShowPasswordReset] = useState(() => {
+    const hash = window.location.hash;
+    return hash.includes('type=recovery');
+  });
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
