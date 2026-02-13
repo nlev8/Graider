@@ -129,20 +129,21 @@
 
             <div class="legal-content">
                 <h2>Our Commitment to Your Privacy</h2>
-                <p>Graider is designed with privacy as a core principle. We understand that educators handle sensitive student information, and we've built our application to ensure that data stays where it belongs: on your computer.</p>
+                <p>Graider is designed with privacy as a core principle. We understand that educators handle sensitive student information, and we've built our platform with multiple layers of protection to keep student data safe and ensure FERPA compliance.</p>
 
                 <div class="highlight-box">
                     <h3>FERPA Compliance Summary</h3>
-                    <p>Graider is designed to be FERPA compliant. Student names are never sent to AI services. All student work, grades, and feedback remain on your local device. We do not store, access, or process any student educational records.</p>
+                    <p>Graider is designed to be FERPA compliant. Student names are automatically stripped before any content is sent to AI services. Graider does not store student personally identifiable information (PII). All AI-generated grades are suggestions that require teacher approval before becoming official. No AI provider receives data that could identify a specific student.</p>
                 </div>
 
                 <h2>How Graider Works</h2>
-                <p>Graider is a desktop application that runs entirely on your computer. Here's what this means for your data:</p>
+                <p>Graider is a cloud-based web application hosted on secure infrastructure. Here's what this means for your data:</p>
                 <ul>
-                    <li><strong>Local Processing:</strong> All file reading, parsing, and storage happens on your device</li>
-                    <li><strong>Your API Key:</strong> You provide your own OpenAI API key, which means API calls go directly from your computer to OpenAI</li>
-                    <li><strong>No Cloud Storage:</strong> We do not operate servers that store your data</li>
-                    <li><strong>No Account Required:</strong> You don't need to create an account to use Graider</li>
+                    <li><strong>Student Name Stripping:</strong> Student names and identifiers are automatically removed before any content is sent to AI providers for grading</li>
+                    <li><strong>Encrypted Data:</strong> All data is encrypted in transit (TLS/HTTPS) and at rest on our servers</li>
+                    <li><strong>No Student PII Stored:</strong> Graider does not retain student personally identifiable information — names are stripped during processing and never stored on our servers</li>
+                    <li><strong>Secure Authentication:</strong> Access requires an authenticated account, ensuring only authorized educators can use the platform</li>
+                    <li><strong>Teacher Approval Required:</strong> All AI-generated grades are suggestions — the teacher must review and approve before they become official</li>
                 </ul>
 
                 <h2>Data We Collect</h2>
@@ -153,61 +154,62 @@
                     <li>Your first and last name</li>
                     <li>Your email address</li>
                 </ul>
-                <p>This information is collected via Formspree and is used solely to provide you with download links, updates about Graider, and occasional product announcements. You can unsubscribe at any time.</p>
+                <p>This information is used to create your account, provide access to Graider, send updates about the platform, and occasional product announcements. You can unsubscribe from communications at any time.</p>
 
-                <h3>What We Do NOT Collect</h3>
+                <h3>What We Do NOT Collect or Retain</h3>
                 <ul>
-                    <li>Student names or identifiers</li>
-                    <li>Student work or assignments</li>
-                    <li>Grades or feedback</li>
-                    <li>Rubrics or assignment configurations</li>
-                    <li>Any content you process through Graider</li>
-                    <li>Usage analytics or telemetry from the desktop app</li>
+                    <li>Student names or identifiers (automatically stripped before AI processing)</li>
+                    <li>Student personally identifiable information (PII)</li>
+                    <li>Original student assignment files after processing is complete</li>
+                    <li>AI provider API responses beyond what is needed to display results to you</li>
                 </ul>
 
                 <h2>AI Processing & Student Privacy</h2>
-                <p>When Graider sends content to OpenAI for grading:</p>
+                <p>When Graider sends content to AI providers (OpenAI, Anthropic, or Google) for grading:</p>
                 <ul>
-                    <li><strong>Student names are stripped:</strong> We automatically remove student names before sending any content to the AI</li>
-                    <li><strong>Direct API connection:</strong> Content goes directly from your computer to OpenAI using your API key</li>
-                    <li><strong>No intermediary servers:</strong> Graider does not route your data through our servers</li>
-                    <li><strong>OpenAI's policies apply:</strong> Please review <a href="https://openai.com/policies/privacy-policy" target="_blank">OpenAI's Privacy Policy</a> for how they handle API requests</li>
+                    <li><strong>Student names are stripped:</strong> We automatically remove student names and identifiers before sending any content to the AI</li>
+                    <li><strong>De-identified content only:</strong> AI providers receive only the student work content (without names) along with your rubric and grading instructions</li>
+                    <li><strong>Encrypted transmission:</strong> All communication between Graider's servers and AI providers occurs over encrypted connections (TLS/HTTPS)</li>
+                    <li><strong>No AI training:</strong> None of the AI providers we use (OpenAI, Anthropic, Google) train their models on API data</li>
+                    <li><strong>AI provider policies apply:</strong> Please review <a href="https://openai.com/policies/privacy-policy" target="_blank">OpenAI's Privacy Policy</a>, <a href="https://www.anthropic.com/privacy" target="_blank">Anthropic's Privacy Policy</a>, and <a href="https://policies.google.com/privacy" target="_blank">Google's Privacy Policy</a> for how they handle API requests</li>
                 </ul>
 
                 <h2>Data Storage</h2>
-                <p>All Graider data is stored locally on your computer in the following locations:</p>
+                <p>Graider stores your account data, rubric configurations, assignment settings, and grading results on secure, encrypted servers. Here's how we protect it:</p>
                 <ul>
-                    <li><code>~/.graider_rubric.json</code> - Your rubric settings</li>
-                    <li><code>~/.graider_settings.json</code> - Application settings</li>
-                    <li><code>~/.graider_assignments/</code> - Saved assignment configurations</li>
-                    <li><code>~/.graider_email.json</code> - Email credentials (if configured)</li>
+                    <li><strong>Encryption at rest:</strong> All stored data is encrypted on our servers</li>
+                    <li><strong>Encryption in transit:</strong> All data transmitted between your browser and our servers uses TLS/HTTPS encryption</li>
+                    <li><strong>Data isolation:</strong> Each educator's data is logically separated from other users</li>
+                    <li><strong>No student PII:</strong> Student names are stripped during processing and are not stored on our servers</li>
+                    <li><strong>Secure hosting:</strong> Our infrastructure is hosted on Railway, a SOC 2 compliant platform</li>
                 </ul>
-                <p>You have full control over this data. You can delete these files at any time to remove all Graider data from your computer.</p>
+                <p>You have full control over your data. You can request deletion of your account and all associated data at any time by contacting us.</p>
 
                 <h2>Third-Party Services</h2>
 
-                <h3>OpenAI</h3>
-                <p>Graider uses OpenAI's API for AI-powered grading. When you use Graider:</p>
+                <h3>AI Providers</h3>
+                <p>Graider uses multiple AI providers for grading (OpenAI, Anthropic, and Google). When you use Graider:</p>
                 <ul>
-                    <li>Assignment content (without student names) is sent to OpenAI</li>
-                    <li>Your API key is used for authentication</li>
-                    <li>OpenAI's data handling policies apply to this content</li>
+                    <li>De-identified assignment content (student names stripped) is sent to the selected AI provider</li>
+                    <li>Graider manages API authentication on your behalf</li>
+                    <li>Each provider's data handling policies apply to content they process</li>
+                    <li>None of these providers use API data to train their models</li>
                 </ul>
 
-                <h3>Formspree</h3>
-                <p>Our website uses Formspree to handle beta signup forms. Formspree processes your name and email according to their privacy policy.</p>
+                <h3>Hosting Infrastructure</h3>
+                <p>Graider's backend is hosted on Railway. Your data is processed and stored according to Railway's security practices and our own data protection measures.</p>
 
                 <h2>Your Rights</h2>
                 <p>You have the right to:</p>
                 <ul>
-                    <li>Access any personal information we have about you (limited to beta signup data)</li>
-                    <li>Request deletion of your information from our beta signup list</li>
+                    <li>Access any personal information we have about you</li>
+                    <li>Request deletion of your account and all associated data</li>
+                    <li>Export your data (rubrics, assignment configurations, grading results)</li>
                     <li>Unsubscribe from communications at any time</li>
-                    <li>Delete all local Graider data by removing the configuration files listed above</li>
                 </ul>
 
                 <h2>Children's Privacy</h2>
-                <p>Graider is designed for use by educators, not students. We do not knowingly collect personal information from children under 13. The application processes student work, but this data never leaves the educator's computer or reaches our systems.</p>
+                <p>Graider is designed for use by educators, not students. We do not knowingly collect personal information from children under 13. Students do not interact with Graider directly or create accounts. While Graider processes student work for grading purposes, student names and identifiers are automatically stripped before AI processing, and no student PII is retained on our servers.</p>
 
                 <h2>Changes to This Policy</h2>
                 <p>We may update this Privacy Policy from time to time. We will notify users of any material changes by posting the new Privacy Policy on this page and updating the "Last updated" date.</p>
