@@ -537,17 +537,17 @@ def extract_fitb_by_template_comparison(student_text: str, template_text: str) -
         content = None
         label = None
 
-        # Numbered with optional timestamp
-        num_match = re.match(r'^(\d+)[\.\)\:]\s*(\([^)]+\))?\s*(.+)', student_line)
+        # Numbered with optional timestamp (handle bullet prefixes like •, *, -)
+        num_match = re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*(\d+)[\.\)\:]\s*(\([^)]+\))?\s*(.+)', student_line)
         if num_match:
             label = f"Item {num_match.group(1)}"
             if num_match.group(2):
                 label += f" {num_match.group(2)}"
             content = num_match.group(3).strip()
 
-        # Lettered
+        # Lettered (handle bullet prefixes)
         if not content:
-            letter_match = re.match(r'^([a-zA-Z])[\.\)\:]\s*(.+)', student_line)
+            letter_match = re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*([a-zA-Z])[\.\)\:]\s*(.+)', student_line)
             if letter_match:
                 label = f"Item {letter_match.group(1).upper()}"
                 content = letter_match.group(2).strip()
@@ -828,8 +828,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
     # Only use underscores as indicator if FITB keyword is also present
     is_fitb = has_fitb_keyword or has_timestamps
 
-    if is_fitb and not custom_markers:
-        print(f"  📝 Detected fill-in-the-blank format (no markers) - using FITB extraction")
+    if is_fitb:
+        print(f"  📝 Detected fill-in-the-blank format - using FITB extraction")
         fitb_results = extract_fitb_by_template_comparison(document_text, template_text)
         if fitb_results:
             # Filter out excluded sections and blank/template content
@@ -1296,6 +1296,18 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             if not is_blank:
                 response = filter_questions_from_response(response)
                 if not response or len(response.strip()) < 3:
+                    is_blank = True
+
+            # Additional blank check: if remaining response is very short and looks like
+            # template fragments (sub-prompts, topic lists, page refs), mark as blank.
+            # Real student answers for questions are typically 20+ characters.
+            if not is_blank and response:
+                resp_clean = response.strip()
+                # Remove common template artifacts: page refs, point values, "Response:" labels
+                resp_stripped = re.sub(r'\((?:pp?\.?\s*\d+[\-–]\d+|\d+\s*(?:pts?|points?))\)', '', resp_clean)
+                resp_stripped = re.sub(r'(?i)^response\s*:\s*', '', resp_stripped).strip()
+                resp_stripped = re.sub(r'[_\-\s]+$', '', resp_stripped).strip()
+                if len(resp_stripped) < 15:
                     is_blank = True
 
             if not is_blank:
@@ -3683,6 +3695,8 @@ UNIVERSAL RULES:
 - Sound like a real teacher — use contractions, natural language
 - Write feedback in English only
 - The feedback must be USEFUL — a parent reading this should understand exactly what their child got right, what they got wrong, and what they need to do to improve
+- NEVER write vague transitions like "there are several areas where you can improve" or "however, improvements can be made" without IMMEDIATELY listing the specific areas. If you say improvements are needed, you MUST list each one with the specific question, what the student wrote, and what the correct answer is. Generic "areas to improve" statements with no details are UNACCEPTABLE.
+- Do NOT include teacher sign-offs, signatures, or closing lines like "Warm Regards, Mr. Smith" — those are added separately by the system
 
 Also identify:
 - Excellent answers: Quote 1-4 specific student answers that earned high marks (fewer for low grades)
@@ -3698,7 +3712,7 @@ Also identify:
                 {"role": "user", "content": prompt}
             ],
             response_format=FeedbackResponse,
-            max_tokens=2000,
+            max_tokens=3500,
             temperature=0,
             seed=42
         )
@@ -3901,15 +3915,18 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     raw_score = int(round((total_earned / max(total_possible, 1)) * (100 - effort_points) + effort_earned))
     raw_score = max(0, min(100, raw_score))
 
-    # Completeness caps by grading style
+    # Completeness caps by grading style — each missing section drops max possible grade
     if grading_style == 'strict':
-        caps = {0: 100, 1: 85, 2: 75, 3: 65}
+        caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35}
     elif grading_style == 'lenient':
-        caps = {0: 100, 1: 95, 2: 89, 3: 79}
+        caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49}
     else:
-        caps = {0: 100, 1: 89, 2: 79, 3: 69}
-    cap = caps.get(min(blank_count, 3), 60 if blank_count >= 4 else 69)
+        caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39}
+    capped_count = min(blank_count, max(caps.keys()))
+    cap = caps.get(capped_count, caps[max(caps.keys())])
     final_score = min(raw_score, cap)
+    if blank_count > 0:
+        print(f"  📉 Completeness: {blank_count} blank/missing → cap at {cap}")
 
     if final_score >= 90: letter_grade = "A"
     elif final_score >= 80: letter_grade = "B"
@@ -4380,8 +4397,8 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
             # Check if line is a question (ends with ? or starts with number/bullet or is a vocab term with colon)
             is_question = (
                 line_stripped.endswith('?') or
-                re.match(r'^\d+[\.\)]\s*\w', line_stripped) or  # "1. Question" or "1) Question"
-                re.match(r'^[a-zA-Z][\.\)]\s*\w', line_stripped) or  # "a. Question" or "a) Question"
+                re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*\d+[\.\)]\s*\w', line_stripped) or  # "• 1. Question" or "1) Question"
+                re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*[a-zA-Z][\.\)]\s*\w', line_stripped) or  # "• a. Question" or "a) Question"
                 (line_stripped.endswith(':') and len(line_stripped) > 5 and '_' not in line_stripped)  # "Nationalism:"
             )
             if is_question and len(line_stripped) > 5:
@@ -4480,15 +4497,22 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     # Also check custom AI instructions for FITB rubric type
     if 'FILL-IN-THE-BLANK' in (custom_ai_instructions or '').upper():
         is_fitb = True
+    # Also detect FITB by timestamp pattern (e.g., "1. (0:00)" format common in video worksheets)
+    if not is_fitb and content:
+        import re as _re
+        has_timestamps = bool(_re.search(r'\d+\.\s*\(\d+:\d+', content))
+        has_filled_underscores = len(_re.findall(r'_{2,}([^_\n]+)_{2,}', content)) >= 2
+        if has_timestamps and has_filled_underscores:
+            is_fitb = True
+            print(f"  📝 FITB detected via timestamps + filled underscores")
 
     # PRE-EXTRACT student responses to prevent AI hallucination
     extraction_result = None
     extracted_responses_text = ''
     if assignment_data.get("type") == "text" and content:
-        # FITB without markers: send full content (pure FITB, no sections to extract)
-        # FITB with markers: run normal extraction so written sections are separated
-        if is_fitb and not custom_markers:
-            print(f"  📝 Pure FITB assignment (no markers) - sending full content for grading")
+        if is_fitb:
+            # FITB assignment — send full content for grading (works with or without markers)
+            print(f"  📝 FITB assignment - sending full content for grading")
             extracted_responses_text = f"""
 ==================================================
 FILL-IN-THE-BLANK SUBMISSION
