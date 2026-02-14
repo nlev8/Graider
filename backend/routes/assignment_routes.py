@@ -122,6 +122,7 @@ def export_assignment():
     title = assignment.get('title', 'Untitled Assignment')
     instructions = assignment.get('instructions', '')
     questions = assignment.get('questions', [])
+    table_structured = assignment.get('tableStructured', False)
 
     output_folder = os.path.expanduser("~/Downloads/Graider/Assignments")
     os.makedirs(output_folder, exist_ok=True)
@@ -129,15 +130,20 @@ def export_assignment():
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
 
     if format_type == 'docx':
-        return _export_docx(title, instructions, questions, output_folder, safe_title)
+        return _export_docx(title, instructions, questions, output_folder, safe_title,
+                            table_structured=table_structured)
     elif format_type == 'pdf':
         return _export_pdf(title, instructions, questions, output_folder, safe_title)
 
     return jsonify({"error": "Unknown format"})
 
 
-def _export_docx(title, instructions, questions, output_folder, safe_title):
-    """Export assignment to Word format."""
+def _export_docx(title, instructions, questions, output_folder, safe_title,
+                  table_structured=False):
+    """Export assignment to Word format.
+
+    If table_structured is True, uses Graider structured tables for questions.
+    """
     try:
         from docx import Document
         from docx.shared import Inches, Pt
@@ -161,29 +167,50 @@ def _export_docx(title, instructions, questions, output_folder, safe_title):
             inst_para.italic = True
             doc.add_paragraph()
 
-        # Questions
-        for i, q in enumerate(questions, 1):
-            marker = q.get('marker', 'Answer:')
-            prompt = q.get('prompt', '')
-            points = q.get('points', 10)
-            q_type = q.get('type', 'short_answer')
+        if table_structured:
+            # Use Graider structured tables
+            from backend.services.document_generator import DEFAULT_STYLE
+            from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker
+            style = dict(DEFAULT_STYLE)
 
-            # Question header with marker
-            q_para = doc.add_paragraph()
-            run = q_para.add_run(f"{marker} ")
-            run.bold = True
-            q_para.add_run(f"({points} pts)")
+            for i, q in enumerate(questions, 1):
+                marker = q.get('marker', 'Answer:')
+                prompt = q.get('prompt', '')
+                points = q.get('points', 10)
+                q_type = q.get('type', 'short_answer')
 
-            # Question prompt
-            if prompt:
-                doc.add_paragraph(prompt)
+                header = str(i) + ") " + (prompt or marker)
+                height = 2160 if q_type == 'short_answer' else 4320 if q_type == 'essay' else 1440
+                _add_graider_table(
+                    doc, header, "GRAIDER:QUESTION:" + str(i),
+                    points, style, height
+                )
 
-            # Answer space
-            lines = 3 if q_type == 'short_answer' else 6 if q_type == 'essay' else 2
-            for _ in range(lines):
-                doc.add_paragraph("_" * 70)
+            _add_graider_marker(doc)
+        else:
+            # Original paragraph-based export
+            for i, q in enumerate(questions, 1):
+                marker = q.get('marker', 'Answer:')
+                prompt = q.get('prompt', '')
+                points = q.get('points', 10)
+                q_type = q.get('type', 'short_answer')
 
-            doc.add_paragraph()
+                # Question header with marker
+                q_para = doc.add_paragraph()
+                run = q_para.add_run(f"{marker} ")
+                run.bold = True
+                q_para.add_run(f"({points} pts)")
+
+                # Question prompt
+                if prompt:
+                    doc.add_paragraph(prompt)
+
+                # Answer space
+                lines = 3 if q_type == 'short_answer' else 6 if q_type == 'essay' else 2
+                for _ in range(lines):
+                    doc.add_paragraph("_" * 70)
+
+                doc.add_paragraph()
 
         filepath = os.path.join(output_folder, f"{safe_title}.docx")
         doc.save(filepath)

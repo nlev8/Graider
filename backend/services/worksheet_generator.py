@@ -12,8 +12,10 @@ import json
 from urllib.parse import quote
 
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches, RGBColor, Twips
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn, nsdecls
+from docx.oxml import parse_xml
 
 from backend.services.document_generator import (
     _parse_markdown_runs, load_style, DEFAULT_STYLE, _apply_style_to_heading
@@ -22,6 +24,101 @@ from backend.services.document_generator import (
 
 WORKSHEETS_DIR = os.path.expanduser("~/Downloads/Graider/Worksheets")
 ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
+
+
+def _add_graider_table(doc, header_text, graider_tag, points, style, height_twips,
+                       body_font="Calibri", body_size=11):
+    """Add a structured 2-row Graider table for a question/vocab/summary section.
+
+    Row 0 (header): Hidden [GRAIDER:TYPE:ID] tag + visible question text + points.
+                    Blue shading, bold white text.
+    Row 1 (response): Empty cell where student types. White, minimum height.
+
+    Args:
+        doc: python-docx Document object
+        header_text: Visible question/term/prompt text
+        graider_tag: e.g. "GRAIDER:VOCAB:Osmosis" (without brackets)
+        points: Point value to display
+        style: Style dict for colors/fonts
+        height_twips: Minimum height of response cell in twips (1440=1in, 2160=1.5in)
+        body_font: Font name for body text
+        body_size: Font size for body text
+    """
+    header_bg = style.get("table_header_bg", "#4472C4").lstrip('#')
+    header_text_color = style.get("table_header_text_color", "#FFFFFF").lstrip('#')
+
+    table = doc.add_table(rows=2, cols=1)
+    table.style = 'Table Grid'
+
+    # --- Row 0: Header with hidden tag + visible text ---
+    header_cell = table.rows[0].cells[0]
+    header_cell.text = ""  # Clear default
+    hp = header_cell.paragraphs[0]
+
+    # Hidden tag run: font color matches background so it's invisible in print/screen
+    tag_run = hp.add_run("[" + graider_tag + "]")
+    tag_run.font.size = Pt(1)
+    r, g, b = int(header_bg[0:2], 16), int(header_bg[2:4], 16), int(header_bg[4:6], 16)
+    tag_run.font.color.rgb = RGBColor(r, g, b)
+
+    # Visible header text
+    text_run = hp.add_run("  " + header_text)
+    text_run.bold = True
+    text_run.font.size = Pt(body_size)
+    text_run.font.name = body_font
+    tr, tg, tb = int(header_text_color[0:2], 16), int(header_text_color[2:4], 16), int(header_text_color[4:6], 16)
+    text_run.font.color.rgb = RGBColor(tr, tg, tb)
+
+    # Points indicator
+    if points is not None:
+        pts_run = hp.add_run("  (" + str(points) + " pts)")
+        pts_run.font.size = Pt(9)
+        pts_run.font.name = body_font
+        pts_run.font.color.rgb = RGBColor(tr, tg, tb)
+
+    # Apply shading to header cell
+    shading = parse_xml(
+        '<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), header_bg)
+    )
+    header_cell._tc.get_or_add_tcPr().append(shading)
+
+    # --- Row 1: Empty response cell with minimum height ---
+    response_cell = table.rows[1].cells[0]
+    response_cell.text = ""
+    # Set minimum row height
+    tr_elem = table.rows[1]._tr
+    trPr = tr_elem.get_or_add_trPr()
+    trHeight = parse_xml(
+        '<w:trHeight {} w:val="{}" w:hRule="atLeast"/>'.format(
+            nsdecls('w'), str(height_twips)
+        )
+    )
+    trPr.append(trHeight)
+
+    # Set font in response cell so student typing uses the right font
+    rp = response_cell.paragraphs[0]
+    placeholder_run = rp.add_run("")
+    placeholder_run.font.name = body_font
+    placeholder_run.font.size = Pt(body_size)
+
+    # Add spacing after table
+    spacer = doc.add_paragraph()
+    spacer_fmt = spacer.paragraph_format
+    spacer_fmt.space_before = Pt(4)
+    spacer_fmt.space_after = Pt(4)
+
+    return table
+
+
+def _add_graider_marker(doc):
+    """Add hidden end-of-document marker for table format detection.
+
+    Adds a paragraph with 'GRAIDER_TABLE_V1' in 1pt white font.
+    """
+    marker_para = doc.add_paragraph()
+    marker_run = marker_para.add_run("GRAIDER_TABLE_V1")
+    marker_run.font.size = Pt(1)
+    marker_run.font.color.rgb = RGBColor(255, 255, 255)
 
 
 def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
@@ -70,65 +167,42 @@ def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
 
     doc.add_paragraph()  # spacing
 
-    # Vocabulary Section
+    # Vocabulary Section — structured tables
     if vocab_terms:
         vh = doc.add_heading('VOCABULARY', level=2)
         _apply_style_to_heading(vh, 2, style)
         for item in vocab_terms:
-            p = doc.add_paragraph()
-            term_text = item.get('term', '') + ': '
-            run = p.add_run(term_text)
-            run.bold = True
-            run.font.size = Pt(body_size)
-            run.font.name = body_font
-            fill_run = p.add_run('_' * 60)
-            fill_run.font.name = body_font
+            term = item.get('term', '')
+            pts = item.get('points', 5)
+            _add_graider_table(
+                doc, term + ":", "GRAIDER:VOCAB:" + term,
+                pts, style, 1440, body_font, body_size  # 1 inch response height
+            )
 
-        doc.add_paragraph()  # spacing
-
-    # Questions Section
+    # Questions Section — structured tables
     if questions:
         qh = doc.add_heading('QUESTIONS', level=2)
         _apply_style_to_heading(qh, 2, style)
         for i, q in enumerate(questions, 1):
             pts = q.get('points', 10)
             question_text = q.get('question', '')
+            header = str(i) + ") " + question_text
+            _add_graider_table(
+                doc, header, "GRAIDER:QUESTION:" + str(i),
+                pts, style, 2160, body_font, body_size  # 1.5 inch response height
+            )
 
-            # Question line with point value
-            p = doc.add_paragraph()
-            num_run = p.add_run(str(i) + ') ')
-            num_run.bold = True
-            num_run.font.size = Pt(body_size)
-            num_run.font.name = body_font
-            _parse_markdown_runs(p, question_text, body_font, body_size)
-            pts_run = p.add_run('  (' + str(pts) + ' pts)')
-            pts_run.font.size = Pt(9)
-            pts_run.font.name = body_font
-            pts_run.font.color.rgb = RGBColor(128, 128, 128)
-
-            # Response lines
-            p = doc.add_paragraph()
-            run = p.add_run('Response: ')
-            run.bold = True
-            run.font.size = Pt(body_size)
-            run.font.name = body_font
-            fill_run = p.add_run('_' * 55)
-            fill_run.font.name = body_font
-            line_p = doc.add_paragraph()
-            line_run = line_p.add_run('_' * 65)
-            line_run.font.name = body_font
-            doc.add_paragraph()  # spacing between questions
-
-    # Summary Section
+    # Summary Section — structured table
     if summary_prompt:
         sh = doc.add_heading('SUMMARY', level=2)
         _apply_style_to_heading(sh, 2, style)
-        sp = doc.add_paragraph()
-        _parse_markdown_runs(sp, summary_prompt, body_font, body_size)
-        for _ in range(5):
-            line_p = doc.add_paragraph()
-            line_run = line_p.add_run('_' * 70)
-            line_run.font.name = body_font
+        _add_graider_table(
+            doc, summary_prompt, "GRAIDER:SUMMARY:main",
+            None, style, 4320, body_font, body_size  # 3 inch response height
+        )
+
+    # Hidden detection marker at end of document
+    _add_graider_marker(doc)
 
     doc.save(filepath)
 
@@ -210,6 +284,8 @@ def generate_worksheet(title, worksheet_type, vocab_terms=None, questions=None,
         summary_prompt, skp, total_points, subject
     )
     config["worksheetDownloadUrl"] = download_url
+    config["tableStructured"] = True
+    config["tableVersion"] = "v1"
     config["importedDoc"] = {
         "text": doc_text,
         "html": "",

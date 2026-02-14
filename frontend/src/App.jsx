@@ -6130,8 +6130,6 @@ ${signature}`;
                 AI-Powered Teacher's Assistant
                 <br />
                 Made for Educators by Educators with ❤️
-                <br />
-                Powered by ChatGPT 4o
               </div>
             </div>
           )}

@@ -16,6 +16,7 @@ PUBLIC_EXACT = [
     '/api/status',              # Grading status polling (used before auth check completes)
     '/api/stripe/webhook',      # Stripe webhook (verified via Stripe-Signature header)
     '/api/auth/notify-signup',  # Public signup notification (no JWT needed)
+    '/api/auth/approve-user',   # One-click approval from admin email (HMAC-protected)
 ]
 
 

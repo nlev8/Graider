@@ -1164,6 +1164,9 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Prepare grade data
                 if file_data["type"] == "text":
                     grade_data = {"type": "text", "content": file_data["content"]}
+                    # Pass through Graider table data for structured extraction
+                    if file_data.get("graider_tables"):
+                        grade_data["graider_tables"] = file_data["graider_tables"]
                 else:
                     grade_data = file_data
 

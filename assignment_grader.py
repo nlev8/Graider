@@ -2552,6 +2552,183 @@ def read_docx_file(filepath: str) -> str:
         return None
 
 
+def read_docx_file_structured(filepath: str) -> dict:
+    """Read a .docx file and detect Graider structured tables.
+
+    Iterates through doc.element.body looking for 2-row tables whose first cell
+    contains a [GRAIDER:TYPE:ID] tag. Also checks for the GRAIDER_TABLE_V1 marker.
+
+    Returns:
+        {
+            "is_graider_table": bool,
+            "plain_text": str (full document text for fallback),
+            "tables": [
+                {"tag_type": "VOCAB"|"QUESTION"|"SUMMARY",
+                 "tag_id": str, "header_text": str, "response": str},
+                ...
+            ]
+        }
+    """
+    try:
+        from docx import Document
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
+    except ImportError:
+        return {"is_graider_table": False, "plain_text": None, "tables": []}
+
+    try:
+        doc = Document(filepath)
+        tables_found = []
+        full_text = []
+        has_marker = False
+        tag_pattern = re.compile(r'\[GRAIDER:(VOCAB|QUESTION|SUMMARY):([^\]]+)\]')
+
+        for element in doc.element.body:
+            if element.tag.endswith('p'):
+                para = Paragraph(element, doc)
+                text = para.text.strip()
+                if text:
+                    full_text.append(text)
+                    if text == "GRAIDER_TABLE_V1":
+                        has_marker = True
+
+            elif element.tag.endswith('tbl'):
+                table = Table(element, doc)
+                rows = table.rows
+                if len(rows) == 2:
+                    header_cell_text = rows[0].cells[0].text
+                    match = tag_pattern.search(header_cell_text)
+                    if match:
+                        tag_type = match.group(1)
+                        tag_id = match.group(2)
+                        # Strip the hidden tag from visible text
+                        visible_header = tag_pattern.sub('', header_cell_text).strip()
+                        response = rows[1].cells[0].text.strip()
+                        tables_found.append({
+                            "tag_type": tag_type,
+                            "tag_id": tag_id,
+                            "header_text": visible_header,
+                            "response": response
+                        })
+                        # Also add to plain text for content reference
+                        full_text.append(visible_header)
+                        if response:
+                            full_text.append(response)
+                        continue
+
+                # Non-Graider table — add as plain text
+                for row in rows:
+                    row_text = []
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            row_text.append(cell.text.strip())
+                    if row_text:
+                        full_text.append(' | '.join(row_text))
+
+        is_graider = has_marker or len(tables_found) > 0
+        plain_text = '\n'.join(full_text)
+
+        if is_graider:
+            print(f"  📊 Detected Graider table format: {len(tables_found)} structured tables")
+
+        return {
+            "is_graider_table": is_graider,
+            "plain_text": plain_text,
+            "tables": tables_found
+        }
+    except Exception as e:
+        print(f"  ⚠️  Error in structured read: {e}")
+        return {"is_graider_table": False, "plain_text": None, "tables": []}
+
+
+def extract_from_tables(table_data, exclude_markers=None):
+    """Extract student responses from Graider structured table data.
+
+    Maps table entries to the same dict format as extract_student_responses().
+
+    Args:
+        table_data: List of dicts from read_docx_file_structured()["tables"]
+        exclude_markers: List of section names to skip
+
+    Returns:
+        Same shape as extract_student_responses():
+        {
+            "extracted_responses": [{"question": ..., "answer": ..., "type": ...}],
+            "blank_questions": [...],
+            "total_questions": int,
+            "answered_questions": int,
+            "extraction_summary": str
+        }
+    """
+    extracted = []
+    blank_questions = []
+    excluded_sections = []
+    exclude_lower = [em.lower().strip() for em in exclude_markers] if exclude_markers else []
+
+    type_map = {
+        "VOCAB": "vocab_term",
+        "QUESTION": "numbered_question",
+        "SUMMARY": "summary"
+    }
+
+    for entry in table_data:
+        tag_type = entry.get("tag_type", "")
+        tag_id = entry.get("tag_id", "")
+        header = entry.get("header_text", "")
+        response = entry.get("response", "")
+
+        # Check exclusion
+        header_lower = header.lower()
+        is_excluded = any(em in header_lower for em in exclude_lower)
+        if is_excluded:
+            excluded_sections.append(header)
+            continue
+
+        # Build question label
+        if tag_type == "VOCAB":
+            question = tag_id  # The term name
+        elif tag_type == "QUESTION":
+            question = header  # e.g. "1) What is photosynthesis?"
+        elif tag_type == "SUMMARY":
+            question = "Summary"
+        else:
+            question = header
+
+        # Check if blank
+        response_cleaned = re.sub(r'[_\s]', '', response)
+        if len(response_cleaned) < 2:
+            blank_questions.append(question)
+            continue
+
+        extracted.append({
+            "question": question,
+            "answer": response,
+            "type": type_map.get(tag_type, "numbered_question"),
+            "section": tag_type,
+            "tag_id": tag_id
+        })
+
+    total_q = len(extracted) + len(blank_questions)
+    answered_q = len(extracted)
+    summary = "Table extraction: Found " + str(answered_q) + " responses out of " + str(total_q) + " sections."
+    if blank_questions:
+        summary += " " + str(len(blank_questions)) + " left blank."
+    if excluded_sections:
+        summary += " Excluded " + str(len(excluded_sections)) + " section(s)."
+
+    print(f"  📊 Table extraction: {answered_q}/{total_q} answered")
+
+    return {
+        "extracted_responses": extracted,
+        "blank_questions": blank_questions,
+        "total_questions": max(total_q, 1),
+        "answered_questions": answered_q,
+        "extraction_summary": summary,
+        "excluded_sections": excluded_sections,
+        "missing_sections": blank_questions
+    }
+
+
 def read_image_file(filepath: str) -> dict:
     """
     Read an image file and return it as base64 for GPT-4o vision.
@@ -2607,6 +2784,19 @@ def read_assignment_file(filepath: str) -> dict:
     
     # Text-based files
     if extension == '.docx':
+        # Try structured table reading first (Graider-generated worksheets)
+        structured = read_docx_file_structured(filepath)
+        if structured.get("is_graider_table") and structured.get("tables"):
+            content = structured.get("plain_text", "")
+            if "GRAIDER_ANSWER_KEY_START" in content:
+                content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+            return {
+                "type": "text",
+                "content": content,
+                "graider_tables": structured["tables"]
+            }
+
+        # Fallback to standard text reading
         content = read_docx_file(filepath)
         if content:
             # Strip embedded answer key from generated worksheets (handles -- and --- variants)
@@ -3155,21 +3345,28 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         assignment_data = {**assignment_data, "content": content}
         print(f"  🧹 Stripped embedded answer key from document")
 
-    if assignment_data.get("type") == "text" and content:
+    # Priority: Graider structured tables > regex extraction
+    extraction_result = None
+    graider_tables = assignment_data.get("graider_tables")
+    if graider_tables:
+        print(f"  📊 Parallel detection: Using Graider table extraction ({len(graider_tables)} tables)")
+        extraction_result = extract_from_tables(graider_tables, exclude_markers)
+    elif assignment_data.get("type") == "text" and content:
         extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
-        if extraction_result.get("extracted_responses"):
-            # Filter out FITB and vocab items — only send written responses to detection
-            # FITB answers (names, dates, facts) and vocab definitions naturally match sources
-            skip_types = {'fitb_full', 'vocab_term'}
-            written_responses = [
-                r for r in extraction_result["extracted_responses"]
-                if 'fill_in_blank' not in r.get('type', '') and r.get('type') not in skip_types
-            ]
-            # If no written responses (pure FITB), extracted_text stays empty → detection skipped
-            extracted_text = "\n".join([
-                f"Q: {r.get('question', 'Unknown')}\nA: {r.get('answer', '')}"
-                for r in written_responses
-            ])
+
+    if extraction_result and extraction_result.get("extracted_responses"):
+        # Filter out FITB and vocab items — only send written responses to detection
+        # FITB answers (names, dates, facts) and vocab definitions naturally match sources
+        skip_types = {'fitb_full', 'vocab_term'}
+        written_responses = [
+            r for r in extraction_result["extracted_responses"]
+            if 'fill_in_blank' not in r.get('type', '') and r.get('type') not in skip_types
+        ]
+        # If no written responses (pure FITB), extracted_text stays empty → detection skipped
+        extracted_text = "\n".join([
+            f"Q: {r.get('question', 'Unknown')}\nA: {r.get('answer', '')}"
+            for r in written_responses
+        ])
 
     # If no extracted text, can't do parallel detection
     if not extracted_text:
@@ -3751,26 +3948,34 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     """
     content = assignment_data.get("content", "")
 
-    # === EXTRACTION (reuse existing logic) ===
+    # === EXTRACTION ===
+    # Priority: Graider structured tables > regex extraction
     extraction_result = None
-    if assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
-        if extraction_result:
-            answered = extraction_result.get("answered_questions", 0)
-            total = extraction_result.get("total_questions", 0)
-            print(f"  📋 Multi-pass: Extracted {answered}/{total} responses")
 
-            if answered == 0:
-                return {
-                    "score": 0, "letter_grade": "INCOMPLETE",
-                    "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
-                    "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
-                    "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
-                    "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
-                    "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
-                    "skills_demonstrated": {"strengths": [], "developing": []},
-                    "excellent_answers": [], "needs_improvement": []
-                }
+    # Check for Graider table data (structured worksheets)
+    graider_tables = assignment_data.get("graider_tables")
+    if graider_tables:
+        print(f"  📊 Multi-pass: Using Graider table extraction ({len(graider_tables)} tables)")
+        extraction_result = extract_from_tables(graider_tables, exclude_markers)
+    elif assignment_data.get("type") == "text" and content:
+        extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+
+    if extraction_result:
+        answered = extraction_result.get("answered_questions", 0)
+        total = extraction_result.get("total_questions", 0)
+        print(f"  📋 Multi-pass: Extracted {answered}/{total} responses")
+
+        if answered == 0:
+            return {
+                "score": 0, "letter_grade": "INCOMPLETE",
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
+                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+                "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "excellent_answers": [], "needs_improvement": []
+            }
 
     if not extraction_result or not extraction_result.get("extracted_responses"):
         # Fall back to single-pass for edge cases
