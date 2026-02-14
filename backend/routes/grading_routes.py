@@ -482,6 +482,7 @@ def export_focus_csv():
     results = data.get('results', [])
     assignment = data.get('assignment', 'Assignment')
     period = data.get('period', 'all')
+    include_letter_grade = data.get('include_letter_grade', False)
 
     if not results:
         return jsonify({"error": "No results to export"})
@@ -690,15 +691,21 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
             # Continue without matching
 
     # Generate CSV
-    csv_lines = ['Student_ID,Score']
+    header = 'Student_ID,Score,Letter_Grade' if include_letter_grade else 'Student_ID,Score'
+    csv_lines = [header]
     matched_count = 0
     for s in students_to_match:
+        score = s['score']
+        if include_letter_grade:
+            lg = 'A' if score >= 90 else 'B' if score >= 80 else 'C' if score >= 70 else 'D' if score >= 60 else 'F'
         if s['id'] and s['id'] not in ('UNMATCHED', 'UNKNOWN'):
-            csv_lines.append(f"{s['id']},{s['score']}")
+            row = f"{s['id']},{score},{lg}" if include_letter_grade else f"{s['id']},{score}"
+            csv_lines.append(row)
             matched_count += 1
         else:
             # Include with name as fallback
-            csv_lines.append(f"# {s['name']},{s['score']}")
+            row = f"# {s['name']},{score},{lg}" if include_letter_grade else f"# {s['name']},{score}"
+            csv_lines.append(row)
 
     csv_content = '\n'.join(csv_lines)
 
@@ -720,15 +727,16 @@ def export_focus_batch():
     """
     Export grades as per-period CSV files for Focus SIS bulk import.
 
-    Format per file: "Student ID,Score" (space in header per Focus requirement).
+    Format per file: "Student_ID,Score"
     Files written to ~/.graider_exports/focus/
 
-    Input JSON: { results?, assignment? }
+    Input JSON: { results?, assignment?, include_letter_grade? }
     Defaults to grading_state["results"] if results not provided.
     """
     data = request.json or {}
     results = data.get('results') or (grading_state.get("results", []) if grading_state else [])
     assignment = data.get('assignment', 'Assignment')
+    include_letter_grade = data.get('include_letter_grade', False)
 
     if not results:
         return jsonify({"error": "No results to export"}), 400
@@ -753,18 +761,23 @@ def export_focus_batch():
 
         matched = 0
         unmatched = 0
-        csv_lines = ['Student ID,Score']  # Note: space in "Student ID" per Focus
+        header = 'Student_ID,Score,Letter_Grade' if include_letter_grade else 'Student_ID,Score'
+        csv_lines = [header]
 
         for r in period_items:
             student_id = r.get('student_id', '')
             score = r.get('score', 0)
+            if include_letter_grade:
+                lg = 'A' if score >= 90 else 'B' if score >= 80 else 'C' if score >= 70 else 'D' if score >= 60 else 'F'
             if student_id:
-                csv_lines.append(f"{student_id},{score}")
+                row = f"{student_id},{score},{lg}" if include_letter_grade else f"{student_id},{score}"
+                csv_lines.append(row)
                 matched += 1
             else:
                 # Comment out unmatched students
                 name = r.get('student_name', 'Unknown')
-                csv_lines.append(f"# {name},{score}")
+                row = f"# {name},{score},{lg}" if include_letter_grade else f"# {name},{score}"
+                csv_lines.append(row)
                 unmatched += 1
 
         with open(filepath, 'w', encoding='utf-8') as f:

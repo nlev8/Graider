@@ -27,6 +27,7 @@ import { supabase } from "./services/supabase";
 import LoginScreen from "./components/LoginScreen";
 import AssistantChat from "./components/AssistantChat";
 import OnboardingWizard from "./components/OnboardingWizard";
+import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
 
 // Tab configuration
 const TABS = [
@@ -792,6 +793,9 @@ function App() {
   // Focus Export state
   const [focusExportModal, setFocusExportModal] = useState(false);
   const [focusExportLoading, setFocusExportLoading] = useState(false);
+  const [focusIncludeLetterGrade, setFocusIncludeLetterGrade] = useState(false);
+  // Approval gate — teacher must approve grades before export
+  const [gradesApproved, setGradesApproved] = useState(false);
   // Parent contacts state
   const [parentContacts, setParentContacts] = useState(null);
   const [uploadingParentContacts, setUploadingParentContacts] = useState(false);
@@ -2023,6 +2027,11 @@ function App() {
       }
     }
   }, [status.results.length]); // Only run when results count changes
+
+  // Reset approval gate when new results come in
+  useEffect(() => {
+    setGradesApproved(false);
+  }, [status.results.length]);
 
   // Sync editedResults with status.results (preserve user edits)
   useEffect(() => {
@@ -4284,7 +4293,10 @@ ${signature}`;
           setRubric={setRubric}
           apiKeys={apiKeys}
           setApiKeys={setApiKeys}
-          onComplete={() => setShowOnboardingWizard(false)}
+          onComplete={(navigateTo) => {
+            setShowOnboardingWizard(false);
+            if (navigateTo === "builder") setActiveTab("builder");
+          }}
           addToast={addToast}
         />
       )}
@@ -7862,6 +7874,23 @@ ${signature}`;
                           ` of ${status.results.length}`}
                         )
                       </h2>
+                      {/* Policy 428 Compliance Banner (FL only) */}
+                      {config.state === "FL" && status.results.length > 0 && (
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: "8px",
+                          padding: "8px 14px", marginBottom: "12px",
+                          background: "rgba(99,102,241,0.08)",
+                          border: "1px solid rgba(99,102,241,0.15)",
+                          borderRadius: "8px", fontSize: "0.8rem",
+                          color: "var(--text-secondary)",
+                        }}>
+                          <Icon name="Shield" size={15} style={{ color: "#818cf8", flexShrink: 0 }} />
+                          <span>
+                            <strong style={{ color: "var(--text-primary)" }}>Policy 428:</strong>{" "}
+                            AI-suggested grades — teacher review and approval required before export
+                          </span>
+                        </div>
+                      )}
                       {/* Assignment Stats - shows when assignment filter is active */}
                       {resultsAssignmentFilter && (() => {
                         const assignmentResults = status.results.filter(r => (r.assignment || r.filename) === resultsAssignmentFilter);
@@ -8137,14 +8166,38 @@ ${signature}`;
                             <Icon name="Trash2" size={18} />
                             {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter) ? "Clear Filtered" : "Clear All"}
                           </button>
+                          {/* Approval Gate Checkbox */}
+                          {status.results.length > 0 && (
+                            <label
+                              style={{
+                                display: "flex", alignItems: "center", gap: "8px",
+                                padding: "6px 14px", borderRadius: "8px", cursor: "pointer",
+                                fontSize: "0.8rem", fontWeight: 500,
+                                border: gradesApproved ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(245,158,11,0.3)",
+                                background: gradesApproved ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.08)",
+                                color: gradesApproved ? "#4ade80" : "var(--text-secondary)",
+                                transition: "all 0.2s",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={gradesApproved}
+                                onChange={(e) => setGradesApproved(e.target.checked)}
+                                style={{ accentColor: "#22c55e" }}
+                              />
+                              I have reviewed and approve these grades for export
+                            </label>
+                          )}
                           <button
                             onClick={() => setFocusExportModal(true)}
                             className="btn btn-primary"
+                            disabled={!gradesApproved}
                             style={{
                               background:
                                 "linear-gradient(135deg, #8b5cf6, #6366f1)",
+                              opacity: gradesApproved ? 1 : 0.5,
                             }}
-                            title="Export grades for Focus SIS import"
+                            title={gradesApproved ? "Export grades for Focus SIS import" : "Approve grades first"}
                           >
                             <Icon name="Download" size={18} />
                             Focus Export
@@ -8178,8 +8231,9 @@ ${signature}`;
                               }
                             }}
                             className="btn btn-secondary"
-                            disabled={batchExportLoading || status.results.length === 0}
-                            title="Export per-period CSVs + comments to ~/.graider_exports/focus/"
+                            disabled={!gradesApproved || batchExportLoading || status.results.length === 0}
+                            style={{ opacity: gradesApproved ? 1 : 0.5 }}
+                            title={gradesApproved ? "Export per-period CSVs + comments to ~/.graider_exports/focus/" : "Approve grades first"}
                           >
                             <Icon name="FolderDown" size={18} />
                             {batchExportLoading ? "Exporting..." : "Batch Focus"}
@@ -8214,8 +8268,9 @@ ${signature}`;
                               }
                             }}
                             className="btn btn-secondary"
-                            disabled={outlookExportLoading || status.results.length === 0}
-                            title="Generate parent emails from contacts"
+                            disabled={!gradesApproved || outlookExportLoading || status.results.length === 0}
+                            style={{ opacity: gradesApproved ? 1 : 0.5 }}
+                            title={gradesApproved ? "Generate parent emails from contacts" : "Approve grades first"}
                           >
                             <Icon name="Mail" size={18} />
                             {outlookExportLoading ? "Generating..." : "Parent Emails"}
@@ -8248,8 +8303,9 @@ ${signature}`;
                               }
                             }}
                             className="btn btn-primary"
-                            disabled={outlookSendStatus.status === "running" || status.results.length === 0 || !vportalConfigured}
-                            title={vportalConfigured ? "Send parent emails from your Outlook account" : "Configure VPortal credentials in Settings first"}
+                            disabled={!gradesApproved || outlookSendStatus.status === "running" || status.results.length === 0 || !vportalConfigured}
+                            style={{ opacity: gradesApproved ? 1 : 0.5 }}
+                            title={!gradesApproved ? "Approve grades first" : vportalConfigured ? "Send parent emails from your Outlook account" : "Configure VPortal credentials in Settings first"}
                           >
                             <Icon name="Send" size={18} />
                             {outlookSendStatus.status === "running"
@@ -10096,6 +10152,36 @@ ${signature}`;
                           <option value="standard">Standard — Balanced grading</option>
                           <option value="strict">Strict — Penalize brevity and weak answers</option>
                         </select>
+                      </div>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div style={{ marginBottom: "20px" }}>
+                      <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Icon name="Sparkles" size={20} style={{ color: "#8b5cf6" }} />
+                        Quick Presets
+                      </h3>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                        {Object.entries(RUBRIC_PRESETS)
+                          .filter(([key, preset]) => {
+                            if (key === "default") return true;
+                            return config.state === "FL" && key.startsWith("FL_");
+                          })
+                          .map(([key, preset]) => (
+                            <button
+                              key={key}
+                              onClick={() => setRubric((prev) => ({ ...prev, categories: preset.categories.map((c) => ({ ...c })) }))}
+                              className="btn btn-secondary"
+                              style={{ fontSize: "0.8rem", padding: "6px 14px", display: "flex", alignItems: "center", gap: "6px" }}
+                            >
+                              {preset.badge && (
+                                <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: "0.65rem", fontWeight: 600, background: "rgba(99,102,241,0.2)", color: "#818cf8" }}>
+                                  {preset.badge}
+                                </span>
+                              )}
+                              {preset.name}
+                            </button>
+                          ))}
                       </div>
                     </div>
 
@@ -21526,6 +21612,21 @@ ${signature}`;
               and Score columns.
             </p>
 
+            {/* Policy 428 notice for FL teachers */}
+            {config.state === "FL" && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "8px 12px", marginBottom: "15px",
+                background: "rgba(99,102,241,0.08)",
+                border: "1px solid rgba(99,102,241,0.15)",
+                borderRadius: "8px", fontSize: "0.78rem",
+                color: "var(--text-secondary)",
+              }}>
+                <Icon name="Shield" size={14} style={{ color: "#818cf8", flexShrink: 0 }} />
+                Policy 428: Grades must be teacher-approved before export
+              </div>
+            )}
+
             {/* Group results by assignment */}
             {(() => {
               const assignments = [
@@ -21594,6 +21695,20 @@ ${signature}`;
                     Students without a Student_ID will be matched by name using
                     Claude AI.
                   </div>
+                  <label style={{
+                    display: "flex", alignItems: "center", gap: "8px",
+                    padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
+                    background: "var(--glass-bg)", fontSize: "0.85rem",
+                    color: "var(--text-secondary)",
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={focusIncludeLetterGrade}
+                      onChange={(e) => setFocusIncludeLetterGrade(e.target.checked)}
+                      style={{ accentColor: "#6366f1" }}
+                    />
+                    Include Letter Grade column
+                  </label>
                   <button
                     onClick={async () => {
                       setFocusExportLoading(true);
@@ -21622,6 +21737,7 @@ ${signature}`;
                             assignment,
                             period,
                             periods: periods.map((p) => ({ name: p })),
+                            include_letter_grade: focusIncludeLetterGrade,
                           }),
                         });
 
