@@ -43,6 +43,26 @@ CONVERSATION_TTL = 7200  # 2 hours
 
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
 
+# Cache user manual text at module level to avoid re-reading on every request
+_user_manual_cache = None
+
+
+def _load_user_manual():
+    """Load User_Manual.md for platform knowledge. Cached after first read."""
+    global _user_manual_cache
+    if _user_manual_cache is not None:
+        return _user_manual_cache
+    manual_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "User_Manual.md"
+    )
+    try:
+        with open(manual_path, 'r', encoding='utf-8') as f:
+            _user_manual_cache = f.read()
+    except Exception:
+        _user_manual_cache = ""
+    return _user_manual_cache
+
 
 def _extract_text_from_pdf(file_bytes):
     """Extract text from PDF bytes using PyMuPDF."""
@@ -178,7 +198,7 @@ def _build_system_prompt():
             parts.append(f"Email Signature:\n{email_signature}")
         teacher_context = "\n\nTeacher Information (use this for email signatures, letters, and communications):\n" + "\n".join(parts)
 
-    return f"""You are a helpful teaching assistant built into Graider, an AI-powered grading tool. You help teachers understand student performance, analyze grades, and manage their gradebook.{teacher_context}
+    prompt = f"""You are a helpful teaching assistant built into Graider, an AI-powered grading tool. You help teachers understand student performance, analyze grades, and manage their gradebook.{teacher_context}
 
 Key guidelines:
 - Be concise and teacher-friendly. Use markdown formatting (bold, lists, tables) when helpful.
@@ -220,6 +240,13 @@ IEP/504 AWARENESS: recommend_next_lesson also returns accommodation_analysis sho
 DOCUMENT GENERATION: When generating any document or worksheet, first call list_document_styles to check if a matching saved style exists, and if so, pass the style_name parameter. Use generate_document for non-gradeable documents (study guides, reference sheets, parent letters, lesson outlines). Use generate_worksheet for gradeable assignments. Both support rich formatting: **bold**, *italic*, and ***bold+italic*** in text content. When the teacher says they like a document's formatting, use save_document_style to save it for future reuse.
 
 SAVING DOCUMENTS: After generating a document with generate_document, always ask the teacher: "Would you like me to save this to your assignments in Grading Setup?" If they say yes, call generate_document again with the same content and save_to_builder=true. Worksheets created with generate_worksheet are always saved to Grading Setup automatically."""
+
+    # Append platform documentation for how-to and feature questions
+    manual = _load_user_manual()
+    if manual:
+        prompt += "\n\n## PLATFORM DOCUMENTATION\n\nWhen users ask about Graider features, how-to questions, settings, troubleshooting, or any platform-related question, use the documentation below to provide accurate, specific answers. Reference exact menu paths and steps.\n\n" + manual
+
+    return prompt
 
 
 def _audit_log(action, details=""):

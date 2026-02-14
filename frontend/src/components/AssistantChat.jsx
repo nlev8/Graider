@@ -21,6 +21,9 @@ const MORE_PROMPTS = [
   "What are students' biggest strengths?",
   "Create a Focus assignment called Quiz 3 worth 100 points",
   "Create a Cornell Notes worksheet about the American Revolution",
+  "How do I set up my rubric?",
+  "What export options are available?",
+  "How does the grading pipeline work?",
 ]
 
 const ACCEPTED_FILE_TYPES = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.docx'

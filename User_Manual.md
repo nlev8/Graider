@@ -61,6 +61,13 @@ Access the live version at **[graider.live](https://graider.live)**
    - Grade Level
    - Subject
 
+4. **Rubric Selection** (Onboarding Wizard):
+   - After setting your state, grade level, and subject, the onboarding wizard prompts you to choose a grading rubric
+   - **Florida teachers**: If your state is set to Florida, you'll see a B.E.S.T. rubric preset matched to your subject (e.g., ELA, Math, Science, Social Studies) with pre-configured category weights
+   - **All other teachers**: You'll see the Standard rubric preset
+   - Options: **Use B.E.S.T. Rubric** / **Use Standard Rubric** / **Customize Later**
+   - The final onboarding step shows a **"Create Your First Assignment"** button to get started immediately
+
 ---
 
 ## Grade Tab - Grading Assignments
@@ -305,9 +312,26 @@ When a student has 3+ graded assignments, results show a baseline deviation indi
 
 Click to see details about why the submission was flagged.
 
+### Policy 428 Compliance (Florida)
+
+Florida teachers see additional compliance features related to **Policy 428** (AI-assisted grading requires teacher review before grades are recorded):
+
+- **Results tab banner**: A notice reminds FL teachers that AI-assisted grades must be reviewed before submission to the gradebook
+- **Focus Export modal**: A Policy 428 compliance notice appears when exporting grades to Focus, reinforcing that teacher review is required
+- **What Policy 428 means**: Any grade produced or assisted by AI must be reviewed and approved by the teacher before it becomes part of the student's official record
+
 ---
 
 ## Exports
+
+### Approval Gate
+
+Before any export, you must confirm that you have reviewed the grades:
+
+1. An **"I have reviewed and approve these grades"** checkbox appears above all export buttons
+2. **All export buttons are disabled** until the checkbox is checked
+3. The checkbox **resets automatically** when new grading results arrive, requiring fresh approval
+4. This ensures compliance with best practices and Florida Policy 428 for AI-assisted grading
 
 ### Automatic Exports
 
@@ -320,6 +344,7 @@ Grade import files for Focus (student information system):
 - **Format:** Student ID, Score, Comment
 - **Separated by assignment** - One CSV per assignment type
 - **Location:** `{Output Folder}/{Assignment}_{timestamp}.csv`
+- **Letter Grade column**: Enable the **"Include Letter Grade column"** checkbox in the Focus Export modal to add a `Letter_Grade` column to the CSV output
 
 **Example:**
 ```csv
@@ -1155,6 +1180,23 @@ Configure scoring weights:
 
 Weights must total 100%.
 
+#### Quick Presets (B.E.S.T. Rubric Presets)
+
+A **Quick Presets** row appears in Settings > Grading for Florida teachers. These presets configure category weights aligned with Florida's B.E.S.T. (Benchmarks for Excellent Student Thinking) standards:
+
+| Preset | Content | Completeness | Writing | Effort |
+|--------|---------|-------------|---------|--------|
+| **ELA** | 35 | 20 | 30 | 15 |
+| **Math** | 45 | 25 | 15 | 15 |
+| **Science** | 40 | 25 | 20 | 15 |
+| **Social Studies** | 40 | 20 | 25 | 15 |
+| **Standard** | 40 | 25 | 20 | 15 |
+
+- **Florida teachers** (state set to FL): See all 4 B.E.S.T. presets plus Standard
+- **Non-FL teachers**: See the Standard preset only
+- Click any preset to instantly apply its weights
+- You can further customize weights after selecting a preset
+
 ### Student Roster
 
 Upload and manage student rosters:
@@ -1456,6 +1498,11 @@ Each student's file contains:
 
 ### New Features
 
+- **B.E.S.T. Rubric Presets**: Quick Presets row in Settings > Grading for Florida teachers — one-click ELA, Math, Science, and Social Studies rubric weights aligned with Florida B.E.S.T. standards
+- **Onboarding Rubric Step**: New step in the onboarding wizard that recommends a B.E.S.T. preset matched to the teacher's subject (FL) or Standard rubric (all other states)
+- **Policy 428 Compliance**: Banner in Results tab and notice in Focus Export modal reminding FL teachers that AI-assisted grades require review before recording
+- **Approval Gate**: "I have reviewed and approve" checkbox required before any grade export — resets when new results arrive
+- **Letter Grade Export**: "Include Letter Grade column" option in Focus Export modal adds a `Letter_Grade` column to CSV output
 - **Ensemble Grading**: Run assignments through multiple AI models (GPT-4, Claude, Gemini) and use median score for more reliable grading
 - **Multi-Provider AI Support**: Choose from OpenAI (GPT-4o, GPT-4o-mini), Anthropic (Claude 3.5 Sonnet, Haiku), and Google (Gemini 2.0 Flash, Pro)
 - **Assessment Generator**: Create standards-aligned assessments with multiple question types (MC, Short Answer, Extended Response, True/False, Matching)
@@ -1509,4 +1556,4 @@ Each student's file contains:
 - Assistant tab with streaming chat, tool indicators, and suggested prompts
 - VPortal credential management in Settings > Tools
 
-*Last updated: February 7, 2026*
+*Last updated: February 14, 2026*
