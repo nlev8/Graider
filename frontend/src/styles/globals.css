@@ -76,6 +76,11 @@
   box-sizing: border-box;
 }
 
+button {
+  color: inherit;
+  font-family: inherit;
+}
+
 html, body {
   overflow-x: hidden;
 }

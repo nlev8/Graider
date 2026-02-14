@@ -34,6 +34,20 @@ async function fetchApi(endpoint, options = {}) {
     })
 
     if (response.status === 401) {
+      // Try refreshing the session once before giving up
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+      if (!refreshError && refreshData?.session) {
+        const retryResponse = await fetch(API_BASE + endpoint, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + refreshData.session.access_token,
+            ...options.headers,
+          },
+        })
+        if (retryResponse.ok) return await retryResponse.json()
+      }
+      // Refresh failed or retry still 401 — truly expired
       window.dispatchEvent(new Event('auth-expired'))
       throw new Error('Session expired. Please log in again.')
     }

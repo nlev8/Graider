@@ -4217,7 +4217,7 @@ ${signature}`;
   }
 
   if (!user) {
-    return <LoginScreen onLogin={setUser} />;
+    return <LoginScreen onLogin={setUser} theme={theme} toggleTheme={toggleTheme} />;
   }
 
   if (showPasswordReset) {
@@ -4298,6 +4298,8 @@ ${signature}`;
             if (navigateTo === "builder") setActiveTab("builder");
           }}
           addToast={addToast}
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
       )}
 
@@ -4774,74 +4776,69 @@ ${signature}`;
                             overflowY: "auto",
                           }}
                         >
-                          {r.is_handwritten ? (
-                            <div style={{ textAlign: "center" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  gap: "8px",
-                                  marginBottom: "15px",
-                                  color: "#10b981",
-                                  fontWeight: 500,
-                                }}
-                              >
-                                <Icon name="PenTool" size={18} />
-                                Handwritten Assignment
-                              </div>
-                              {r.original_image_path ? (
-                                <div>
-                                  <p
+                          {(() => {
+                            const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+                            const fname = (r.filename || '').toLowerCase();
+                            const isImage = r.is_handwritten || imageExts.some(ext => fname.endsWith(ext)) || r.student_content === '[Image file]';
+                            if (isImage) {
+                              const imagePath = r.filepath || r.original_image_path;
+                              return (
+                                <div style={{ textAlign: "center" }}>
+                                  <div
                                     style={{
-                                      fontSize: "0.85rem",
-                                      color: "var(--text-muted)",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: "8px",
                                       marginBottom: "15px",
+                                      color: "#10b981",
+                                      fontWeight: 500,
                                     }}
                                   >
-                                    Original image saved to output folder
-                                  </p>
-                                  <button
-                                    onClick={() =>
-                                      api.openFolder(config.output_folder)
-                                    }
-                                    className="btn btn-secondary"
-                                    style={{ margin: "0 auto" }}
-                                  >
-                                    <Icon name="FolderOpen" size={16} />
-                                    Open Output Folder
-                                  </button>
+                                    <Icon name={r.is_handwritten ? "PenTool" : "Image"} size={18} />
+                                    {r.is_handwritten ? "Handwritten Assignment" : "Image Submission"}
+                                  </div>
+                                  {imagePath ? (
+                                    <img
+                                      src={"/api/serve-file?path=" + encodeURIComponent(imagePath)}
+                                      alt={r.filename || "Student submission"}
+                                      style={{
+                                        maxWidth: "100%",
+                                        borderRadius: "10px",
+                                        boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
+                                      }}
+                                    />
+                                  ) : (
+                                    <p
+                                      style={{
+                                        fontSize: "0.85rem",
+                                        color: "var(--text-muted)",
+                                      }}
+                                    >
+                                      {r.is_handwritten
+                                        ? "Handwritten responses were extracted by AI vision. Check the \"Responses\" tab to see extracted answers."
+                                        : "[No image path available - click Open Original to view]"}
+                                    </p>
+                                  )}
                                 </div>
-                              ) : (
-                                <p
-                                  style={{
-                                    fontSize: "0.85rem",
-                                    color: "var(--text-muted)",
-                                  }}
-                                >
-                                  Handwritten responses were extracted by AI
-                                  vision.
-                                  <br />
-                                  Check the "Responses" tab to see extracted
-                                  answers.
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <div
-                              style={{
-                                whiteSpace: "pre-wrap",
-                                fontSize: "22px",
-                                lineHeight: 1.7,
-                                color: "var(--text-secondary)",
-                                fontFamily: "monospace",
-                              }}
-                            >
-                              {r.full_content ||
-                                r.student_content ||
-                                "[No content - click Open Original to view]"}
-                            </div>
-                          )}
+                              );
+                            }
+                            return (
+                              <div
+                                style={{
+                                  whiteSpace: "pre-wrap",
+                                  fontSize: "22px",
+                                  lineHeight: 1.7,
+                                  color: "var(--text-secondary)",
+                                  fontFamily: "monospace",
+                                }}
+                              >
+                                {r.full_content ||
+                                  r.student_content ||
+                                  "[No content - click Open Original to view]"}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -6010,27 +6007,30 @@ ${signature}`;
             />
           </button>
 
-          {/* Logo */}
-          <div
-            style={{
-              overflow: "hidden",
-              marginBottom: "-130px",
-              display: sidebarCollapsed ? "none" : "block",
-            }}
-          >
-            <img
-              src="/logo.svg"
-              alt="Graider"
+          {/* Logo - expanded */}
+          {!sidebarCollapsed && (
+            <div
               style={{
-                width: "180%",
-                display: "block",
-                marginLeft: "-40%",
-                marginTop: "-110px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                padding: "20px 16px 8px",
               }}
-            />
-          </div>
+            >
+              <img
+                src={theme === "light" ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
+                alt="Graider brain"
+                style={{ width: 40, height: 40, marginBottom: 6 }}
+              />
+              <img
+                src={theme === "light" ? "/graider-wordmark-light.png" : "/graider-wordmark-dark.png"}
+                alt="Graider"
+                style={{ height: 24 }}
+              />
+            </div>
+          )}
 
-          {/* Collapsed Logo */}
+          {/* Logo - collapsed */}
           {sidebarCollapsed && (
             <div
               style={{
@@ -6040,12 +6040,9 @@ ${signature}`;
               }}
             >
               <img
-                src="/Justbrain.svg"
+                src={theme === "light" ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
                 alt="Graider"
-                style={{
-                  width: "40px",
-                  height: "40px",
-                }}
+                style={{ width: 40, height: 40 }}
               />
             </div>
           )}

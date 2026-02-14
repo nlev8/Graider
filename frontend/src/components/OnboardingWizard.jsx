@@ -121,6 +121,8 @@ export default function OnboardingWizard({
   setApiKeys,
   onComplete,
   addToast,
+  theme,
+  toggleTheme,
 }) {
   const [step, setStep] = useState(0);
   const [wizardData, setWizardData] = useState({
@@ -403,6 +405,7 @@ export default function OnboardingWizard({
                 border: isSelected ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
                 borderRadius: 12, cursor: "pointer",
                 textAlign: "left", transition: "all 0.2s",
+                color: "var(--text-primary)", fontFamily: "inherit",
               }}
             >
               <div style={{
@@ -447,6 +450,7 @@ export default function OnboardingWizard({
           border: selected ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
           borderRadius: 12, cursor: "pointer",
           transition: "all 0.2s",
+          color: "var(--text-primary)", fontFamily: "inherit",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -513,6 +517,7 @@ export default function OnboardingWizard({
               border: rubricChoice === "custom" ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
               borderRadius: 12, cursor: "pointer",
               transition: "all 0.2s", textAlign: "left",
+              color: "var(--text-primary)", fontFamily: "inherit",
             }}
           >
             <Icon name="Settings" size={18} style={{ color: "var(--text-secondary)" }} />
@@ -743,21 +748,40 @@ export default function OnboardingWizard({
         display: "flex", flexDirection: "column",
         overflow: "hidden",
       }}>
-        {/* Progress bar */}
+        {/* Progress bar + theme toggle */}
         <div style={{
-          display: "flex", gap: 4,
+          display: "flex", alignItems: "center", gap: 8,
           padding: "20px 24px 0",
         }}>
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
+          <div style={{ display: "flex", gap: 4, flex: 1 }}>
+            {STEPS.map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  flex: 1, height: 4, borderRadius: 2,
+                  background: i <= step ? "var(--accent-primary)" : "var(--glass-border)",
+                  transition: "background 0.3s",
+                }}
+              />
+            ))}
+          </div>
+          {toggleTheme && (
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
               style={{
-                flex: 1, height: 4, borderRadius: 2,
-                background: i <= step ? "var(--accent-primary)" : "var(--glass-border)",
-                transition: "background 0.3s",
+                width: 32, height: 32, borderRadius: 8,
+                background: "var(--glass-bg)",
+                border: "1px solid var(--glass-border)",
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, transition: "all 0.2s",
+                color: "var(--text-primary)", padding: 0,
               }}
-            />
-          ))}
+            >
+              <Icon name={theme === "dark" ? "Sun" : "Moon"} size={16} />
+            </button>
+          )}
         </div>
 
         {/* Step indicator */}

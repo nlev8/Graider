@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../services/supabase'
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen({ onLogin, theme, toggleTheme }) {
+  const isDark = theme !== 'light';
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -59,28 +60,52 @@ export default function LoginScreen({ onLogin }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+      background: isDark
+        ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'
+        : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%)',
       padding: '20px',
+      position: 'relative',
     }}>
+      {/* Theme toggle */}
+      {toggleTheme && (
+        <button
+          onClick={toggleTheme}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            position: 'absolute', top: 20, right: 20,
+            width: 40, height: 40, borderRadius: 12,
+            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+            border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
+            fontSize: '1.2rem', padding: 0, fontFamily: 'inherit',
+          }}
+        >
+          {isDark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
+        </button>
+      )}
       <div style={{
         width: '100%',
         maxWidth: '400px',
-        background: 'rgba(255,255,255,0.03)',
+        background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.8)',
         backdropFilter: 'blur(20px)',
         borderRadius: '20px',
-        border: '1px solid rgba(255,255,255,0.1)',
+        border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
         padding: '40px',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <h1 style={{
-            fontSize: '2rem',
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            marginBottom: '8px',
-          }}>Graider</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.95rem' }}>
+          <img
+            src={isDark ? '/graider-brain-dark.png' : '/graider-brain-light.png'}
+            alt="Graider brain"
+            style={{ width: 64, height: 64, marginBottom: 12, display: 'block', margin: '0 auto 12px' }}
+          />
+          <img
+            src={isDark ? '/graider-wordmark-dark.png' : '/graider-wordmark-light.png'}
+            alt="Graider"
+            style={{ height: 36, marginBottom: 8, display: 'block', margin: '0 auto 8px' }}
+          />
+          <p style={{ color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', fontSize: '0.95rem' }}>
             {showForgot ? 'Reset your password' : 'Sign in to continue'}
           </p>
         </div>
@@ -108,11 +133,12 @@ export default function LoginScreen({ onLogin }) {
                   width: '100%',
                   padding: '12px',
                   borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: 'white',
+                  border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'),
+                  background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                  color: isDark ? 'white' : '#1e293b',
                   cursor: 'pointer',
                   fontSize: '0.95rem',
+                  fontFamily: 'inherit',
                 }}>
                 Back to Sign In
               </button>
@@ -120,16 +146,16 @@ export default function LoginScreen({ onLogin }) {
           ) : (
             <form onSubmit={handleForgotPassword}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>Email</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '8px' }}>Email</label>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@school.edu" required
                   style={{
                     width: '100%',
                     padding: '12px 16px',
                     borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'white',
+                    border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+                    color: isDark ? 'white' : '#1e293b',
                     fontSize: '0.95rem',
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -146,36 +172,37 @@ export default function LoginScreen({ onLogin }) {
                   cursor: loading ? 'wait' : 'pointer',
                   fontSize: '1rem',
                   fontWeight: 600,
+                  fontFamily: 'inherit',
                   opacity: loading ? 0.7 : 1,
                 }}>
                 {loading ? 'Sending...' : 'Send Reset Link'}
               </button>
               <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.9rem' }}>
                 <a href="#" onClick={(e) => { e.preventDefault(); setShowForgot(false); setError('') }}
-                  style={{ color: '#a5b4fc', textDecoration: 'none' }}>Back to Sign In</a>
+                  style={{ color: isDark ? '#a5b4fc' : '#4f46e5', textDecoration: 'none' }}>Back to Sign In</a>
               </p>
             </form>
           )
         ) : (
           <form onSubmit={handleLogin}>
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>Email</label>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '8px' }}>Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@school.edu" required
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: 'white',
+                  border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+                  background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+                  color: isDark ? 'white' : '#1e293b',
                   fontSize: '0.95rem',
                   outline: 'none',
                   boxSizing: 'border-box',
                 }} />
             </div>
             <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>Password</label>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '8px' }}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password" required
@@ -184,9 +211,9 @@ export default function LoginScreen({ onLogin }) {
                     padding: '12px 16px',
                     paddingRight: '44px',
                     borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'white',
+                    border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+                    color: isDark ? 'white' : '#1e293b',
                     fontSize: '0.95rem',
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -195,7 +222,7 @@ export default function LoginScreen({ onLogin }) {
                   style={{
                     position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                    color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem', lineHeight: 1,
+                    color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)', fontSize: '1.1rem', lineHeight: 1,
                   }}
                   aria-label="Toggle password visibility"
                 >{showPassword ? String.fromCodePoint(0x1F441) : String.fromCodePoint(0x1F441, 0x200D, 0x1F5E8)}</button>
@@ -212,14 +239,15 @@ export default function LoginScreen({ onLogin }) {
                 cursor: loading ? 'wait' : 'pointer',
                 fontSize: '1rem',
                 fontWeight: 600,
+                fontFamily: 'inherit',
                 opacity: loading ? 0.7 : 1,
               }}>
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', fontSize: '0.9rem' }}>
               <a href="#" onClick={(e) => { e.preventDefault(); setShowForgot(true); setError('') }}
-                style={{ color: '#a5b4fc', textDecoration: 'none' }}>Forgot password?</a>
-              <a href="https://graider.live" style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'none' }}>
+                style={{ color: isDark ? '#a5b4fc' : '#4f46e5', textDecoration: 'none' }}>Forgot password?</a>
+              <a href="https://graider.live" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8', textDecoration: 'none' }}>
                 Need an account?
               </a>
             </div>
