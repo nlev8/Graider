@@ -6014,18 +6014,19 @@ ${signature}`;
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                padding: "28px 16px 20px",
+                padding: "20px 16px 0",
+                overflow: "hidden",
               }}
             >
               <img
                 src={theme === "light" ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
                 alt="Graider brain"
-                style={{ width: 80, height: 80, marginBottom: -16 }}
+                style={{ width: 80, height: 80, marginBottom: -20 }}
               />
               <img
                 src={theme === "light" ? "/graider-wordmark-light.png" : "/graider-wordmark-dark.png"}
                 alt="Graider"
-                style={{ width: "85%" }}
+                style={{ width: "85%", marginBottom: -20 }}
               />
             </div>
           )}
