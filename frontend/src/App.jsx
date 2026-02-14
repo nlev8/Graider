@@ -6020,7 +6020,7 @@ ${signature}`;
               <img
                 src={theme === "light" ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
                 alt="Graider brain"
-                style={{ width: 64, height: 64, marginBottom: 4 }}
+                style={{ width: 80, height: 80, marginBottom: -4 }}
               />
               <img
                 src={theme === "light" ? "/graider-wordmark-light.png" : "/graider-wordmark-dark.png"}
