@@ -1,0 +1,24 @@
+{
+  "id": "volusia",
+  "name": "Volusia County Schools",
+  "portal_url": "https://vportal.volusia.k12.fl.us/",
+  "sso_type": "classlink",
+  "email_domain": "volusia.k12.fl.us",
+  "selectors": {
+    "portal_login_button": "button.btn-saml",
+    "username_field": "#userNameInput",
+    "password_field": "#passwordInput",
+    "login_button": "#submitButton",
+    "m365_tile": "text=Microsoft 365",
+    "outlook_tile": "a:has-text('Outlook')"
+  },
+  "login_steps": [
+    {"action": "click", "selector": "portal_login_button", "description": "Click to Login on VPortal"},
+    {"action": "fill", "selector": "username_field", "value": "email", "description": "Enter email"},
+    {"action": "fill", "selector": "password_field", "value": "password", "description": "Enter password"},
+    {"action": "click", "selector": "login_button", "description": "Click Sign in"},
+    {"action": "click", "selector": "m365_tile", "description": "Click Microsoft 365 tile"},
+    {"action": "click", "selector": "outlook_tile", "description": "Click Outlook app"}
+  ],
+  "notes": "VPortal -> ADFS login -> ClassLink dashboard -> M365 -> Outlook"
+}
