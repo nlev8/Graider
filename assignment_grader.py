@@ -1214,7 +1214,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     else:
                         extracted.append({
                             "question": item["question"],
-                            "answer": answer[:1000],
+                            "answer": answer[:10000],
                             "type": "numbered_question"
                         })
                 continue  # Skip normal processing for this marker
@@ -1233,7 +1233,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                         else:
                             extracted.append({
                                 "question": vitem["term"],
-                                "answer": vitem["answer"][:1000],
+                                "answer": vitem["answer"][:10000],
                                 "type": "vocab_term"
                             })
                     continue  # Skip normal blob processing
@@ -1344,7 +1344,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
 
                 extracted.append({
                     "question": question_label,
-                    "answer": response[:1000],
+                    "answer": response[:10000],
                     "type": "marker_response"
                 })
             else:
@@ -1422,7 +1422,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 if answer and len(answer) > 3:
                     extracted.append({
                         "question": current_question,
-                        "answer": answer[:500],
+                        "answer": answer[:10000],
                         "type": "numbered_qa"
                     })
 
@@ -1451,7 +1451,7 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
         if answer and len(answer) > 3:
             extracted.append({
                 "question": current_question,
-                "answer": answer[:500],
+                "answer": answer[:10000],
                 "type": "numbered_qa"
             })
 
@@ -1594,7 +1594,7 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
                 if not is_template:
                     extracted.append({
                         "question": start_marker,
-                        "answer": content[:800],
+                        "answer": content[:10000],
                         "type": "highlighted_section"
                     })
                 else:
@@ -1791,7 +1791,7 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
                 if not already_captured:
                     extracted.append({
                         "question": section_name,
-                        "answer": student_response[:800],  # Allow longer responses
+                        "answer": student_response[:10000],
                         "type": "written_response"
                     })
             else:
@@ -1896,7 +1896,7 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
                 break
 
         output.append(f"[{i}] {question}{points_str}")
-        output.append(f"    STUDENT ANSWER: \"{cleaned_answer[:500]}{'...' if len(cleaned_answer) > 500 else ''}\"")
+        output.append(f"    STUDENT ANSWER: \"{cleaned_answer}\"")
         output.append(f"    (Type: {q_type})")
         output.append("")
 
@@ -3375,13 +3375,9 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
                                grading_style=grading_style)
 
-    # Determine grading strategy: multi-pass for OpenAI, single-pass for Claude/Gemini
-    use_multipass = not ai_model.startswith("claude") and not ai_model.startswith("gemini")
-
-    if use_multipass:
-        print(f"  🔄 Running parallel detection + multi-pass grading...")
-    else:
-        print(f"  🔄 Running parallel detection + single-pass grading...")
+    # Multi-pass grading for all providers
+    use_multipass = True
+    print(f"  🔄 Running parallel detection + multi-pass grading ({ai_model})...")
 
     # Preprocess text for AI detection (removes template text, focuses on student writing)
     detection_text = preprocess_for_ai_detection(extracted_text)
@@ -3618,6 +3614,7 @@ def grade_per_question(question: str, student_answer: str, expected_answer: str,
                        points: int, grade_level: str, subject: str,
                        teacher_instructions: str, grading_style: str,
                        ai_model: str = 'gpt-4o',
+                       ai_provider: str = 'openai',
                        response_type: str = 'marker_response',
                        section_name: str = '', section_type: str = 'written') -> dict:
     """Grade a single question/response pair with full section-aware context.
@@ -3633,9 +3630,6 @@ def grade_per_question(question: str, student_answer: str, expected_answer: str,
 
     Returns dict with score, reasoning, quality label.
     """
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
-
     # Build section-specific grading instructions based on response type
     type_instructions = ""
     if response_type == 'vocab_term':
@@ -3730,27 +3724,82 @@ Read these FIRST, then score accordingly:
 {teacher_instructions}
 ---"""
 
+    system_msg = f"You are a grade {grade_level} {subject} teacher grading student work. IMPORTANT: The teacher has provided custom grading instructions in the prompt. You MUST follow them exactly — they override all default scoring rules and anchors. If the teacher says to be lenient, score generously. If the teacher says to accept basic answers, do not penalize simplicity."
+
+    json_schema = '''Respond with ONLY valid JSON in this exact format:
+{
+    "grade": {
+        "score": <integer 0 to ''' + str(points) + '''>,
+        "possible": ''' + str(points) + ''',
+        "reasoning": "<1-2 sentence explanation>",
+        "is_correct": <true or false>,
+        "quality": "<excellent|good|adequate|developing|insufficient>"
+    },
+    "excellent": <true if score >= ''' + str(int(points * 0.9)) + '''>,
+    "improvement_note": "<suggestion if not full credit, else empty string>"
+}'''
+
     try:
-        response = client.beta.chat.completions.parse(
-            model=ai_model,
-            messages=[
-                {"role": "system", "content": f"You are a grade {grade_level} {subject} teacher grading student work. IMPORTANT: The teacher has provided custom grading instructions in the prompt. You MUST follow them exactly — they override all default scoring rules and anchors. If the teacher says to be lenient, score generously. If the teacher says to accept basic answers, do not penalize simplicity."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format=PerQuestionResponse,
-            max_tokens=300,
-            temperature=0,
-            seed=42
-        )
-        parsed = response.choices[0].message.parsed
-        if parsed:
-            return parsed.model_dump()
+        if ai_provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            claude_model_map = {
+                "claude-haiku": "claude-3-5-haiku-latest",
+                "claude-sonnet": "claude-sonnet-4-20250514",
+                "claude-opus": "claude-opus-4-20250514",
+            }
+            actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
+
+            response = client.messages.create(
+                model=actual_model,
+                max_tokens=300,
+                system=system_msg + "\n\n" + json_schema,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            result = _try_parse_json_fallback(response.content[0].text.strip())
+            if result and "grade" in result:
+                return result
+
+        elif ai_provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=GEMINI_API_KEY)
+            gemini_model_map = {
+                "gemini-flash": "gemini-2.0-flash",
+                "gemini-pro": "gemini-2.0-pro-exp",
+            }
+            actual_model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
+            gemini_client = genai.GenerativeModel(actual_model)
+
+            full_prompt = system_msg + "\n\n" + json_schema + "\n\n---\n\n" + prompt
+            response = gemini_client.generate_content(full_prompt)
+            result = _try_parse_json_fallback(response.text.strip())
+            if result and "grade" in result:
+                return result
+
+        else:  # OpenAI — use structured output
+            from openai import OpenAI
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = client.beta.chat.completions.parse(
+                model=ai_model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format=PerQuestionResponse,
+                max_tokens=300,
+                temperature=0,
+                seed=42
+            )
+            parsed = response.choices[0].message.parsed
+            if parsed:
+                return parsed.model_dump()
+
     except Exception as e:
-        print(f"    ⚠️ Per-question grading error: {e}")
+        print(f"    ⚠️ Per-question grading error ({ai_provider}): {e}")
 
     return {
         "grade": {"score": int(points * 0.7), "possible": points,
-                  "reasoning": "Grading error - default score applied",
+                  "reasoning": f"Grading error - default score applied ({ai_provider})",
                   "is_correct": True, "quality": "adequate"},
         "excellent": False,
         "improvement_note": ""
@@ -3761,6 +3810,7 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
                       letter_grade: str, grade_level: str, subject: str,
                       teacher_instructions: str = '', ell_language: str = None,
                       ai_model: str = 'gpt-4o-mini',
+                      ai_provider: str = 'openai',
                       student_responses: list = None,
                       rubric_breakdown: dict = None,
                       blank_questions: list = None,
@@ -3778,8 +3828,6 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
         blank_questions: List of questions the student left blank/unanswered.
         missing_sections: List of required sections entirely missing from submission.
     """
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
 
     summary_lines = []
     responses_list = student_responses or []
@@ -3791,9 +3839,9 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
         student_answer = ""
         if i - 1 < len(responses_list):
             resp = responses_list[i - 1]
-            student_answer = resp.get("answer", "")[:400]
+            student_answer = resp.get("answer", "")
         line = f"Q{i}: {g.get('score', 0)}/{g.get('possible', 10)} ({g.get('quality', 'unknown')})"
-        line += f"\n  Reasoning: {g.get('reasoning', '')[:150]}"
+        line += f"\n  Reasoning: {g.get('reasoning', '')}"
         if student_answer:
             line += f"\n  Student wrote: \"{student_answer}\""
         summary_lines.append(line)
@@ -3901,28 +3949,93 @@ Also identify:
 - Strengths: 1-4 specific skills the student demonstrated (tied to rubric areas)
 - Developing: 1-3 specific skills the student needs to work on (tied to rubric areas)"""
 
+    system_msg = f"You are an encouraging grade {grade_level} {subject} teacher writing specific, actionable feedback focused on helping the student improve. Always reference actual student answers. Scale the balance of praise vs improvement guidance based on the grade, but every grade level should focus primarily on what the student needs to do to get better."
+
+    json_schema = '''Respond with ONLY valid JSON in this exact format:
+{
+    "feedback": "<3-4 paragraphs of personalized feedback>",
+    "excellent_answers": ["<specific student answers that earned high marks>"],
+    "needs_improvement": ["<specific answers that lost points, with corrections>"],
+    "skills_demonstrated": {
+        "strengths": ["<specific skill demonstrated>"],
+        "developing": ["<specific skill to work on>"]
+    }
+}'''
+
     try:
-        response = client.beta.chat.completions.parse(
-            model=ai_model,
-            messages=[
-                {"role": "system", "content": f"You are an encouraging grade {grade_level} {subject} teacher writing specific, actionable feedback focused on helping the student improve. Always reference actual student answers. Scale the balance of praise vs improvement guidance based on the grade, but every grade level should focus primarily on what the student needs to do to get better."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format=FeedbackResponse,
-            max_tokens=3500,
-            temperature=0,
-            seed=42
-        )
-        parsed = response.choices[0].message.parsed
-        if parsed:
-            result = parsed.model_dump()
-            if ell_language and result.get("feedback"):
-                translated = _translate_feedback(result["feedback"], ell_language, ai_model)
-                if translated:
-                    result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
-            return result
+        if ai_provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            claude_model_map = {
+                "claude-haiku": "claude-3-5-haiku-latest",
+                "claude-sonnet": "claude-sonnet-4-20250514",
+                "claude-opus": "claude-opus-4-20250514",
+            }
+            actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
+
+            response = client.messages.create(
+                model=actual_model,
+                max_tokens=3500,
+                system=system_msg + "\n\n" + json_schema,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            result = _try_parse_json_fallback(response.content[0].text.strip())
+            if result and "feedback" in result:
+                if "skills_demonstrated" not in result or not isinstance(result["skills_demonstrated"], dict):
+                    result["skills_demonstrated"] = {"strengths": [], "developing": []}
+                if ell_language and result.get("feedback"):
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                    if translated:
+                        result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
+                return result
+
+        elif ai_provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=GEMINI_API_KEY)
+            gemini_model_map = {
+                "gemini-flash": "gemini-2.0-flash",
+                "gemini-pro": "gemini-2.0-pro-exp",
+            }
+            actual_model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
+            gemini_client = genai.GenerativeModel(actual_model)
+
+            full_prompt = system_msg + "\n\n" + json_schema + "\n\n---\n\n" + prompt
+            response = gemini_client.generate_content(full_prompt)
+            result = _try_parse_json_fallback(response.text.strip())
+            if result and "feedback" in result:
+                if "skills_demonstrated" not in result or not isinstance(result["skills_demonstrated"], dict):
+                    result["skills_demonstrated"] = {"strengths": [], "developing": []}
+                if ell_language and result.get("feedback"):
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                    if translated:
+                        result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
+                return result
+
+        else:  # OpenAI — use structured output
+            from openai import OpenAI
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = client.beta.chat.completions.parse(
+                model=ai_model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format=FeedbackResponse,
+                max_tokens=3500,
+                temperature=0,
+                seed=42
+            )
+            parsed = response.choices[0].message.parsed
+            if parsed:
+                result = parsed.model_dump()
+                if ell_language and result.get("feedback"):
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                    if translated:
+                        result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
+                return result
+
     except Exception as e:
-        print(f"  ⚠️ Feedback generation error: {e}")
+        print(f"  ⚠️ Feedback generation error ({ai_provider}): {e}")
 
     return {
         "feedback": "Good effort on this assignment. Keep working hard!",
@@ -3946,6 +4059,14 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     Pass 3: Generate feedback (cheaper model)
     Final: Aggregate scores, apply caps, build result
     """
+    # Determine provider from model name
+    if ai_model.startswith("claude"):
+        provider = "anthropic"
+    elif ai_model.startswith("gemini"):
+        provider = "gemini"
+    else:
+        provider = "openai"
+
     content = assignment_data.get("content", "")
 
     # === EXTRACTION ===
@@ -4054,6 +4175,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 teacher_instructions=effective_instructions,  # FULL — includes rubric
                 grading_style=grading_style,
                 ai_model=grading_model,
+                ai_provider=provider,
                 response_type=resp_type,
                 section_name=meta['section_name'],
                 section_type=meta['section_type']
@@ -4180,7 +4302,13 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     blank_questions = extraction_result.get("blank_questions", [])
     missing_sections = extraction_result.get("missing_sections", [])
 
-    print(f"  🔄 Multi-pass: Generating feedback...")
+    # Use a cost-efficient model for feedback generation
+    feedback_model = ai_model
+    if provider == "openai":
+        feedback_model = "gpt-4o-mini"  # Cheaper for feedback text
+    # Claude/Gemini: use the same model (no cheaper tier that supports long output)
+
+    print(f"  🔄 Multi-pass: Generating feedback ({feedback_model})...")
     feedback_result = generate_feedback(
         question_results=question_results,
         total_score=final_score, total_possible=100,
@@ -4188,7 +4316,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         grade_level=grade_level, subject=subject,
         teacher_instructions=effective_instructions,
         ell_language=ell_language,
-        ai_model='gpt-4o-mini',
+        ai_model=feedback_model,
+        ai_provider=provider,
         student_responses=responses,
         rubric_breakdown=rubric_breakdown,
         blank_questions=blank_questions,
@@ -4228,8 +4357,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     # Add audit trail for AI Reasoning / Raw API Output
     audit_input_parts = []
     for i, resp in enumerate(responses):
-        q = resp.get("question", f"Q{i+1}")[:80]
-        a = resp.get("answer", "")[:300]
+        q = resp.get("question", f"Q{i+1}")
+        a = resp.get("answer", "")
         audit_input_parts.append(f"[{q}]\n{a}")
     audit_response_parts = []
     for i, qr in enumerate(question_results):
@@ -4237,7 +4366,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
             g = qr.get("grade", {})
             audit_response_parts.append(
                 f"Q{i+1}: {g.get('score', 0)}/{g.get('possible', 10)} "
-                f"({g.get('quality', 'N/A')}) - {g.get('reasoning', '')[:200]}"
+                f"({g.get('quality', 'N/A')}) - {g.get('reasoning', '')}"
             )
     result["_audit"] = {
         "ai_input": "\n\n".join(audit_input_parts),
