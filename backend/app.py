@@ -242,7 +242,8 @@ grading_state = {
     "log": [],
     "results": load_saved_results(),  # Load saved results on startup
     "complete": False,
-    "error": None
+    "error": None,
+    "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0}
 }
 
 
@@ -257,7 +258,8 @@ def reset_state(clear_results=False):
         "log": [],
         "results": [] if clear_results else grading_state.get("results", []),
         "complete": False,
-        "error": None
+        "error": None,
+        "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0}
     })
 
 
@@ -1404,8 +1406,17 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "marker_status": result.get("marker_status", "unverified"),
                     "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
-                    "ai_response": grade_result.get('_audit', {}).get('ai_response', '')
+                    "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
+                    "token_usage": grade_result.get('token_usage', {})
                 })
+
+                # Accumulate session cost
+                usage = grade_result.get('token_usage', {})
+                if usage:
+                    grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
+                    grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
+                    grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
+                    grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
 
         # Handle API error - stop and save
         if api_error_occurred:

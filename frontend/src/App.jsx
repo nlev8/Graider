@@ -1094,7 +1094,7 @@ function App() {
   const resizeStartX = useRef(0);
   const resizeStartW = useRef(0);
 
-  const defaultColPercents = [13, 15, 12, 7, 11, 14, 11, 17];
+  const defaultColPercents = [13, 14, 11, 6, 10, 6, 13, 10, 17];
 
   function initColWidths() {
     if (colWidths || !tableRef.current) return;
@@ -1821,7 +1821,8 @@ function App() {
         gradingToastId.current = null;
       }
       if (status.results && status.results.length > 0) {
-        addToast(`Grading complete! ${status.results.length} assignments graded.`, "success");
+        const costStr = status.session_cost?.total_cost > 0 ? ` (API cost: $${status.session_cost.total_cost.toFixed(4)})` : "";
+        addToast(`Grading complete! ${status.results.length} assignments graded.${costStr}`, "success");
       }
     }
   }, [status.is_running, status.current_file, status.results]);
@@ -7801,6 +7802,16 @@ ${signature}`;
                             {status.current_file}
                           </p>
                         )}
+                        {status.session_cost && status.session_cost.total_cost > 0 && (
+                          <div style={{
+                            display: "flex", gap: "16px", fontSize: "0.8rem",
+                            color: "var(--text-secondary)", marginTop: "8px"
+                          }}>
+                            <span>Cost: ${status.session_cost.total_cost.toFixed(4)}</span>
+                            <span>Tokens: {(status.session_cost.total_input_tokens + status.session_cost.total_output_tokens).toLocaleString()}</span>
+                            <span>API Calls: {status.session_cost.total_api_calls}</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -8876,10 +8887,10 @@ ${signature}`;
                           )}
                           <thead>
                             <tr>
-                              {["Student", "Assignment", "Time", "Score", "Grade", "Authenticity", "Email", "Actions"].map((label, i) => (
+                              {["Student", "Assignment", "Time", "Score", "Grade", "Cost", "Authenticity", "Email", "Actions"].map((label, i) => (
                                 <th key={label} style={{ textAlign: i >= 3 ? "center" : undefined, position: "relative", overflow: "visible" }}>
                                   {label}
-                                  {i < 7 && (
+                                  {i < 8 && (
                                     <span
                                       onMouseDown={(e) => handleResizeStart(e, i)}
                                       style={{
@@ -9167,6 +9178,9 @@ ${signature}`;
                                       >
                                         {r.letter_grade}
                                       </span>
+                                    </td>
+                                    <td style={{ textAlign: "center", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                      {r.token_usage?.total_cost_display || "—"}
                                     </td>
                                     <td style={{ textAlign: "center" }}>
                                       {(() => {

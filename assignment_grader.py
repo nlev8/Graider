@@ -25,6 +25,7 @@ import csv
 import json
 import re
 import random
+import threading
 import concurrent.futures
 from datetime import datetime
 from pathlib import Path
@@ -96,6 +97,79 @@ except ImportError:
 import os
 app_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(app_dir, '.env'), override=True)
+
+# =============================================================================
+# TOKEN / COST TRACKING
+# =============================================================================
+
+MODEL_PRICING = {
+    # OpenAI — price per 1M tokens
+    "gpt-4o-mini":    {"input": 0.15,  "output": 0.60},
+    "gpt-4o":         {"input": 2.50,  "output": 10.00},
+    # Claude
+    "claude-3-5-haiku-latest":    {"input": 0.80,  "output": 4.00},
+    "claude-sonnet-4-20250514":   {"input": 3.00,  "output": 15.00},
+    "claude-opus-4-20250514":     {"input": 15.00, "output": 75.00},
+    # Gemini
+    "gemini-2.0-flash":    {"input": 0.10,  "output": 0.40},
+    "gemini-2.0-pro-exp":  {"input": 1.25,  "output": 5.00},
+}
+
+class TokenTracker:
+    """Accumulates token usage across multiple API calls for a single student grading."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.calls = []
+
+    def record_openai(self, response, model: str):
+        if not response or not hasattr(response, 'usage') or not response.usage:
+            return
+        inp = response.usage.prompt_tokens or 0
+        out = response.usage.completion_tokens or 0
+        self._add(model, inp, out)
+
+    def record_anthropic(self, response, model: str):
+        if not response or not hasattr(response, 'usage') or not response.usage:
+            return
+        inp = response.usage.input_tokens or 0
+        out = response.usage.output_tokens or 0
+        self._add(model, inp, out)
+
+    def record_gemini(self, response, model: str):
+        if not response or not hasattr(response, 'usage_metadata') or not response.usage_metadata:
+            return
+        inp = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+        out = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+        self._add(model, inp, out)
+
+    def _add(self, model: str, input_tokens: int, output_tokens: int):
+        pricing = MODEL_PRICING.get(model, {"input": 0, "output": 0})
+        cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+        with self._lock:
+            self.total_input_tokens += input_tokens
+            self.total_output_tokens += output_tokens
+            self.calls.append({
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost": round(cost, 6)
+            })
+
+    def summary(self) -> dict:
+        total_cost = sum(c["cost"] for c in self.calls)
+        return {
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "total_tokens": self.total_input_tokens + self.total_output_tokens,
+            "total_cost": round(total_cost, 6),
+            "total_cost_display": f"${total_cost:.4f}",
+            "api_calls": len(self.calls),
+            "calls": self.calls
+        }
+
 
 # =============================================================================
 # PRE-EXTRACTION - Extract student responses BEFORE AI grading (prevents hallucination)
@@ -3090,7 +3164,7 @@ def preprocess_for_ai_detection(text: str) -> str:
     return "\n\n".join(result_parts)
 
 
-def detect_ai_plagiarism(student_responses: str, grade_level: str = '6') -> dict:
+def detect_ai_plagiarism(student_responses: str, grade_level: str = '6', token_tracker: 'TokenTracker' = None) -> dict:
     """
     Dedicated AI/Plagiarism detection using GPT-4o-mini.
     Runs in parallel with grading for speed.
@@ -3178,6 +3252,8 @@ Respond ONLY with this JSON (no other text):
                 temperature=0,
                 seed=42
             )
+            if token_tracker:
+                token_tracker.record_openai(response, "gpt-4o-mini")
             parsed = response.choices[0].message.parsed
             if parsed:
                 return parsed.model_dump()
@@ -3192,6 +3268,8 @@ Respond ONLY with this JSON (no other text):
             temperature=0,
             seed=42
         )
+        if token_tracker:
+            token_tracker.record_openai(response, "gpt-4o-mini")
         response_text = response.choices[0].message.content.strip()
         result = _try_parse_json_fallback(response_text)
         if result:
@@ -3382,23 +3460,26 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     # Preprocess text for AI detection (removes template text, focuses on student writing)
     detection_text = preprocess_for_ai_detection(extracted_text)
 
+    # Shared token tracker for both detection and grading
+    tracker = TokenTracker()
+
     # Run detection and grading in parallel using ThreadPoolExecutor
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         # Submit both tasks
-        detection_future = executor.submit(detect_ai_plagiarism, detection_text, grade_level)
+        detection_future = executor.submit(detect_ai_plagiarism, detection_text, grade_level, token_tracker=tracker)
 
         if use_multipass:
             grading_future = executor.submit(grade_multipass, student_name, assignment_data,
                                              custom_ai_instructions, grade_level, subject,
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
-                                             extraction_mode, grading_style)
+                                             extraction_mode, grading_style, token_tracker=tracker)
         else:
             grading_future = executor.submit(grade_assignment, student_name, assignment_data,
                                              custom_ai_instructions, grade_level, subject,
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
-                                             extraction_mode, grading_style)
+                                             extraction_mode, grading_style, token_tracker=tracker)
 
         # Wait for both to complete
         detection_result = detection_future.result()
@@ -3407,6 +3488,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     # Skip detection merging for blank/incomplete submissions — nothing to detect
     if grading_result.get("letter_grade") == "INCOMPLETE" and grading_result.get("score", 0) == 0:
         print(f"  📝 Blank/incomplete submission — skipping AI/plagiarism detection merge")
+        grading_result["token_usage"] = tracker.summary()
         return grading_result
 
     # Merge detection results into grading results
@@ -3497,6 +3579,9 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         grading_result["feedback"] = "Please resubmit using your own words. Copying and pasting from Google (plagiarism) or use of AI is considered a violation of academic integrity."
         grading_result["academic_integrity_flag"] = True
         print(f"  🚨 Academic integrity concern - feedback replaced")
+
+    # Update token_usage with final tracker summary (includes both detection + grading)
+    grading_result["token_usage"] = tracker.summary()
 
     return grading_result
 
@@ -3616,7 +3701,8 @@ def grade_per_question(question: str, student_answer: str, expected_answer: str,
                        ai_model: str = 'gpt-4o',
                        ai_provider: str = 'openai',
                        response_type: str = 'marker_response',
-                       section_name: str = '', section_type: str = 'written') -> dict:
+                       section_name: str = '', section_type: str = 'written',
+                       token_tracker: 'TokenTracker' = None) -> dict:
     """Grade a single question/response pair with full section-aware context.
 
     Args:
@@ -3756,6 +3842,8 @@ Read these FIRST, then score accordingly:
                 system=system_msg + "\n\n" + json_schema,
                 messages=[{"role": "user", "content": prompt}]
             )
+            if token_tracker:
+                token_tracker.record_anthropic(response, actual_model)
             result = _try_parse_json_fallback(response.content[0].text.strip())
             if result and "grade" in result:
                 return result
@@ -3772,6 +3860,8 @@ Read these FIRST, then score accordingly:
 
             full_prompt = system_msg + "\n\n" + json_schema + "\n\n---\n\n" + prompt
             response = gemini_client.generate_content(full_prompt)
+            if token_tracker:
+                token_tracker.record_gemini(response, actual_model)
             result = _try_parse_json_fallback(response.text.strip())
             if result and "grade" in result:
                 return result
@@ -3790,6 +3880,8 @@ Read these FIRST, then score accordingly:
                 temperature=0,
                 seed=42
             )
+            if token_tracker:
+                token_tracker.record_openai(response, ai_model)
             parsed = response.choices[0].message.parsed
             if parsed:
                 return parsed.model_dump()
@@ -3814,7 +3906,8 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
                       student_responses: list = None,
                       rubric_breakdown: dict = None,
                       blank_questions: list = None,
-                      missing_sections: list = None) -> dict:
+                      missing_sections: list = None,
+                      token_tracker: 'TokenTracker' = None) -> dict:
     """Generate encouraging, improvement-focused teacher feedback from per-question grades.
 
     Args:
@@ -3979,12 +4072,14 @@ Also identify:
                 system=system_msg + "\n\n" + json_schema,
                 messages=[{"role": "user", "content": prompt}]
             )
+            if token_tracker:
+                token_tracker.record_anthropic(response, actual_model)
             result = _try_parse_json_fallback(response.content[0].text.strip())
             if result and "feedback" in result:
                 if "skills_demonstrated" not in result or not isinstance(result["skills_demonstrated"], dict):
                     result["skills_demonstrated"] = {"strengths": [], "developing": []}
                 if ell_language and result.get("feedback"):
-                    translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
                     if translated:
                         result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 return result
@@ -4001,12 +4096,14 @@ Also identify:
 
             full_prompt = system_msg + "\n\n" + json_schema + "\n\n---\n\n" + prompt
             response = gemini_client.generate_content(full_prompt)
+            if token_tracker:
+                token_tracker.record_gemini(response, actual_model)
             result = _try_parse_json_fallback(response.text.strip())
             if result and "feedback" in result:
                 if "skills_demonstrated" not in result or not isinstance(result["skills_demonstrated"], dict):
                     result["skills_demonstrated"] = {"strengths": [], "developing": []}
                 if ell_language and result.get("feedback"):
-                    translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
                     if translated:
                         result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 return result
@@ -4025,11 +4122,13 @@ Also identify:
                 temperature=0,
                 seed=42
             )
+            if token_tracker:
+                token_tracker.record_openai(response, ai_model)
             parsed = response.choices[0].message.parsed
             if parsed:
                 result = parsed.model_dump()
                 if ell_language and result.get("feedback"):
-                    translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
                     if translated:
                         result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 return result
@@ -4051,7 +4150,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                     assignment_template: str = None, rubric_prompt: str = None,
                     custom_markers: list = None, exclude_markers: list = None,
                     marker_config: list = None, effort_points: int = 15,
-                    extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
+                    extraction_mode: str = 'structured', grading_style: str = 'standard',
+                    token_tracker: 'TokenTracker' = None) -> dict:
     """Multi-pass grading pipeline for consistent, robust scoring.
 
     Pass 1: Extract responses (reuses existing extraction logic)
@@ -4067,6 +4167,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     else:
         provider = "openai"
 
+    tracker = token_tracker or TokenTracker()
     content = assignment_data.get("content", "")
 
     # === EXTRACTION ===
@@ -4178,7 +4279,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 ai_provider=provider,
                 response_type=resp_type,
                 section_name=meta['section_name'],
-                section_type=meta['section_type']
+                section_type=meta['section_type'],
+                token_tracker=tracker
             )
             future_to_idx[f] = i
 
@@ -4321,7 +4423,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         student_responses=responses,
         rubric_breakdown=rubric_breakdown,
         blank_questions=blank_questions,
-        missing_sections=missing_sections
+        missing_sections=missing_sections,
+        token_tracker=tracker
     )
 
     # === BUILD RESULT ===
@@ -4351,7 +4454,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
              "possible": qr.get("grade", {}).get("possible", 10),
              "quality": qr.get("grade", {}).get("quality", "")}
             for i, qr in enumerate(question_results) if qr
-        ]
+        ],
+        "token_usage": tracker.summary()
     }
 
     # Add audit trail for AI Reasoning / Raw API Output
@@ -4449,7 +4553,7 @@ The "score" field should equal the sum of all section_scores earned values.
 # BILINGUAL FEEDBACK TRANSLATION (two-pass system for ELL students)
 # =============================================================================
 
-def _translate_feedback(feedback: str, target_language: str, ai_model: str = 'gpt-4o-mini') -> str:
+def _translate_feedback(feedback: str, target_language: str, ai_model: str = 'gpt-4o-mini', token_tracker: 'TokenTracker' = None) -> str:
     """
     Translate grading feedback into the target language using a dedicated API call.
     This is a separate, focused call that produces consistent results because
@@ -4482,6 +4586,8 @@ FEEDBACK TO TRANSLATE:
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
             )
+            if token_tracker:
+                token_tracker.record_anthropic(response, model)
             return response.content[0].text.strip()
 
         elif ai_model.startswith("gemini"):
@@ -4494,6 +4600,8 @@ FEEDBACK TO TRANSLATE:
             model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
             client = genai.GenerativeModel(model)
             response = client.generate_content(prompt)
+            if token_tracker:
+                token_tracker.record_gemini(response, model)
             return response.text.strip()
 
         else:
@@ -4505,6 +4613,8 @@ FEEDBACK TO TRANSLATE:
                 max_tokens=2000,
                 temperature=0.3
             )
+            if token_tracker:
+                token_tracker.record_openai(response, ai_model)
             return response.choices[0].message.content.strip()
 
     except Exception as e:
@@ -4607,7 +4717,7 @@ def _try_parse_json_fallback(text: str) -> dict:
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -5414,6 +5524,8 @@ Provide your response in the following JSON format ONLY (no other text):
                 max_tokens=2000,
                 messages=[{"role": "user", "content": claude_content}]
             )
+            if token_tracker:
+                token_tracker.record_anthropic(response, actual_model)
             response_text = response.content[0].text.strip()
 
         elif provider == "gemini":
@@ -5436,6 +5548,8 @@ Provide your response in the following JSON format ONLY (no other text):
                     else:
                         text_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
                         response = gemini_client.generate_content(text_content)
+                    if token_tracker:
+                        token_tracker.record_gemini(response, actual_model)
                     response_text = response.text.strip()
                     break  # Success, exit retry loop
                 except Exception as e:
@@ -5457,6 +5571,8 @@ Provide your response in the following JSON format ONLY (no other text):
                     temperature=0,
                     seed=42
                 )
+                if token_tracker:
+                    token_tracker.record_openai(response, ai_model)
                 parsed = response.choices[0].message.parsed
                 if parsed:
                     result = parsed.model_dump()
@@ -5478,6 +5594,8 @@ Provide your response in the following JSON format ONLY (no other text):
                     temperature=0,
                     seed=42
                 )
+                if token_tracker:
+                    token_tracker.record_openai(response, ai_model)
                 response_text = response.choices[0].message.content.strip()
                 result = None
 
@@ -5539,7 +5657,7 @@ Provide your response in the following JSON format ONLY (no other text):
         # Two-pass bilingual feedback: translate via separate dedicated API call
         if ell_language and result.get("feedback"):
             print(f"  🌐 Translating feedback to {ell_language}...")
-            translated = _translate_feedback(result["feedback"], ell_language, ai_model)
+            translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
             if translated:
                 result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 print(f"  ✅ Bilingual feedback added ({ell_language})")
@@ -5566,6 +5684,10 @@ Provide your response in the following JSON format ONLY (no other text):
             "ai_input": extracted_responses_section,
             "ai_response": original_text
         }
+
+        # Add token usage tracking
+        if token_tracker:
+            result["token_usage"] = token_tracker.summary()
 
         return result
 
