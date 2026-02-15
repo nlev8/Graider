@@ -4404,11 +4404,11 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     blank_questions = extraction_result.get("blank_questions", [])
     missing_sections = extraction_result.get("missing_sections", [])
 
-    # Use a cost-efficient model for feedback generation
+    # Use gpt-4o for feedback — it's 1 call per student and the most important output
     feedback_model = ai_model
     if provider == "openai":
-        feedback_model = "gpt-4o-mini"  # Cheaper for feedback text
-    # Claude/Gemini: use the same model (no cheaper tier that supports long output)
+        feedback_model = "gpt-4o"  # Feedback is what teachers/parents read — needs quality
+    # Claude/Gemini: use the teacher's selected model
 
     print(f"  🔄 Multi-pass: Generating feedback ({feedback_model})...")
     feedback_result = generate_feedback(
