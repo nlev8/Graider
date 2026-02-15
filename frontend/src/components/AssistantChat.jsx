@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Icon from './Icon'
 import { getAuthHeaders } from '../services/api'
+import { useVoice } from '../hooks/useVoice'
 
 const API_BASE = ''
 
@@ -83,9 +84,40 @@ export default function AssistantChat({ addToast }) {
   const [sessionId] = useState(loadStoredSession)
   const [showMorePrompts, setShowMorePrompts] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState([])
+  const [voiceMode, setVoiceMode] = useState(false)
+  const [voiceAvailable, setVoiceAvailable] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
+  const voiceModeRef = useRef(false)
+
+  // Keep ref in sync with state for use in SSE callback
+  useEffect(() => { voiceModeRef.current = voiceMode }, [voiceMode])
+
+  // Voice hook — sendMessage defined below, so we use a ref callback
+  const sendMessageRef = useRef(null)
+  const onVoiceTranscript = useCallback((text) => {
+    if (sendMessageRef.current) sendMessageRef.current(text)
+  }, [])
+
+  const voice = useVoice({ onTranscript: onVoiceTranscript })
+
+  // Check if voice is configured on backend
+  useEffect(() => {
+    async function checkVoice() {
+      try {
+        const authHeaders = await getAuthHeaders()
+        const resp = await fetch(API_BASE + '/api/assistant/voice-config', {
+          headers: authHeaders
+        })
+        const data = await resp.json()
+        setVoiceAvailable(data.enabled && voice.speechAvailable)
+      } catch (e) {
+        setVoiceAvailable(false)
+      }
+    }
+    checkVoice()
+  }, [voice.speechAvailable])
 
   // Persist messages and session to localStorage
   useEffect(() => {
@@ -165,6 +197,9 @@ export default function AssistantChat({ addToast }) {
     const content = text || input.trim()
     if ((!content && attachedFiles.length === 0) || isStreaming) return
 
+    // Barge-in: stop audio if assistant is speaking
+    if (voice.isSpeaking) voice.stopSpeaking()
+
     const messageText = content || 'Please analyze ' + (attachedFiles.length === 1 ? 'this file.' : 'these files.')
     const currentFiles = [...attachedFiles]
 
@@ -197,6 +232,7 @@ export default function AssistantChat({ addToast }) {
           messages: [{ role: 'user', content: messageText }],
           session_id: sessionId,
           files: files,
+          voice_mode: voiceModeRef.current,
         }),
       })
 
@@ -282,6 +318,10 @@ export default function AssistantChat({ addToast }) {
                 }
                 return updated
               })
+            } else if (event.type === 'audio_chunk') {
+              if (voiceModeRef.current && event.audio) {
+                voice.enqueueAudioChunk(event.audio)
+              }
             } else if (event.type === 'error') {
               setMessages(prev => {
                 const updated = [...prev]
@@ -319,6 +359,9 @@ export default function AssistantChat({ addToast }) {
       setIsStreaming(false)
     }
   }
+
+  // Wire up ref so voice hook can call sendMessage
+  sendMessageRef.current = sendMessage
 
   async function clearConversation() {
     try {
@@ -643,11 +686,40 @@ export default function AssistantChat({ addToast }) {
                   <span className="typing-dot" style={{ animationDelay: '0.4s' }}>.</span>
                 </span>
               )}
+              {voice.isSpeaking && msg.role === 'assistant' && idx === messages.length - 1 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginTop: '6px',
+                  fontSize: '0.75rem',
+                  color: 'var(--accent-light)',
+                }}>
+                  <Icon name="Volume2" size={12} />
+                  Speaking...
+                </div>
+              )}
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Voice interim transcript */}
+      {voice.isListening && voice.transcript && (
+        <div style={{
+          padding: '6px 20px',
+          fontSize: '0.85rem',
+          color: 'var(--accent-light)',
+          fontStyle: 'italic',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}>
+          <Icon name="Mic" size={14} style={{ color: '#ef4444' }} />
+          {voice.transcript}
+        </div>
+      )}
 
       {/* File preview chips */}
       {attachedFiles.length > 0 && (
@@ -721,6 +793,64 @@ export default function AssistantChat({ addToast }) {
         >
           <Icon name="Paperclip" size={18} />
         </button>
+        {/* Voice mode toggle */}
+        {voiceAvailable && (
+          <button
+            onClick={() => {
+              const next = !voiceMode
+              setVoiceMode(next)
+              if (!next) voice.stopSpeaking()
+            }}
+            title={voiceMode ? 'Disable voice mode' : 'Enable voice mode'}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: voiceMode
+                ? 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))'
+                : 'var(--glass-bg)',
+              border: voiceMode ? 'none' : '1px solid var(--glass-border)',
+              color: voiceMode ? '#fff' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+            }}
+          >
+            <Icon name={voiceMode ? 'Volume2' : 'VolumeX'} size={18} />
+          </button>
+        )}
+        {/* Mic button (voice mode only) */}
+        {voiceMode && (
+          <button
+            onClick={voice.toggleListening}
+            disabled={isStreaming}
+            title={voice.isListening ? 'Stop listening' : 'Speak to assistant'}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: voice.isListening
+                ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                : 'var(--glass-bg)',
+              border: voice.isListening ? 'none' : '1px solid var(--glass-border)',
+              color: voice.isListening ? '#fff' : 'var(--text-secondary)',
+              cursor: isStreaming ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isStreaming ? 0.5 : 1,
+              transition: 'all 0.2s',
+              flexShrink: 0,
+              boxShadow: voice.isListening ? '0 0 0 0 rgba(239, 68, 68, 0.4)' : 'none',
+              animation: voice.isListening ? 'micPulse 1.5s ease-in-out infinite' : 'none',
+            }}
+          >
+            <Icon name={voice.isListening ? 'MicOff' : 'Mic'} size={18} />
+          </button>
+        )}
         <textarea
           ref={inputRef}
           value={input}

@@ -13,6 +13,8 @@ import base64
 import uuid
 import tempfile
 import threading
+import queue
+import logging
 from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response, stream_with_context
@@ -290,6 +292,7 @@ def assistant_chat():
     session_id = data.get("session_id", str(uuid.uuid4()))
     user_messages = data["messages"]
     uploaded_files = data.get("files", [])
+    voice_mode = data.get("voice_mode", False)
 
     # Cleanup stale sessions periodically
     _cleanup_stale_sessions()
@@ -321,6 +324,49 @@ def assistant_chat():
         client = anthropic.Anthropic(api_key=api_key)
         messages = list(conv["messages"])
 
+        # Voice mode: set up TTS streaming
+        tts_stream = None
+        sentence_buffer = None
+        audio_out_queue = None
+        audio_thread = None
+
+        if voice_mode:
+            try:
+                from backend.services.elevenlabs_service import (
+                    ElevenLabsTTSStream, SentenceBuffer
+                )
+                tts_stream = ElevenLabsTTSStream()
+                tts_stream.connect()
+                sentence_buffer = SentenceBuffer()
+                audio_out_queue = queue.Queue()
+
+                def _drain_audio():
+                    for b64 in tts_stream.iter_audio():
+                        audio_out_queue.put(b64)
+                    audio_out_queue.put(None)
+
+                audio_thread = threading.Thread(
+                    target=_drain_audio, daemon=True
+                )
+                audio_thread.start()
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    "Voice mode unavailable: %s", e
+                )
+                tts_stream = None
+
+        def _flush_audio_queue():
+            """Yield any available audio chunks from the queue."""
+            if not audio_out_queue:
+                return
+            while not audio_out_queue.empty():
+                try:
+                    chunk = audio_out_queue.get_nowait()
+                    if chunk is not None:
+                        yield f"data: {json.dumps({'type': 'audio_chunk', 'audio': chunk})}\n\n"
+                except queue.Empty:
+                    break
+
         # Tool use loop — may need multiple rounds
         max_rounds = 5
         for _ in range(max_rounds):
@@ -350,6 +396,15 @@ def assistant_chat():
                             if hasattr(event.delta, 'text'):
                                 full_response_text += event.delta.text
                                 yield f"data: {json.dumps({'type': 'text_delta', 'content': event.delta.text})}\n\n"
+
+                                # Pipe text to TTS
+                                if tts_stream and sentence_buffer:
+                                    for sent in sentence_buffer.add(event.delta.text):
+                                        tts_stream.send_text(sent + " ")
+
+                                # Yield any ready audio chunks
+                                yield from _flush_audio_queue()
+
                             elif hasattr(event.delta, 'partial_json'):
                                 if tool_use_blocks:
                                     tool_use_blocks[-1]["input_json"] += event.delta.partial_json
@@ -420,6 +475,24 @@ def assistant_chat():
         # Update stored conversation with the final messages
         conv["messages"] = messages
 
+        # Flush remaining TTS audio
+        if tts_stream and sentence_buffer:
+            remaining = sentence_buffer.flush()
+            if remaining:
+                tts_stream.send_text(remaining + " ")
+            tts_stream.flush()
+            tts_stream.close()
+            # Drain final audio chunks
+            if audio_out_queue:
+                while True:
+                    try:
+                        chunk = audio_out_queue.get(timeout=3.0)
+                        if chunk is None:
+                            break
+                        yield f"data: {json.dumps({'type': 'audio_chunk', 'audio': chunk})}\n\n"
+                    except queue.Empty:
+                        break
+
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return Response(
@@ -485,3 +558,21 @@ def get_credentials():
         except Exception:
             pass
     return jsonify({"configured": False})
+
+
+# ═══════════════════════════════════════════════════════
+# VOICE CONFIGURATION
+# ═══════════════════════════════════════════════════════
+
+@assistant_bp.route('/api/assistant/voice-config', methods=['GET'])
+def get_voice_config():
+    """Return voice TTS configuration status."""
+    api_key = os.environ.get("ELEVENLABS_API_KEY", "")
+    voice_id = os.environ.get(
+        "ELEVENLABS_VOICE_ID", "Aa6nEBJJMKJwJkCx8VU2"
+    )
+    return jsonify({
+        "enabled": bool(api_key),
+        "voice_id": voice_id,
+        "voice_name": "James",
+    })
