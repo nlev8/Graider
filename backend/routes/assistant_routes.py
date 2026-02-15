@@ -300,7 +300,14 @@ CURRICULUM & LESSON TOOLS:
 - get_recent_lessons: List saved lesson plans by unit. Shows topics, standards covered, vocabulary, and objectives from past lessons. Use when the teacher says "create a quiz for this unit", "what have we been working on", or references past lessons.
 - save_memory: Save important facts about the teacher or their classes for future conversations. Use when the teacher shares preferences, class structure, or workflow habits.
 
-When generating worksheets or quizzes, ALWAYS call get_standards first to find relevant standards, and get_recent_lessons to see what's been taught. Use the vocabulary, learning targets, and topics from both to create accurate, curriculum-aligned content. Adapt difficulty based on class differentiation levels below."""
+TEACHING CALENDAR TOOLS:
+- get_calendar: Read the teaching calendar for a date range. Shows scheduled lessons and holidays. Use when the teacher asks "what am I teaching this week?", "what's on my calendar?", or "what's coming up?". Defaults to the next 7 days.
+- schedule_lesson: Place a saved lesson onto the calendar on a specific date. For multi-day lessons, call once per day with incrementing day_number and consecutive school-day dates. Use when the teacher says "schedule Unit 3 starting Monday" or "put the Revolution lesson on the calendar for next week". Always confirm dates before scheduling.
+- add_calendar_holiday: Mark a date (or date range) as a holiday or break. Use when the teacher says "we're off next Friday", "add Spring Break March 16-20", or "mark Monday as a teacher workday".
+
+When generating worksheets or quizzes, ALWAYS call get_standards first to find relevant standards, and get_recent_lessons to see what's been taught. Use the vocabulary, learning targets, and topics from both to create accurate, curriculum-aligned content. Adapt difficulty based on class differentiation levels below.
+
+When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar first to check for conflicts, then schedule each day sequentially on school days only."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:

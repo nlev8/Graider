@@ -422,6 +422,9 @@ export default function AssistantChat({ addToast }) {
     save_memory: 'Saving to memory',
     get_standards: 'Looking up standards',
     get_recent_lessons: 'Loading recent lessons',
+    get_calendar: 'Checking calendar',
+    schedule_lesson: 'Scheduling lesson',
+    add_calendar_holiday: 'Adding holiday',
   }
 
   const hasMessages = messages.length > 0

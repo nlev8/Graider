@@ -694,6 +694,75 @@ TOOL_DEFINITIONS = [
                 }
             }
         }
+    },
+    {
+        "name": "get_calendar",
+        "description": "Read the teaching calendar — scheduled lessons and holidays for a date range. Use when the teacher asks 'what am I teaching this week?', 'what's on my calendar?', 'what's coming up?', or anything about their schedule.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {
+                    "type": "string",
+                    "description": "Start date in YYYY-MM-DD format. Defaults to today."
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End date in YYYY-MM-DD format. Defaults to 7 days from start."
+                }
+            }
+        }
+    },
+    {
+        "name": "schedule_lesson",
+        "description": "Schedule a saved lesson plan onto the teaching calendar on a specific date. Use when the teacher says 'schedule the Revolution unit starting Monday', 'put Unit 3 on the calendar', or asks to plan out their week/month. For multi-day lessons, call this once per day with incrementing day_number and dates.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Date to schedule in YYYY-MM-DD format"
+                },
+                "unit": {
+                    "type": "string",
+                    "description": "Unit name the lesson belongs to"
+                },
+                "lesson_title": {
+                    "type": "string",
+                    "description": "Title of the lesson"
+                },
+                "day_number": {
+                    "type": "integer",
+                    "description": "Day number within the lesson (e.g., 1 for Day 1). Optional."
+                },
+                "lesson_file": {
+                    "type": "string",
+                    "description": "Path to lesson file like 'Unit Name/Lesson Title.json'. Optional."
+                }
+            },
+            "required": ["date", "lesson_title"]
+        }
+    },
+    {
+        "name": "add_calendar_holiday",
+        "description": "Add a holiday or break to the teaching calendar. Use when the teacher says 'add Spring Break', 'mark Monday as a holiday', or 'we're off next Friday'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Start date in YYYY-MM-DD format"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Name of the holiday or break (e.g., 'Spring Break', 'Teacher Workday')"
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End date for multi-day breaks in YYYY-MM-DD format. Omit for single-day holidays."
+                }
+            },
+            "required": ["date", "name"]
+        }
     }
 ]
 
@@ -2270,6 +2339,113 @@ def get_recent_lessons(unit_name=None):
 
 
 # ═══════════════════════════════════════════════════════
+# CALENDAR TOOLS
+# ═══════════════════════════════════════════════════════
+
+CALENDAR_FILE = os.path.expanduser("~/.graider_data/teaching_calendar.json")
+
+
+def _load_calendar():
+    """Load calendar data from disk."""
+    if not os.path.exists(CALENDAR_FILE):
+        return {"scheduled_lessons": [], "holidays": [], "school_days": {}}
+    try:
+        with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {"scheduled_lessons": [], "holidays": [], "school_days": {}}
+
+
+def _save_calendar(data):
+    """Persist calendar data to disk."""
+    os.makedirs(os.path.dirname(CALENDAR_FILE), exist_ok=True)
+    with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+
+def get_calendar(start_date=None, end_date=None):
+    """Read the teaching calendar for a date range."""
+    cal = _load_calendar()
+
+    if not start_date:
+        start_date = datetime.now().strftime('%Y-%m-%d')
+    if not end_date:
+        from datetime import timedelta
+        end_dt = datetime.strptime(start_date, '%Y-%m-%d') + timedelta(days=7)
+        end_date = end_dt.strftime('%Y-%m-%d')
+
+    # Filter lessons in range
+    lessons = [s for s in cal.get("scheduled_lessons", [])
+               if start_date <= s.get("date", "") <= end_date]
+    lessons.sort(key=lambda s: s.get("date", ""))
+
+    # Filter holidays in range (including multi-day overlaps)
+    holidays = []
+    for h in cal.get("holidays", []):
+        h_start = h.get("date", "")
+        h_end = h.get("end_date", h_start)
+        if h_end >= start_date and h_start <= end_date:
+            holidays.append(h)
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "scheduled_lessons": lessons,
+        "holidays": holidays,
+        "total_lessons": len(lessons),
+        "total_holidays": len(holidays),
+    }
+
+
+def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_file=None):
+    """Schedule a lesson on the teaching calendar."""
+    import uuid as _uuid
+    if not date or not lesson_title:
+        return {"error": "date and lesson_title are required"}
+
+    cal = _load_calendar()
+
+    # Pick a color based on unit name
+    unit_colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444']
+    color_idx = hash(unit or '') % len(unit_colors)
+
+    entry = {
+        "id": str(_uuid.uuid4()),
+        "date": date,
+        "unit": unit or "",
+        "lesson_title": lesson_title,
+        "day_number": day_number,
+        "lesson_file": lesson_file or "",
+        "color": unit_colors[color_idx],
+    }
+
+    cal["scheduled_lessons"].append(entry)
+    _save_calendar(cal)
+
+    return {"status": "scheduled", "entry": entry}
+
+
+def add_calendar_holiday(date, name, end_date=None):
+    """Add a holiday or break to the teaching calendar."""
+    if not date or not name:
+        return {"error": "date and name are required"}
+
+    cal = _load_calendar()
+
+    holiday = {"date": date, "name": name}
+    if end_date:
+        holiday["end_date"] = end_date
+
+    # Remove existing holiday on same date to avoid duplicates
+    cal["holidays"] = [h for h in cal["holidays"] if h["date"] != date]
+    cal["holidays"].append(holiday)
+    cal["holidays"].sort(key=lambda h: h["date"])
+
+    _save_calendar(cal)
+    return {"status": "added", "holiday": holiday}
+
+
+# ═══════════════════════════════════════════════════════
 # PERSISTENT MEMORY
 # ═══════════════════════════════════════════════════════
 
@@ -2344,6 +2520,9 @@ TOOL_HANDLERS = {
     "save_memory": save_memory,
     "get_standards": get_standards_tool,
     "get_recent_lessons": get_recent_lessons,
+    "get_calendar": get_calendar,
+    "schedule_lesson": schedule_lesson_tool,
+    "add_calendar_holiday": add_calendar_holiday,
 }
 
 
