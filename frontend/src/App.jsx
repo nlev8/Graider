@@ -1141,7 +1141,7 @@ function App() {
   }); // field: time, name, assignment, score, grade
   const [missingAssignmentFilter, setMissingAssignmentFilter] = useState(""); // Assignment to check for missing submissions
   const [missingPeriodFilter, setMissingPeriodFilter] = useState(""); // Period to filter missing report
-  const [collapsedPeriods, setCollapsedPeriods] = useState(new Set()); // Collapsed period cards in missing report
+  const [expandedPeriods, setExpandedPeriods] = useState(new Set()); // Expanded period cards in missing report (default: all collapsed)
   const [missingStudentFilter, setMissingStudentFilter] = useState(""); // Student to check for missing assignments
   const [missingUploadedFiles, setMissingUploadedFiles] = useState([]); // Files in folder for missing check
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
@@ -13369,7 +13369,17 @@ ${signature}`;
                               gap: "8px",
                             }}
                           >
-                            {config.trustedStudents.map((studentId) => (
+                            {config.trustedStudents.map((studentId) => {
+                              const matchedResult = (status.results || []).find(r => (r.student_id || r.student) === studentId);
+                              let displayName = matchedResult ? matchedResult.student_name : null;
+                              if (!displayName) {
+                                for (const p of periods) {
+                                  const s = (p.students || []).find(st => st.id === studentId || st.student_id === studentId);
+                                  if (s) { displayName = s.full || s.name || ((s.first || "") + " " + (s.last || "")).trim(); break; }
+                                }
+                              }
+                              if (!displayName) displayName = studentId;
+                              return (
                               <div
                                 key={studentId}
                                 style={{
@@ -13383,14 +13393,14 @@ ${signature}`;
                                 }}
                               >
                                 <Icon name="User" size={14} style={{ color: "#22c55e" }} />
-                                <span>{studentId}</span>
+                                <span>{displayName}</span>
                                 <button
                                   onClick={() => {
                                     setConfig(prev => ({
                                       ...prev,
                                       trustedStudents: prev.trustedStudents.filter(id => id !== studentId)
                                     }));
-                                    addToast(`Removed ${studentId} from trusted list`, "info");
+                                    addToast(`Removed ${displayName} from trusted list`, "info");
                                   }}
                                   style={{
                                     background: "none",
@@ -13403,7 +13413,8 @@ ${signature}`;
                                   <Icon name="X" size={12} />
                                 </button>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : (
                           <div
@@ -17343,7 +17354,7 @@ ${signature}`;
                       </div>
 
                       {/* API Cost Summary */}
-                      {filteredAnalytics.cost_summary && filteredAnalytics.cost_summary.total_cost > 0 && (
+                      {filteredAnalytics.cost_summary && (
                         <div className="glass-card" style={{ padding: "25px" }}>
                           <h3
                             style={{
@@ -18047,8 +18058,8 @@ ${signature}`;
                                 {/* Per Period Breakdown */}
                                 <div style={{ display: "grid", gap: "12px" }}>
                                   {periodReports.map((report) => {
-                                    const isCollapsed = collapsedPeriods.has(report.period);
                                     const canCollapse = !missingPeriodFilter && periodReports.length > 1;
+                                    const isCollapsed = canCollapse && !expandedPeriods.has(report.period);
                                     return (
                                     <div
                                       key={report.period}
@@ -18063,7 +18074,7 @@ ${signature}`;
                                     >
                                       <div
                                         onClick={canCollapse ? () => {
-                                          setCollapsedPeriods(prev => {
+                                          setExpandedPeriods(prev => {
                                             const next = new Set(prev);
                                             if (next.has(report.period)) next.delete(report.period);
                                             else next.add(report.period);
