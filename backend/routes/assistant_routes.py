@@ -44,6 +44,9 @@ conversations = {}
 CONVERSATION_TTL = 7200  # 2 hours
 
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
+MEMORY_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
+PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
+ACCOMMODATIONS_FILE = os.path.join(GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
 
 # Cache user manual text at module level to avoid re-reading on every request
 _user_manual_cache = None
@@ -160,6 +163,45 @@ def _build_file_content_blocks(files):
     return blocks
 
 
+def _load_period_differentiation():
+    """Load period class levels from meta files. Returns dict like {'Period 1': 'advanced', ...}."""
+    levels = {}
+    if not os.path.isdir(PERIODS_DIR):
+        return levels
+    try:
+        import glob as glob_mod
+        for meta_file in glob_mod.glob(os.path.join(PERIODS_DIR, "*.meta.json")):
+            with open(meta_file, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+            period_name = meta.get("period_name", "")
+            class_level = meta.get("class_level", "standard")
+            if period_name:
+                levels[period_name] = class_level
+    except Exception:
+        pass
+    return levels
+
+
+def _load_accommodation_summary():
+    """Load aggregate accommodation stats (FERPA-safe: counts only, no student names)."""
+    if not os.path.exists(ACCOMMODATIONS_FILE):
+        return None
+    try:
+        with open(ACCOMMODATIONS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not data:
+            return None
+        total_students = len(data)
+        preset_counts = {}
+        for student_data in data.values():
+            presets = student_data.get("presets", [])
+            for p in presets:
+                preset_counts[p] = preset_counts.get(p, 0) + 1
+        return {"total_students": total_students, "preset_counts": preset_counts}
+    except Exception:
+        return None
+
+
 def _build_system_prompt():
     """Build the system prompt dynamically, injecting teacher info from settings."""
     teacher_name = ""
@@ -168,6 +210,9 @@ def _build_system_prompt():
     teacher_email = ""
     email_signature = ""
     grade_level = ""
+    state = ""
+    grading_period = ""
+    global_ai_notes = ""
 
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -180,6 +225,9 @@ def _build_system_prompt():
             teacher_email = config.get('teacher_email', '')
             email_signature = config.get('email_signature', '')
             grade_level = config.get('grade_level', '')
+            state = config.get('state', '')
+            grading_period = config.get('grading_period', '')
+            global_ai_notes = settings.get('globalAINotes', '')
         except Exception:
             pass
 
@@ -192,6 +240,10 @@ def _build_system_prompt():
             parts.append(f"Subject: {subject}")
         if grade_level:
             parts.append(f"Grade Level: {grade_level}")
+        if state:
+            parts.append(f"State: {state}")
+        if grading_period:
+            parts.append(f"Grading Period: {grading_period}")
         if school_name:
             parts.append(f"School: {school_name}")
         if teacher_email:
@@ -241,7 +293,59 @@ IEP/504 AWARENESS: recommend_next_lesson also returns accommodation_analysis sho
 
 DOCUMENT GENERATION: When generating any document or worksheet, first call list_document_styles to check if a matching saved style exists, and if so, pass the style_name parameter. Use generate_document for non-gradeable documents (study guides, reference sheets, parent letters, lesson outlines). Use generate_worksheet for gradeable assignments. Both support rich formatting: **bold**, *italic*, and ***bold+italic*** in text content. When the teacher says they like a document's formatting, use save_document_style to save it for future reuse.
 
-SAVING DOCUMENTS: After generating a document with generate_document, always ask the teacher: "Would you like me to save this to your assignments in Grading Setup?" If they say yes, call generate_document again with the same content and save_to_builder=true. Worksheets created with generate_worksheet are always saved to Grading Setup automatically."""
+SAVING DOCUMENTS: After generating a document with generate_document, always ask the teacher: "Would you like me to save this to your assignments in Grading Setup?" If they say yes, call generate_document again with the same content and save_to_builder=true. Worksheets created with generate_worksheet are always saved to Grading Setup automatically.
+
+CURRICULUM & LESSON TOOLS:
+- get_standards: Look up curriculum standards for the teacher's state and subject. Filter by topic keyword and DOK level. Use this when generating standards-aligned worksheets, quizzes, or lesson materials.
+- get_recent_lessons: List saved lesson plans by unit. Shows topics, standards covered, vocabulary, and objectives from past lessons. Use when the teacher says "create a quiz for this unit", "what have we been working on", or references past lessons.
+- save_memory: Save important facts about the teacher or their classes for future conversations. Use when the teacher shares preferences, class structure, or workflow habits.
+
+When generating worksheets or quizzes, ALWAYS call get_standards first to find relevant standards, and get_recent_lessons to see what's been taught. Use the vocabulary, learning targets, and topics from both to create accurate, curriculum-aligned content. Adapt difficulty based on class differentiation levels below."""
+
+    # Inject global AI notes (teacher's custom grading/teaching instructions)
+    if global_ai_notes:
+        prompt += f"\n\n## TEACHER'S INSTRUCTIONS\n{global_ai_notes}"
+
+    # Inject class differentiation
+    period_levels = _load_period_differentiation()
+    if period_levels:
+        level_groups = {}
+        for period, level in sorted(period_levels.items()):
+            level_groups.setdefault(level, []).append(period)
+        diff_lines = []
+        dok_map = {"advanced": "DOK 1-4", "standard": "DOK 1-3", "support": "DOK 1-2"}
+        for level in ["advanced", "standard", "support"]:
+            periods = level_groups.get(level, [])
+            if periods:
+                dok = dok_map.get(level, "DOK 1-3")
+                diff_lines.append(f"- {', '.join(periods)}: {level.capitalize()} ({dok})")
+        if diff_lines:
+            prompt += "\n\n## CLASS DIFFERENTIATION\n" + "\n".join(diff_lines)
+
+    # Inject accommodation summary (FERPA-safe: aggregate counts only)
+    accomm = _load_accommodation_summary()
+    if accomm:
+        prompt += f"\n\n## ACCOMMODATIONS IN USE\n- {accomm['total_students']} students have IEP/504 accommodations"
+        if accomm["preset_counts"]:
+            top_presets = sorted(accomm["preset_counts"].items(), key=lambda x: -x[1])[:5]
+            preset_str = ", ".join(f"{name.replace('_', ' ')} ({count})" for name, count in top_presets)
+            prompt += f"\n- Common presets: {preset_str}"
+
+    # Inject persistent memories from previous conversations
+    try:
+        if os.path.exists(MEMORY_FILE):
+            with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
+                memories = json.load(f)
+            if isinstance(memories, list) and memories:
+                facts = []
+                for m in memories:
+                    fact = m.get("fact", m) if isinstance(m, dict) else str(m)
+                    facts.append(f"- {fact}")
+                prompt += "\n\n## PERSISTENT MEMORY\nThese are facts you've saved from previous conversations with this teacher:\n"
+                prompt += "\n".join(facts)
+                prompt += "\nUse these to personalize your responses. Save new important facts with the save_memory tool."
+    except Exception:
+        pass
 
     # Append platform documentation for how-to and feature questions
     manual = _load_user_manual()
@@ -521,6 +625,40 @@ def clear_conversation():
 
 
 # ═══════════════════════════════════════════════════════
+# PERSISTENT MEMORY
+# ═══════════════════════════════════════════════════════
+
+@assistant_bp.route('/api/assistant/memory', methods=['GET'])
+def get_memory():
+    """Return all saved assistant memories."""
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
+                memories = json.load(f)
+            if isinstance(memories, list):
+                facts = []
+                for m in memories:
+                    fact = m.get("fact", m) if isinstance(m, dict) else str(m)
+                    facts.append(fact)
+                return jsonify({"memories": facts, "count": len(facts)})
+        except Exception:
+            pass
+    return jsonify({"memories": [], "count": 0})
+
+
+@assistant_bp.route('/api/assistant/memory', methods=['DELETE'])
+def clear_memory():
+    """Clear all saved assistant memories."""
+    if os.path.exists(MEMORY_FILE):
+        try:
+            os.remove(MEMORY_FILE)
+        except Exception as e:
+            return jsonify({"error": f"Failed to clear memory: {str(e)}"}), 500
+    _audit_log("memory_cleared", "All assistant memories cleared")
+    return jsonify({"status": "cleared"})
+
+
+# ═══════════════════════════════════════════════════════
 # VPORTAL CREDENTIALS
 # ═══════════════════════════════════════════════════════
 
@@ -569,7 +707,7 @@ def get_voice_config():
     """Return voice TTS configuration status."""
     api_key = os.environ.get("ELEVENLABS_API_KEY", "")
     voice_id = os.environ.get(
-        "ELEVENLABS_VOICE_ID", "Aa6nEBJJMKJwJkCx8VU2"
+        "ELEVENLABS_VOICE_ID", "UgBBYS2sOqTuMpoF3BR0"
     )
     return jsonify({
         "enabled": bool(api_key),

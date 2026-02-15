@@ -1,15 +1,19 @@
 """
 Lesson Plan storage routes for Graider.
 Saves lesson plans for later use in assessment generation.
+Includes teaching calendar endpoints for scheduling lessons.
 """
 import os
 import json
+import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 lesson_bp = Blueprint('lesson', __name__)
 
 LESSONS_DIR = os.path.expanduser("~/.graider_lessons")
+GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
+CALENDAR_FILE = os.path.join(GRAIDER_DATA_DIR, "teaching_calendar.json")
 
 
 def _safe_filename(name):
@@ -130,3 +134,153 @@ def list_units():
     units = [d for d in os.listdir(LESSONS_DIR)
              if os.path.isdir(os.path.join(LESSONS_DIR, d))]
     return jsonify({"units": sorted(units)})
+
+
+# ═══════════════════════════════════════════════════════
+# TEACHING CALENDAR
+# ═══════════════════════════════════════════════════════
+
+_DEFAULT_CALENDAR = {
+    "scheduled_lessons": [],
+    "holidays": [],
+    "school_days": {
+        "monday": True, "tuesday": True, "wednesday": True,
+        "thursday": True, "friday": True, "saturday": False, "sunday": False
+    }
+}
+
+
+def _load_calendar():
+    """Load calendar data from disk."""
+    if not os.path.exists(CALENDAR_FILE):
+        return dict(_DEFAULT_CALENDAR)
+    try:
+        with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        # Ensure all keys exist
+        for key, default in _DEFAULT_CALENDAR.items():
+            if key not in data:
+                data[key] = default
+        return data
+    except Exception:
+        return dict(_DEFAULT_CALENDAR)
+
+
+def _save_calendar(data):
+    """Persist calendar data to disk."""
+    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
+    with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+
+@lesson_bp.route('/api/calendar', methods=['GET'])
+def get_calendar():
+    """Return full calendar data."""
+    return jsonify(_load_calendar())
+
+
+@lesson_bp.route('/api/calendar/schedule', methods=['PUT'])
+def schedule_lesson():
+    """Add or update a scheduled lesson on the calendar."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    date = data.get('date')
+    if not date:
+        return jsonify({"error": "date is required"}), 400
+
+    cal = _load_calendar()
+
+    entry_id = data.get('id') or str(uuid.uuid4())
+
+    entry = {
+        "id": entry_id,
+        "date": date,
+        "unit": data.get('unit', ''),
+        "lesson_title": data.get('lesson_title', ''),
+        "day_number": data.get('day_number'),
+        "lesson_file": data.get('lesson_file', ''),
+        "color": data.get('color', '#6366f1'),
+    }
+
+    # Update existing or append new
+    existing_idx = next(
+        (i for i, s in enumerate(cal["scheduled_lessons"]) if s["id"] == entry_id),
+        None
+    )
+    if existing_idx is not None:
+        cal["scheduled_lessons"][existing_idx] = entry
+    else:
+        cal["scheduled_lessons"].append(entry)
+
+    _save_calendar(cal)
+    return jsonify({"status": "scheduled", "entry": entry})
+
+
+@lesson_bp.route('/api/calendar/schedule/<entry_id>', methods=['DELETE'])
+def unschedule_lesson(entry_id):
+    """Remove a scheduled lesson from the calendar."""
+    cal = _load_calendar()
+    before = len(cal["scheduled_lessons"])
+    cal["scheduled_lessons"] = [s for s in cal["scheduled_lessons"] if s["id"] != entry_id]
+    if len(cal["scheduled_lessons"]) == before:
+        return jsonify({"error": "Entry not found"}), 404
+    _save_calendar(cal)
+    return jsonify({"status": "removed"})
+
+
+@lesson_bp.route('/api/calendar/holiday', methods=['POST'])
+def add_holiday():
+    """Add a holiday or break to the calendar."""
+    data = request.json
+    if not data or not data.get('date'):
+        return jsonify({"error": "date and name are required"}), 400
+
+    cal = _load_calendar()
+
+    holiday = {
+        "date": data["date"],
+        "name": data.get("name", "Holiday"),
+    }
+    if data.get("end_date"):
+        holiday["end_date"] = data["end_date"]
+
+    # Avoid duplicate dates
+    cal["holidays"] = [h for h in cal["holidays"] if h["date"] != data["date"]]
+    cal["holidays"].append(holiday)
+    cal["holidays"].sort(key=lambda h: h["date"])
+
+    _save_calendar(cal)
+    return jsonify({"status": "added", "holiday": holiday})
+
+
+@lesson_bp.route('/api/calendar/holiday', methods=['DELETE'])
+def remove_holiday():
+    """Remove a holiday by date."""
+    date = request.args.get('date')
+    if not date:
+        return jsonify({"error": "date parameter required"}), 400
+
+    cal = _load_calendar()
+    before = len(cal["holidays"])
+    cal["holidays"] = [h for h in cal["holidays"] if h["date"] != date]
+    if len(cal["holidays"]) == before:
+        return jsonify({"error": "Holiday not found for that date"}), 404
+    _save_calendar(cal)
+    return jsonify({"status": "removed"})
+
+
+@lesson_bp.route('/api/calendar/school-days', methods=['PUT'])
+def update_school_days():
+    """Update which days of the week are school days."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    cal = _load_calendar()
+    for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+        if day in data:
+            cal["school_days"][day] = bool(data[day])
+    _save_calendar(cal)
+    return jsonify({"status": "updated", "school_days": cal["school_days"]})

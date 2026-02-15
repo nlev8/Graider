@@ -382,6 +382,20 @@ export default function AssistantChat({ addToast }) {
     } catch (e) { /* ignore */ }
   }
 
+  async function clearMemory() {
+    if (!window.confirm('Clear all saved memories? The assistant will no longer remember facts from previous conversations.')) return
+    try {
+      const authHeaders = await getAuthHeaders()
+      await fetch(API_BASE + '/api/assistant/memory', {
+        method: 'DELETE',
+        headers: authHeaders,
+      })
+      if (addToast) addToast('Assistant memory cleared', 'success')
+    } catch (e) {
+      if (addToast) addToast('Failed to clear memory', 'error')
+    }
+  }
+
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -405,6 +419,9 @@ export default function AssistantChat({ addToast }) {
     generate_document: 'Generating document',
     save_document_style: 'Saving document style',
     list_document_styles: 'Checking saved styles',
+    save_memory: 'Saving to memory',
+    get_standards: 'Looking up standards',
+    get_recent_lessons: 'Loading recent lessons',
   }
 
   const hasMessages = messages.length > 0
@@ -441,16 +458,27 @@ export default function AssistantChat({ addToast }) {
             Graider Assistant
           </h2>
         </div>
-        {hasMessages && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
-            onClick={clearConversation}
+            onClick={clearMemory}
             className="btn btn-secondary"
             style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+            title="Clear saved facts from previous conversations"
           >
-            <Icon name="Trash2" size={14} />
-            Clear
+            <Icon name="BrainCircuit" size={14} />
+            Clear Memory
           </button>
-        )}
+          {hasMessages && (
+            <button
+              onClick={clearConversation}
+              className="btn btn-secondary"
+              style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+            >
+              <Icon name="Trash2" size={14} />
+              Clear Chat
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Messages Area */}

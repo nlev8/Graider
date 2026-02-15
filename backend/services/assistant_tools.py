@@ -28,6 +28,8 @@ PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
 ACCOMMODATIONS_DIR = os.path.expanduser("~/.graider_data/accommodations")
 PARENT_CONTACTS_FILE = os.path.expanduser("~/.graider_data/parent_contacts.json")
 PERIOD_CSVS_DIR = os.path.join(PROJECT_ROOT, "Period CSVs")
+MEMORY_FILE = os.path.expanduser("~/.graider_data/assistant_memory.json")
+MAX_MEMORIES = 50
 
 
 def _safe_int_score(val):
@@ -645,6 +647,50 @@ TOOL_DEFINITIONS = [
                 "num_assignments": {
                     "type": "integer",
                     "description": "Number of recent assignments to analyze (default 1, max 5). More assignments = broader trend analysis."
+                }
+            }
+        }
+    },
+    {
+        "name": "save_memory",
+        "description": "Save an important fact about the teacher or their classes for future conversations. Use this when the teacher shares preferences, class structure, workflow habits, or any information that would be useful to remember across sessions. Only save genuinely useful facts, not temporary or conversation-specific details.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fact": {
+                    "type": "string",
+                    "description": "The fact to remember (e.g., 'Period 3 is honors with higher expectations')"
+                }
+            },
+            "required": ["fact"]
+        }
+    },
+    {
+        "name": "get_standards",
+        "description": "Look up curriculum standards for the teacher's state and subject. Use this when generating standards-aligned documents, worksheets, quizzes, or lesson content. Filter by topic keyword to find relevant standards. Returns standard codes, benchmarks, vocabulary, learning targets, and essential questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "description": "Topic keyword to filter standards (e.g., 'fractions', 'civil war', 'photosynthesis'). Matches against benchmark text, topics, and vocabulary."
+                },
+                "dok_max": {
+                    "type": "integer",
+                    "description": "Maximum DOK level to include (1-4). Use 2 for support classes, 3 for standard, 4 for advanced."
+                }
+            }
+        }
+    },
+    {
+        "name": "get_recent_lessons",
+        "description": "List saved lesson plans, optionally filtered by unit name. Shows what has been taught recently — topics, standards covered, vocabulary, and objectives per day. Use this when the teacher asks to create a quiz or worksheet 'for this unit', 'for what we've been doing', or references past lessons.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "unit_name": {
+                    "type": "string",
+                    "description": "Filter by unit name (partial match, case-insensitive). Omit to show all units and recent lessons."
                 }
             }
         }
@@ -2079,6 +2125,201 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
 
 
 # ═══════════════════════════════════════════════════════
+# STANDARDS LOOKUP
+# ═══════════════════════════════════════════════════════
+
+def get_standards_tool(topic=None, dok_max=None):
+    """Look up curriculum standards filtered by topic and DOK level."""
+    all_standards = _load_standards()
+    if not all_standards:
+        settings = _load_settings()
+        config = settings.get('config', {})
+        subj = config.get('subject', 'unknown')
+        st = config.get('state', 'unknown')
+        return {"error": f"No standards found for {subj} in {st}. Check Settings > Subject and State."}
+
+    results = all_standards
+
+    # Filter by DOK level
+    if dok_max is not None:
+        results = [s for s in results if s.get('dok', 99) <= dok_max]
+
+    # Filter by topic keyword
+    if topic:
+        topic_lower = topic.lower()
+        filtered = []
+        for s in results:
+            searchable = " ".join([
+                s.get('benchmark', ''),
+                " ".join(s.get('topics', [])),
+                " ".join(s.get('vocabulary', [])),
+                s.get('item_specs', ''),
+            ]).lower()
+            if topic_lower in searchable:
+                filtered.append(s)
+        results = filtered
+
+    if not results:
+        return {"error": f"No standards found matching '{topic or 'all'}' (DOK <= {dok_max or 'any'})"}
+
+    # Cap at 15 results
+    results = results[:15]
+
+    return {
+        "count": len(results),
+        "standards": [
+            {
+                "code": s.get("code", ""),
+                "benchmark": s.get("benchmark", ""),
+                "dok": s.get("dok"),
+                "topics": s.get("topics", []),
+                "vocabulary": s.get("vocabulary", []),
+                "learning_targets": s.get("learning_targets", []),
+                "essential_questions": s.get("essential_questions", []),
+                "sample_assessment": s.get("sample_assessment", ""),
+            }
+            for s in results
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════
+# RECENT LESSONS
+# ═══════════════════════════════════════════════════════
+
+def get_recent_lessons(unit_name=None):
+    """List saved lesson plans with full detail for document generation context."""
+    if not os.path.exists(LESSONS_DIR):
+        return {"error": "No saved lessons found. Generate and save lesson plans in the Planner tab first."}
+
+    lessons = []
+    for unit_dir in os.listdir(LESSONS_DIR):
+        unit_path = os.path.join(LESSONS_DIR, unit_dir)
+        if not os.path.isdir(unit_path):
+            continue
+
+        # Filter by unit name if provided
+        if unit_name and unit_name.lower() not in unit_dir.lower():
+            continue
+
+        for fname in os.listdir(unit_path):
+            if not fname.endswith('.json'):
+                continue
+            try:
+                with open(os.path.join(unit_path, fname), 'r', encoding='utf-8') as fh:
+                    data = json.load(fh)
+
+                # Extract day-level details
+                days_summary = []
+                all_vocab = []
+                all_standards = []
+                for day in data.get('days', []):
+                    day_info = {
+                        "day": day.get("day"),
+                        "topic": day.get("topic", ""),
+                        "objective": day.get("objective", ""),
+                    }
+                    # Collect standards addressed
+                    stds = day.get("standards_addressed", [])
+                    if stds:
+                        day_info["standards"] = stds
+                        all_standards.extend(stds)
+                    # Collect vocabulary
+                    vocab = day.get("vocabulary", [])
+                    for v in vocab:
+                        term = v.get("term", v) if isinstance(v, dict) else str(v)
+                        if term and term not in all_vocab:
+                            all_vocab.append(term)
+                    days_summary.append(day_info)
+
+                lessons.append({
+                    "unit": unit_dir,
+                    "title": data.get("title", fname.replace(".json", "")),
+                    "overview": data.get("overview", ""),
+                    "essential_questions": data.get("essential_questions", []),
+                    "num_days": len(data.get("days", [])),
+                    "days": days_summary,
+                    "vocabulary": all_vocab,
+                    "standards_covered": list(set(all_standards)),
+                    "saved_at": data.get("_saved_at", ""),
+                })
+            except Exception:
+                continue
+
+    if not lessons:
+        msg = f"No lessons found for unit '{unit_name}'." if unit_name else "No saved lessons found."
+        return {"error": msg}
+
+    # Sort by saved_at (most recent first), cap at 10
+    lessons.sort(key=lambda x: x.get("saved_at", ""), reverse=True)
+    lessons = lessons[:10]
+
+    # Group by unit for readability
+    units = {}
+    for lesson in lessons:
+        unit = lesson["unit"]
+        if unit not in units:
+            units[unit] = []
+        units[unit].append(lesson)
+
+    return {
+        "total_lessons": len(lessons),
+        "units": list(units.keys()),
+        "lessons": lessons,
+    }
+
+
+# ═══════════════════════════════════════════════════════
+# PERSISTENT MEMORY
+# ═══════════════════════════════════════════════════════
+
+def _load_memories():
+    """Load saved memories from disk. Returns list of fact strings."""
+    if not os.path.exists(MEMORY_FILE):
+        return []
+    try:
+        with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_memories(memories):
+    """Persist memories list to disk."""
+    os.makedirs(os.path.dirname(MEMORY_FILE), exist_ok=True)
+    with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(memories, f, indent=2)
+
+
+def save_memory(fact):
+    """Save a fact to persistent memory for future conversations."""
+    if not fact or not fact.strip():
+        return {"error": "No fact provided"}
+
+    fact = fact.strip()
+    memories = _load_memories()
+
+    # Duplicate check — skip if a very similar fact already exists
+    fact_lower = fact.lower()
+    for existing in memories:
+        existing_text = existing.get("fact", existing) if isinstance(existing, dict) else str(existing)
+        if existing_text.lower() == fact_lower:
+            return {"status": "already_saved", "fact": fact, "message": "This fact is already saved."}
+
+    # Build entry with timestamp
+    entry = {"fact": fact, "saved_at": datetime.now().isoformat()}
+    memories.append(entry)
+
+    # Cap at MAX_MEMORIES (remove oldest if exceeded)
+    if len(memories) > MAX_MEMORIES:
+        memories = memories[-MAX_MEMORIES:]
+
+    _save_memories(memories)
+    return {"status": "saved", "fact": fact, "total_memories": len(memories)}
+
+
+# ═══════════════════════════════════════════════════════
 # TOOL DISPATCH
 # ═══════════════════════════════════════════════════════
 
@@ -2100,6 +2341,9 @@ TOOL_HANDLERS = {
     "generate_document": generate_document_tool,
     "save_document_style": save_document_style_tool,
     "list_document_styles": list_document_styles_tool,
+    "save_memory": save_memory,
+    "get_standards": get_standards_tool,
+    "get_recent_lessons": get_recent_lessons,
 }
 
 

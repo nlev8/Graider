@@ -1434,7 +1434,16 @@ function App() {
   const [assessmentAnswers, setAssessmentAnswers] = useState({}); // Track interactive answers for preview
   const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
   const [gradingAssessment, setGradingAssessment] = useState(false);
-  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson" or "assessment"
+  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", or "calendar"
+
+  // Calendar state
+  const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} })
+  const [calendarMonth, setCalendarMonth] = useState(new Date())
+  const [calendarView, setCalendarView] = useState('month')
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
+  const [showHolidayModal, setShowHolidayModal] = useState(false)
+  const [holidayForm, setHolidayForm] = useState({ date: '', name: '', end_date: '' })
+  const [calendarDragId, setCalendarDragId] = useState(null)
   const [publishingAssessment, setPublishingAssessment] = useState(false);
   const [publishedAssessmentModal, setPublishedAssessmentModal] = useState({ show: false, joinCode: "", joinLink: "" });
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
@@ -1963,6 +1972,118 @@ function App() {
         });
     }
   }, [config.state, config.grade_level, config.subject, activeTab]);
+
+  // Load calendar data when calendar mode is active
+  useEffect(() => {
+    if (activeTab === 'planner' && plannerMode === 'calendar') {
+      fetch('/api/calendar').then(r => r.json()).then(setCalendarData).catch(() => {})
+    }
+  }, [activeTab, plannerMode])
+
+  // Calendar helper functions
+  function loadCalendar() {
+    fetch('/api/calendar').then(r => r.json()).then(setCalendarData).catch(() => {})
+  }
+
+  async function scheduleLesson(entry) {
+    try {
+      const resp = await fetch('/api/calendar/schedule', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+      const data = await resp.json()
+      if (data.status === 'scheduled') loadCalendar()
+    } catch (e) {
+      if (addToast) addToast('Failed to schedule lesson', 'error')
+    }
+  }
+
+  async function unscheduleLesson(entryId) {
+    try {
+      await fetch('/api/calendar/schedule/' + entryId, { method: 'DELETE' })
+      loadCalendar()
+    } catch (e) {
+      if (addToast) addToast('Failed to remove lesson', 'error')
+    }
+  }
+
+  async function addHoliday(holiday) {
+    try {
+      const resp = await fetch('/api/calendar/holiday', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(holiday),
+      })
+      const data = await resp.json()
+      if (data.status === 'added') loadCalendar()
+    } catch (e) {
+      if (addToast) addToast('Failed to add holiday', 'error')
+    }
+  }
+
+  async function removeHoliday(date) {
+    try {
+      await fetch('/api/calendar/holiday?date=' + date, { method: 'DELETE' })
+      loadCalendar()
+    } catch (e) {
+      if (addToast) addToast('Failed to remove holiday', 'error')
+    }
+  }
+
+  // Calendar grid computation
+  function getCalendarDays(month) {
+    const year = month.getFullYear()
+    const m = month.getMonth()
+    const firstDay = new Date(year, m, 1)
+    const lastDay = new Date(year, m + 1, 0)
+    const startDow = firstDay.getDay() // 0=Sun
+    const totalDays = lastDay.getDate()
+
+    const days = []
+    // Fill leading blanks (start from Sunday)
+    for (let i = 0; i < startDow; i++) days.push(null)
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = year + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0')
+      days.push({ day: d, date: dateStr, dow: new Date(year, m, d).getDay() })
+    }
+    return days
+  }
+
+  function getWeekDays(startOfWeek) {
+    const days = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek)
+      d.setDate(d.getDate() + i)
+      const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+      days.push({ day: d.getDate(), date: dateStr, dow: d.getDay(), fullDate: d })
+    }
+    return days
+  }
+
+  function getStartOfWeek(date) {
+    const d = new Date(date)
+    const day = d.getDay()
+    d.setDate(d.getDate() - day)
+    return d
+  }
+
+  function isHoliday(dateStr) {
+    return (calendarData.holidays || []).find(h => {
+      if (h.date === dateStr) return true
+      if (h.end_date && dateStr >= h.date && dateStr <= h.end_date) return true
+      return false
+    })
+  }
+
+  function getLessonsForDate(dateStr) {
+    return (calendarData.scheduled_lessons || []).filter(s => s.date === dateStr)
+  }
+
+  function isSchoolDay(dow) {
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    return calendarData.school_days ? calendarData.school_days[dayNames[dow]] : (dow >= 1 && dow <= 5)
+  }
 
   // Load assessment templates and VPortal credentials when settings tab is opened
   useEffect(() => {
@@ -18384,6 +18505,31 @@ ${signature}`;
                       <Icon name="Users" size={18} />
                       Student Portal
                     </button>
+                    <button
+                      onClick={() => setPlannerMode("calendar")}
+                      style={{
+                        padding: "10px 20px",
+                        cursor: "pointer",
+                        fontSize: "0.9rem",
+                        background:
+                          plannerMode === "calendar"
+                            ? "linear-gradient(135deg, #f59e0b, #d97706)"
+                            : "var(--glass-bg)",
+                        border:
+                          plannerMode === "calendar"
+                            ? "none"
+                            : "1px solid var(--glass-border)",
+                        color: plannerMode === "calendar" ? "#fff" : "var(--text-secondary)",
+                        fontWeight: 600,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="Calendar" size={18} />
+                      Calendar
+                    </button>
                   </div>
 
                   {/* Lesson Planning Mode */}
@@ -21683,6 +21829,418 @@ ${signature}`;
                       </div>
                     </div>
                   )}
+
+                  {/* Calendar Mode */}
+                  {plannerMode === "calendar" && (
+                    <div className="fade-in">
+                      {/* Calendar Header */}
+                      <div className="glass-card" style={{ padding: "16px 20px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <button
+                            onClick={() => {
+                              const d = new Date(calendarMonth)
+                              d.setMonth(d.getMonth() - 1)
+                              setCalendarMonth(d)
+                            }}
+                            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "8px", padding: "6px 10px", cursor: "pointer", color: "var(--text-primary)" }}
+                          >
+                            <Icon name="ChevronLeft" size={18} />
+                          </button>
+                          <h3 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0, minWidth: "180px", textAlign: "center" }}>
+                            {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                          </h3>
+                          <button
+                            onClick={() => {
+                              const d = new Date(calendarMonth)
+                              d.setMonth(d.getMonth() + 1)
+                              setCalendarMonth(d)
+                            }}
+                            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "8px", padding: "6px 10px", cursor: "pointer", color: "var(--text-primary)" }}
+                          >
+                            <Icon name="ChevronRight" size={18} />
+                          </button>
+                          <button
+                            onClick={() => setCalendarMonth(new Date())}
+                            className="btn btn-secondary"
+                            style={{ padding: "6px 14px", fontSize: "0.8rem" }}
+                          >
+                            Today
+                          </button>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ display: "flex", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--glass-border)" }}>
+                            <button
+                              onClick={() => setCalendarView('month')}
+                              style={{
+                                padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer", border: "none",
+                                background: calendarView === 'month' ? 'var(--accent-primary)' : 'var(--glass-bg)',
+                                color: calendarView === 'month' ? '#fff' : 'var(--text-secondary)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Month
+                            </button>
+                            <button
+                              onClick={() => setCalendarView('week')}
+                              style={{
+                                padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer", border: "none",
+                                background: calendarView === 'week' ? 'var(--accent-primary)' : 'var(--glass-bg)',
+                                color: calendarView === 'week' ? '#fff' : 'var(--text-secondary)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Week
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => { setHolidayForm({ date: '', name: '', end_date: '' }); setShowHolidayModal(true) }}
+                            className="btn btn-secondary"
+                            style={{ padding: "6px 14px", fontSize: "0.8rem" }}
+                          >
+                            <Icon name="CalendarOff" size={14} />
+                            Add Holiday
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Month View */}
+                      {calendarView === 'month' && (() => {
+                        const days = getCalendarDays(calendarMonth)
+                        const today = new Date()
+                        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
+                        return (
+                          <div>
+                            {/* Day headers */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px", marginBottom: "4px" }}>
+                              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                                <div key={d} style={{ textAlign: "center", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", padding: "6px" }}>
+                                  {d}
+                                </div>
+                              ))}
+                            </div>
+                            {/* Day cells */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px" }}>
+                              {days.map((cell, idx) => {
+                                if (!cell) return <div key={'blank-' + idx} style={{ minHeight: "100px" }} />
+                                const holiday = isHoliday(cell.date)
+                                const lessons = getLessonsForDate(cell.date)
+                                const school = isSchoolDay(cell.dow)
+                                const isToday = cell.date === todayStr
+                                return (
+                                  <div
+                                    key={cell.date}
+                                    onDragOver={e => e.preventDefault()}
+                                    onDrop={e => {
+                                      e.preventDefault()
+                                      if (calendarDragId) {
+                                        const entry = (calendarData.scheduled_lessons || []).find(s => s.id === calendarDragId)
+                                        if (entry) scheduleLesson({ ...entry, date: cell.date })
+                                        setCalendarDragId(null)
+                                      }
+                                    }}
+                                    onClick={() => {
+                                      if (!holiday && school && lessons.length === 0) {
+                                        setSelectedCalendarDate(cell.date)
+                                      }
+                                    }}
+                                    style={{
+                                      minHeight: "100px",
+                                      background: holiday ? "rgba(239, 68, 68, 0.08)" : !school ? "rgba(100,100,100,0.05)" : isToday ? "rgba(99, 102, 241, 0.08)" : "var(--glass-bg)",
+                                      border: isToday ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                                      borderRadius: "8px",
+                                      padding: "6px",
+                                      cursor: !holiday && school && lessons.length === 0 ? "pointer" : "default",
+                                      opacity: !school ? 0.5 : 1,
+                                      transition: "all 0.15s",
+                                    }}
+                                  >
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                      <span style={{ fontSize: "0.8rem", fontWeight: isToday ? 700 : 500, color: isToday ? "var(--accent-primary)" : "var(--text-primary)" }}>
+                                        {cell.day}
+                                      </span>
+                                    </div>
+                                    {holiday && (
+                                      <div style={{
+                                        fontSize: "0.7rem", padding: "2px 6px", borderRadius: "6px",
+                                        background: "rgba(239, 68, 68, 0.2)", color: "#ef4444", fontWeight: 600,
+                                        display: "flex", alignItems: "center", gap: "3px", marginBottom: "3px", justifyContent: "space-between",
+                                      }}>
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{holiday.name}</span>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); removeHoliday(holiday.date) }}
+                                          style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 0, lineHeight: 1, flexShrink: 0 }}
+                                        >
+                                          <Icon name="X" size={10} />
+                                        </button>
+                                      </div>
+                                    )}
+                                    {lessons.map(lesson => (
+                                      <div
+                                        key={lesson.id}
+                                        draggable
+                                        onDragStart={() => setCalendarDragId(lesson.id)}
+                                        onDragEnd={() => setCalendarDragId(null)}
+                                        style={{
+                                          fontSize: "0.7rem", padding: "3px 6px", borderRadius: "6px",
+                                          background: lesson.color || "#6366f1", color: "#fff", fontWeight: 500,
+                                          marginBottom: "2px", cursor: "grab", display: "flex", alignItems: "center",
+                                          justifyContent: "space-between", gap: "2px",
+                                        }}
+                                      >
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                          {lesson.day_number ? 'D' + lesson.day_number + ': ' : ''}{lesson.lesson_title}
+                                        </span>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); unscheduleLesson(lesson.id) }}
+                                          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, lineHeight: 1, flexShrink: 0 }}
+                                        >
+                                          <Icon name="X" size={10} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Week View */}
+                      {calendarView === 'week' && (() => {
+                        const weekStart = getStartOfWeek(calendarMonth)
+                        const days = getWeekDays(weekStart)
+                        const today = new Date()
+                        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
+                        return (
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "8px" }}>
+                            {days.map(cell => {
+                              const holiday = isHoliday(cell.date)
+                              const lessons = getLessonsForDate(cell.date)
+                              const school = isSchoolDay(cell.dow)
+                              const isToday = cell.date === todayStr
+                              const dayLabel = cell.fullDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                              return (
+                                <div
+                                  key={cell.date}
+                                  onDragOver={e => e.preventDefault()}
+                                  onDrop={e => {
+                                    e.preventDefault()
+                                    if (calendarDragId) {
+                                      const entry = (calendarData.scheduled_lessons || []).find(s => s.id === calendarDragId)
+                                      if (entry) scheduleLesson({ ...entry, date: cell.date })
+                                      setCalendarDragId(null)
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    if (!holiday && school && lessons.length === 0) setSelectedCalendarDate(cell.date)
+                                  }}
+                                  className="glass-card"
+                                  style={{
+                                    minHeight: "280px", padding: "12px",
+                                    opacity: !school ? 0.4 : 1,
+                                    border: isToday ? "2px solid var(--accent-primary)" : undefined,
+                                    background: holiday ? "rgba(239, 68, 68, 0.08)" : undefined,
+                                    cursor: !holiday && school && lessons.length === 0 ? "pointer" : "default",
+                                  }}
+                                >
+                                  <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "10px", color: isToday ? "var(--accent-primary)" : "var(--text-primary)" }}>
+                                    {dayLabel}
+                                  </div>
+                                  {holiday && (
+                                    <div style={{
+                                      fontSize: "0.8rem", padding: "6px 10px", borderRadius: "8px",
+                                      background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", fontWeight: 600,
+                                      marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px",
+                                    }}>
+                                      <Icon name="CalendarOff" size={14} />
+                                      {holiday.name}
+                                    </div>
+                                  )}
+                                  {lessons.map(lesson => (
+                                    <div
+                                      key={lesson.id}
+                                      draggable
+                                      onDragStart={() => setCalendarDragId(lesson.id)}
+                                      onDragEnd={() => setCalendarDragId(null)}
+                                      style={{
+                                        padding: "8px 10px", borderRadius: "8px",
+                                        background: lesson.color || "#6366f1", color: "#fff",
+                                        marginBottom: "6px", cursor: "grab",
+                                      }}
+                                    >
+                                      <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "2px" }}>
+                                        {lesson.day_number ? 'Day ' + lesson.day_number + ': ' : ''}{lesson.lesson_title}
+                                      </div>
+                                      {lesson.unit && <div style={{ fontSize: "0.7rem", opacity: 0.8 }}>{lesson.unit}</div>}
+                                      <button
+                                        onClick={e => { e.stopPropagation(); unscheduleLesson(lesson.id) }}
+                                        style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", cursor: "pointer", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem", marginTop: "4px" }}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {!holiday && school && lessons.length === 0 && (
+                                    <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", marginTop: "40px" }}>
+                                      Click to schedule
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
+
+                      {/* Schedule Lesson Modal */}
+                      {selectedCalendarDate && (
+                        <div
+                          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+                          onClick={() => setSelectedCalendarDate(null)}
+                        >
+                          <div
+                            className="glass-card"
+                            style={{ maxWidth: "500px", width: "100%", padding: "24px", maxHeight: "80vh", overflowY: "auto" }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <Icon name="CalendarPlus" size={20} style={{ color: "var(--accent-primary)" }} />
+                              Schedule Lesson
+                            </h3>
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                              {new Date(selectedCalendarDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                            </p>
+                            {Object.keys(savedLessons.units || {}).length === 0 ? (
+                              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>No saved lessons. Generate and save lesson plans first.</p>
+                            ) : (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {Object.entries(savedLessons.units || {}).map(([unitName, unitLessons]) => (
+                                  <div key={unitName}>
+                                    <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <Icon name="FolderOpen" size={14} />
+                                      {unitName}
+                                    </div>
+                                    {unitLessons.map((lesson, li) => {
+                                      const unitColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444']
+                                      const colorIdx = Object.keys(savedLessons.units).indexOf(unitName) % unitColors.length
+                                      return (
+                                        <button
+                                          key={li}
+                                          onClick={() => {
+                                            scheduleLesson({
+                                              date: selectedCalendarDate,
+                                              unit: unitName,
+                                              lesson_title: lesson.title,
+                                              lesson_file: unitName + '/' + lesson.filename + '.json',
+                                              color: unitColors[colorIdx],
+                                            })
+                                            setSelectedCalendarDate(null)
+                                          }}
+                                          style={{
+                                            width: "100%", textAlign: "left", padding: "10px 14px",
+                                            background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+                                            borderRadius: "8px", cursor: "pointer", color: "var(--text-primary)",
+                                            fontSize: "0.85rem", marginBottom: "4px",
+                                            display: "flex", alignItems: "center", gap: "8px",
+                                            transition: "all 0.15s",
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-primary)"; e.currentTarget.style.background = "var(--glass-hover)" }}
+                                          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--glass-border)"; e.currentTarget.style.background = "var(--glass-bg)" }}
+                                        >
+                                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: unitColors[colorIdx], flexShrink: 0 }} />
+                                          {lesson.title}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setSelectedCalendarDate(null)}
+                              className="btn btn-secondary"
+                              style={{ marginTop: "16px", width: "100%" }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add Holiday Modal */}
+                      {showHolidayModal && (
+                        <div
+                          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+                          onClick={() => setShowHolidayModal(false)}
+                        >
+                          <div
+                            className="glass-card"
+                            style={{ maxWidth: "400px", width: "100%", padding: "24px" }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <Icon name="CalendarOff" size={20} style={{ color: "#ef4444" }} />
+                              Add Holiday / Break
+                            </h3>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Name</label>
+                                <input
+                                  type="text"
+                                  value={holidayForm.name}
+                                  onChange={e => setHolidayForm(prev => ({ ...prev, name: e.target.value }))}
+                                  placeholder="e.g., Spring Break"
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Start Date</label>
+                                <input
+                                  type="date"
+                                  value={holidayForm.date}
+                                  onChange={e => setHolidayForm(prev => ({ ...prev, date: e.target.value }))}
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>End Date (for multi-day breaks)</label>
+                                <input
+                                  type="date"
+                                  value={holidayForm.end_date}
+                                  onChange={e => setHolidayForm(prev => ({ ...prev, end_date: e.target.value }))}
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                />
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                                <button
+                                  onClick={() => {
+                                    if (holidayForm.date && holidayForm.name) {
+                                      addHoliday(holidayForm)
+                                      setShowHolidayModal(false)
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ flex: 1 }}
+                                  disabled={!holidayForm.date || !holidayForm.name}
+                                >
+                                  Add Holiday
+                                </button>
+                                <button
+                                  onClick={() => setShowHolidayModal(false)}
+                                  className="btn btn-secondary"
+                                  style={{ flex: 1 }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               )}
             </div>
