@@ -70,6 +70,11 @@ def get_analytics():
                     "completeness": int(float(row.get("Completeness", 0) or 0)),
                     "writing": int(float(row.get("Writing Quality", 0) or 0)),
                     "effort": int(float(row.get("Effort Engagement", 0) or 0)),
+                    "api_cost": float(row.get("API Cost", 0) or 0),
+                    "input_tokens": int(float(row.get("Input Tokens", 0) or 0)),
+                    "output_tokens": int(float(row.get("Output Tokens", 0) or 0)),
+                    "api_calls": int(float(row.get("API Calls", 0) or 0)),
+                    "ai_model": row.get("AI Model", ""),
                 }
                 all_grades.append(grade_data)
 
@@ -151,6 +156,42 @@ def get_analytics():
     # Top performers
     top_performers = sorted(student_progress, key=lambda x: x["average"], reverse=True)[:5]
 
+    # Cost summary
+    total_cost = sum(g.get("api_cost", 0) for g in all_grades)
+    total_input = sum(g.get("input_tokens", 0) for g in all_grades)
+    total_output = sum(g.get("output_tokens", 0) for g in all_grades)
+    total_api_calls = sum(g.get("api_calls", 0) for g in all_grades)
+
+    # Cost by model
+    cost_by_model = {}
+    for g in all_grades:
+        model = g.get("ai_model", "") or "unknown"
+        if model not in cost_by_model:
+            cost_by_model[model] = {"cost": 0, "count": 0, "tokens": 0}
+        cost_by_model[model]["cost"] += g.get("api_cost", 0)
+        cost_by_model[model]["count"] += 1
+        cost_by_model[model]["tokens"] += g.get("input_tokens", 0) + g.get("output_tokens", 0)
+
+    # Cost by assignment
+    cost_by_assignment = {}
+    for g in all_grades:
+        assign = g.get("assignment", "") or "unknown"
+        if assign not in cost_by_assignment:
+            cost_by_assignment[assign] = {"cost": 0, "count": 0}
+        cost_by_assignment[assign]["cost"] += g.get("api_cost", 0)
+        cost_by_assignment[assign]["count"] += 1
+
+    cost_summary = {
+        "total_cost": round(total_cost, 4),
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "total_tokens": total_input + total_output,
+        "total_api_calls": total_api_calls,
+        "avg_cost_per_student": round(total_cost / len(all_grades), 4) if all_grades else 0,
+        "by_model": [{"model": m, **v} for m, v in sorted(cost_by_model.items(), key=lambda x: x[1]["cost"], reverse=True) if m != "unknown"],
+        "by_assignment": [{"assignment": a, **v} for a, v in sorted(cost_by_assignment.items(), key=lambda x: x[1]["cost"], reverse=True)],
+    }
+
     return jsonify({
         "class_stats": class_stats,
         "student_progress": sorted(student_progress, key=lambda x: x["name"]),
@@ -159,7 +200,8 @@ def get_analytics():
         "attention_needed": attention_needed,
         "top_performers": top_performers,
         "all_grades": all_grades,
-        "available_periods": sorted(list(available_periods))
+        "available_periods": sorted(list(available_periods)),
+        "cost_summary": cost_summary
     })
 
 

@@ -1377,7 +1377,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "grading_period": grading_period,
                     "has_markers": False,
                     "config_mismatch": result.get("config_mismatch", False),
-                    "config_mismatch_reason": result.get("config_mismatch_reason", "")
+                    "config_mismatch_reason": result.get("config_mismatch_reason", ""),
+                    "ai_model": ai_model
                 }
                 all_grades.append(grade_record)
 

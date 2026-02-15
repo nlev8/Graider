@@ -1141,6 +1141,7 @@ function App() {
   }); // field: time, name, assignment, score, grade
   const [missingAssignmentFilter, setMissingAssignmentFilter] = useState(""); // Assignment to check for missing submissions
   const [missingPeriodFilter, setMissingPeriodFilter] = useState(""); // Period to filter missing report
+  const [collapsedPeriods, setCollapsedPeriods] = useState(new Set()); // Collapsed period cards in missing report
   const [missingStudentFilter, setMissingStudentFilter] = useState(""); // Student to check for missing assignments
   const [missingUploadedFiles, setMissingUploadedFiles] = useState([]); // Files in folder for missing check
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
@@ -2279,6 +2280,16 @@ function App() {
       .sort((a, b) => b.average - a.average)
       .slice(0, 5);
 
+    // Recompute cost summary from filtered grades
+    const filteredCostTotal = filteredGrades.reduce((sum, g) => sum + (g.api_cost || 0), 0);
+    const filteredCostSummary = analytics.cost_summary ? {
+      ...analytics.cost_summary,
+      total_cost: Math.round(filteredCostTotal * 10000) / 10000,
+      total_tokens: filteredGrades.reduce((sum, g) => sum + (g.input_tokens || 0) + (g.output_tokens || 0), 0),
+      total_api_calls: filteredGrades.reduce((sum, g) => sum + (g.api_calls || 0), 0),
+      avg_cost_per_student: filteredGrades.length > 0 ? Math.round(filteredCostTotal / filteredGrades.length * 10000) / 10000 : 0,
+    } : analytics.cost_summary;
+
     return {
       ...analytics,
       all_grades: filteredGrades,
@@ -2286,6 +2297,7 @@ function App() {
       class_stats: filteredClassStats,
       attention_needed: filteredAttention,
       top_performers: filteredTop,
+      cost_summary: filteredCostSummary,
     };
   }, [analytics, analyticsClassPeriod, analyticsClassStudents]);
 
@@ -17330,6 +17342,111 @@ ${signature}`;
                         </div>
                       </div>
 
+                      {/* API Cost Summary */}
+                      {filteredAnalytics.cost_summary && filteredAnalytics.cost_summary.total_cost > 0 && (
+                        <div className="glass-card" style={{ padding: "25px" }}>
+                          <h3
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Icon name="DollarSign" size={20} />
+                            API Cost Tracker
+                          </h3>
+                          {/* Summary stats */}
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                              gap: "12px",
+                              marginBottom: "20px",
+                            }}
+                          >
+                            {[
+                              { label: "Total Spend", value: "$" + filteredAnalytics.cost_summary.total_cost.toFixed(4), color: "#f59e0b" },
+                              { label: "Avg / Student", value: "$" + filteredAnalytics.cost_summary.avg_cost_per_student.toFixed(4), color: "#6366f1" },
+                              { label: "Total Tokens", value: filteredAnalytics.cost_summary.total_tokens.toLocaleString(), color: "#10b981" },
+                              { label: "API Calls", value: filteredAnalytics.cost_summary.total_api_calls.toLocaleString(), color: "#8b5cf6" },
+                            ].map((stat) => (
+                              <div
+                                key={stat.label}
+                                style={{
+                                  textAlign: "center",
+                                  padding: "12px",
+                                  background: "rgba(0,0,0,0.15)",
+                                  borderRadius: "8px",
+                                }}
+                              >
+                                <div style={{ fontSize: "1.4rem", fontWeight: 700, color: stat.color }}>{stat.value}</div>
+                                <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{stat.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Cost by model */}
+                          {filteredAnalytics.cost_summary.by_model?.length > 0 && (
+                            <div style={{ marginBottom: "15px" }}>
+                              <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "8px", color: "var(--text-secondary)" }}>By Model</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {filteredAnalytics.cost_summary.by_model.map((m) => (
+                                  <div
+                                    key={m.model}
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      padding: "8px 12px",
+                                      background: "var(--input-bg)",
+                                      borderRadius: "6px",
+                                      fontSize: "0.85rem",
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: 500 }}>{m.model}</span>
+                                    <div style={{ display: "flex", gap: "16px", color: "var(--text-secondary)" }}>
+                                      <span>{m.count} graded</span>
+                                      <span>{m.tokens.toLocaleString()} tokens</span>
+                                      <span style={{ fontWeight: 600, color: "#f59e0b" }}>${m.cost.toFixed(4)}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Cost by assignment */}
+                          {filteredAnalytics.cost_summary.by_assignment?.length > 0 && (
+                            <div>
+                              <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "8px", color: "var(--text-secondary)" }}>By Assignment</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {filteredAnalytics.cost_summary.by_assignment.map((a) => (
+                                  <div
+                                    key={a.assignment}
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      padding: "8px 12px",
+                                      background: "var(--input-bg)",
+                                      borderRadius: "6px",
+                                      fontSize: "0.85rem",
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: 500, maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.assignment}</span>
+                                    <div style={{ display: "flex", gap: "16px", color: "var(--text-secondary)" }}>
+                                      <span>{a.count} students</span>
+                                      <span style={{ fontWeight: 600, color: "#f59e0b" }}>${a.cost.toFixed(4)}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Missing Assignments Section */}
                       <div className="glass-card" style={{ padding: "25px" }}>
                         <div
@@ -17929,7 +18046,10 @@ ${signature}`;
 
                                 {/* Per Period Breakdown */}
                                 <div style={{ display: "grid", gap: "12px" }}>
-                                  {periodReports.map((report) => (
+                                  {periodReports.map((report) => {
+                                    const isCollapsed = collapsedPeriods.has(report.period);
+                                    const canCollapse = !missingPeriodFilter && periodReports.length > 1;
+                                    return (
                                     <div
                                       key={report.period}
                                       style={{
@@ -17942,18 +18062,29 @@ ${signature}`;
                                       }}
                                     >
                                       <div
+                                        onClick={canCollapse ? () => {
+                                          setCollapsedPeriods(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(report.period)) next.delete(report.period);
+                                            else next.add(report.period);
+                                            return next;
+                                          });
+                                        } : undefined}
                                         style={{
                                           display: "flex",
                                           justifyContent: "space-between",
                                           alignItems: "center",
+                                          cursor: canCollapse ? "pointer" : "default",
                                           marginBottom:
-                                            report.studentsWithMissing.length >
-                                            0
+                                            !isCollapsed && report.studentsWithMissing.length > 0
                                               ? "10px"
                                               : 0,
                                         }}
                                       >
-                                        <span style={{ fontWeight: 600 }}>
+                                        <span style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+                                          {canCollapse && (
+                                            <Icon name={isCollapsed ? "ChevronRight" : "ChevronDown"} size={16} style={{ opacity: 0.6 }} />
+                                          )}
                                           {report.period}
                                         </span>
                                         <span style={{ fontSize: "0.85rem" }}>
@@ -17972,7 +18103,7 @@ ${signature}`;
                                           )}
                                         </span>
                                       </div>
-                                      {report.studentsWithMissing.length >
+                                      {!isCollapsed && report.studentsWithMissing.length >
                                         0 && (
                                         <div
                                           style={{
@@ -18030,7 +18161,8 @@ ${signature}`;
                                         </div>
                                       )}
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );

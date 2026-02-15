@@ -6030,7 +6030,8 @@ def save_to_master_csv(grades: list, output_folder: str):
         'Period', 'Assignment', 'Unit', 'Quarter',
         'Overall Score', 'Letter Grade',
         'Content Accuracy', 'Completeness', 'Writing Quality', 'Effort Engagement',
-        'Feedback'
+        'Feedback',
+        'API Cost', 'Input Tokens', 'Output Tokens', 'API Calls', 'AI Model'
     ]
 
     # Determine current quarter based on date
@@ -6096,6 +6097,8 @@ def save_to_master_csv(grades: list, output_folder: str):
 
             breakdown = grade.get('breakdown', {})
 
+            token_usage = grade.get('token_usage', {})
+
             writer.writerow([
                 today.strftime('%Y-%m-%d'),
                 grade.get('student_id', ''),
@@ -6112,7 +6115,12 @@ def save_to_master_csv(grades: list, output_folder: str):
                 breakdown.get('completeness', 0),
                 breakdown.get('writing_quality', 0),
                 breakdown.get('effort_engagement', 0),
-                grade.get('feedback', '').replace('\r', ' ').replace('\n', ' ')[:500]
+                grade.get('feedback', '').replace('\r', ' ').replace('\n', ' ')[:500],
+                token_usage.get('total_cost', ''),
+                token_usage.get('total_input_tokens', ''),
+                token_usage.get('total_output_tokens', ''),
+                token_usage.get('api_calls', ''),
+                grade.get('ai_model', '')
             ])
     
     print(f"📊 Updated master grades file: {master_file}")
