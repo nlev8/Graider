@@ -3403,7 +3403,8 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    assignment_template: str = None, rubric_prompt: str = None,
                                    custom_markers: list = None, exclude_markers: list = None,
                                    marker_config: list = None, effort_points: int = 15,
-                                   extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
+                                   extraction_mode: str = 'structured', grading_style: str = 'standard',
+                                   student_history: str = '') -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
@@ -3473,7 +3474,8 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                              custom_ai_instructions, grade_level, subject,
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
-                                             extraction_mode, grading_style, token_tracker=tracker)
+                                             extraction_mode, grading_style, token_tracker=tracker,
+                                             student_history=student_history)
         else:
             grading_future = executor.submit(grade_assignment, student_name, assignment_data,
                                              custom_ai_instructions, grade_level, subject,
@@ -3907,7 +3909,8 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
                       rubric_breakdown: dict = None,
                       blank_questions: list = None,
                       missing_sections: list = None,
-                      token_tracker: 'TokenTracker' = None) -> dict:
+                      token_tracker: 'TokenTracker' = None,
+                      student_history: str = '') -> dict:
     """Generate encouraging, improvement-focused teacher feedback from per-question grades.
 
     Args:
@@ -4003,6 +4006,11 @@ RUBRIC BREAKDOWN (address each area in your feedback):
                 missing_parts.append(f"  - {q}")
         missing_summary = "\n" + "\n".join(missing_parts) + "\n"
 
+    # Build dedicated history section (kept separate from teacher_instructions for prominence)
+    history_section = ""
+    if student_history:
+        history_section = f"\n---\nSTUDENT PERFORMANCE HISTORY (MANDATORY -- you MUST reference this):\n{student_history}\n---\n"
+
     prompt = f"""Write personalized, encouraging teacher feedback for a grade {grade_level} {subject} student. Focus on what the student needs to know to improve.
 
 SCORE: {total_score}/{total_possible} ({letter_grade})
@@ -4011,9 +4019,10 @@ PER-QUESTION RESULTS (with the student's actual answers):
 {chr(10).join(summary_lines)}
 
 ---
-TEACHER'S INSTRUCTIONS & STUDENT CONTEXT (includes student history if available):
+TEACHER'S INSTRUCTIONS & GRADING CONTEXT:
 {teacher_instructions}
 ---
+{history_section}
 NOTE ON TEACHER LENIENCY: If the per-question reasoning above says "Teacher accepts general definitions"
 for vocabulary terms, do NOT criticize those vocab answers as "too basic" or "lacking context" in your
 feedback. Briefly acknowledge them positively, then move on to the questions and sections that actually
@@ -4027,7 +4036,7 @@ UNIVERSAL RULES:
 - For every wrong answer you mention, explain what the correct answer is or what was missing
 - MISSING WORK: If there are blank questions or missing sections listed above, you MUST call them out specifically in your feedback. Name the exact questions or sections that were left blank and explain what the student should have written. Example: "You left the SUMMARY section blank — this section asked you to summarize the key events of the Seminole Wars in 4-5 sentences. To complete it, you'd want to cover the three wars (1817-1858), the role of Andrew Jackson, and the eventual forced relocation to Indian Territory."
 - Reference the actual assignment content (topic, questions, vocabulary terms)
-- If student history/past scores are in the context above, ALWAYS reference their trajectory (improving, declining, consistent) and compare to previous performance
+- You MUST reference the STUDENT PERFORMANCE HISTORY section above if present. Compare this score to previous scores. Check if the student improved on previously flagged areas. If no history section is provided, skip this
 - RUBRIC PERFORMANCE: Address the student's performance on ALL aspects of the rubric — content accuracy, completeness, writing quality, and effort/engagement. For each rubric area, note whether it was a strength or weakness and explain why. Example: "Your content accuracy was strong — most of your answers were factually correct. But your completeness needs work — you left two questions blank, which cost you a full letter grade."
 - Do NOT use the student's name — say "you" or "your"
 - Sound like a real teacher — use contractions, natural language
@@ -4151,7 +4160,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                     custom_markers: list = None, exclude_markers: list = None,
                     marker_config: list = None, effort_points: int = 15,
                     extraction_mode: str = 'structured', grading_style: str = 'standard',
-                    token_tracker: 'TokenTracker' = None) -> dict:
+                    token_tracker: 'TokenTracker' = None,
+                    student_history: str = '') -> dict:
     """Multi-pass grading pipeline for consistent, robust scoring.
 
     Pass 1: Extract responses (reuses existing extraction logic)
@@ -4424,7 +4434,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         rubric_breakdown=rubric_breakdown,
         blank_questions=blank_questions,
         missing_sections=missing_sections,
-        token_tracker=tracker
+        token_tracker=tracker,
+        student_history=student_history
     )
 
     # === BUILD RESULT ===

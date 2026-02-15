@@ -558,11 +558,35 @@ def build_history_context(student_id: str) -> str:
     # Assignment count
     context_parts.append(f"This student has {len(assignments)} previous assignments graded.")
 
-    # Recent performance
+    # --- Section A: Previous assignment scores with names and dates ---
+    recent_assignments = assignments[-5:][::-1]  # Last 5, most recent first
+    if recent_assignments:
+        context_parts.append("")
+        context_parts.append("PREVIOUS ASSIGNMENTS (most recent first):")
+        for a in recent_assignments:
+            name = a.get("assignment", "Unknown Assignment")
+            score = a.get("score", 0)
+            letter = a.get("letter_grade", "")
+            date = a.get("date", "")
+            date_str = f" — {date}" if date else ""
+            grade_str = f" ({letter})" if letter else ""
+            context_parts.append(f"- {name}: {score}/100{grade_str}{date_str}")
+
+    # Recent average (kept for quick reference)
     if len(assignments) >= 2:
         recent_scores = [a.get("score", 0) for a in assignments[-3:]]
         avg_recent = sum(recent_scores) / len(recent_scores)
         context_parts.append(f"Recent average score: {avg_recent:.0f}/100")
+
+    # --- Section B: Previous needs_improvement items ---
+    most_recent = assignments[-1] if assignments else {}
+    prev_needs_improvement = most_recent.get("needs_improvement", [])
+    if prev_needs_improvement:
+        context_parts.append("")
+        context_parts.append("AREAS STUDENT WAS TOLD TO IMPROVE LAST TIME:")
+        for item in prev_needs_improvement[:3]:
+            truncated = item[:150] if isinstance(item, str) else str(item)[:150]
+            context_parts.append(f'- "{truncated}"')
 
     # Overall trend
     overall_trend = skill_scores.get("_overall_trend")
@@ -630,15 +654,17 @@ def build_history_context(student_id: str) -> str:
     if not context_parts:
         return ""
 
+    # --- Section C: Mandatory referencing instructions ---
+    context_parts.append("")
+    context_parts.append("YOU MUST reference this history in your feedback:")
+    context_parts.append("- Compare this assignment's score to their recent scores listed above")
+    context_parts.append('- Check if they improved on the "AREAS TO IMPROVE" from last time — call it out either way')
+    context_parts.append("- Acknowledge continued strengths from their history")
+    context_parts.append("- If score is declining, address the trend with encouragement and specific guidance")
+
     return "\n".join([
         "---",
-        "STUDENT HISTORY CONTEXT (for personalized feedback):",
+        "STUDENT PERFORMANCE HISTORY (MANDATORY -- you MUST reference this):",
         *context_parts,
-        "",
-        "Use this history to personalize feedback:",
-        "- Reference improvements or streaks when relevant",
-        "- Acknowledge consistent strengths",
-        "- Gently address recurring weaknesses with specific guidance",
-        "- Connect current work to past achievements when possible",
         "---"
     ])

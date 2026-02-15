@@ -1098,11 +1098,10 @@ Look for: main ideas captured, good questions, clear summary at bottom.
                     if accommodation_prompt:
                         file_ai_notes += f"\n{accommodation_prompt}"
 
-                # Add student history context
+                # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
+                history_context = ""
                 if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
                     history_context = build_history_context(student_info['student_id'])
-                    if history_context:
-                        file_ai_notes += f"\n{history_context}"
 
                 # Add class period context for differentiated grading
                 if student_period:
@@ -1220,7 +1219,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style
+                        marker_config, effort_points, extraction_mode, grading_style,
+                        student_history=history_context
                     )
 
                 # Check for errors
@@ -1675,9 +1675,14 @@ def grade_individual():
         # Get student ID for history tracking
         individual_student_id = student_info.get('id', '') if student_info else None
 
+        # Build student history context (passed separately to feedback)
+        history_context = ""
+        if individual_student_id:
+            history_context = build_history_context(individual_student_id)
+
         # Grade the assignment (no custom rubric for individual grading yet)
         # Pass None for marker_config and 15 for effort_points (defaults)
-        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers, None, 15)
+        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers, None, 15, student_history=history_context)
 
         if grade_result.get('letter_grade') == 'ERROR':
             return jsonify({"error": grade_result.get('feedback', 'Grading failed')}), 500
