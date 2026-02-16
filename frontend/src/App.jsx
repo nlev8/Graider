@@ -22928,13 +22928,17 @@ ${signature}`;
             </p>
 
 
-            {/* Group results by assignment */}
+            {/* Group results by assignment — filter out one-off student uploads
+                (config mismatches where the "assignment" is actually a filename) */}
             {(() => {
-              const assignments = [
-                ...new Set(
-                  status.results.map((r) => r.assignment || "Unknown"),
-                ),
-              ];
+              const assignmentCounts = {};
+              status.results.forEach((r) => {
+                const a = r.assignment || "Unknown";
+                assignmentCounts[a] = (assignmentCounts[a] || 0) + 1;
+              });
+              const assignments = Object.keys(assignmentCounts)
+                .filter((a) => assignmentCounts[a] >= 2 || Object.keys(assignmentCounts).length <= 3)
+                .sort((a, b) => assignmentCounts[b] - assignmentCounts[a]);
               const periods = [
                 ...new Set(status.results.map((r) => r.period || "All")),
               ];

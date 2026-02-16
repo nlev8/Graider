@@ -163,7 +163,16 @@ function loadComments(filepath) {
       return { assignment: 'Assignment', comments: data, byPeriod: { 'All': data } };
     }
     if (data.comments && Array.isArray(data.comments)) {
-      return { assignment: data.assignment || 'Assignment', comments: data.comments, byPeriod: data.byPeriod || { 'All': data.comments } };
+      // Group by period if comments have period fields
+      var byPeriod = data.byPeriod || {};
+      if (Object.keys(byPeriod).length === 0) {
+        for (var ci = 0; ci < data.comments.length; ci++) {
+          var period = data.comments[ci].period || 'All';
+          if (!byPeriod[period]) byPeriod[period] = [];
+          byPeriod[period].push(data.comments[ci]);
+        }
+      }
+      return { assignment: data.assignment || 'Assignment', comments: data.comments, byPeriod: byPeriod };
     }
     emit('error', { message: 'Invalid comments file format.' });
     process.exit(1);
@@ -310,16 +319,17 @@ async function navigateToGradebook(page) {
  * Period options look like: "01 - USHADV01 - M/J US HIST ADV"
  * Our period names look like: "Period 1" or just "1"
  */
-async function selectSection(page, periodName) {
-  emit('status', { message: 'Selecting section for: ' + periodName });
-
+/**
+ * Get all dropdown options matching a period number.
+ * Returns array of { text, value } for all sections in that period.
+ * E.g., Period 5 may have "05 - USH605ADV" AND "05 - GUSH005".
+ */
+async function getSectionsForPeriod(page, periodName) {
   const periodSelect = page.locator('select[name="side_period"]').first();
   if (!await periodSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
-    emit('status', { message: 'Period dropdown not found' });
-    return false;
+    return [];
   }
 
-  // Get all option texts and values
   const options = await periodSelect.locator('option').all();
   const optionData = [];
   for (const opt of options) {
@@ -328,39 +338,52 @@ async function selectSection(page, periodName) {
     optionData.push({ text: text.trim(), value: value });
   }
 
-  emit('status', { message: 'Period options: ' + optionData.map(o => o.text).join(' | ') });
-
-  // Extract period number from our name (e.g., "Period 1" → "1", "Period 7" → "7")
   const periodNum = periodName.replace(/[^0-9]/g, '');
-
-  // Match: option text starts with the period number followed by space/dash
-  // e.g., "01 - USHADV01 - M/J US HIST ADV" matches period "1"
-  for (const opt of optionData) {
-    const optNum = opt.text.split(/[\s-]/)[0].replace(/^0+/, '');
+  var matches = [];
+  for (var i = 0; i < optionData.length; i++) {
+    var optNum = optionData[i].text.split(/[\s-]/)[0].replace(/^0+/, '');
     if (optNum === periodNum) {
-      await periodSelect.selectOption(opt.value);
-      emit('status', { message: 'Selected: ' + opt.text });
-      // The form auto-submits — wait for page reload
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await page.waitForTimeout(3000);
-      await screenshot(page, 'section_selected_' + periodNum);
-      return true;
+      matches.push(optionData[i]);
     }
   }
 
   // Fallback: partial text match
-  for (const opt of optionData) {
-    if (opt.text.includes(periodName) || opt.text.includes('Period ' + periodNum)) {
-      await periodSelect.selectOption(opt.value);
-      emit('status', { message: 'Selected (fallback): ' + opt.text });
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await page.waitForTimeout(3000);
-      return true;
+  if (matches.length === 0) {
+    for (var j = 0; j < optionData.length; j++) {
+      if (optionData[j].text.includes(periodName) || optionData[j].text.includes('Period ' + periodNum)) {
+        matches.push(optionData[j]);
+      }
     }
   }
 
-  emit('status', { message: 'Could not match period "' + periodName + '" in dropdown' });
-  return false;
+  return matches;
+}
+
+/**
+ * Select a specific section by its dropdown value.
+ */
+async function selectSectionByValue(page, sectionOption) {
+  const periodSelect = page.locator('select[name="side_period"]').first();
+  if (!await periodSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
+    return false;
+  }
+  await periodSelect.selectOption(sectionOption.value);
+  emit('status', { message: 'Selected: ' + sectionOption.text });
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(3000);
+  await screenshot(page, 'section_selected');
+  return true;
+}
+
+async function selectSection(page, periodName) {
+  emit('status', { message: 'Selecting section for: ' + periodName });
+  var sections = await getSectionsForPeriod(page, periodName);
+  if (sections.length === 0) {
+    emit('status', { message: 'Could not match period "' + periodName + '" in dropdown' });
+    return false;
+  }
+  emit('status', { message: 'Found ' + sections.length + ' section(s) for ' + periodName + ': ' + sections.map(function(s) { return s.text; }).join(' | ') });
+  return await selectSectionByValue(page, sections[0]);
 }
 
 /**
@@ -444,28 +467,93 @@ async function findAndFillComment(page, assignmentName, commentText) {
   // Each assignment row has an <a> tag with the assignment name.
   // We match against the link text, NOT the full row text, to avoid
   // false matches from grade/points data in other cells.
-  const allRows = await page.locator('table tr').all();
   let targetRow = null;
   const assignLower = assignmentName.toLowerCase().trim();
 
-  // Collect all rows that have an assignment link with their names
+  // Scan for assignment rows. Focus uses a complex table structure —
+  // try multiple strategies to find assignment name links and their parent rows.
   var candidates = [];
-  for (var ri = 0; ri < allRows.length; ri++) {
-    var row = allRows[ri];
-    // Assignment name is in an <a> tag inside the row
-    var link = row.locator('a').first();
-    var linkText = '';
-    try {
-      linkText = await link.textContent();
-      linkText = (linkText || '').trim();
-    } catch (e) {
-      continue;
+
+  // Strategy 1: Use page.evaluate to find all links and debug the DOM
+  var debugInfo = await page.evaluate(function() {
+    var info = { tables: 0, trs: 0, links: 0, iframes: 0, samples: [] };
+    info.tables = document.querySelectorAll('table').length;
+    info.trs = document.querySelectorAll('table tr').length;
+    info.links = document.querySelectorAll('a').length;
+    info.iframes = document.querySelectorAll('iframe').length;
+    // Find all links that look like assignment names
+    var allLinks = document.querySelectorAll('a');
+    for (var i = 0; i < allLinks.length && info.samples.length < 15; i++) {
+      var text = (allLinks[i].textContent || '').trim();
+      if (text.length > 5 && text.length < 200) {
+        info.samples.push(text.substring(0, 80));
+      }
     }
-    if (!linkText) continue;
-    candidates.push({ row: row, name: linkText, nameLower: linkText.toLowerCase() });
+    return info;
+  });
+  emit('status', { message: 'DOM: ' + debugInfo.tables + ' tables, ' + debugInfo.trs + ' trs, ' + debugInfo.links + ' links, ' + debugInfo.iframes + ' iframes' });
+  emit('status', { message: 'Link samples: ' + debugInfo.samples.join(' | ') });
+
+  // Check for iframes — Focus renders gradebook content inside iframes
+  var frames = page.frames();
+  var targetFrame = page;
+  for (var fi = 0; fi < frames.length; fi++) {
+    var frameName = frames[fi].name() || '';
+    var frameUrl = frames[fi].url() || '';
+    // Look for the frame containing assignment data
+    var hasAssignmentCol = await frames[fi].locator('text=Assignment').first()
+      .isVisible({ timeout: 500 }).catch(function() { return false; });
+    var frameRowCount = await frames[fi].locator('table tr').count().catch(function() { return 0; });
+    emit('status', { message: 'Frame ' + fi + ': name="' + frameName + '" rows=' + frameRowCount + ' hasAssignment=' + hasAssignmentCol + ' url=' + frameUrl.substring(0, 80) });
+    if (hasAssignmentCol && frameRowCount > 3) {
+      targetFrame = frames[fi];
+      emit('status', { message: 'Using frame ' + fi + ' for assignment matching' });
+      break;
+    }
   }
 
-  emit('status', { message: 'Found ' + candidates.length + ' assignments, matching "' + assignmentName + '"...' });
+  // Now scan rows in the target frame using Playwright locators (which pierce iframes).
+  // IMPORTANT: Do NOT use evaluate() here — it runs JS in a single frame context
+  // and cannot see content inside iframes. Playwright's locator methods (.textContent(),
+  // .isVisible(), etc.) automatically pierce iframes and work cross-frame.
+
+  // Focus renders assignment names as <span class="data-field-assignment_title">
+  // inside <div class="assignment-name-link"> (NOT <a> tags).
+
+  // Focus renders assignment names as <span class="data-field-assignment_title">
+  // inside <div class="assignment-name-link">, NOT as <a> tags.
+  // Find all assignment title spans and map each to its parent <tr> row.
+  var titleSpans = await targetFrame.locator('span.data-field-assignment_title').all();
+  emit('status', { message: 'Found ' + titleSpans.length + ' assignment title spans' });
+
+  for (var si2 = 0; si2 < titleSpans.length; si2++) {
+    var span = titleSpans[si2];
+    var spanText = await span.textContent({ timeout: 2000 }).catch(function() { return ''; });
+    spanText = (spanText || '').trim();
+    if (spanText && spanText.length > 3) {
+      // Navigate up to the parent <tr> for this assignment
+      var parentRow = span.locator('xpath=ancestor::tr').first();
+      candidates.push({ row: parentRow, name: spanText, nameLower: spanText.toLowerCase() });
+    }
+  }
+
+  // Fallback: if no span-based candidates, try div.assignment-name-link text
+  if (candidates.length === 0) {
+    var assignDivs = await targetFrame.locator('div.assignment-name-link').all();
+    emit('status', { message: 'Fallback: found ' + assignDivs.length + ' assignment-name-link divs' });
+    for (var di = 0; di < assignDivs.length; di++) {
+      var divText = await assignDivs[di].textContent({ timeout: 2000 }).catch(function() { return ''; });
+      divText = (divText || '').trim();
+      if (divText && divText.length > 3) {
+        var divRow = assignDivs[di].locator('xpath=ancestor::tr').first();
+        candidates.push({ row: divRow, name: divText, nameLower: divText.toLowerCase() });
+      }
+    }
+  }
+
+  var candNames = candidates.map(function(c) { return c.name; });
+  emit('status', { message: 'Found ' + candidates.length + ' assignments: ' + candNames.join(' | ') });
+  emit('status', { message: 'Matching target: "' + assignmentName + '"' });
 
   // Pass 1: Exact match (assignment link text equals or contains our full name)
   for (var ci = 0; ci < candidates.length; ci++) {
@@ -672,6 +760,7 @@ async function processSection(page, periodComments, assignmentName, globalOffset
   let entered = 0;
   let failed = 0;
   let skipped = 0;
+  let notFoundStudents = [];  // students not found in this section (may be in alternate section)
 
   for (let i = 0; i < periodComments.length; i++) {
     const comment = periodComments[i];
@@ -733,10 +822,10 @@ async function processSection(page, periodComments, assignmentName, globalOffset
     }
 
     if (!matched) {
-      failed++;
+      notFoundStudents.push(comment);
       emit('progress', {
         current: globalIdx + 1, total: globalTotal,
-        student: studentName, message: 'Student not found in gradebook list',
+        student: studentName, message: 'Student not found in this section — will retry alternate',
         entered: entered,
       });
       continue;
@@ -830,7 +919,7 @@ async function processSection(page, periodComments, assignmentName, globalOffset
     await page.waitForTimeout(1000);
   }
 
-  return { entered, failed, skipped };
+  return { entered, failed, skipped, notFoundStudents };
 }
 
 
@@ -865,7 +954,12 @@ async function main() {
     process.exit(1);
   }
 
-  const periods = Object.keys(byPeriod);
+  // Sort periods: numbered periods first (Period 1, 2, ...), then empty/unknown last
+  const periods = Object.keys(byPeriod).sort(function(a, b) {
+    var aNum = parseInt(a.replace(/[^0-9]/g, '')) || 999;
+    var bNum = parseInt(b.replace(/[^0-9]/g, '')) || 999;
+    return aNum - bNum;
+  });
   emit('status', {
     message: 'Loaded ' + comments.length + ' comments for "' + assignment + '" across ' + periods.length + ' period(s): ' + periods.join(', '),
   });
@@ -914,20 +1008,48 @@ async function main() {
       emit('status', { message: 'Processing ' + periodName + ' (' + periodComments.length + ' students)...' });
 
       // Select the section in the top-right period dropdown
-      if (periods.length > 1 || periodName !== 'All') {
-        const selected = await selectSection(page, periodName);
-        if (!selected) {
-          emit('status', { message: 'Could not select section for ' + periodName + ' — trying with current view' });
+      // Skip for empty period names or 'All' (no switch needed)
+      var sections = [];
+      if (periodName && periodName !== 'All' && /\d/.test(periodName)) {
+        sections = await getSectionsForPeriod(page, periodName);
+        if (sections.length === 0) {
+          emit('status', { message: 'Could not find sections for ' + periodName + ' — trying with current view' });
+        } else {
+          await selectSectionByValue(page, sections[0]);
         }
+      } else if (!periodName || periodName === '') {
+        emit('status', { message: 'Skipping period switch (no period assigned) — will try in current view' });
       }
 
       await screenshot(page, 'section_' + periodName.replace(/[^a-zA-Z0-9]/g, ''));
 
-      // Enter comments for each student in this section
+      // Enter comments for each student in the first section
       const result = await processSection(page, periodComments, assignment, globalOffset, comments.length);
       totalEntered += result.entered;
       totalFailed += result.failed;
       totalSkipped += result.skipped;
+
+      // If some students weren't found and there are alternate sections for this period,
+      // retry them in each alternate section (e.g., Period 5 has USH605ADV + GUSH005)
+      var retryStudents = result.notFoundStudents || [];
+      for (var altIdx = 1; altIdx < sections.length && retryStudents.length > 0; altIdx++) {
+        emit('status', { message: retryStudents.length + ' student(s) not found — trying alternate section: ' + sections[altIdx].text });
+        await selectSectionByValue(page, sections[altIdx]);
+        var retryResult = await processSection(page, retryStudents, assignment, globalOffset, comments.length);
+        totalEntered += retryResult.entered;
+        totalSkipped += retryResult.skipped;
+        // Students found in this alternate section reduce the not-found count
+        totalFailed -= retryResult.entered + retryResult.skipped;
+        retryStudents = retryResult.notFoundStudents || [];
+      }
+
+      // Any students still not found after all sections are true failures
+      totalFailed += retryStudents.length;
+      if (retryStudents.length > 0) {
+        var names = retryStudents.map(function(c) { return c.student_name; }).join(', ');
+        emit('status', { message: retryStudents.length + ' student(s) not found in any section: ' + names });
+      }
+
       globalOffset += periodComments.length;
     }
 

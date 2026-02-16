@@ -982,7 +982,9 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     file_exclude_markers = []
                     file_notes = fallback_notes
                     file_sections = fallback_sections
-                    matched_title = submitted_assignment if config_mismatch else ASSIGNMENT_NAME  # Use submitted name, not fallback
+                    # Use the loaded assignment config name so all results group together.
+                    # Only fall back to filename if there's truly no config at all.
+                    matched_title = ASSIGNMENT_NAME if ASSIGNMENT_NAME else submitted_assignment
                     is_completion_only = False
                     assignment_template_local = ''
                     rubric_type = 'standard'
