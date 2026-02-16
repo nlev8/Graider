@@ -811,6 +811,8 @@ function App() {
   const [vportalSaving, setVportalSaving] = useState(false);
   const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
   const [outlookSendPolling, setOutlookSendPolling] = useState(false);
+  const [focusCommentsStatus, setFocusCommentsStatus] = useState({ status: "idle", entered: 0, total: 0, failed: 0, message: "" });
+  const [focusCommentsPolling, setFocusCommentsPolling] = useState(false);
 
   // Available EdTech tools that can be selected
   const EDTECH_TOOLS = [
@@ -1444,6 +1446,14 @@ function App() {
   const [showHolidayModal, setShowHolidayModal] = useState(false)
   const [holidayForm, setHolidayForm] = useState({ date: '', name: '', end_date: '' })
   const [calendarDragId, setCalendarDragId] = useState(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importParsing, setImportParsing] = useState(false)
+  const [importEvents, setImportEvents] = useState([])
+  const [importChecked, setImportChecked] = useState({})
+  const [importSelectedDoc, setImportSelectedDoc] = useState('')
+  const [importImporting, setImportImporting] = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
+  const [quickAddForm, setQuickAddForm] = useState({ title: '', unit: '', color: '#6366f1' })
   const [publishingAssessment, setPublishingAssessment] = useState(false);
   const [publishedAssessmentModal, setPublishedAssessmentModal] = useState({ show: false, joinCode: "", joinLink: "" });
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
@@ -1485,6 +1495,18 @@ function App() {
   const [newPeriodName, setNewPeriodName] = useState("");
   const [newDocType, setNewDocType] = useState("curriculum");
   const [newDocDescription, setNewDocDescription] = useState("");
+
+  // Focus roster import + inline editor state
+  const [focusImporting, setFocusImporting] = useState(false);
+  const [focusImportProgress, setFocusImportProgress] = useState("");
+  const [expandedPeriod, setExpandedPeriod] = useState(null);
+  const [expandedStudents, setExpandedStudents] = useState([]);
+  const [loadingExpandedStudents, setLoadingExpandedStudents] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState(null);
+  const [editStudentData, setEditStudentData] = useState({});
+  const [addingStudent, setAddingStudent] = useState(false);
+  const [newStudent, setNewStudent] = useState({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' });
+
   const [rosterMappingModal, setRosterMappingModal] = useState({
     show: false,
     roster: null,
@@ -2085,7 +2107,17 @@ function App() {
     return calendarData.school_days ? calendarData.school_days[dayNames[dow]] : (dow >= 1 && dow <= 5)
   }
 
-  // Load assessment templates and VPortal credentials when settings tab is opened
+  // Load VPortal credentials on startup so buttons are enabled on Results tab
+  useEffect(() => {
+    api.getPortalCredentials()
+      .then((data) => {
+        setVportalConfigured(data.configured || false);
+        if (data.email) setVportalEmail(data.email);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load assessment templates and refresh VPortal credentials when settings tab is opened
   useEffect(() => {
     if (activeTab === "settings") {
       api.getAssessmentTemplates()
@@ -2123,6 +2155,26 @@ function App() {
     }, 2000);
     return function() { clearInterval(interval); };
   }, [outlookSendPolling]);
+
+  // Focus comments upload polling
+  useEffect(() => {
+    if (!focusCommentsPolling) return;
+    var interval = setInterval(async function() {
+      try {
+        var data = await api.getFocusCommentsStatus();
+        setFocusCommentsStatus(data);
+        if (data.status === "done" || data.status === "error" || data.status === "idle") {
+          setFocusCommentsPolling(false);
+          if (data.status === "done") {
+            addToast("Focus: Entered " + data.entered + " comments" + (data.failed > 0 ? " (" + data.failed + " failed)" : "") + (data.skipped > 0 ? " (" + data.skipped + " skipped)" : ""), data.failed > 0 ? "warning" : "success");
+          }
+        }
+      } catch (err) {
+        // ignore polling errors
+      }
+    }, 2000);
+    return function() { clearInterval(interval); };
+  }, [focusCommentsPolling]);
 
   // Auto-scroll log
   useEffect(() => {
@@ -2320,18 +2372,16 @@ function App() {
   // Check if a student name matches any student in the period roster
   const studentNameMatchesPeriod = (studentName, students) => {
     if (!students || students.length === 0) return true;
-    const lowerName = (studentName || "").toLowerCase();
+    // Fuzzy word-based matching: all words from student's first/last appear in studentName
+    const nameWords = (studentName || "").toLowerCase().replace(/[,;.]/g, " ").split(/\s+/).filter(Boolean);
     return students.some((student) => {
       const first = (student.first || "").toLowerCase().trim();
       const last = (student.last || "").toLowerCase().trim();
-      // Match "First Last" or "Last, First" patterns
-      return (
-        (first &&
-          last &&
-          lowerName.includes(first) &&
-          lowerName.includes(last)) ||
-        (first && lowerName.startsWith(first + " ")) ||
-        (last && lowerName.endsWith(" " + last))
+      if (!first && !last) return false;
+      const searchWords = [first, last].join(" ").split(/\s+/).filter(Boolean);
+      // Every search word must match (or prefix-match) a word in the name
+      return searchWords.every((sw) =>
+        nameWords.some((nw) => nw.startsWith(sw) || sw.startsWith(nw))
       );
     });
   };
@@ -2482,8 +2532,15 @@ function App() {
                     studentName = firstName + ' ' + lastName;
                   }
                 }
-                // Check if filename contains student name (handles various naming formats)
+                // Word-based matching: each word in studentName appears in filename
+                const nameWords = studentName.split(/\s+/).filter(Boolean);
+                const fileNameNorm = fileName.replace(/[_\-.,;]/g, " ");
+                const wordMatch = nameWords.every((w) =>
+                  fileNameNorm.includes(w)
+                );
+                // Also try direct string matching for edge cases
                 return (
+                  wordMatch ||
                   fileName.includes(studentName.replace(/\s+/g, "")) ||
                   fileName.includes(studentName.replace(/\s+/g, "_")) ||
                   fileName.includes(studentName.replace(/\s+/g, "-")) ||
@@ -8330,6 +8387,8 @@ ${signature}`;
                               I have reviewed and approve these grades for export
                             </label>
                           )}
+                          {/* Focus SIS Group */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(99,102,241,0.06)" }}>
                           <button
                             onClick={() => setFocusExportModal(true)}
                             className="btn btn-primary"
@@ -8350,9 +8409,13 @@ ${signature}`;
                               try {
                                 const batchSource = editedResults.length > 0 ? editedResults : status.results;
                                 const assignment = resultsAssignmentFilter || (batchSource[0] && batchSource[0].assignment) || 'Assignment';
-                                const resultsToExport = resultsAssignmentFilter
-                                  ? batchSource.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
-                                  : batchSource;
+                                var resultsToExport = batchSource;
+                                if (resultsAssignmentFilter) {
+                                  resultsToExport = resultsToExport.filter(function(r) { return r.assignment === resultsAssignmentFilter; });
+                                }
+                                if (resultsPeriodFilter) {
+                                  resultsToExport = resultsToExport.filter(function(r) { return r.period === resultsPeriodFilter; });
+                                }
 
                                 const batchRes = await api.exportFocusBatch(resultsToExport, assignment);
                                 await api.exportFocusComments(resultsToExport, assignment);
@@ -8380,6 +8443,39 @@ ${signature}`;
                             <Icon name="FolderDown" size={18} />
                             {batchExportLoading ? "Exporting..." : "Batch Focus"}
                           </button>
+                          <button
+                            onClick={async () => {
+                              var assignment = resultsAssignmentFilter || (status.results[0] && status.results[0].assignment) || 'Assignment';
+                              if (!confirm("Upload comments to Focus gradebook for \"" + assignment + "\"?" + String.fromCharCode(10) + String.fromCharCode(10) + "This will open a browser window and log into Focus to enter feedback comments for each student." + String.fromCharCode(10) + String.fromCharCode(10) + "Make sure you have already run 'Batch Focus' export first.")) return;
+                              try {
+                                var result = await api.uploadFocusComments({
+                                  use_manifest: true,
+                                  assignment: assignment,
+                                });
+                                if (result.error) {
+                                  addToast(result.error, "error");
+                                } else {
+                                  setFocusCommentsPolling(true);
+                                  setFocusCommentsStatus({ status: "running", entered: 0, total: result.total, failed: 0, message: "Starting..." });
+                                  addToast("Focus comment upload started (" + result.total + " students)", "info");
+                                }
+                              } catch (err) {
+                                addToast("Focus upload error: " + err.message, "error");
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            disabled={!gradesApproved || focusCommentsStatus.status === "running" || status.results.length === 0 || !vportalConfigured}
+                            style={{ opacity: gradesApproved ? 1 : 0.5 }}
+                            title={!gradesApproved ? "Approve grades first" : vportalConfigured ? "Upload feedback comments to Focus gradebook" : "Configure VPortal credentials in Settings first"}
+                          >
+                            <Icon name="MessageSquareText" size={18} />
+                            {focusCommentsStatus.status === "running"
+                              ? "Uploading " + focusCommentsStatus.entered + "/" + focusCommentsStatus.total + "..."
+                              : "Upload Comments"}
+                          </button>
+                          </div>
+                          {/* Email Actions Group */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(234,179,8,0.06)" }}>
                           <button
                             onClick={async () => {
                               setOutlookExportLoading(true);
@@ -8454,8 +8550,7 @@ ${signature}`;
                               ? "Sending " + outlookSendStatus.sent + "/" + outlookSendStatus.total + "..."
                               : "Send via Outlook"}
                           </button>
-                          {/* Email Actions */}
-                          <div style={{ borderLeft: "1px solid var(--glass-border)", height: "24px", margin: "0 5px" }} />
+                          </div>
                           {/* Send by Period Dropdown */}
                           {sortedPeriods.length > 0 && (
                             <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
@@ -9226,6 +9321,28 @@ ${signature}`;
                                             <Icon name="FileX" size={12} />
                                           </span>
                                         )}
+                                        {r.is_resubmission && (
+                                          <span
+                                            title="RESUBMISSION: This is a newer version of a previously graded assignment."
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              width: "20px",
+                                              height: "20px",
+                                              borderRadius: "4px",
+                                              background:
+                                                "rgba(59, 130, 246, 0.15)",
+                                              color: "#3b82f6",
+                                              cursor: "help",
+                                            }}
+                                          >
+                                            <Icon
+                                              name="RefreshCw"
+                                              size={12}
+                                            />
+                                          </span>
+                                        )}
                                         {r.student_id &&
                                           studentAccommodations[
                                             r.student_id
@@ -9984,29 +10101,6 @@ ${signature}`;
                           onClick={() =>
                             handleBrowse("folder", "output_folder")
                           }
-                          className="btn btn-secondary"
-                        >
-                          Browse
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="label">Roster File</label>
-                      <div style={{ display: "flex", gap: "10px" }}>
-                        <input
-                          type="text"
-                          className="input"
-                          value={config.roster_file}
-                          onChange={(e) =>
-                            setConfig((prev) => ({
-                              ...prev,
-                              roster_file: e.target.value,
-                            }))
-                          }
-                        />
-                        <button
-                          onClick={() => handleBrowse("file", "roster_file")}
                           className="btn btn-secondary"
                         >
                           Browse
@@ -11801,168 +11895,6 @@ ${signature}`;
                     {/* Classroom Tab */}
                     {settingsTab === "classroom" && (
                       <>
-                    {/* Roster Upload Section */}
-                    <div>
-                      <h3
-                        style={{
-                          fontSize: "1.1rem",
-                          fontWeight: 700,
-                          marginBottom: "15px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                        }}
-                      >
-                        <Icon
-                          name="Users"
-                          size={20}
-                          style={{ color: "#6366f1" }}
-                        />
-                        Student Roster
-                      </h3>
-                      <p
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        Upload CSV with Student ID, Name, Student Email, and
-                        Parent Email columns
-                      </p>
-
-                      <input
-                        ref={rosterInputRef}
-                        type="file"
-                        accept=".csv"
-                        style={{ display: "none" }}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setUploadingRoster(true);
-                          try {
-                            const result = await api.uploadRoster(file);
-                            if (result.error) {
-                              addToast(result.error, "error");
-                            } else {
-                              const rostersData = await api.listRosters();
-                              setRosters(rostersData.rosters || []);
-                              setRosterMappingModal({
-                                show: true,
-                                roster: result,
-                              });
-                            }
-                          } catch (err) {
-                            addToast("Upload failed: " + err.message, "error");
-                          }
-                          setUploadingRoster(false);
-                          e.target.value = "";
-                        }}
-                      />
-
-                      <button
-                        onClick={() => rosterInputRef.current?.click()}
-                        className="btn btn-secondary"
-                        disabled={uploadingRoster}
-                        style={{ marginBottom: "15px" }}
-                      >
-                        <Icon name="Upload" size={18} />
-                        {uploadingRoster ? "Uploading..." : "Upload Roster CSV"}
-                      </button>
-
-                      {rosters.length > 0 && (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "10px",
-                          }}
-                        >
-                          {rosters.map((roster) => (
-                            <div
-                              key={roster.filename}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "12px 15px",
-                                background: "var(--input-bg)",
-                                borderRadius: "8px",
-                                border: "1px solid var(--glass-border)",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "12px",
-                                }}
-                              >
-                                <Icon
-                                  name="FileSpreadsheet"
-                                  size={18}
-                                  style={{ color: "#10b981" }}
-                                />
-                                <div>
-                                  <div style={{ fontWeight: 600 }}>
-                                    {roster.filename}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "0.8rem",
-                                      color: "var(--text-secondary)",
-                                    }}
-                                  >
-                                    {roster.row_count} students •{" "}
-                                    {roster.headers?.length || 0} columns
-                                    {Object.keys(roster.column_mapping || {})
-                                      .length > 0 && " • Mapped"}
-                                  </div>
-                                </div>
-                              </div>
-                              <div style={{ display: "flex", gap: "8px" }}>
-                                <button
-                                  onClick={() =>
-                                    setRosterMappingModal({
-                                      show: true,
-                                      roster,
-                                    })
-                                  }
-                                  className="btn btn-secondary"
-                                  style={{
-                                    padding: "6px 12px",
-                                    fontSize: "0.8rem",
-                                  }}
-                                >
-                                  <Icon name="Settings2" size={14} />
-                                  Map Columns
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    if (confirm("Delete this roster?")) {
-                                      await api.deleteRoster(roster.filename);
-                                      const data = await api.listRosters();
-                                      setRosters(data.rosters || []);
-                                    }
-                                  }}
-                                  style={{
-                                    padding: "6px 10px",
-                                    background: "rgba(239,68,68,0.2)",
-                                    border: "none",
-                                    borderRadius: "6px",
-                                    color: "#ef4444",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <Icon name="Trash2" size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
                     {/* Add Student from Screenshot Section */}
                     <div
                       style={{
@@ -12112,7 +12044,7 @@ ${signature}`;
                           marginBottom: "15px",
                         }}
                       >
-                        Upload separate rosters for each class period
+                        Upload separate rosters for each class period, or import directly from Focus SIS
                       </p>
 
                       <input
@@ -12193,105 +12125,399 @@ ${signature}`;
                             : "Upload CSV/Excel"}
                         </button>
                       </div>
-                      {!newPeriodName.trim() && (
-                        <p
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "var(--text-muted)",
-                            marginTop: "-10px",
-                            marginBottom: "10px",
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "15px" }}>
+                        {!newPeriodName.trim() && (
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--text-muted)",
+                              margin: 0,
+                            }}
+                          >
+                            Enter a period name above, then click Upload
+                          </p>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (focusImporting) return;
+                            setFocusImporting(true);
+                            setFocusImportProgress("Starting Focus import...");
+                            try {
+                              const res = await api.importFromFocus();
+                              if (res.error) {
+                                addToast(res.error, "error");
+                                setFocusImporting(false);
+                                return;
+                              }
+                              // Poll for status
+                              const pollInterval = setInterval(async () => {
+                                try {
+                                  const status = await api.getFocusImportStatus();
+                                  setFocusImportProgress(status.progress || "");
+                                  if (status.status === "completed") {
+                                    clearInterval(pollInterval);
+                                    setFocusImporting(false);
+                                    setFocusImportProgress("");
+                                    const r = status.result || {};
+                                    addToast("Imported " + (r.periods_imported || 0) + " periods, " + (r.total_students || 0) + " students, " + (r.total_contacts || 0) + " parent contacts", "success");
+                                    const periodsData = await api.listPeriods();
+                                    setPeriods(periodsData.periods || []);
+                                  } else if (status.status === "failed") {
+                                    clearInterval(pollInterval);
+                                    setFocusImporting(false);
+                                    setFocusImportProgress("");
+                                    addToast("Focus import failed: " + (status.error || "Unknown error"), "error");
+                                  }
+                                } catch (err) {
+                                  clearInterval(pollInterval);
+                                  setFocusImporting(false);
+                                  setFocusImportProgress("");
+                                }
+                              }, 2000);
+                            } catch (err) {
+                              addToast("Failed to start Focus import: " + err.message, "error");
+                              setFocusImporting(false);
+                              setFocusImportProgress("");
+                            }
                           }}
+                          className="btn btn-secondary"
+                          disabled={focusImporting}
+                          style={{ marginLeft: "auto", opacity: focusImporting ? 0.6 : 1, whiteSpace: "nowrap" }}
                         >
-                          Enter a period name above, then click Upload
-                        </p>
+                          <Icon name="Download" size={18} />
+                          {focusImporting ? "Importing..." : "Import from Focus"}
+                        </button>
+                      </div>
+
+                      {/* Focus import progress banner */}
+                      {focusImporting && focusImportProgress && (
+                        <div style={{
+                          padding: "10px 15px",
+                          marginBottom: "15px",
+                          background: "rgba(59, 130, 246, 0.1)",
+                          border: "1px solid rgba(59, 130, 246, 0.3)",
+                          borderRadius: "8px",
+                          fontSize: "0.85rem",
+                          color: "#60a5fa",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}>
+                          <Icon name="Loader" size={16} style={{ animation: "spin 1s linear infinite" }} />
+                          {focusImportProgress}
+                        </div>
                       )}
 
+                      {/* Period Cards - Expandable */}
                       {sortedPeriods.length > 0 && (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "10px",
-                          }}
-                        >
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                           {sortedPeriods.map((period) => (
-                            <div
-                              key={period.filename}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                padding: "10px 15px",
-                                background: "var(--input-bg)",
-                                borderRadius: "8px",
-                                border: "1px solid var(--glass-border)",
-                              }}
-                            >
-                              <Icon
-                                name="Users"
-                                size={16}
-                                style={{ color: "#f59e0b" }}
-                              />
-                              <div style={{ flex: 1 }}>
-                                <div
-                                  style={{
-                                    fontWeight: 600,
-                                    fontSize: "0.9rem",
-                                  }}
-                                >
-                                  {period.period_name}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    color: "var(--text-secondary)",
-                                  }}
-                                >
-                                  {period.row_count} students
-                                </div>
-                              </div>
-                              <select
-                                value={period.class_level || "standard"}
-                                onChange={async (e) => {
-                                  const newLevel = e.target.value;
-                                  await api.updatePeriodLevel(period.filename, newLevel);
-                                  const data = await api.listPeriods();
-                                  setPeriods(data.periods || []);
-                                }}
+                            <div key={period.filename} style={{ borderRadius: "8px", border: "1px solid var(--glass-border)", overflow: "hidden" }}>
+                              {/* Period Header Row */}
+                              <div
                                 style={{
-                                  padding: "4px 8px",
-                                  borderRadius: "6px",
-                                  border: "1px solid var(--glass-border)",
-                                  background: period.class_level === "advanced" ? "rgba(139, 92, 246, 0.2)" : period.class_level === "support" ? "rgba(244, 114, 182, 0.2)" : "var(--input-bg)",
-                                  color: period.class_level === "advanced" ? "#a78bfa" : period.class_level === "support" ? "#f472b6" : "var(--text-primary)",
-                                  fontSize: "0.8rem",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "10px",
+                                  padding: "10px 15px",
+                                  background: expandedPeriod === period.filename ? "rgba(245, 158, 11, 0.08)" : "var(--input-bg)",
                                   cursor: "pointer",
                                 }}
-                              >
-                                <option value="standard">Standard</option>
-                                <option value="advanced">Advanced</option>
-                                <option value="support">Support</option>
-                              </select>
-                              <button
                                 onClick={async () => {
-                                  if (
-                                    confirm(`Delete ${period.period_name}?`)
-                                  ) {
-                                    await api.deletePeriod(period.filename);
+                                  if (expandedPeriod === period.filename) {
+                                    setExpandedPeriod(null);
+                                    setExpandedStudents([]);
+                                    setEditingStudentId(null);
+                                    setAddingStudent(false);
+                                    return;
+                                  }
+                                  setExpandedPeriod(period.filename);
+                                  setLoadingExpandedStudents(true);
+                                  setEditingStudentId(null);
+                                  setAddingStudent(false);
+                                  try {
+                                    const [studentsRes, contactsRes] = await Promise.all([
+                                      api.getPeriodStudents(period.filename),
+                                      api.getParentContacts(),
+                                    ]);
+                                    const students = studentsRes.students || [];
+                                    const contacts = contactsRes.contacts || {};
+                                    // Merge contact info into student list
+                                    const merged = students.map(s => {
+                                      const contact = contacts[s.id] || {};
+                                      return {
+                                        ...s,
+                                        parent_emails: contact.parent_emails || [],
+                                        parent_phones: contact.parent_phones || [],
+                                      };
+                                    });
+                                    setExpandedStudents(merged);
+                                  } catch (err) {
+                                    addToast("Failed to load students: " + err.message, "error");
+                                    setExpandedStudents([]);
+                                  }
+                                  setLoadingExpandedStudents(false);
+                                }}
+                              >
+                                <Icon
+                                  name={expandedPeriod === period.filename ? "ChevronDown" : "ChevronRight"}
+                                  size={16}
+                                  style={{ color: "#f59e0b", flexShrink: 0 }}
+                                />
+                                <Icon name="Users" size={16} style={{ color: "#f59e0b", flexShrink: 0 }} />
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 600, fontSize: "0.9rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    {period.period_name}
+                                    {period.course_codes && period.course_codes.length > 0 && (
+                                      <span style={{ fontSize: "0.7rem", padding: "1px 6px", borderRadius: "4px", background: "rgba(139, 92, 246, 0.15)", color: "#a78bfa", fontWeight: 500 }}>
+                                        {period.course_codes.join(", ")}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                                    {period.row_count} students{period.imported_from === "focus" ? " (Focus SIS)" : ""}
+                                  </div>
+                                </div>
+                                <select
+                                  value={period.class_level || "standard"}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={async (e) => {
+                                    e.stopPropagation();
+                                    const newLevel = e.target.value;
+                                    await api.updatePeriodLevel(period.filename, newLevel);
                                     const data = await api.listPeriods();
                                     setPeriods(data.periods || []);
-                                  }
-                                }}
-                                style={{
-                                  padding: "4px 6px",
-                                  background: "none",
-                                  border: "none",
-                                  color: "var(--text-muted)",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Icon name="X" size={14} />
-                              </button>
+                                  }}
+                                  style={{
+                                    padding: "4px 8px",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--glass-border)",
+                                    background: period.class_level === "advanced" ? "rgba(139, 92, 246, 0.2)" : period.class_level === "support" ? "rgba(244, 114, 182, 0.2)" : "var(--input-bg)",
+                                    color: period.class_level === "advanced" ? "#a78bfa" : period.class_level === "support" ? "#f472b6" : "var(--text-primary)",
+                                    fontSize: "0.8rem",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <option value="standard">Standard</option>
+                                  <option value="advanced">Advanced</option>
+                                  <option value="support">Support</option>
+                                </select>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (confirm("Delete " + period.period_name + "?")) {
+                                      await api.deletePeriod(period.filename);
+                                      const data = await api.listPeriods();
+                                      setPeriods(data.periods || []);
+                                      if (expandedPeriod === period.filename) {
+                                        setExpandedPeriod(null);
+                                        setExpandedStudents([]);
+                                      }
+                                    }
+                                  }}
+                                  style={{ padding: "4px 6px", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                                >
+                                  <Icon name="X" size={14} />
+                                </button>
+                              </div>
+
+                              {/* Expanded Student List */}
+                              {expandedPeriod === period.filename && (
+                                <div style={{ borderTop: "1px solid var(--glass-border)", padding: "10px 15px", background: "var(--bg-secondary)" }}>
+                                  {loadingExpandedStudents ? (
+                                    <div style={{ textAlign: "center", padding: "20px", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+                                      <Icon name="Loader" size={18} style={{ animation: "spin 1s linear infinite", marginRight: "8px" }} />
+                                      Loading students...
+                                    </div>
+                                  ) : expandedStudents.length === 0 ? (
+                                    <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "10px" }}>No students found</p>
+                                  ) : (
+                                    <div style={{ overflowX: "auto" }}>
+                                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                                        <thead>
+                                          <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                                            <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Student Name</th>
+                                            <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>ID</th>
+                                            <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Parent Emails</th>
+                                            <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Parent Phones</th>
+                                            <th style={{ textAlign: "right", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600, width: "80px" }}>Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {expandedStudents.map((student) => (
+                                            <tr key={student.id || student.full} style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                                              {editingStudentId === student.id ? (
+                                                <>
+                                                  <td style={{ padding: "6px 8px" }}>
+                                                    <input type="text" value={editStudentData.student_name || ""} onChange={(e) => setEditStudentData({...editStudentData, student_name: e.target.value})} style={{ width: "100%", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                                  </td>
+                                                  <td style={{ padding: "6px 8px", color: "var(--text-muted)" }}>{student.id}</td>
+                                                  <td style={{ padding: "6px 8px" }}>
+                                                    <input type="text" value={editStudentData.parent_emails || ""} onChange={(e) => setEditStudentData({...editStudentData, parent_emails: e.target.value})} placeholder="email1, email2" style={{ width: "100%", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                                  </td>
+                                                  <td style={{ padding: "6px 8px" }}>
+                                                    <input type="text" value={editStudentData.parent_phones || ""} onChange={(e) => setEditStudentData({...editStudentData, parent_phones: e.target.value})} placeholder="(386) 555-1234" style={{ width: "100%", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                                  </td>
+                                                  <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>
+                                                    <button
+                                                      onClick={async () => {
+                                                        try {
+                                                          const emails = editStudentData.parent_emails ? editStudentData.parent_emails.split(",").map(e => e.trim()).filter(Boolean) : [];
+                                                          const phones = editStudentData.parent_phones ? editStudentData.parent_phones.split(",").map(p => p.trim()).filter(Boolean) : [];
+                                                          await api.updateStudent({
+                                                            period_filename: period.filename,
+                                                            student_id: student.id,
+                                                            student_name: editStudentData.student_name,
+                                                            parent_emails: emails,
+                                                            parent_phones: phones,
+                                                          });
+                                                          setEditingStudentId(null);
+                                                          // Refresh
+                                                          const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
+                                                          const contacts = contactsRes.contacts || {};
+                                                          setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                                          addToast("Student updated", "success");
+                                                        } catch (err) {
+                                                          addToast("Update failed: " + err.message, "error");
+                                                        }
+                                                      }}
+                                                      style={{ padding: "2px 6px", background: "rgba(74, 222, 128, 0.2)", border: "1px solid rgba(74, 222, 128, 0.4)", borderRadius: "4px", color: "#4ade80", cursor: "pointer", fontSize: "0.75rem", marginRight: "4px" }}
+                                                    >Save</button>
+                                                    <button
+                                                      onClick={() => setEditingStudentId(null)}
+                                                      style={{ padding: "2px 6px", background: "none", border: "1px solid var(--glass-border)", borderRadius: "4px", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem" }}
+                                                    >Cancel</button>
+                                                  </td>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <td style={{ padding: "6px 8px" }}>{student.full || (student.first + " " + student.last)}</td>
+                                                  <td style={{ padding: "6px 8px", color: "var(--text-secondary)" }}>{student.id || "\u2014"}</td>
+                                                  <td style={{ padding: "6px 8px", color: student.parent_emails.length ? "var(--text-primary)" : "var(--text-muted)" }}>
+                                                    {student.parent_emails.length > 0 ? student.parent_emails.join(", ") : "\u2014"}
+                                                  </td>
+                                                  <td style={{ padding: "6px 8px", color: student.parent_phones.length ? "var(--text-primary)" : "var(--text-muted)" }}>
+                                                    {student.parent_phones.length > 0 ? student.parent_phones.join(", ") : "\u2014"}
+                                                  </td>
+                                                  <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>
+                                                    {student.id && (
+                                                      <>
+                                                        <button
+                                                          onClick={() => {
+                                                            setEditingStudentId(student.id);
+                                                            setEditStudentData({
+                                                              student_name: student.full || (student.first + " " + student.last),
+                                                              parent_emails: student.parent_emails.join(", "),
+                                                              parent_phones: student.parent_phones.join(", "),
+                                                            });
+                                                          }}
+                                                          title="Edit"
+                                                          style={{ padding: "2px 4px", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                                                        ><Icon name="Pencil" size={13} /></button>
+                                                        <button
+                                                          onClick={async () => {
+                                                            if (!confirm("Remove " + (student.full || student.first + " " + student.last) + " from this period?")) return;
+                                                            try {
+                                                              await api.removeStudent({ period_filename: period.filename, student_id: student.id });
+                                                              const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
+                                                              const contacts = contactsRes.contacts || {};
+                                                              setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                                              const periodsData = await api.listPeriods();
+                                                              setPeriods(periodsData.periods || []);
+                                                              addToast("Student removed", "success");
+                                                            } catch (err) {
+                                                              addToast("Remove failed: " + err.message, "error");
+                                                            }
+                                                          }}
+                                                          title="Remove"
+                                                          style={{ padding: "2px 4px", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                                                        ><Icon name="Trash2" size={13} /></button>
+                                                      </>
+                                                    )}
+                                                  </td>
+                                                </>
+                                              )}
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+
+                                  {/* Add Student Form */}
+                                  {addingStudent ? (
+                                    <div style={{ marginTop: "10px", padding: "10px", background: "var(--input-bg)", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                                        <input type="text" placeholder="Student Name (Last; First)" value={newStudent.name} onChange={(e) => setNewStudent({...newStudent, name: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                        <input type="text" placeholder="Student ID" value={newStudent.student_id} onChange={(e) => setNewStudent({...newStudent, student_id: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                        <input type="text" placeholder="Grade (e.g., 06)" value={newStudent.grade} onChange={(e) => setNewStudent({...newStudent, grade: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                        <input type="text" placeholder="Parent Emails (comma-separated)" value={newStudent.parent_emails} onChange={(e) => setNewStudent({...newStudent, parent_emails: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                        <input type="text" placeholder="Parent Phones (comma-separated)" value={newStudent.parent_phones} onChange={(e) => setNewStudent({...newStudent, parent_phones: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                      </div>
+                                      <div style={{ display: "flex", gap: "8px" }}>
+                                        <button
+                                          onClick={async () => {
+                                            if (!newStudent.name.trim()) { addToast("Student name is required", "warning"); return; }
+                                            try {
+                                              const emails = newStudent.parent_emails ? newStudent.parent_emails.split(",").map(e => e.trim()).filter(Boolean) : [];
+                                              const phones = newStudent.parent_phones ? newStudent.parent_phones.split(",").map(p => p.trim()).filter(Boolean) : [];
+                                              const res = await api.addStudent({
+                                                period_filename: period.filename,
+                                                student_name: newStudent.name,
+                                                student_id: newStudent.student_id,
+                                                grade: newStudent.grade,
+                                                parent_emails: emails,
+                                                parent_phones: phones,
+                                              });
+                                              if (res.error) { addToast(res.error, "error"); return; }
+                                              setNewStudent({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' });
+                                              setAddingStudent(false);
+                                              // Refresh
+                                              const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
+                                              const contacts = contactsRes.contacts || {};
+                                              setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                              const periodsData = await api.listPeriods();
+                                              setPeriods(periodsData.periods || []);
+                                              addToast("Student added", "success");
+                                            } catch (err) {
+                                              addToast("Add failed: " + err.message, "error");
+                                            }
+                                          }}
+                                          className="btn btn-primary"
+                                          style={{ fontSize: "0.8rem", padding: "5px 12px" }}
+                                        >Add Student</button>
+                                        <button
+                                          onClick={() => { setAddingStudent(false); setNewStudent({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' }); }}
+                                          className="btn btn-secondary"
+                                          style={{ fontSize: "0.8rem", padding: "5px 12px" }}
+                                        >Cancel</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setAddingStudent(true)}
+                                      style={{
+                                        marginTop: "10px",
+                                        padding: "6px 12px",
+                                        background: "none",
+                                        border: "1px dashed var(--glass-border)",
+                                        borderRadius: "6px",
+                                        color: "var(--text-secondary)",
+                                        cursor: "pointer",
+                                        fontSize: "0.8rem",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "6px",
+                                        width: "100%",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <Icon name="Plus" size={14} />
+                                      Add Student
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -21900,6 +22126,25 @@ ${signature}`;
                             <Icon name="CalendarOff" size={14} />
                             Add Holiday
                           </button>
+                          <button
+                            onClick={async () => {
+                              setImportEvents([])
+                              setImportChecked({})
+                              setImportSelectedDoc('')
+                              setShowImportModal(true)
+                              if (supportDocs.length === 0) {
+                                try {
+                                  const data = await api.listSupportDocuments()
+                                  if (data.documents) setSupportDocs(data.documents)
+                                } catch (e) { /* ignore */ }
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            style={{ padding: "6px 14px", fontSize: "0.8rem" }}
+                          >
+                            <Icon name="FileUp" size={14} />
+                            Import
+                          </button>
                         </div>
                       </div>
 
@@ -21909,17 +22154,14 @@ ${signature}`;
                         const today = new Date()
                         const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
                         return (
-                          <div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "2px" }}>
                             {/* Day headers */}
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px", marginBottom: "4px" }}>
-                              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                                <div key={d} style={{ textAlign: "center", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", padding: "6px" }}>
-                                  {d}
-                                </div>
-                              ))}
-                            </div>
+                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                              <div key={d} style={{ textAlign: "center", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", padding: "6px" }}>
+                                {d}
+                              </div>
+                            ))}
                             {/* Day cells */}
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px" }}>
                               {days.map((cell, idx) => {
                                 if (!cell) return <div key={'blank-' + idx} style={{ minHeight: "100px" }} />
                                 const holiday = isHoliday(cell.date)
@@ -21939,7 +22181,8 @@ ${signature}`;
                                       }
                                     }}
                                     onClick={() => {
-                                      if (!holiday && school && lessons.length === 0) {
+                                      if (!holiday && school) {
+                                        setQuickAddForm({ title: '', unit: '', color: '#6366f1' })
                                         setSelectedCalendarDate(cell.date)
                                       }
                                     }}
@@ -21949,7 +22192,7 @@ ${signature}`;
                                       border: isToday ? "2px solid var(--accent-primary)" : "1px solid var(--glass-border)",
                                       borderRadius: "8px",
                                       padding: "6px",
-                                      cursor: !holiday && school && lessons.length === 0 ? "pointer" : "default",
+                                      cursor: !holiday && school ? "pointer" : "default",
                                       opacity: !school ? 0.5 : 1,
                                       transition: "all 0.15s",
                                     }}
@@ -21980,10 +22223,14 @@ ${signature}`;
                                         draggable
                                         onDragStart={() => setCalendarDragId(lesson.id)}
                                         onDragEnd={() => setCalendarDragId(null)}
+                                        onClick={e => {
+                                          e.stopPropagation()
+                                          setEditingEvent({ ...lesson })
+                                        }}
                                         style={{
                                           fontSize: "0.7rem", padding: "3px 6px", borderRadius: "6px",
                                           background: lesson.color || "#6366f1", color: "#fff", fontWeight: 500,
-                                          marginBottom: "2px", cursor: "grab", display: "flex", alignItems: "center",
+                                          marginBottom: "2px", cursor: "pointer", display: "flex", alignItems: "center",
                                           justifyContent: "space-between", gap: "2px",
                                         }}
                                       >
@@ -22001,7 +22248,6 @@ ${signature}`;
                                   </div>
                                 )
                               })}
-                            </div>
                           </div>
                         )
                       })()}
@@ -22033,7 +22279,10 @@ ${signature}`;
                                     }
                                   }}
                                   onClick={() => {
-                                    if (!holiday && school && lessons.length === 0) setSelectedCalendarDate(cell.date)
+                                    if (!holiday && school) {
+                                      setQuickAddForm({ title: '', unit: '', color: '#6366f1' })
+                                      setSelectedCalendarDate(cell.date)
+                                    }
                                   }}
                                   className="glass-card"
                                   style={{
@@ -22041,7 +22290,7 @@ ${signature}`;
                                     opacity: !school ? 0.4 : 1,
                                     border: isToday ? "2px solid var(--accent-primary)" : undefined,
                                     background: holiday ? "rgba(239, 68, 68, 0.08)" : undefined,
-                                    cursor: !holiday && school && lessons.length === 0 ? "pointer" : "default",
+                                    cursor: !holiday && school ? "pointer" : "default",
                                   }}
                                 >
                                   <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "10px", color: isToday ? "var(--accent-primary)" : "var(--text-primary)" }}>
@@ -22063,27 +22312,39 @@ ${signature}`;
                                       draggable
                                       onDragStart={() => setCalendarDragId(lesson.id)}
                                       onDragEnd={() => setCalendarDragId(null)}
+                                      onClick={e => {
+                                        e.stopPropagation()
+                                        setEditingEvent({ ...lesson })
+                                      }}
                                       style={{
                                         padding: "8px 10px", borderRadius: "8px",
                                         background: lesson.color || "#6366f1", color: "#fff",
-                                        marginBottom: "6px", cursor: "grab",
+                                        marginBottom: "6px", cursor: "pointer",
                                       }}
                                     >
                                       <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "2px" }}>
                                         {lesson.day_number ? 'Day ' + lesson.day_number + ': ' : ''}{lesson.lesson_title}
                                       </div>
                                       {lesson.unit && <div style={{ fontSize: "0.7rem", opacity: 0.8 }}>{lesson.unit}</div>}
-                                      <button
-                                        onClick={e => { e.stopPropagation(); unscheduleLesson(lesson.id) }}
-                                        style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", cursor: "pointer", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem", marginTop: "4px" }}
-                                      >
-                                        Remove
-                                      </button>
+                                      <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); setEditingEvent({ ...lesson }) }}
+                                          style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", cursor: "pointer", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem" }}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); unscheduleLesson(lesson.id) }}
+                                          style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", cursor: "pointer", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem" }}
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
                                     </div>
                                   ))}
                                   {!holiday && school && lessons.length === 0 && (
                                     <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", marginTop: "40px" }}>
-                                      Click to schedule
+                                      Click to add event
                                     </div>
                                   )}
                                 </div>
@@ -22093,7 +22354,7 @@ ${signature}`;
                         )
                       })()}
 
-                      {/* Schedule Lesson Modal */}
+                      {/* Add Event / Schedule Lesson Modal */}
                       {selectedCalendarDate && (
                         <div
                           style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
@@ -22106,56 +22367,120 @@ ${signature}`;
                           >
                             <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
                               <Icon name="CalendarPlus" size={20} style={{ color: "var(--accent-primary)" }} />
-                              Schedule Lesson
+                              Add Event
                             </h3>
                             <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
                               {new Date(selectedCalendarDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                             </p>
-                            {Object.keys(savedLessons.units || {}).length === 0 ? (
-                              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>No saved lessons. Generate and save lesson plans first.</p>
-                            ) : (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                {Object.entries(savedLessons.units || {}).map(([unitName, unitLessons]) => (
-                                  <div key={unitName}>
-                                    <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                      <Icon name="FolderOpen" size={14} />
-                                      {unitName}
-                                    </div>
-                                    {unitLessons.map((lesson, li) => {
-                                      const unitColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444']
-                                      const colorIdx = Object.keys(savedLessons.units).indexOf(unitName) % unitColors.length
-                                      return (
-                                        <button
-                                          key={li}
-                                          onClick={() => {
-                                            scheduleLesson({
-                                              date: selectedCalendarDate,
-                                              unit: unitName,
-                                              lesson_title: lesson.title,
-                                              lesson_file: unitName + '/' + lesson.filename + '.json',
-                                              color: unitColors[colorIdx],
-                                            })
-                                            setSelectedCalendarDate(null)
-                                          }}
-                                          style={{
-                                            width: "100%", textAlign: "left", padding: "10px 14px",
-                                            background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
-                                            borderRadius: "8px", cursor: "pointer", color: "var(--text-primary)",
-                                            fontSize: "0.85rem", marginBottom: "4px",
-                                            display: "flex", alignItems: "center", gap: "8px",
-                                            transition: "all 0.15s",
-                                          }}
-                                          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-primary)"; e.currentTarget.style.background = "var(--glass-hover)" }}
-                                          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--glass-border)"; e.currentTarget.style.background = "var(--glass-bg)" }}
-                                        >
-                                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: unitColors[colorIdx], flexShrink: 0 }} />
-                                          {lesson.title}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                ))}
+
+                            {/* Quick Add Custom Event */}
+                            <div style={{ padding: "14px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "10px", marginBottom: "16px" }}>
+                              <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px", color: "var(--text-primary)" }}>
+                                <Icon name="Plus" size={14} />
+                                Custom Event
                               </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <input
+                                  type="text"
+                                  value={quickAddForm.title}
+                                  onChange={e => setQuickAddForm(prev => ({ ...prev, title: e.target.value }))}
+                                  placeholder="Event title (e.g., Unit 5 Test, Lab Day)"
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' && quickAddForm.title.trim()) {
+                                      scheduleLesson({ date: selectedCalendarDate, lesson_title: quickAddForm.title.trim(), unit: quickAddForm.unit.trim(), color: quickAddForm.color })
+                                      setSelectedCalendarDate(null)
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <input
+                                    type="text"
+                                    value={quickAddForm.unit}
+                                    onChange={e => setQuickAddForm(prev => ({ ...prev, unit: e.target.value }))}
+                                    placeholder="Unit (optional)"
+                                    style={{ flex: 1, padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.85rem" }}
+                                  />
+                                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                    {['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444'].map(c => (
+                                      <button
+                                        key={c}
+                                        onClick={() => setQuickAddForm(prev => ({ ...prev, color: c }))}
+                                        style={{
+                                          width: 22, height: 22, borderRadius: "6px", background: c, border: quickAddForm.color === c ? "2px solid #fff" : "2px solid transparent",
+                                          cursor: "pointer", outline: quickAddForm.color === c ? "2px solid " + c : "none", padding: 0,
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (quickAddForm.title.trim()) {
+                                      scheduleLesson({ date: selectedCalendarDate, lesson_title: quickAddForm.title.trim(), unit: quickAddForm.unit.trim(), color: quickAddForm.color })
+                                      setSelectedCalendarDate(null)
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ width: "100%", padding: "8px" }}
+                                  disabled={!quickAddForm.title.trim()}
+                                >
+                                  Add Event
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Saved Lessons Section */}
+                            {Object.keys(savedLessons.units || {}).length > 0 && (
+                              <>
+                                <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <Icon name="BookOpen" size={14} />
+                                  Or pick from saved lessons
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                  {Object.entries(savedLessons.units || {}).map(([unitName, unitLessons]) => (
+                                    <div key={unitName}>
+                                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <Icon name="FolderOpen" size={14} />
+                                        {unitName}
+                                      </div>
+                                      {unitLessons.map((lesson, li) => {
+                                        const unitColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444']
+                                        const colorIdx = Object.keys(savedLessons.units).indexOf(unitName) % unitColors.length
+                                        return (
+                                          <button
+                                            key={li}
+                                            onClick={() => {
+                                              scheduleLesson({
+                                                date: selectedCalendarDate,
+                                                unit: unitName,
+                                                lesson_title: lesson.title,
+                                                lesson_file: unitName + '/' + lesson.filename + '.json',
+                                                color: unitColors[colorIdx],
+                                              })
+                                              setSelectedCalendarDate(null)
+                                            }}
+                                            style={{
+                                              width: "100%", textAlign: "left", padding: "10px 14px",
+                                              background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+                                              borderRadius: "8px", cursor: "pointer", color: "var(--text-primary)",
+                                              fontSize: "0.85rem", marginBottom: "4px",
+                                              display: "flex", alignItems: "center", gap: "8px",
+                                              transition: "all 0.15s",
+                                            }}
+                                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-primary)"; e.currentTarget.style.background = "var(--glass-hover)" }}
+                                            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--glass-border)"; e.currentTarget.style.background = "var(--glass-bg)" }}
+                                          >
+                                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: unitColors[colorIdx], flexShrink: 0 }} />
+                                            {lesson.title}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
                             )}
                             <button
                               onClick={() => setSelectedCalendarDate(null)}
@@ -22164,6 +22489,103 @@ ${signature}`;
                             >
                               Cancel
                             </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Edit Event Modal */}
+                      {editingEvent && (
+                        <div
+                          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+                          onClick={() => setEditingEvent(null)}
+                        >
+                          <div
+                            className="glass-card"
+                            style={{ maxWidth: "460px", width: "100%", padding: "24px" }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <Icon name="Pencil" size={20} style={{ color: "var(--accent-primary)" }} />
+                              Edit Event
+                            </h3>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Title</label>
+                                <input
+                                  type="text"
+                                  value={editingEvent.lesson_title || ''}
+                                  onChange={e => setEditingEvent(prev => ({ ...prev, lesson_title: e.target.value }))}
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                  autoFocus
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Date</label>
+                                <input
+                                  type="date"
+                                  value={editingEvent.date || ''}
+                                  onChange={e => setEditingEvent(prev => ({ ...prev, date: e.target.value }))}
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Unit</label>
+                                <input
+                                  type="text"
+                                  value={editingEvent.unit || ''}
+                                  onChange={e => setEditingEvent(prev => ({ ...prev, unit: e.target.value }))}
+                                  placeholder="Unit name (optional)"
+                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Color</label>
+                                <div style={{ display: "flex", gap: "6px" }}>
+                                  {['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444'].map(c => (
+                                    <button
+                                      key={c}
+                                      onClick={() => setEditingEvent(prev => ({ ...prev, color: c }))}
+                                      style={{
+                                        width: 28, height: 28, borderRadius: "8px", background: c, border: (editingEvent.color || '#6366f1') === c ? "2px solid #fff" : "2px solid transparent",
+                                        cursor: "pointer", outline: (editingEvent.color || '#6366f1') === c ? "2px solid " + c : "none", padding: 0,
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                                <button
+                                  onClick={() => {
+                                    if (editingEvent.lesson_title && editingEvent.date) {
+                                      scheduleLesson(editingEvent)
+                                      setEditingEvent(null)
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ flex: 1 }}
+                                  disabled={!editingEvent.lesson_title || !editingEvent.date}
+                                >
+                                  Save Changes
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    unscheduleLesson(editingEvent.id)
+                                    setEditingEvent(null)
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ color: "#ef4444" }}
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={() => setEditingEvent(null)}
+                                  className="btn btn-secondary"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -22238,6 +22660,171 @@ ${signature}`;
                           </div>
                         </div>
                       )}
+
+                      {/* Import Document Modal */}
+                      {showImportModal && (
+                        <div
+                          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+                          onClick={() => setShowImportModal(false)}
+                        >
+                          <div
+                            className="glass-card"
+                            style={{ maxWidth: "560px", width: "100%", padding: "24px", maxHeight: "80vh", display: "flex", flexDirection: "column" }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <Icon name="FileUp" size={20} style={{ color: "var(--accent-primary)" }} />
+                              Import Events from Document
+                            </h3>
+
+                            {/* Step 1: Select document */}
+                            <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                              <select
+                                value={importSelectedDoc}
+                                onChange={e => { setImportSelectedDoc(e.target.value); setImportEvents([]); setImportChecked({}) }}
+                                style={{ flex: 1, padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                              >
+                                <option value="">Select a document...</option>
+                                {supportDocs.filter(d => /\.(pdf|docx?)$/i.test(d.filename)).map(d => (
+                                  <option key={d.filename} value={d.filename}>{d.filename}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={async () => {
+                                  if (!importSelectedDoc) return
+                                  setImportParsing(true)
+                                  setImportEvents([])
+                                  setImportChecked({})
+                                  try {
+                                    const data = await api.parseDocumentForCalendar(importSelectedDoc)
+                                    if (data.events) {
+                                      setImportEvents(data.events)
+                                      const checked = {}
+                                      data.events.forEach((_, i) => { checked[i] = true })
+                                      setImportChecked(checked)
+                                    } else if (data.error) {
+                                      if (addToast) addToast(data.error, 'error')
+                                    }
+                                  } catch (e) {
+                                    if (addToast) addToast('Failed to parse document', 'error')
+                                  } finally {
+                                    setImportParsing(false)
+                                  }
+                                }}
+                                className="btn btn-primary"
+                                style={{ padding: "8px 16px", fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                                disabled={!importSelectedDoc || importParsing}
+                              >
+                                {importParsing ? 'Parsing...' : 'Parse Document'}
+                              </button>
+                            </div>
+
+                            {importParsing && (
+                              <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                                <Icon name="Loader2" size={24} style={{ animation: "spin 1s linear infinite", marginBottom: "8px" }} />
+                                <div>AI is extracting events from your document...</div>
+                              </div>
+                            )}
+
+                            {/* Step 2: Event list with checkboxes */}
+                            {importEvents.length > 0 && !importParsing && (
+                              <>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                                    {importEvents.length} events found
+                                  </span>
+                                  <div style={{ display: "flex", gap: "8px" }}>
+                                    <button
+                                      onClick={() => {
+                                        const all = {}
+                                        importEvents.forEach((_, i) => { all[i] = true })
+                                        setImportChecked(all)
+                                      }}
+                                      style={{ background: "none", border: "none", color: "var(--accent-primary)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, padding: "2px 6px" }}
+                                    >
+                                      Select All
+                                    </button>
+                                    <button
+                                      onClick={() => setImportChecked({})}
+                                      style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, padding: "2px 6px" }}
+                                    >
+                                      Deselect All
+                                    </button>
+                                  </div>
+                                </div>
+                                <div style={{ flex: 1, overflowY: "auto", maxHeight: "340px", border: "1px solid var(--glass-border)", borderRadius: "8px", marginBottom: "16px" }}>
+                                  {importEvents.map((ev, i) => (
+                                    <label
+                                      key={i}
+                                      style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px",
+                                        borderBottom: i < importEvents.length - 1 ? "1px solid var(--glass-border)" : "none",
+                                        cursor: "pointer", fontSize: "0.85rem",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={!!importChecked[i]}
+                                        onChange={() => setImportChecked(prev => ({ ...prev, [i]: !prev[i] }))}
+                                        style={{ accentColor: "var(--accent-primary)" }}
+                                      />
+                                      <span style={{
+                                        display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 600,
+                                        background: ev.type === 'holiday' ? "rgba(239, 68, 68, 0.15)" : "rgba(99, 102, 241, 0.15)",
+                                        color: ev.type === 'holiday' ? "#ef4444" : "#6366f1",
+                                        minWidth: "52px", textAlign: "center",
+                                      }}>
+                                        {ev.type === 'holiday' ? 'Holiday' : 'Lesson'}
+                                      </span>
+                                      <span style={{ fontWeight: 500, color: "var(--text-primary)", flex: 1 }}>{ev.title}</span>
+                                      <span style={{ color: "var(--text-secondary)", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{ev.date}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+
+                            {/* Action buttons */}
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              {importEvents.length > 0 && !importParsing && (
+                                <button
+                                  onClick={async () => {
+                                    const selected = importEvents.filter((_, i) => importChecked[i])
+                                    if (selected.length === 0) return
+                                    setImportImporting(true)
+                                    try {
+                                      const data = await api.importCalendarEvents(selected)
+                                      if (data.status === 'imported') {
+                                        loadCalendar()
+                                        setShowImportModal(false)
+                                        if (addToast) addToast('Imported ' + data.lessons_added + ' lessons and ' + data.holidays_added + ' holidays', 'success')
+                                      } else if (data.error) {
+                                        if (addToast) addToast(data.error, 'error')
+                                      }
+                                    } catch (e) {
+                                      if (addToast) addToast('Failed to import events', 'error')
+                                    } finally {
+                                      setImportImporting(false)
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ flex: 1 }}
+                                  disabled={importImporting || Object.values(importChecked).filter(Boolean).length === 0}
+                                >
+                                  {importImporting ? 'Importing...' : 'Import ' + Object.values(importChecked).filter(Boolean).length + ' Events'}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setShowImportModal(false)}
+                                className="btn btn-secondary"
+                                style={{ flex: importEvents.length > 0 && !importParsing ? undefined : 1 }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -22266,13 +22853,12 @@ ${signature}`;
           }}
         >
           <div
+            className="glass-card"
             style={{
-              background: "#1a1a2e",
               borderRadius: "12px",
               width: "100%",
               maxWidth: "500px",
               padding: "25px",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
               boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
             }}
           >
@@ -22299,12 +22885,12 @@ ${signature}`;
               <button
                 onClick={() => setFocusExportModal(false)}
                 style={{
-                  background: "rgba(255,255,255,0.1)",
-                  border: "none",
+                  background: "var(--glass-bg)",
+                  border: "1px solid var(--glass-border)",
                   cursor: "pointer",
                   padding: "8px",
                   borderRadius: "6px",
-                  color: "#fff",
+                  color: "var(--text-primary)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",

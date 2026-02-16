@@ -6,6 +6,8 @@ import os
 import json
 import csv
 import re
+import subprocess
+import threading
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
@@ -1291,3 +1293,566 @@ def check_api_keys():
         "anthropic_configured": bool(keys.get('anthropic')) or anthropic_in_env,
         "gemini_configured": bool(keys.get('gemini')) or gemini_in_env
     })
+
+
+# ══════════════════════════════════════════════════════════════
+# FOCUS ROSTER IMPORT
+# ══════════════════════════════════════════════════════════════
+
+FOCUS_IMPORT_FILE = os.path.join(GRAIDER_DATA_DIR, "focus_roster_import.json")
+
+# Module-level state for Focus import process
+_focus_import_state = {
+    "status": "idle",
+    "progress": "",
+    "result": None,
+    "error": None,
+}
+
+
+def _run_focus_import():
+    """Run the Focus roster import script in a background thread."""
+    global _focus_import_state
+    _focus_import_state["status"] = "running"
+    _focus_import_state["progress"] = "Starting Focus import..."
+    _focus_import_state["result"] = None
+    _focus_import_state["error"] = None
+
+    script_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "focus-roster-import.js"
+    )
+
+    if not os.path.exists(script_path):
+        _focus_import_state["status"] = "failed"
+        _focus_import_state["error"] = "focus-roster-import.js not found"
+        return
+
+    try:
+        proc = subprocess.Popen(
+            ["node", script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        # Read stdout lines for progress updates
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+                msg_type = msg.get("type", "")
+                message = msg.get("message", "")
+
+                if msg_type == "progress":
+                    _focus_import_state["progress"] = message
+                elif msg_type == "status":
+                    _focus_import_state["progress"] = message
+                elif msg_type == "complete":
+                    _focus_import_state["progress"] = message
+                elif msg_type == "error":
+                    _focus_import_state["error"] = message
+                elif msg_type == "warning":
+                    _focus_import_state["progress"] = message
+            except json.JSONDecodeError:
+                pass
+
+        proc.wait()
+
+        if proc.returncode != 0:
+            stderr = proc.stderr.read()
+            if not _focus_import_state["error"]:
+                _focus_import_state["error"] = stderr or "Import process exited with error"
+            _focus_import_state["status"] = "failed"
+            return
+
+        # Process the import output file
+        if not os.path.exists(FOCUS_IMPORT_FILE):
+            _focus_import_state["status"] = "failed"
+            _focus_import_state["error"] = "Import file not created"
+            return
+
+        with open(FOCUS_IMPORT_FILE, 'r') as f:
+            import_data = json.load(f)
+
+        result = _process_focus_import(import_data)
+        _focus_import_state["status"] = "completed"
+        _focus_import_state["result"] = result
+
+    except Exception as e:
+        _focus_import_state["status"] = "failed"
+        _focus_import_state["error"] = str(e)
+
+
+def _process_focus_import(import_data):
+    """Process Focus import data: write period CSVs and update parent contacts.
+
+    Handles enriched format from focus-roster-import.js:
+    - periods keyed by "Period N" with course_codes, period_num, students
+    - students have contacts (primary/secondary/third), schedule, has_504
+    - backward-compatible parent_emails/parent_phones arrays
+    """
+    periods_data = import_data.get("periods", {})
+    total_students = 0
+    total_contacts = 0
+    period_summary = {}
+
+    # Load existing parent contacts (preserve non-Focus entries)
+    contacts = {}
+    if os.path.exists(PARENT_CONTACTS_FILE):
+        try:
+            with open(PARENT_CONTACTS_FILE, 'r') as f:
+                contacts = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    # Store student schedules separately for cross-teacher lookup
+    schedules_path = os.path.join(GRAIDER_DATA_DIR, "student_schedules.json")
+
+    for period_name, period_data in periods_data.items():
+        students = period_data.get("students", [])
+        if not students:
+            continue
+
+        course_codes = period_data.get("course_codes", [])
+        period_num = period_data.get("period_num", 0)
+
+        # Write period CSV
+        safe_name = re.sub(r'[^\w\s-]', '', period_name).strip().replace(' ', '_')
+        csv_filename = safe_name + ".csv"
+        csv_path = os.path.join(PERIODS_DIR, csv_filename)
+
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Student", "Student ID", "Local ID", "Grade", "Local Student ID", "Team"])
+            for s in students:
+                writer.writerow([
+                    s.get("name", ""),
+                    s.get("student_id", ""),
+                    s.get("local_id", ""),
+                    s.get("grade", ""),
+                    s.get("local_id", ""),
+                    ""
+                ])
+
+        # Write .meta.json with course code info
+        meta = {
+            "filename": csv_filename,
+            "filepath": csv_path,
+            "period_name": period_name,
+            "period_num": period_num,
+            "course_codes": course_codes,
+            "headers": ["Student", "Student ID", "Local ID", "Grade", "Local Student ID", "Team"],
+            "row_count": len(students),
+            "column_mapping": {},
+            "imported_from": "focus",
+            "imported_at": import_data.get("imported_at", "")
+        }
+        meta_path = os.path.join(PERIODS_DIR, csv_filename + ".meta.json")
+        with open(meta_path, 'w') as f:
+            json.dump(meta, f, indent=2)
+
+        # Update parent contacts with enriched data
+        period_contacts = 0
+        for s in students:
+            sid = s.get("student_id", "")
+            if not sid:
+                continue
+
+            emails = s.get("parent_emails", [])
+            phones = s.get("parent_phones", [])
+            rich_contacts = s.get("contacts", {})
+            schedule = s.get("schedule", [])
+            has_504 = s.get("has_504", False)
+
+            contact_entry = {
+                "student_name": s.get("name", ""),
+                "period": period_name,
+                "has_504": has_504,
+                "parent_emails": sorted(set(emails)) if emails else [],
+                "parent_phones": phones or [],
+                "contacts": [],
+                "schedule": schedule,
+            }
+
+            # Build structured contacts list from primary/secondary/third
+            for role in ["primary", "secondary", "third"]:
+                c = rich_contacts.get(role)
+                if c:
+                    contact_entry["contacts"].append({
+                        "role": role,
+                        "first_name": c.get("first_name", ""),
+                        "last_name": c.get("last_name", ""),
+                        "relationship": c.get("relationship", ""),
+                        "phone": c.get("phone", ""),
+                        "email": c.get("email", ""),
+                        "call_out": c.get("call_out", False),
+                    })
+
+            # Merge with existing entry if present (preserve manually added data)
+            if sid in contacts:
+                existing = contacts[sid]
+                # Merge emails
+                merged_emails = sorted(
+                    set(existing.get("parent_emails", [])) | set(contact_entry["parent_emails"])
+                )
+                contact_entry["parent_emails"] = merged_emails
+                # Merge phones
+                for p in existing.get("parent_phones", []):
+                    if p not in contact_entry["parent_phones"]:
+                        contact_entry["parent_phones"].append(p)
+
+            contacts[sid] = contact_entry
+            if emails or phones:
+                period_contacts += 1
+
+        total_students += len(students)
+        total_contacts += period_contacts
+        period_summary[period_name] = {
+            "students": len(students),
+            "course_codes": course_codes,
+        }
+
+    # Save updated parent contacts
+    with open(PARENT_CONTACTS_FILE, 'w') as f:
+        json.dump(contacts, f, indent=2)
+
+    return {
+        "periods_imported": len(period_summary),
+        "total_students": total_students,
+        "total_contacts": total_contacts,
+        "period_summary": period_summary,
+    }
+
+
+@settings_bp.route('/api/import-from-focus', methods=['POST'])
+def import_from_focus():
+    """Trigger Focus SIS roster import via Playwright."""
+    # Check credentials exist
+    creds_path = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
+    if not os.path.exists(creds_path):
+        return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools > District Portal."}), 400
+
+    if _focus_import_state["status"] == "running":
+        return jsonify({"error": "Import already in progress"}), 409
+
+    # Start import in background thread
+    thread = threading.Thread(target=_run_focus_import, daemon=True)
+    thread.start()
+
+    return jsonify({"status": "started", "message": "Focus import started. A browser window will open for 2FA."})
+
+
+@settings_bp.route('/api/focus-import-status')
+def focus_import_status():
+    """Get current status of the Focus import process."""
+    return jsonify({
+        "status": _focus_import_state["status"],
+        "progress": _focus_import_state["progress"],
+        "result": _focus_import_state["result"],
+        "error": _focus_import_state["error"],
+    })
+
+
+# ══════════════════════════════════════════════════════════════
+# INLINE ROSTER EDITOR (Add/Remove/Update Students)
+# ══════════════════════════════════════════════════════════════
+
+def _read_period_csv(filepath):
+    """Read a period CSV and return (headers, rows) where rows are lists."""
+    headers = []
+    rows = []
+    with open(filepath, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        headers = next(reader, [])
+        for row in reader:
+            rows.append(row)
+    return headers, rows
+
+
+def _write_period_csv(filepath, headers, rows):
+    """Write headers + rows back to a period CSV."""
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        for row in rows:
+            writer.writerow(row)
+
+
+def _update_meta_row_count(filename, new_count):
+    """Update the row_count in a period's .meta.json file."""
+    meta_path = os.path.join(PERIODS_DIR, secure_filename(filename) + ".meta.json")
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, 'r') as f:
+                meta = json.load(f)
+            meta['row_count'] = new_count
+            with open(meta_path, 'w') as f:
+                json.dump(meta, f, indent=2)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+
+def _find_student_id_col(headers):
+    """Find the index of the Student ID column."""
+    for i, h in enumerate(headers):
+        if h.strip().lower() == 'student id':
+            return i
+    return -1
+
+
+def _find_student_name_col(headers):
+    """Find the index of the Student/Name column."""
+    for i, h in enumerate(headers):
+        hl = h.strip().lower()
+        if hl in ('student', 'name', 'student name'):
+            return i
+    return 0  # default to first column
+
+
+def _load_parent_contacts():
+    """Load parent_contacts.json safely."""
+    if os.path.exists(PARENT_CONTACTS_FILE):
+        try:
+            with open(PARENT_CONTACTS_FILE, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return {}
+
+
+def _save_parent_contacts(contacts):
+    """Save parent_contacts.json."""
+    with open(PARENT_CONTACTS_FILE, 'w') as f:
+        json.dump(contacts, f, indent=2)
+
+
+@settings_bp.route('/api/add-student', methods=['POST'])
+def add_student():
+    """Add a student to a period CSV and optionally to parent contacts."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    filename = data.get('period_filename')
+    student_name = data.get('student_name', '').strip()
+    student_id = data.get('student_id', '').strip()
+
+    if not filename:
+        return jsonify({"error": "period_filename is required"}), 400
+    if not student_name:
+        return jsonify({"error": "student_name is required"}), 400
+
+    filepath = os.path.join(PERIODS_DIR, secure_filename(filename))
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Period file not found"}), 404
+
+    try:
+        headers, rows = _read_period_csv(filepath)
+
+        # Check for duplicate student ID
+        if student_id:
+            id_col = _find_student_id_col(headers)
+            if id_col >= 0:
+                for row in rows:
+                    if id_col < len(row) and row[id_col].strip() == student_id:
+                        return jsonify({"error": "Student ID already exists in this period"}), 409
+
+        # Build new row matching existing headers
+        local_id = data.get('local_id', '')
+        grade = data.get('grade', '')
+        new_row = []
+        for h in headers:
+            hl = h.strip().lower()
+            if hl in ('student', 'name', 'student name'):
+                new_row.append(student_name)
+            elif hl == 'student id':
+                new_row.append(student_id)
+            elif hl == 'local id' or hl == 'local student id':
+                new_row.append(local_id)
+            elif hl == 'grade':
+                new_row.append(grade)
+            else:
+                new_row.append('')
+
+        rows.append(new_row)
+        _write_period_csv(filepath, headers, rows)
+        _update_meta_row_count(filename, len(rows))
+
+        # Update parent contacts if provided
+        parent_emails = data.get('parent_emails', [])
+        parent_phones = data.get('parent_phones', [])
+        if (parent_emails or parent_phones) and student_id:
+            contacts = _load_parent_contacts()
+
+            # Try to get the period_name from meta
+            period_name = ''
+            meta_path = os.path.join(PERIODS_DIR, secure_filename(filename) + ".meta.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as f:
+                        meta = json.load(f)
+                    period_name = meta.get('period_name', '')
+                except (json.JSONDecodeError, IOError):
+                    pass
+
+            contacts[student_id] = {
+                "student_name": student_name,
+                "period": period_name,
+                "parent_emails": parent_emails if isinstance(parent_emails, list) else [e.strip() for e in parent_emails.split(',') if e.strip()],
+                "parent_phones": parent_phones if isinstance(parent_phones, list) else [p.strip() for p in parent_phones.split(',') if p.strip()],
+            }
+            _save_parent_contacts(contacts)
+
+        # Return updated student list
+        students = get_students_from_period_file(filepath)
+        return jsonify({"status": "added", "students": students, "count": len(students)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/remove-student', methods=['POST'])
+def remove_student():
+    """Remove a student from period CSV and parent contacts."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    filename = data.get('period_filename')
+    student_id = data.get('student_id', '').strip()
+
+    if not filename:
+        return jsonify({"error": "period_filename is required"}), 400
+    if not student_id:
+        return jsonify({"error": "student_id is required"}), 400
+
+    filepath = os.path.join(PERIODS_DIR, secure_filename(filename))
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Period file not found"}), 404
+
+    try:
+        headers, rows = _read_period_csv(filepath)
+        id_col = _find_student_id_col(headers)
+
+        if id_col < 0:
+            return jsonify({"error": "Could not find Student ID column in CSV"}), 400
+
+        original_count = len(rows)
+        rows = [row for row in rows if not (id_col < len(row) and row[id_col].strip() == student_id)]
+
+        if len(rows) == original_count:
+            return jsonify({"error": "Student not found in this period"}), 404
+
+        _write_period_csv(filepath, headers, rows)
+        _update_meta_row_count(filename, len(rows))
+
+        # Remove from parent contacts
+        contacts = _load_parent_contacts()
+        if student_id in contacts:
+            del contacts[student_id]
+            _save_parent_contacts(contacts)
+
+        students = get_students_from_period_file(filepath)
+        return jsonify({"status": "removed", "students": students, "count": len(students)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/update-student', methods=['POST'])
+def update_student():
+    """Update a student's info in the period CSV and/or parent contacts."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    filename = data.get('period_filename')
+    student_id = data.get('student_id', '').strip()
+
+    if not filename:
+        return jsonify({"error": "period_filename is required"}), 400
+    if not student_id:
+        return jsonify({"error": "student_id is required"}), 400
+
+    filepath = os.path.join(PERIODS_DIR, secure_filename(filename))
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Period file not found"}), 404
+
+    try:
+        new_name = data.get('student_name', '').strip()
+        new_grade = data.get('grade', '').strip()
+        parent_emails = data.get('parent_emails', [])
+        parent_phones = data.get('parent_phones', [])
+
+        # Update CSV if name or grade changed
+        if new_name or new_grade:
+            headers, rows = _read_period_csv(filepath)
+            id_col = _find_student_id_col(headers)
+            name_col = _find_student_name_col(headers)
+            grade_col = -1
+            for i, h in enumerate(headers):
+                if h.strip().lower() == 'grade':
+                    grade_col = i
+                    break
+
+            found = False
+            for row in rows:
+                if id_col >= 0 and id_col < len(row) and row[id_col].strip() == student_id:
+                    if new_name and name_col >= 0 and name_col < len(row):
+                        row[name_col] = new_name
+                    if new_grade and grade_col >= 0 and grade_col < len(row):
+                        row[grade_col] = new_grade
+                    found = True
+                    break
+
+            if not found:
+                return jsonify({"error": "Student not found in this period"}), 404
+
+            _write_period_csv(filepath, headers, rows)
+
+        # Update parent contacts
+        contacts = _load_parent_contacts()
+        if student_id in contacts:
+            if parent_emails is not None:
+                if isinstance(parent_emails, str):
+                    parent_emails = [e.strip() for e in parent_emails.split(',') if e.strip()]
+                contacts[student_id]["parent_emails"] = parent_emails
+            if parent_phones is not None:
+                if isinstance(parent_phones, str):
+                    parent_phones = [p.strip() for p in parent_phones.split(',') if p.strip()]
+                contacts[student_id]["parent_phones"] = parent_phones
+            if new_name:
+                contacts[student_id]["student_name"] = new_name
+        else:
+            # Create new contact entry
+            period_name = ''
+            meta_path = os.path.join(PERIODS_DIR, secure_filename(filename) + ".meta.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as f:
+                        meta = json.load(f)
+                    period_name = meta.get('period_name', '')
+                except (json.JSONDecodeError, IOError):
+                    pass
+
+            if isinstance(parent_emails, str):
+                parent_emails = [e.strip() for e in parent_emails.split(',') if e.strip()]
+            if isinstance(parent_phones, str):
+                parent_phones = [p.strip() for p in parent_phones.split(',') if p.strip()]
+
+            contacts[student_id] = {
+                "student_name": new_name or "",
+                "period": period_name,
+                "parent_emails": parent_emails or [],
+                "parent_phones": parent_phones or [],
+            }
+
+        _save_parent_contacts(contacts)
+
+        return jsonify({"status": "updated"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

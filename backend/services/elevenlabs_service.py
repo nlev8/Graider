@@ -19,44 +19,79 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_VOICE_ID = "Aa6nEBJJMKJwJkCx8VU2"
+DEFAULT_VOICE_ID = "UgBBYS2sOqTuMpoF3BR0"
 DEFAULT_MODEL_ID = "eleven_turbo_v2_5"
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
 
 
 class SentenceBuffer:
-    """Accumulates text fragments and emits complete sentences.
+    """Accumulates text fragments and emits at natural speech boundaries.
 
-    ElevenLabs produces better audio from complete sentences
-    rather than tiny word fragments from streaming deltas.
+    Emits on sentence endings (.!?), clause boundaries (,;:—),
+    newlines, and when the buffer exceeds MAX_LEN characters.
+    This keeps audio flowing smoothly without long gaps.
     """
 
-    ENDINGS = {'.', '!', '?', ':', '\n'}
+    # Strong breaks — always split here
+    STRONG = {'.', '!', '?', '\n'}
+    # Weak breaks — split here if buffer is long enough for natural speech
+    WEAK = {',', ';', ':', '\u2014', '\u2013', ')'}
+    WEAK_MIN = 30  # Only split on weak break if buffer >= this many chars
+    MAX_LEN = 80   # Force-emit if buffer exceeds this, splitting at last space
 
     def __init__(self):
         self.buffer = ""
 
     def add(self, text):
-        """Add text and return list of complete sentences."""
+        """Add text and return list of speakable chunks."""
         self.buffer += text
-        sentences = []
+        chunks = []
 
         while True:
+            emitted = False
+
+            # 1. Check for strong break (sentence ending)
             earliest = -1
-            for ch in self.ENDINGS:
+            for ch in self.STRONG:
                 idx = self.buffer.find(ch)
                 if idx != -1 and (earliest == -1 or idx < earliest):
                     earliest = idx
+            if earliest != -1:
+                chunk = self.buffer[:earliest + 1]
+                self.buffer = self.buffer[earliest + 1:].lstrip()
+                if chunk.strip():
+                    chunks.append(chunk)
+                emitted = True
 
-            if earliest == -1:
+            # 2. Check for weak break (comma, semicolon) if buffer is long enough
+            if not emitted and len(self.buffer) >= self.WEAK_MIN:
+                earliest = -1
+                for ch in self.WEAK:
+                    idx = self.buffer.find(ch)
+                    if idx != -1 and idx >= 15 and (earliest == -1 or idx < earliest):
+                        earliest = idx
+                if earliest != -1:
+                    chunk = self.buffer[:earliest + 1]
+                    self.buffer = self.buffer[earliest + 1:].lstrip()
+                    if chunk.strip():
+                        chunks.append(chunk)
+                    emitted = True
+
+            # 3. Force-emit on max length (split at last space)
+            if not emitted and len(self.buffer) >= self.MAX_LEN:
+                split_at = self.buffer.rfind(' ', 0, self.MAX_LEN)
+                if split_at <= 0:
+                    split_at = self.MAX_LEN
+                chunk = self.buffer[:split_at]
+                self.buffer = self.buffer[split_at:].lstrip()
+                if chunk.strip():
+                    chunks.append(chunk)
+                emitted = True
+
+            if not emitted:
                 break
 
-            sentence = self.buffer[:earliest + 1]
-            self.buffer = self.buffer[earliest + 1:].lstrip()
-            if sentence.strip():
-                sentences.append(sentence)
-
-        return sentences
+        return chunks
 
     def flush(self):
         """Return any remaining buffered text."""
@@ -93,6 +128,7 @@ class ElevenLabsTTSStream:
         self.ws = None
         self._closed = False
         self._connected = threading.Event()
+        self._flush_done = threading.Event()
 
     def connect(self):
         """Open the ElevenLabs WebSocket connection."""
@@ -128,10 +164,18 @@ class ElevenLabsTTSStream:
                 "ElevenLabs WebSocket connection timed out"
             )
 
+        # Start keep-alive thread to prevent 20s timeout during tool calls
+        self._last_send = time.time()
+        self._keepalive_thread = threading.Thread(
+            target=self._keepalive_loop, daemon=True
+        )
+        self._keepalive_thread.start()
+
     def send_text(self, text):
         """Send a text chunk for TTS conversion."""
         if self._closed or not self.ws:
             return
+        self._last_send = time.time()
         self._send_json({
             "text": text,
             "try_trigger_generation": True,
@@ -141,7 +185,14 @@ class ElevenLabsTTSStream:
         """Force generation of any remaining buffered text."""
         if self._closed or not self.ws:
             return
+        self._flush_done.clear()
+        self._last_send = time.time()
         self._send_json({"text": " ", "flush": True})
+
+    def wait_for_flush(self, timeout=5.0):
+        """Block until ElevenLabs finishes generating audio for the flushed text.
+        Returns True if flush completed, False on timeout."""
+        return self._flush_done.wait(timeout=timeout)
 
     def close(self):
         """Send end-of-stream signal and close."""
@@ -161,6 +212,20 @@ class ElevenLabsTTSStream:
             if chunk is None:
                 break
             yield chunk
+
+    def _keepalive_loop(self):
+        """Send a space every 15s to prevent ElevenLabs 20s idle timeout."""
+        while not self._closed:
+            time.sleep(5)
+            if self._closed:
+                break
+            elapsed = time.time() - self._last_send
+            if elapsed >= 15:
+                try:
+                    self._send_json({"text": " "})
+                    self._last_send = time.time()
+                except Exception:
+                    break
 
     def _send_json(self, data):
         if self.ws and self.ws.sock and self.ws.sock.connected:
@@ -187,7 +252,10 @@ class ElevenLabsTTSStream:
             if audio:
                 self.audio_queue.put(audio)
             if data.get("isFinal"):
-                self.audio_queue.put(None)
+                # Signal that flush/generation is complete — but do NOT put None
+                # in the queue. None kills the _drain_audio thread permanently.
+                # The pipeline must stay alive for subsequent text rounds.
+                self._flush_done.set()
         except Exception:
             pass
 

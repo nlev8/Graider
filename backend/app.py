@@ -656,13 +656,27 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                                     student_key = f"{first} {last}".lower()
                                     student_period_map[student_key] = period_name
                                 elif full_name:
-                                    # Handle "LastName; FirstName" format
+                                    # Handle "Last; First" or "Last, First" formats
                                     if '; ' in full_name:
                                         parts = full_name.split('; ', 1)
                                         if len(parts) == 2:
-                                            # Convert "LastName; FirstName" to "FirstName LastName"
                                             student_key = f"{parts[1]} {parts[0]}".lower()
                                             student_period_map[student_key] = period_name
+                                    elif ', ' in full_name:
+                                        parts = full_name.split(', ', 1)
+                                        if len(parts) == 2:
+                                            last_name = parts[0].strip()
+                                            first_name = parts[1].strip()
+                                            # Full key: "First Middle Last1 Last2"
+                                            student_key = f"{first_name} {last_name}".lower()
+                                            student_period_map[student_key] = period_name
+                                            # Also add short key: "FirstWord LastWord" for filename matching
+                                            first_simple = first_name.split()[0].lower() if first_name else ''
+                                            last_simple = last_name.split()[0].lower() if last_name else ''
+                                            if first_simple and last_simple:
+                                                short_key = f"{first_simple} {last_simple}"
+                                                if short_key != student_key:
+                                                    student_period_map[short_key] = period_name
                                     else:
                                         student_period_map[full_name.lower()] = period_name
                     except Exception as e:
@@ -726,16 +740,33 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
 
             Returns tuple: (student_key, assignment_key)
             Example: 'jackson_gaytan_Chapter_10_Notes.docx' -> ('jackson_gaytan', 'chapter_10_notes')
+            Handles duplicate suffixes: '(1)', '(2)', trailing ' 1', ' 2'
             """
             import re
             name = filename.lower()
             name = os.path.splitext(name)[0]  # Remove extension
 
-            # Try to split into student name (first 2 words) and assignment (rest)
-            # Pattern: "firstname_lastname_assignment_name" or "firstname lastname - assignment"
+            # Strip OneDrive/SharePoint duplicate suffixes BEFORE normalizing:
+            #   "file (1)" -> "file", "file (2)" -> "file"
+            #   "file 1" -> "file", "file 2" -> "file" (only trailing bare digits)
+            name = re.sub(r'\s*\(\d+\)\s*$', '', name)   # Remove trailing (1), (2), etc.
+            name = re.sub(r'\s+\d{1,2}\s*$', '', name)    # Remove trailing " 1", " 2" (1-2 digits only)
+            name = re.sub(r'\s*-\s*copy\s*(\d*)$', '', name)  # Remove "- Copy", "- Copy 2"
 
-            # Remove emojis for cleaner parsing
+            # Remove emojis and special chars for cleaner parsing
             name_clean = re.sub(r'[^\w\s_-]', '', name)
+
+            # Handle "Last, First._Assignment" format (comma before first underscore)
+            first_underscore = name_clean.find('_')
+            if first_underscore > 0 and ',' in name_clean[:first_underscore]:
+                name_part = name_clean[:first_underscore]
+                assignment_part = name_clean[first_underscore + 1:] if first_underscore < len(name_clean) - 1 else ""
+                comma_parts = name_part.split(',')
+                last_name = comma_parts[0].strip()
+                first_name = comma_parts[1].strip().split()[0] if len(comma_parts) > 1 else ""
+                student_key = f"{first_name}_{last_name}".lower().strip('_')
+                assignment_key = re.sub(r'[_\s]+', '_', assignment_part.strip()).strip('_')
+                return (student_key, assignment_key or "unknown")
 
             # Split by underscores or spaces
             parts = re.split(r'[_\s]+', name_clean)
@@ -789,6 +820,21 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             grading_state["log"].append(f"🎯 Matched {len(all_files)} of {len(selected_files)} selected files")
         else:
             grading_state["log"].append(f"Found {len(all_files)} total files (no filter applied)")
+
+        # Detect resubmissions: newest file in a group where an older version was already graded
+        resubmissions = set()
+        for (student_key, assignment_key), files in file_groups.items():
+            if len(files) > 1:
+                files_sorted = sorted(files, key=lambda x: x.stat().st_mtime, reverse=True)
+                newest = files_sorted[0]
+                older_graded = [f for f in files_sorted[1:] if f.name in already_graded]
+                if older_graded and newest.name not in already_graded:
+                    resubmissions.add(newest.name)
+
+        if resubmissions:
+            grading_state["log"].append(f"🔄 {len(resubmissions)} resubmission(s) detected — grading latest versions")
+            for name in sorted(resubmissions):
+                grading_state["log"].append(f"  ↳ {name}")
 
         # Filter out already graded files (only if not using selection)
         if selected_files is None:
@@ -1405,6 +1451,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "baseline_deviation": result.get("baseline_deviation", {}),
                     "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
                     "marker_status": result.get("marker_status", "unverified"),
+                    "is_resubmission": filepath.name in resubmissions,
                     "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
                     "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),

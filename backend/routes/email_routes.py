@@ -35,12 +35,29 @@ def send_emails():
         if not results:
             return jsonify({"error": "No results to email"})
 
+        # Load parent contacts for email fallback
+        parent_contacts = {}
+        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+        if os.path.exists(contacts_file):
+            try:
+                with open(contacts_file, 'r', encoding='utf-8') as cf:
+                    parent_contacts = json.load(cf)
+            except Exception:
+                pass
+
         # Group by student email for combined emails
         students = defaultdict(list)
 
         for r in results:
             # Support both 'email' and 'student_email' field names
             email = r.get('student_email') or r.get('email', '')
+            # Fallback: look up parent email from parent_contacts.json
+            if (not email or '@' not in email) and r.get('student_id'):
+                contact = parent_contacts.get(str(r['student_id']), {})
+                parent_emails = contact.get('parent_emails', [])
+                if parent_emails:
+                    email = parent_emails[0]
+                    r['_cc_emails'] = parent_emails[1:] if len(parent_emails) > 1 else []
             if email and '@' in email:
                 students[email].append(r)
 
@@ -48,7 +65,14 @@ def send_emails():
         failed = 0
 
         for email, grades in students.items():
-            first_name = grades[0].get('student_name', 'Student').split()[0]
+            # Extract first name correctly from "Last, First" or "First Last" formats
+            raw_name = grades[0].get('student_name', 'Student')
+            if ',' in raw_name or ';' in raw_name:
+                sep = ',' if ',' in raw_name else ';'
+                after = raw_name.split(sep, 1)[1].strip()
+                first_name = after.split()[0] if after else raw_name.split()[0]
+            else:
+                first_name = raw_name.split()[0]
             teacher = teacher_name
 
             # Check for custom email content (edited by teacher)

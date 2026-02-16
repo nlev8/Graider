@@ -6,7 +6,7 @@ import os
 import subprocess
 import base64
 from pathlib import Path
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 
 document_bp = Blueprint('document', __name__)
 
@@ -58,6 +58,15 @@ def open_folder():
         os.system(f'open "{folder}"')
         return jsonify({"status": "opened"})
     return jsonify({"error": "Folder not found"})
+
+
+@document_bp.route('/api/serve-file', methods=['GET'])
+def serve_file_endpoint():
+    """Serve a local file for inline preview (images, etc.)."""
+    filepath = request.args.get('path', '')
+    if not filepath or not os.path.isfile(filepath):
+        return jsonify({"error": "File not found"}), 404
+    return send_file(filepath)
 
 
 @document_bp.route('/api/parse-document', methods=['POST'])

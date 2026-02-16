@@ -24,7 +24,11 @@ try:
 except ImportError:
     anthropic = None
 
-from backend.services.assistant_tools import TOOL_DEFINITIONS, execute_tool
+from backend.services.assistant_tools import (
+    TOOL_DEFINITIONS, execute_tool,
+    _load_standards, _extract_pdf_text, _extract_docx_text,
+    DOCUMENTS_DIR,
+)
 
 assistant_bp = Blueprint('assistant', __name__)
 
@@ -43,10 +47,22 @@ MAX_TOKENS = 4096
 conversations = {}
 CONVERSATION_TTL = 7200  # 2 hours
 
+# Per-session TTS mute flag — set by frontend to stop ElevenLabs mid-stream
+tts_muted_sessions = set()
+
+# Per-session cancellation flag — stops the tool loop when user clicks Stop
+cancelled_sessions = set()
+
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
+RUBRIC_FILE = os.path.expanduser("~/.graider_rubric.json")
 MEMORY_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
+ASSISTANT_COSTS_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_costs.json")
+
+# ElevenLabs pricing — approximate per-character cost (varies by plan tier)
+ELEVENLABS_COST_PER_CHAR = 0.00024  # ~$0.24 per 1K chars (mid-tier estimate)
 PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 ACCOMMODATIONS_FILE = os.path.join(GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
+TEMPLATES_DIR = os.path.join(GRAIDER_DATA_DIR, "assessment_templates")
 
 # Cache user manual text at module level to avoid re-reading on every request
 _user_manual_cache = None
@@ -202,6 +218,124 @@ def _load_accommodation_summary():
         return None
 
 
+# Cap total injected resource text at 80K chars (~20K tokens)
+MAX_RESOURCE_INJECTION = 80000
+
+
+def _load_resource_content():
+    """Load text content from all uploaded documents for system prompt injection.
+
+    Returns a formatted string with each document's content, or empty string
+    if no documents exist. Respects MAX_RESOURCE_INJECTION total char limit.
+    """
+    if not os.path.isdir(DOCUMENTS_DIR):
+        return ""
+
+    sections = []
+    total_chars = 0
+
+    try:
+        for fname in sorted(os.listdir(DOCUMENTS_DIR)):
+            if fname.endswith('.meta.json'):
+                continue
+            fpath = os.path.join(DOCUMENTS_DIR, fname)
+            if not os.path.isfile(fpath):
+                continue
+
+            # Load metadata for context
+            meta_path = fpath + ".meta.json"
+            meta = {}
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r', encoding='utf-8') as f:
+                        meta = json.load(f)
+                except Exception:
+                    pass
+
+            doc_type = meta.get("doc_type", "general")
+            description = meta.get("description", "")
+            ext = os.path.splitext(fname)[1].lower()
+
+            # Extract text
+            content = ""
+            try:
+                if ext == '.pdf':
+                    content, _ = _extract_pdf_text(fpath)
+                elif ext in ('.docx', '.doc'):
+                    content = _extract_docx_text(fpath)
+                elif ext in ('.txt', '.md'):
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+            except Exception:
+                continue
+
+            if not content or content.startswith("[Error") or content.startswith("[PDF extraction"):
+                continue
+
+            # Check total size budget
+            if total_chars + len(content) > MAX_RESOURCE_INJECTION:
+                remaining = MAX_RESOURCE_INJECTION - total_chars
+                if remaining > 500:
+                    content = content[:remaining] + "\n[... truncated due to size limit]"
+                else:
+                    break
+
+            header = f"### {fname}"
+            if description:
+                header += f" — {description}"
+            header += f" ({doc_type})"
+
+            sections.append(f"{header}\n{content}")
+            total_chars += len(content)
+
+    except Exception:
+        return ""
+
+    return "\n\n".join(sections)
+
+
+def _load_rubric():
+    """Load grading rubric settings."""
+    try:
+        if os.path.exists(RUBRIC_FILE):
+            with open(RUBRIC_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+def _load_assessment_templates():
+    """Load assessment template metadata (e.g., Wayground quiz format)."""
+    templates = []
+    try:
+        if not os.path.exists(TEMPLATES_DIR):
+            return templates
+        for fname in os.listdir(TEMPLATES_DIR):
+            if not fname.endswith('.meta.json'):
+                continue
+            meta_path = os.path.join(TEMPLATES_DIR, fname)
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+            structure = meta.get("structure", {})
+            # Extract unique question types from sample rows
+            question_types = set()
+            for row in structure.get("sample_rows", []):
+                if len(row) > 1 and row[1] and not row[1].startswith("Question Type"):
+                    question_types.add(row[1])
+            templates.append({
+                "name": meta.get("name", fname),
+                "platform": meta.get("platform", "unknown"),
+                "extension": meta.get("extension", ""),
+                "columns": structure.get("columns", []),
+                "sample_rows": structure.get("sample_rows", [])[1:],  # Skip header-description row
+                "question_types": sorted(question_types) if question_types else [],
+            })
+    except Exception:
+        pass
+    return templates
+
+
 def _build_system_prompt():
     """Build the system prompt dynamically, injecting teacher info from settings."""
     teacher_name = ""
@@ -213,6 +347,7 @@ def _build_system_prompt():
     state = ""
     grading_period = ""
     global_ai_notes = ""
+    available_tools = []
 
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -228,6 +363,7 @@ def _build_system_prompt():
             state = config.get('state', '')
             grading_period = config.get('grading_period', '')
             global_ai_notes = settings.get('globalAINotes', '')
+            available_tools = config.get('availableTools', [])
         except Exception:
             pass
 
@@ -274,12 +410,13 @@ Available tools:
 - get_feedback_patterns: Analyze feedback text and skills across an assignment — common strengths, areas for growth, feedback samples from high/low scorers. Use when asked about patterns or common issues.
 - compare_periods: Compare performance across class periods — averages, grade distributions, category breakdowns, omission rates per period.
 - recommend_next_lesson: Analyze weaknesses and recommend what to teach next. Now includes DIFFERENTIATED recommendations by class level (advanced/standard/support) with DOK-appropriate standards, and IEP/504 accommodation analysis. Use when teacher asks "what should I teach next?", "how should I differentiate?", or "what lesson would help?"
-- lookup_student_info: Look up student roster and contact information — student IDs, local IDs, grade level, period, student email, parent emails, parent phone numbers. Search by name, ID, or list all students in a period. Supports BATCH lookup via student_ids array. Use this when the teacher asks for contact info, emails, parent emails, phone numbers, or student IDs. IMPORTANT: query_grades results include student_id — when you need parent emails for multiple students (e.g., failing students), first use query_grades to get their student_ids, then use lookup_student_info with the student_ids array to get all their contacts in one call.
+- lookup_student_info: Look up student roster and contact information — student IDs, local IDs, grade level, period, course codes, student email, parent emails, parent phone numbers, 504 plan status, detailed contacts (up to 3 with names, relationships, and roles), and full student schedule (all periods with teachers and courses). Search by name, ID, or list all students in a period. Supports BATCH lookup via student_ids array. Use this when the teacher asks for contact info, emails, parent emails, phone numbers, student IDs, who a student's other teachers are, or 504/accommodation status. IMPORTANT: query_grades results include student_id — when you need parent emails for multiple students (e.g., failing students), first use query_grades to get their student_ids, then use lookup_student_info with the student_ids array to get all their contacts in one call.
 - get_missing_assignments: Find missing/unsubmitted work. Search by student (what are they missing?), by period (who has missing work?), or by assignment (who hasn't turned in X?). Use this when teacher asks about missing work, incomplete submissions, or which students haven't turned in assignments.
 - generate_worksheet: Create downloadable worksheet documents (Cornell Notes, fill-in-blank, short-answer, vocabulary) with built-in answer keys for AI grading. Automatically saved to Grading Setup. When the teacher uploads a textbook page or reading and asks for a worksheet, ALWAYS use this tool. Extract vocab terms, write questions with expected answers, and include summary key points. The worksheet will have an invisible answer key embedded for consistent grading.
 - generate_document: Create formatted Word documents with rich typography (headings, bold, italic, lists, tables). Use for study guides, reference sheets, parent letters, lesson outlines, rubrics, or any document. NOT for gradeable worksheets.
 - save_document_style: Save the visual formatting of a document (fonts, sizes, colors) as a reusable style. Use when the teacher says they like how a document looks and want that same look for future documents of that type.
 - list_document_styles: Check what saved visual styles exist. Use before generating a document to see if a matching style is available.
+- generate_csv: Generate a downloadable spreadsheet (XLSX or CSV). Use .xlsx for Wayground quizzes (required format) and polished spreadsheets. When generating for Wayground, use .xlsx and match the exact column structure from the Assessment Templates section (Question Text, Question Type, Option 1-5, Correct Answer, Time in seconds, Image Link, Answer explanation).
 - create_focus_assignment: Create assignment in Focus gradebook (browser automation)
 - export_grades_csv: Export grades as Focus-compatible CSV files
 
@@ -296,9 +433,14 @@ DOCUMENT GENERATION: When generating any document or worksheet, first call list_
 SAVING DOCUMENTS: After generating a document with generate_document, always ask the teacher: "Would you like me to save this to your assignments in Grading Setup?" If they say yes, call generate_document again with the same content and save_to_builder=true. Worksheets created with generate_worksheet are always saved to Grading Setup automatically.
 
 CURRICULUM & LESSON TOOLS:
-- get_standards: Look up curriculum standards for the teacher's state and subject. Filter by topic keyword and DOK level. Use this when generating standards-aligned worksheets, quizzes, or lesson materials.
+- get_standards: Look up curriculum standards for the teacher's state and subject. Returns ALL standards when no topic filter, or filter by keyword and DOK level. Use for full details (vocabulary, learning targets, essential questions).
+- list_all_standards: Get a compact index of ALL curriculum standards (codes, short benchmarks, DOK levels). Use this first to see the full scope of standards before drilling into specifics with get_standards.
 - get_recent_lessons: List saved lesson plans by unit. Shows topics, standards covered, vocabulary, and objectives from past lessons. Use when the teacher says "create a quiz for this unit", "what have we been working on", or references past lessons.
 - save_memory: Save important facts about the teacher or their classes for future conversations. Use when the teacher shares preferences, class structure, or workflow habits.
+
+RESOURCE TOOLS:
+- list_resources: List all uploaded supporting documents (pacing guides, curriculum docs, rubrics). Discover what reference materials are available.
+- read_resource: Read the full text content of a specific uploaded document. Use for curriculum guides, pacing calendars, or any reference material the teacher has uploaded.
 
 TEACHING CALENDAR TOOLS:
 - get_calendar: Read the teaching calendar for a date range. Shows scheduled lessons and holidays. Use when the teacher asks "what am I teaching this week?", "what's on my calendar?", or "what's coming up?". Defaults to the next 7 days.
@@ -307,7 +449,9 @@ TEACHING CALENDAR TOOLS:
 
 When generating worksheets or quizzes, ALWAYS call get_standards first to find relevant standards, and get_recent_lessons to see what's been taught. Use the vocabulary, learning targets, and topics from both to create accurate, curriculum-aligned content. Adapt difficulty based on class differentiation levels below.
 
-When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar first to check for conflicts, then schedule each day sequentially on school days only."""
+When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar first to check for conflicts, then schedule each day sequentially on school days only.
+
+STANDARDS & RESOURCES: The full curriculum standards and uploaded reference documents (pacing guides, calendars, curriculum docs) are included in your context above. Use them directly when generating curriculum-aligned content — you already know all the standards and have the pacing guide content. Reference specific standard codes. For additional standard details (learning targets, essential questions), use get_standards with a topic keyword. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:
@@ -354,6 +498,75 @@ When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar 
     except Exception:
         pass
 
+    # Inject full curriculum standards so the assistant always knows the scope
+    all_standards = _load_standards()
+    if all_standards:
+        std_lines = []
+        for s in all_standards:
+            code = s.get("code", "")
+            benchmark = s.get("benchmark", "")
+            dok = s.get("dok", "")
+            topics = ", ".join(s.get("topics", []))
+            vocab = ", ".join(s.get("vocabulary", []))
+            line = f"- **{code}** (DOK {dok}): {benchmark}"
+            if topics:
+                line += f"  Topics: {topics}"
+            if vocab:
+                line += f"  Vocabulary: {vocab}"
+            std_lines.append(line)
+        prompt += "\n\n## CURRICULUM STANDARDS\n"
+        prompt += f"All {len(all_standards)} standards for {subject} ({state}, grade {grade_level}):\n"
+        prompt += "\n".join(std_lines)
+        prompt += "\n\nThese are the COMPLETE standards for this subject. Reference specific codes when creating aligned content. Use get_standards tool for additional details like learning targets and essential questions."
+
+    # Inject uploaded resource documents so the assistant has full context
+    resource_content = _load_resource_content()
+    if resource_content:
+        prompt += "\n\n## UPLOADED REFERENCE DOCUMENTS\n"
+        prompt += "The teacher has uploaded the following reference materials. Use these to answer questions about pacing, curriculum sequence, calendar scheduling, and content planning.\n"
+        prompt += resource_content
+
+    # Inject rubric settings (grading categories, weights, style)
+    rubric_data = _load_rubric()
+    if rubric_data:
+        prompt += "\n\n## GRADING RUBRIC\n"
+        prompt += f"Grading Style: {rubric_data.get('gradingStyle', 'standard')}\n"
+        cats = rubric_data.get("categories", [])
+        if cats:
+            prompt += "Categories:\n"
+            for c in cats:
+                prompt += f"- {c.get('name', '')}: {c.get('description', '')} — {c.get('points', 0)} pts, weight {c.get('weight', 0)}%\n"
+        if rubric_data.get("generous"):
+            prompt += "Mode: Generous grading enabled (benefit of the doubt on borderline scores)\n"
+
+    # Inject available ed-tech tools
+    if available_tools:
+        prompt += "\n\n## AVAILABLE ED-TECH TOOLS\n"
+        prompt += "The teacher has these tools enabled. Reference them in lesson plans, activity suggestions, and assessment recommendations:\n"
+        for tool in available_tools:
+            # Custom tools like "custom:Wayground" get formatted nicely
+            if tool.startswith("custom:"):
+                prompt += f"- {tool.split(':', 1)[1]} (custom platform)\n"
+            else:
+                prompt += f"- {tool.replace('_', ' ').title()}\n"
+
+    # Inject assessment templates (e.g., Wayground quiz format)
+    templates = _load_assessment_templates()
+    if templates:
+        prompt += "\n\n## ASSESSMENT TEMPLATES\n"
+        prompt += "These are the quiz/assessment CSV/XLSX templates the teacher has uploaded. When asked to generate a quiz for one of these platforms, produce output matching the EXACT column structure shown.\n"
+        for t in templates:
+            prompt += f"\n### {t['name']} ({t['platform']})\n"
+            prompt += f"Format: {t['extension']}\n"
+            prompt += f"Columns: {' | '.join(t['columns'])}\n"
+            if t.get("question_types"):
+                prompt += f"Supported question types: {', '.join(t['question_types'])}\n"
+            if t.get("sample_rows"):
+                prompt += "Example rows:\n"
+                for row in t["sample_rows"][:2]:
+                    prompt += f"  {' | '.join(str(v) for v in row)}\n"
+            prompt += f"\nWhen generating quizzes for {t['platform']}, output a CSV/table with these exact columns. For Correct Answer: use the option number (1-5) for Multiple Choice, comma-separated numbers for Checkbox, leave blank for Open-Ended/Poll/Draw/Fill-in-the-Blank.\n"
+
     # Append platform documentation for how-to and feature questions
     manual = _load_user_manual()
     if manual:
@@ -371,6 +584,77 @@ def _audit_log(action, details=""):
             f.write(entry)
     except Exception:
         pass
+
+
+logger = logging.getLogger(__name__)
+
+
+def _record_assistant_cost(input_tokens, output_tokens, model, elevenlabs_chars=0):
+    """Record assistant API usage to persistent JSON file."""
+    from assignment_grader import MODEL_PRICING
+
+    pricing = MODEL_PRICING.get(model, {"input": 0, "output": 0})
+    claude_cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+    tts_cost = elevenlabs_chars * ELEVENLABS_COST_PER_CHAR
+    total_cost = round(claude_cost + tts_cost, 6)
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    zero_entry = {
+        "claude_input_tokens": 0,
+        "claude_output_tokens": 0,
+        "claude_cost": 0,
+        "elevenlabs_chars": 0,
+        "elevenlabs_cost": 0,
+        "total_cost": 0,
+        "api_calls": 0,
+    }
+
+    try:
+        os.makedirs(os.path.dirname(ASSISTANT_COSTS_FILE), exist_ok=True)
+        try:
+            with open(ASSISTANT_COSTS_FILE, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {"total": dict(zero_entry), "daily": {}}
+
+        # Ensure keys exist (handles files from older versions)
+        if "total" not in data:
+            data["total"] = dict(zero_entry)
+        if "daily" not in data:
+            data["daily"] = {}
+
+        # Update totals
+        t = data["total"]
+        t["claude_input_tokens"] = t.get("claude_input_tokens", 0) + input_tokens
+        t["claude_output_tokens"] = t.get("claude_output_tokens", 0) + output_tokens
+        t["claude_cost"] = round(t.get("claude_cost", 0) + claude_cost, 6)
+        t["elevenlabs_chars"] = t.get("elevenlabs_chars", 0) + elevenlabs_chars
+        t["elevenlabs_cost"] = round(t.get("elevenlabs_cost", 0) + tts_cost, 6)
+        t["total_cost"] = round(t.get("total_cost", 0) + total_cost, 6)
+        t["api_calls"] = t.get("api_calls", 0) + 1
+
+        # Update daily entry
+        if today not in data["daily"]:
+            data["daily"][today] = dict(zero_entry)
+        d = data["daily"][today]
+        d["claude_input_tokens"] = d.get("claude_input_tokens", 0) + input_tokens
+        d["claude_output_tokens"] = d.get("claude_output_tokens", 0) + output_tokens
+        d["claude_cost"] = round(d.get("claude_cost", 0) + claude_cost, 6)
+        d["elevenlabs_chars"] = d.get("elevenlabs_chars", 0) + elevenlabs_chars
+        d["elevenlabs_cost"] = round(d.get("elevenlabs_cost", 0) + tts_cost, 6)
+        d["total_cost"] = round(d.get("total_cost", 0) + total_cost, 6)
+        d["api_calls"] = d.get("api_calls", 0) + 1
+
+        with open(ASSISTANT_COSTS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error("Failed to record assistant cost: %s", e)
+
+    return {
+        "claude_cost": round(claude_cost, 6),
+        "tts_cost": round(tts_cost, 6),
+        "total_cost": total_cost,
+    }
 
 
 def _cleanup_stale_sessions():
@@ -432,6 +716,9 @@ def assistant_chat():
     _audit_log("assistant_query", f"session={session_id}")
 
     def generate():
+        # Clear any stale cancel flag for this session
+        cancelled_sessions.discard(session_id)
+
         client = anthropic.Anthropic(api_key=api_key)
         messages = list(conv["messages"])
 
@@ -478,6 +765,11 @@ def assistant_chat():
                 except queue.Empty:
                     break
 
+        # Cost tracking accumulators
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_tts_chars = 0
+
         # Tool use loop — may need multiple rounds
         max_rounds = 5
         for _ in range(max_rounds):
@@ -493,6 +785,10 @@ def assistant_chat():
                     tools=TOOL_DEFINITIONS
                 ) as stream:
                     for event in stream:
+                        # Check if user cancelled
+                        if session_id in cancelled_sessions:
+                            break
+
                         if event.type == "content_block_start":
                             if hasattr(event.content_block, 'type'):
                                 if event.content_block.type == "tool_use":
@@ -508,22 +804,52 @@ def assistant_chat():
                                 full_response_text += event.delta.text
                                 yield f"data: {json.dumps({'type': 'text_delta', 'content': event.delta.text})}\n\n"
 
-                                # Pipe text to TTS
-                                if tts_stream and sentence_buffer:
+                                # Pipe text to TTS (skip if muted mid-stream)
+                                if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
                                     for sent in sentence_buffer.add(event.delta.text):
-                                        tts_stream.send_text(sent + " ")
-
-                                # Yield any ready audio chunks
-                                yield from _flush_audio_queue()
+                                        text_to_speak = sent + " "
+                                        tts_stream.send_text(text_to_speak)
+                                        total_tts_chars += len(text_to_speak)
 
                             elif hasattr(event.delta, 'partial_json'):
                                 if tool_use_blocks:
                                     tool_use_blocks[-1]["input_json"] += event.delta.partial_json
 
-                # If no tool calls, we're done
+                        # Flush audio after every event type (not just text deltas)
+                        yield from _flush_audio_queue()
+
+                # Capture token usage from this round
+                try:
+                    final_msg = stream.get_final_message()
+                    if final_msg and hasattr(final_msg, 'usage') and final_msg.usage:
+                        total_input_tokens += final_msg.usage.input_tokens or 0
+                        total_output_tokens += final_msg.usage.output_tokens or 0
+                except Exception:
+                    pass  # Stream may have been interrupted by cancellation
+
+                # If cancelled or no tool calls, we're done
+                if session_id in cancelled_sessions:
+                    if full_response_text:
+                        conv["messages"].append({"role": "assistant", "content": full_response_text})
+                    break
+
                 if not tool_use_blocks:
                     conv["messages"].append({"role": "assistant", "content": full_response_text})
                     break
+
+                # Flush TTS sentence buffer and wait for ALL audio to be generated
+                # before tool execution, so the voice finishes its sentence first
+                if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                    remaining = sentence_buffer.flush()
+                    if remaining:
+                        text_to_speak = remaining + " "
+                        tts_stream.send_text(text_to_speak)
+                        total_tts_chars += len(text_to_speak)
+                    tts_stream.flush()
+                    # Wait for ElevenLabs to signal generation complete (isFinal)
+                    tts_stream.wait_for_flush(timeout=5.0)
+                    # Flush all generated audio to the frontend
+                    yield from _flush_audio_queue()
 
                 # Build the assistant message with all content blocks
                 assistant_content = []
@@ -532,6 +858,10 @@ def assistant_chat():
 
                 tool_results = []
                 for tb in tool_use_blocks:
+                    # Check cancellation before each tool — skip remaining tools
+                    if session_id in cancelled_sessions:
+                        break
+
                     try:
                         tool_input = json.loads(tb["input_json"]) if tb["input_json"] else {}
                     except json.JSONDecodeError:
@@ -544,10 +874,16 @@ def assistant_chat():
                         "input": tool_input
                     })
 
+                    # Flush any pending audio before tool execution (which may take seconds)
+                    yield from _flush_audio_queue()
+
                     # Execute the tool
                     _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
                     result = execute_tool(tb["name"], tool_input)
                     result_str = json.dumps(result)
+
+                    # Flush audio that arrived during tool execution
+                    yield from _flush_audio_queue()
 
                     # Send tool result preview to client
                     preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
@@ -572,6 +908,10 @@ def assistant_chat():
                         "content": result_str
                     })
 
+                # If cancelled mid-tool-loop, stop — don't send partial results to Claude
+                if session_id in cancelled_sessions:
+                    break
+
                 # Add assistant message and tool results to conversation
                 messages.append({"role": "assistant", "content": assistant_content})
                 messages.append({"role": "user", "content": tool_results})
@@ -586,15 +926,19 @@ def assistant_chat():
         # Update stored conversation with the final messages
         conv["messages"] = messages
 
-        # Flush remaining TTS audio
-        if tts_stream and sentence_buffer:
-            remaining = sentence_buffer.flush()
-            if remaining:
-                tts_stream.send_text(remaining + " ")
-            tts_stream.flush()
+        # Flush remaining TTS audio (skip if muted)
+        if tts_stream:
+            if session_id not in tts_muted_sessions and sentence_buffer:
+                remaining = sentence_buffer.flush()
+                if remaining:
+                    text_to_speak = remaining + " "
+                    tts_stream.send_text(text_to_speak)
+                    total_tts_chars += len(text_to_speak)
+                tts_stream.flush()
+                tts_stream.wait_for_flush(timeout=5.0)
             tts_stream.close()
-            # Drain final audio chunks
-            if audio_out_queue:
+            # Drain final audio chunks (only if not muted)
+            if audio_out_queue and session_id not in tts_muted_sessions:
                 while True:
                     try:
                         chunk = audio_out_queue.get(timeout=3.0)
@@ -603,6 +947,19 @@ def assistant_chat():
                         yield f"data: {json.dumps({'type': 'audio_chunk', 'audio': chunk})}\n\n"
                     except queue.Empty:
                         break
+            # Clear mute flag for next request
+            tts_muted_sessions.discard(session_id)
+
+        # Clear cancel flag
+        cancelled_sessions.discard(session_id)
+
+        # Record and send cost summary
+        if total_input_tokens > 0 or total_tts_chars > 0:
+            cost_info = _record_assistant_cost(
+                total_input_tokens, total_output_tokens,
+                MODEL, total_tts_chars
+            )
+            yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
@@ -629,6 +986,53 @@ def clear_conversation():
     if session_id and session_id in conversations:
         del conversations[session_id]
     return jsonify({"status": "cleared"})
+
+
+@assistant_bp.route('/api/assistant/mute-tts', methods=['POST'])
+def mute_tts():
+    """Mute TTS for a session — stops sending text to ElevenLabs mid-stream."""
+    data = request.json or {}
+    session_id = data.get("session_id")
+    if session_id:
+        tts_muted_sessions.add(session_id)
+    return jsonify({"status": "muted"})
+
+
+@assistant_bp.route('/api/assistant/cancel', methods=['POST'])
+def cancel_stream():
+    """Cancel an active assistant stream — stops tool execution loop."""
+    data = request.json or {}
+    session_id = data.get("session_id")
+    if session_id:
+        cancelled_sessions.add(session_id)
+        tts_muted_sessions.add(session_id)  # Also mute TTS
+    return jsonify({"status": "cancelled"})
+
+
+# ═══════════════════════════════════════════════════════
+# COST TRACKING
+# ═══════════════════════════════════════════════════════
+
+@assistant_bp.route('/api/assistant/costs', methods=['GET'])
+def get_assistant_costs():
+    """Return assistant API cost summary (total + daily breakdown)."""
+    try:
+        with open(ASSISTANT_COSTS_FILE, 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return jsonify({
+            "total": {
+                "claude_input_tokens": 0,
+                "claude_output_tokens": 0,
+                "claude_cost": 0,
+                "elevenlabs_chars": 0,
+                "elevenlabs_cost": 0,
+                "total_cost": 0,
+                "api_calls": 0,
+            },
+            "daily": {}
+        })
 
 
 # ═══════════════════════════════════════════════════════

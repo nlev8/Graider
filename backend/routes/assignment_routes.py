@@ -324,6 +324,15 @@ def download_worksheet(filename):
     return send_from_directory(worksheets_dir, filename, as_attachment=True)
 
 
+@assignment_bp.route('/api/download-csv/<filename>')
+def download_csv(filename):
+    """Serve a generated CSV file for download."""
+    csv_dir = os.path.expanduser("~/Downloads/Graider/Exports")
+    if not os.path.exists(os.path.join(csv_dir, filename)):
+        return jsonify({"error": "CSV not found"}), 404
+    return send_from_directory(csv_dir, filename, as_attachment=True)
+
+
 @assignment_bp.route('/api/download-export/<filename>')
 def download_export(filename):
     """Serve an exported CSV file for download."""

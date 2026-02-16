@@ -2447,7 +2447,7 @@ def load_roster(roster_path: str) -> dict:
                 first_name_simple = first_name.split()[0] if first_name else ''
                 lookup_key = f"{first_name_simple} {last_name}".lower().strip()
 
-                roster[lookup_key] = {
+                entry = {
                     "student_id": str(student_id),
                     "student_name": f"{first_name} {last_name}".strip(),
                     "first_name": first_name,
@@ -2455,11 +2455,23 @@ def load_roster(roster_path: str) -> dict:
                     "email": email or "",
                     "period": str(period) if period else ""
                 }
+                roster[lookup_key] = entry
 
                 reverse_key = f"{last_name} {first_name_simple}".lower().strip()
-                roster[reverse_key] = roster[lookup_key]
+                roster[reverse_key] = entry
 
-        print(f"📋 Loaded {len(roster)//2} students from CSV roster")
+                # For compound last names ("Wilkins Reels"), also add key with just first part
+                # so "Dicen_Wilkins" filename matches "Dicen Macheil Wilkins Reels"
+                last_parts = last_name.split()
+                if len(last_parts) > 1:
+                    short_key = f"{first_name_simple} {last_parts[0]}".lower().strip()
+                    if short_key not in roster:
+                        roster[short_key] = entry
+                    reverse_short = f"{last_parts[0]} {first_name_simple}".lower().strip()
+                    if reverse_short not in roster:
+                        roster[reverse_short] = entry
+
+        print(f"📋 Loaded {len(set(id(v) for v in roster.values()))} students from CSV roster")
         return roster
 
     # Handle Excel files
@@ -2504,7 +2516,7 @@ def load_roster(roster_path: str) -> dict:
 
         lookup_key = f"{first_name_simple} {last_name}".lower().strip()
 
-        roster[lookup_key] = {
+        entry = {
             "student_id": str(student_id),
             "student_name": f"{first_name} {last_name}".strip(),
             "first_name": first_name,
@@ -2512,11 +2524,95 @@ def load_roster(roster_path: str) -> dict:
             "email": email or "",
             "period": str(period) if period else ""
         }
+        roster[lookup_key] = entry
 
         reverse_key = f"{last_name} {first_name_simple}".lower().strip()
-        roster[reverse_key] = roster[lookup_key]
+        roster[reverse_key] = entry
 
-    print(f"📋 Loaded {len(roster)//2} students from Excel roster")
+        # For compound last names, add short key with just first part of last name
+        last_parts = last_name.split()
+        if len(last_parts) > 1:
+            short_key = f"{first_name_simple} {last_parts[0]}".lower().strip()
+            if short_key not in roster:
+                roster[short_key] = entry
+            reverse_short = f"{last_parts[0]} {first_name_simple}".lower().strip()
+            if reverse_short not in roster:
+                roster[reverse_short] = entry
+
+    print(f"📋 Loaded {len(set(id(v) for v in roster.values()))} students from Excel roster")
+
+    # Supplement with period CSVs from Focus Import (adds students not in Excel roster)
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+    if os.path.exists(periods_dir):
+        import csv as csv_mod
+        added = 0
+        for period_file in sorted(os.listdir(periods_dir)):
+            if not period_file.endswith('.csv'):
+                continue
+            period_name = period_file.replace('.csv', '').replace('_', ' ')
+            # Try to get period name from metadata
+            meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as mf:
+                        meta = json.load(mf)
+                        period_name = meta.get('period_name', period_name)
+                except Exception:
+                    pass
+            filepath = os.path.join(periods_dir, period_file)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as fh:
+                    reader = csv_mod.DictReader(fh)
+                    for row in reader:
+                        student_col = row.get('Student', row.get('Name', '')).strip().strip('"')
+                        student_id = row.get('Student ID', '').strip().strip('"')
+                        local_id = row.get('Local ID', '').strip().strip('"')
+                        grade = row.get('Grade', '').strip().strip('"')
+
+                        # Parse "Last, First" or "Last; First" format
+                        first_name = ''
+                        last_name = ''
+                        for sep in [';', ',']:
+                            if sep in student_col:
+                                parts = student_col.split(sep, 1)
+                                last_name = parts[0].strip()
+                                first_name = parts[1].strip() if len(parts) > 1 else ''
+                                break
+                        if not first_name and not last_name:
+                            continue
+
+                        first_name_simple = first_name.split()[0] if first_name else ''
+                        lookup_key = f"{first_name_simple} {last_name}".lower().strip()
+
+                        # Only add if not already in roster (don't overwrite Excel data)
+                        if lookup_key in roster:
+                            continue
+
+                        email = f"{local_id}@vcs2go.net" if local_id else ""
+                        entry = {
+                            "student_id": str(student_id),
+                            "student_name": f"{first_name} {last_name}".strip(),
+                            "first_name": first_name,
+                            "last_name": last_name,
+                            "email": email,
+                            "period": period_name
+                        }
+                        roster[lookup_key] = entry
+                        reverse_key = f"{last_name} {first_name_simple}".lower().strip()
+                        if reverse_key not in roster:
+                            roster[reverse_key] = entry
+                        # Compound last name short keys
+                        last_parts = last_name.split()
+                        if len(last_parts) > 1:
+                            short_key = f"{first_name_simple} {last_parts[0]}".lower().strip()
+                            if short_key not in roster:
+                                roster[short_key] = entry
+                        added += 1
+            except Exception:
+                pass
+        if added:
+            print(f"📋 Supplemented with {added} students from period CSVs")
+
     return roster
 
 

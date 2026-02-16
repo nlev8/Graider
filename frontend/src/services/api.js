@@ -503,6 +503,20 @@ export async function deleteSupportDocument(filename) {
   })
 }
 
+export async function parseDocumentForCalendar(filename) {
+  return fetchApi('/api/calendar/parse-document', {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  })
+}
+
+export async function importCalendarEvents(events) {
+  return fetchApi('/api/calendar/import-events', {
+    method: 'POST',
+    body: JSON.stringify({ events }),
+  })
+}
+
 // ============ Accommodations (IEP/504) ============
 
 export async function getAccommodationPresets() {
@@ -711,6 +725,37 @@ export async function getParentContacts() {
   return fetchApi('/api/parent-contacts')
 }
 
+// ============ Focus Roster Import ============
+
+export async function importFromFocus() {
+  return fetchApi('/api/import-from-focus', { method: 'POST' })
+}
+
+export async function getFocusImportStatus() {
+  return fetchApi('/api/focus-import-status')
+}
+
+export async function addStudent(data) {
+  return fetchApi('/api/add-student', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function removeStudent(data) {
+  return fetchApi('/api/remove-student', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateStudent(data) {
+  return fetchApi('/api/update-student', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 // ============ Focus Batch Export ============
 
 export async function exportFocusBatch(results = null, assignment = null) {
@@ -725,6 +770,17 @@ export async function exportFocusComments(results = null, assignment = null) {
     method: 'POST',
     body: JSON.stringify({ results, assignment }),
   })
+}
+
+export async function uploadFocusComments(data = {}) {
+  return fetchApi('/api/upload-focus-comments', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getFocusCommentsStatus() {
+  return fetchApi('/api/focus-comments/status')
 }
 
 // ============ Outlook Email Export ============
@@ -852,6 +908,8 @@ export default {
   uploadSupportDocument,
   listSupportDocuments,
   deleteSupportDocument,
+  parseDocumentForCalendar,
+  importCalendarEvents,
   listFiles,
   getAccommodationPresets,
   saveAccommodationPreset,
@@ -890,8 +948,16 @@ export default {
   previewParentContacts,
   saveParentContactMapping,
   getParentContacts,
+  // Focus Roster Import
+  importFromFocus,
+  getFocusImportStatus,
+  addStudent,
+  removeStudent,
+  updateStudent,
   exportFocusBatch,
   exportFocusComments,
+  uploadFocusComments,
+  getFocusCommentsStatus,
   exportOutlookEmails,
   // Outlook Sending
   sendOutlookEmails,

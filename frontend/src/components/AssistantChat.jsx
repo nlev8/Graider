@@ -86,10 +86,12 @@ export default function AssistantChat({ addToast }) {
   const [attachedFiles, setAttachedFiles] = useState([])
   const [voiceMode, setVoiceMode] = useState(false)
   const [voiceAvailable, setVoiceAvailable] = useState(false)
+  const [sessionCost, setSessionCost] = useState(0)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
   const voiceModeRef = useRef(false)
+  const abortControllerRef = useRef(null)
 
   // Keep ref in sync with state for use in SSE callback
   useEffect(() => { voiceModeRef.current = voiceMode }, [voiceMode])
@@ -131,6 +133,7 @@ export default function AssistantChat({ addToast }) {
         downloadUrl: m.downloadUrl,
         downloadFilename: m.downloadFilename,
         downloadUrls: m.downloadUrls,
+        cost: m.cost,
       }))
       localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(toStore))
     } catch (e) { /* storage full or unavailable */ }
@@ -193,12 +196,27 @@ export default function AssistantChat({ addToast }) {
     })
   }
 
+  // Tell the backend to stop sending text to ElevenLabs (saves ElevenLabs characters/cost)
+  async function muteTTS() {
+    try {
+      const authHeaders = await getAuthHeaders()
+      fetch(API_BASE + '/api/assistant/mute-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+    } catch (e) { /* best-effort */ }
+  }
+
   async function sendMessage(text) {
     const content = text || input.trim()
     if ((!content && attachedFiles.length === 0) || isStreaming) return
 
-    // Barge-in: stop audio if assistant is speaking
-    if (voice.isSpeaking) voice.stopSpeaking()
+    // Barge-in: stop audio and mute TTS on backend
+    if (voice.isSpeaking) {
+      voice.stopSpeaking()
+      muteTTS()
+    }
 
     const messageText = content || 'Please analyze ' + (attachedFiles.length === 1 ? 'this file.' : 'these files.')
     const currentFiles = [...attachedFiles]
@@ -224,6 +242,9 @@ export default function AssistantChat({ addToast }) {
         files = await Promise.all(currentFiles.map(f => fileToBase64(f)))
       }
 
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
       const authHeaders = await getAuthHeaders()
       const response = await fetch(API_BASE + '/api/assistant/chat', {
         method: 'POST',
@@ -234,6 +255,7 @@ export default function AssistantChat({ addToast }) {
           files: files,
           voice_mode: voiceModeRef.current,
         }),
+        signal: controller.signal,
       })
 
       if (!response.ok) {
@@ -282,6 +304,11 @@ export default function AssistantChat({ addToast }) {
                 return updated
               })
             } else if (event.type === 'tool_start') {
+              // In voice mode, wait for audio to finish playing before
+              // showing the tool spinner — let the AI finish its sentence
+              if (voiceModeRef.current) {
+                await voice.waitForPlaybackDone()
+              }
               setMessages(prev => {
                 const updated = [...prev]
                 const last = updated[updated.length - 1]
@@ -322,6 +349,16 @@ export default function AssistantChat({ addToast }) {
               if (voiceModeRef.current && event.audio) {
                 voice.enqueueAudioChunk(event.audio)
               }
+            } else if (event.type === 'cost') {
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last && last.role === 'assistant') {
+                  updated[updated.length - 1] = { ...last, cost: event }
+                }
+                return updated
+              })
+              setSessionCost(prev => prev + (event.total_cost || 0))
             } else if (event.type === 'error') {
               setMessages(prev => {
                 const updated = [...prev]
@@ -342,28 +379,68 @@ export default function AssistantChat({ addToast }) {
         }
       }
     } catch (err) {
-      setMessages(prev => {
-        const updated = [...prev]
-        const last = updated[updated.length - 1]
-        if (last && last.role === 'assistant') {
-          updated[updated.length - 1] = {
-            ...last,
-            content: 'Sorry, something went wrong: ' + err.message,
-            isError: true
+      // AbortError means user clicked stop — not an error
+      if (err.name === 'AbortError') {
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last && last.role === 'assistant') {
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + (last.content ? '\n\n*[Stopped]*' : '*[Stopped]*'),
+            }
           }
-        }
-        return updated
-      })
-      if (addToast) addToast('Assistant error: ' + err.message, 'error')
+          return updated
+        })
+      } else {
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last && last.role === 'assistant') {
+            updated[updated.length - 1] = {
+              ...last,
+              content: 'Sorry, something went wrong: ' + err.message,
+              isError: true
+            }
+          }
+          return updated
+        })
+        if (addToast) addToast('Assistant error: ' + err.message, 'error')
+      }
     } finally {
+      abortControllerRef.current = null
       setIsStreaming(false)
+      // Signal the voice player that no more audio chunks will arrive
+      voice.markStreamDone()
     }
   }
 
   // Wire up ref so voice hook can call sendMessage
   sendMessageRef.current = sendMessage
 
+  function stopStreaming() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    // Stop TTS playback and mute backend
+    if (voice.isSpeaking) {
+      voice.stopSpeaking()
+    }
+    // Cancel backend tool execution loop + mute TTS in one call
+    getAuthHeaders().then(authHeaders => {
+      fetch(API_BASE + '/api/assistant/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+    }).catch(() => {})
+  }
+
   async function clearConversation() {
+    // Stop any active stream first
+    if (isStreaming) stopStreaming()
+
     try {
       const authHeaders = await getAuthHeaders()
       await fetch(API_BASE + '/api/assistant/clear', {
@@ -376,9 +453,9 @@ export default function AssistantChat({ addToast }) {
     }
     setMessages([])
     setAttachedFiles([])
+    setSessionCost(0)
     try {
       localStorage.removeItem(STORAGE_KEY_MESSAGES)
-      localStorage.removeItem(STORAGE_KEY_SESSION)
     } catch (e) { /* ignore */ }
   }
 
@@ -417,14 +494,18 @@ export default function AssistantChat({ addToast }) {
     export_grades_csv: 'Exporting CSV',
     generate_worksheet: 'Generating worksheet',
     generate_document: 'Generating document',
+    generate_csv: 'Generating CSV file',
     save_document_style: 'Saving document style',
     list_document_styles: 'Checking saved styles',
     save_memory: 'Saving to memory',
     get_standards: 'Looking up standards',
+    list_all_standards: 'Loading standards index',
     get_recent_lessons: 'Loading recent lessons',
     get_calendar: 'Checking calendar',
     schedule_lesson: 'Scheduling lesson',
     add_calendar_holiday: 'Adding holiday',
+    list_resources: 'Loading resources',
+    read_resource: 'Reading document',
   }
 
   const hasMessages = messages.length > 0
@@ -462,6 +543,29 @@ export default function AssistantChat({ addToast }) {
           </h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {sessionCost > 0 && (
+            <span style={{
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+              padding: '4px 10px',
+              background: 'var(--glass-bg)',
+              borderRadius: '12px',
+              border: '1px solid var(--glass-border)',
+            }}>
+              Session: ${sessionCost.toFixed(4)}
+            </span>
+          )}
+          {hasMessages && (
+            <button
+              onClick={clearConversation}
+              className="btn btn-secondary"
+              style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+              title="Clear chat window (memory is preserved)"
+            >
+              <Icon name="Trash2" size={14} />
+              Clear Chat
+            </button>
+          )}
           <button
             onClick={clearMemory}
             className="btn btn-secondary"
@@ -471,16 +575,6 @@ export default function AssistantChat({ addToast }) {
             <Icon name="BrainCircuit" size={14} />
             Clear Memory
           </button>
-          {hasMessages && (
-            <button
-              onClick={clearConversation}
-              className="btn btn-secondary"
-              style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-            >
-              <Icon name="Trash2" size={14} />
-              Clear Chat
-            </button>
-          )}
         </div>
       </div>
 
@@ -730,6 +824,17 @@ export default function AssistantChat({ addToast }) {
                   Speaking...
                 </div>
               )}
+              {msg.cost && msg.cost.total_cost > 0 && (
+                <div style={{
+                  marginTop: '6px',
+                  fontSize: '0.7rem',
+                  color: 'var(--text-secondary)',
+                  opacity: 0.6,
+                }}>
+                  ${msg.cost.total_cost.toFixed(4)}
+                  {msg.cost.tts_cost > 0 ? ' (incl. voice)' : ''}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -830,7 +935,10 @@ export default function AssistantChat({ addToast }) {
             onClick={() => {
               const next = !voiceMode
               setVoiceMode(next)
-              if (!next) voice.stopSpeaking()
+              if (!next) {
+                voice.stopSpeaking()
+                muteTTS()
+              }
             }}
             title={voiceMode ? 'Disable voice mode' : 'Enable voice mode'}
             style={{
@@ -910,27 +1018,37 @@ export default function AssistantChat({ addToast }) {
           }}
         />
         <button
-          onClick={() => sendMessage()}
-          disabled={!canSend}
+          onClick={isStreaming ? stopStreaming : () => sendMessage()}
+          disabled={!isStreaming && !canSend}
+          title={isStreaming ? 'Stop generating' : 'Send message'}
           style={{
             width: '42px',
             height: '42px',
             borderRadius: '50%',
-            background: !canSend
-              ? 'var(--glass-bg)'
-              : 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
-            border: 'none',
+            background: isStreaming
+              ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+              : !canSend
+                ? 'var(--glass-bg)'
+                : 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+            border: isStreaming ? '2px solid #fca5a5' : 'none',
             color: '#fff',
-            cursor: !canSend ? 'default' : 'pointer',
+            cursor: (!isStreaming && !canSend) ? 'default' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            opacity: !canSend ? 0.5 : 1,
+            opacity: (!isStreaming && !canSend) ? 0.5 : 1,
             transition: 'all 0.2s',
             flexShrink: 0,
+            boxShadow: isStreaming ? '0 0 12px rgba(239, 68, 68, 0.5)' : 'none',
           }}
         >
-          <Icon name={isStreaming ? 'Loader2' : 'Send'} size={18} className={isStreaming ? 'spin' : ''} />
+          {isStreaming ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+              <rect x="0" y="0" width="14" height="14" rx="2" />
+            </svg>
+          ) : (
+            <Icon name="Send" size={18} />
+          )}
         </button>
       </div>
     </div>

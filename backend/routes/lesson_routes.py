@@ -6,14 +6,25 @@ Includes teaching calendar endpoints for scheduling lessons.
 import os
 import json
 import uuid
+import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+
+from backend.services.assistant_tools import _extract_pdf_text, _extract_docx_text
+
+logger = logging.getLogger(__name__)
 
 lesson_bp = Blueprint('lesson', __name__)
 
 LESSONS_DIR = os.path.expanduser("~/.graider_lessons")
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 CALENDAR_FILE = os.path.join(GRAIDER_DATA_DIR, "teaching_calendar.json")
+DOCUMENTS_DIR = os.path.join(GRAIDER_DATA_DIR, "documents")
 
 
 def _safe_filename(name):
@@ -284,3 +295,135 @@ def update_school_days():
             cal["school_days"][day] = bool(data[day])
     _save_calendar(cal)
     return jsonify({"status": "updated", "school_days": cal["school_days"]})
+
+
+@lesson_bp.route('/api/calendar/parse-document', methods=['POST'])
+def parse_document_for_calendar():
+    """Parse an uploaded document and extract calendar events using AI."""
+    data = request.json
+    if not data or not data.get('filename'):
+        return jsonify({"error": "filename is required"}), 400
+
+    filename = data['filename']
+    filepath = os.path.join(DOCUMENTS_DIR, filename)
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Document not found"}), 404
+
+    try:
+        ext = os.path.splitext(filename)[1].lower()
+        if ext == '.pdf':
+            text, _ = _extract_pdf_text(filepath)
+        elif ext in ('.docx', '.doc'):
+            text = _extract_docx_text(filepath)
+        else:
+            return jsonify({"error": "Unsupported file type. Use PDF or DOCX."}), 400
+
+        if not text or text.startswith('['):
+            return jsonify({"error": "Could not extract text from document"}), 400
+    except Exception as e:
+        logger.error("Failed to extract text from %s: %s", filename, e)
+        return jsonify({"error": "Failed to read document: " + str(e)}), 500
+
+    if anthropic is None:
+        return jsonify({"error": "anthropic package is not installed"}), 500
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
+
+    prompt = (
+        "You are a calendar data extractor for a teaching pacing guide.\n"
+        "Extract every dated event from the following document text.\n"
+        "Return ONLY a JSON array (no markdown, no explanation) where each element has:\n"
+        '  {"date": "YYYY-MM-DD", "title": "short event title", '
+        '"type": "lesson" or "holiday", "unit": "unit name or empty string"}\n\n'
+        "Rules:\n"
+        "- Convert all dates to YYYY-MM-DD format\n"
+        "- Use type 'holiday' for breaks, holidays, no-school days, PD days\n"
+        "- Use type 'lesson' for lessons, topics, units, activities, tests, quizzes\n"
+        "- For multi-day events, create one entry per day\n"
+        "- If a unit/chapter name is mentioned, include it in the 'unit' field\n"
+        "- Keep titles concise (under 60 characters)\n"
+        "- If no specific date is found for an item, skip it\n\n"
+        "Document text:\n" + text[:15000]
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        response_text = message.content[0].text.strip()
+
+        # Strip markdown code fences if present
+        if response_text.startswith('```'):
+            lines = response_text.split('\n')
+            lines = [l for l in lines if not l.strip().startswith('```')]
+            response_text = '\n'.join(lines)
+
+        events = json.loads(response_text)
+        if not isinstance(events, list):
+            return jsonify({"error": "AI returned invalid format"}), 500
+
+        return jsonify({"events": events, "count": len(events)})
+
+    except json.JSONDecodeError:
+        logger.error("AI returned non-JSON response for %s", filename)
+        return jsonify({"error": "AI could not parse events from this document"}), 500
+    except Exception as e:
+        logger.error("AI parsing failed for %s: %s", filename, e)
+        return jsonify({"error": "AI parsing failed: " + str(e)}), 500
+
+
+@lesson_bp.route('/api/calendar/import-events', methods=['POST'])
+def import_calendar_events():
+    """Bulk import events into the teaching calendar."""
+    data = request.json
+    if not data or not isinstance(data.get('events'), list):
+        return jsonify({"error": "events array is required"}), 400
+
+    events = data['events']
+    cal = _load_calendar()
+
+    lessons_added = 0
+    holidays_added = 0
+
+    for event in events:
+        date = event.get('date')
+        title = event.get('title', '')
+        event_type = event.get('type', 'lesson')
+        unit = event.get('unit', '')
+
+        if not date or not title:
+            continue
+
+        if event_type == 'holiday':
+            # Deduplicate by date
+            cal["holidays"] = [h for h in cal["holidays"] if h["date"] != date]
+            cal["holidays"].append({"date": date, "name": title})
+            holidays_added += 1
+        else:
+            entry = {
+                "id": str(uuid.uuid4()),
+                "date": date,
+                "unit": unit,
+                "lesson_title": title,
+                "day_number": None,
+                "lesson_file": "",
+                "color": "#6366f1",
+            }
+            cal["scheduled_lessons"].append(entry)
+            lessons_added += 1
+
+    cal["holidays"].sort(key=lambda h: h["date"])
+    _save_calendar(cal)
+
+    return jsonify({
+        "status": "imported",
+        "lessons_added": lessons_added,
+        "holidays_added": holidays_added,
+        "calendar": cal,
+    })

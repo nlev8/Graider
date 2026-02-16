@@ -1,0 +1,24 @@
+{
+  "name": "graider",
+  "version": "1.0.0",
+  "description": "**AI-Powered Grading Assistant for Educators**",
+  "main": "focus-automation.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nlev8/Graider.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/nlev8/Graider/issues"
+  },
+  "homepage": "https://github.com/nlev8/Graider#readme",
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}

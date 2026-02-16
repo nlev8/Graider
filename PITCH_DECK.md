@@ -162,19 +162,49 @@ Graider doesn't depend on a single AI. Three independent models grade your assig
 
 # Key Features
 
-## Student Progress Tracking
+## Student Progress Tracking & History-Aware Feedback
 
-### Personalized Learning Insights
+### Every Student Gets a Longitudinal Profile
 
-After 3+ assignments, Graider tracks each student's:
+After 3+ assignments, Graider builds a comprehensive learning profile for each student — stored locally (FERPA compliant), never sent to AI providers.
 
-- **Performance trends** - Improving, stable, or declining
-- **Skill patterns** - Reading comprehension, critical thinking, etc.
-- **Baseline profile** - What's "normal" for this student
+| What's Tracked | How It's Used |
+|---------------|--------------|
+| **Score History** | Last 20 assignments with dates, scores, letter grades |
+| **Rubric Category Trends** | Rolling averages for content accuracy, completeness, writing quality, effort |
+| **Improvement Streaks** | Detects 3+ consecutive improvements in any rubric category |
+| **Decline Alerts** | Flags when a category score drops for 3+ assignments |
+| **Strength Patterns** | Skills consistently above 85% (e.g., "reading comprehension", "source analysis") |
+| **Growth Areas** | Skills consistently below 60% — targeted for feedback emphasis |
+| **Skill Trajectory** | Tracks skills moving from "developing" to "strength" over time |
+| **Writing Style Fingerprint** | Word length, sentence complexity, academic vocabulary, contraction usage |
+| **Statistical Baseline** | Mean + standard deviation per category — flags unusual deviations |
+| **Previous Excellent Answers** | Saves top answers for continuity across assignments |
+| **Previous Improvement Areas** | What the student was told to work on last time |
 
-### AI Uses History for Better Feedback:
-> *"You're on a 3-assignment improvement streak in writing quality!"*
-> *"Your reading comprehension continues to be a real strength!"*
+### AI Feedback References Actual History
+
+Graider doesn't just say "good job." It connects the current assignment to the student's trajectory with specific, concrete references:
+
+> *"You scored a 78 on Cornell Notes Ch. 19 and an 85 on Ch. 20 — this 92 continues that upward trend. Your content accuracy has been improving for 3 straight assignments, which tells me you're really engaging with the material."*
+
+> *"Last time, I mentioned your summaries needed more detail — and you delivered. Your summary section this time included specific dates and cause-effect connections that were missing before. That's real growth."*
+
+> *"Writing quality has been your strongest category across the last 5 assignments (avg 18/20). Your area to focus on is still completeness — you've left at least one section blank on 3 of your last 5 assignments, and it's costing you 10-15 points each time."*
+
+### Baseline Deviation Detection
+
+The historical profile also powers academic integrity detection:
+
+| Detection | What It Catches |
+|-----------|----------------|
+| **Score deviation** | Student averaging 72 suddenly scores 98 — flagged for review |
+| **Category spike** | Writing quality jumps from 12/20 to 20/20 with no gradual improvement |
+| **Style mismatch** | Complexity score jumps from 3/10 to 9/10 in one assignment |
+| **New skills** | 3+ sophisticated skills (e.g., "thesis development") never demonstrated before |
+| **Sudden improvement** | 20+ point jump from recent average |
+
+The system gets smarter with every assignment graded — building a more accurate picture of what's "normal" for each student.
 
 ---
 
@@ -757,8 +787,11 @@ District Dashboard
 ### AI Processing Cost
 | Model | Cost per 100 assignments | Best for |
 |-------|--------------------------|----------|
-| GPT-4o-mini | ~$0.09 | Daily grading |
+| GPT-4o-mini | ~$0.09 | Daily grading (per-question scoring) |
 | GPT-4o | ~$1.43 | Complex assignments |
+| **Smart hybrid** | **~$0.30** | **GPT-4o-mini scores each question, GPT-4o writes feedback** |
+
+Graider uses a **hybrid model strategy**: fast, cheap per-question grading with GPT-4o-mini, then upgrades to GPT-4o for the feedback narrative — the output teachers and parents actually read. Quality where it matters, cost efficiency everywhere else.
 
 ### Annual cost per teacher: **< $50** for 5,000+ assignments
 

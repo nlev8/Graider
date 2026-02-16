@@ -8,6 +8,9 @@ due to tight coupling with global state. Full extraction planned for Phase 3.
 import os
 import csv
 import json
+import sys
+import subprocess
+import threading
 from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify
@@ -866,6 +869,148 @@ def export_focus_comments():
         json.dump(manifest, f, indent=2)
 
     return jsonify(manifest)
+
+
+# ══════════════════════════════════════════════════════════════
+# FOCUS COMMENTS UPLOAD (Playwright)
+# ══════════════════════════════════════════════════════════════
+
+GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
+
+_focus_comments_state = {
+    "process": None,
+    "status": "idle",      # idle | running | done | error
+    "entered": 0,
+    "failed": 0,
+    "skipped": 0,
+    "total": 0,
+    "message": "",
+    "log": [],
+}
+
+
+def _read_focus_comments_output(proc):
+    """Background thread: read subprocess stdout and update state."""
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+            etype = event.get("type", "")
+            if etype == "progress":
+                _focus_comments_state["entered"] = event.get("entered", 0)
+                _focus_comments_state["total"] = event.get("total", _focus_comments_state["total"])
+                _focus_comments_state["message"] = event.get("message", "")
+                student = event.get("student", "")
+                if student:
+                    _focus_comments_state["message"] = student + ": " + event.get("message", "")
+            elif etype == "status":
+                _focus_comments_state["message"] = event.get("message", "")
+            elif etype == "done":
+                _focus_comments_state["status"] = "done"
+                _focus_comments_state["entered"] = event.get("entered", 0)
+                _focus_comments_state["failed"] = event.get("failed", 0)
+                _focus_comments_state["skipped"] = event.get("skipped", 0)
+                _focus_comments_state["message"] = event.get("message", "Complete")
+            elif etype == "error":
+                _focus_comments_state["failed"] += 1
+                _focus_comments_state["message"] = event.get("message", "")
+            _focus_comments_state["log"].append(event)
+            if len(_focus_comments_state["log"]) > 100:
+                _focus_comments_state["log"] = _focus_comments_state["log"][-50:]
+        except json.JSONDecodeError:
+            pass
+
+    if _focus_comments_state["status"] == "running":
+        _focus_comments_state["status"] = "done"
+
+
+@grading_bp.route('/api/upload-focus-comments', methods=['POST'])
+def upload_focus_comments():
+    """Start uploading comments to Focus via Playwright automation."""
+    if _focus_comments_state.get("status") == "running":
+        return jsonify({"error": "Already uploading comments. Check status or wait."}), 409
+
+    try:
+        data = request.json or {}
+        use_manifest = data.get("use_manifest", True)
+        comments = data.get("comments")
+        assignment = data.get("assignment", "Assignment")
+
+        script_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'focus-comments-upload.js'
+        )
+
+        if not os.path.exists(script_path):
+            return jsonify({"error": "focus-comments-upload.js not found"}), 500
+
+        if use_manifest and not comments:
+            # Use the manifest from the latest Batch Focus export
+            manifest_path = os.path.join(FOCUS_EXPORTS_DIR, "comments_manifest.json")
+            if not os.path.exists(manifest_path):
+                return jsonify({"error": "No comments manifest found. Run 'Batch Focus' export first."}), 400
+
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+            total = sum(p.get("count", 0) for p in manifest.get("periods", []))
+            cmd = ['node', script_path, '--from-manifest']
+
+        else:
+            # Write provided comments to temp file
+            if not comments or not isinstance(comments, list):
+                return jsonify({"error": "No comments provided"}), 400
+
+            tmp_file = os.path.join(GRAIDER_DATA_DIR, "tmp_focus_comments.json")
+            os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
+            with open(tmp_file, 'w') as f:
+                json.dump({"assignment": assignment, "comments": comments}, f)
+
+            total = len(comments)
+            cmd = ['node', script_path, tmp_file]
+
+        # Reset state
+        _focus_comments_state.update({
+            "status": "running",
+            "entered": 0,
+            "failed": 0,
+            "skipped": 0,
+            "total": total,
+            "message": "Starting Focus automation...",
+            "log": [],
+        })
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        _focus_comments_state["process"] = proc
+
+        thread = threading.Thread(target=_read_focus_comments_output, args=(proc,), daemon=True)
+        thread.start()
+
+        return jsonify({"status": "started", "total": total})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@grading_bp.route('/api/focus-comments/status')
+def focus_comments_status():
+    """Get current Focus comments upload progress."""
+    return jsonify({
+        "status": _focus_comments_state.get("status", "idle"),
+        "entered": _focus_comments_state.get("entered", 0),
+        "failed": _focus_comments_state.get("failed", 0),
+        "skipped": _focus_comments_state.get("skipped", 0),
+        "total": _focus_comments_state.get("total", 0),
+        "message": _focus_comments_state.get("message", ""),
+    })
 
 
 # ══════════════════════════════════════════════════════════════

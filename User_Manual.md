@@ -907,13 +907,61 @@ Below the published assessments, view your saved assessments:
 
 ## Resources Tab
 
-Upload and manage supporting documents:
-- Curriculum guides
-- Rubrics
-- Standards documents
-- Reference materials
+### Overview
 
-These resources can enhance AI grading and lesson planning accuracy.
+Upload supporting documents so the AI Assistant has full context about your curriculum, pacing, and academic calendar. Everything you upload here is read automatically by the Assistant — it doesn't need to be told to look at them.
+
+### What to Upload
+
+The more context you give the Assistant, the better it can generate lesson plans, worksheets, and assessments that align with what you're actually teaching and when.
+
+**Recommended uploads (in order of impact):**
+
+| Document | Why It Matters |
+|----------|---------------|
+| **Pacing Guide / Pacing Calendar** | Tells the Assistant what standards and topics you should be covering each week and quarter. This is the single most impactful document you can upload — it lets the Assistant answer "What should I be teaching next week?" using your district's actual timeline. |
+| **Curriculum Framework / Course Description** | The state or district document that defines your course scope — benchmark descriptions, course outcomes, content limits. Gives the Assistant the full picture beyond just standard codes. |
+| **School Year Calendar** | Start/end dates, holidays, teacher workdays, early release days, testing windows. The Assistant uses this to schedule lessons on actual school days and plan around breaks. |
+| **Scope & Sequence** | If your department has a unit-by-unit sequence with suggested timeframes, upload it. Helps the Assistant know what comes before and after any given topic. |
+| **District Curriculum Guide** | Any district-specific document with expected vocabulary, essential questions, or learning targets per unit. |
+| **Department or PLC Documents** | Common assessment schedules, shared rubrics, or unit plans your team uses. |
+
+### Supported File Types
+
+- **PDF** — pacing guides, curriculum frameworks, school calendars
+- **Word (.docx)** — scope & sequence documents, department guides
+- **Text / Markdown (.txt, .md)** — any plain text reference
+
+### How Uploads Work
+
+1. Go to the **Resources** tab
+2. Click **Upload Document**
+3. Select your file and add a description (e.g., "Q3-Q4 Pacing Calendar")
+4. Choose a document type (curriculum, calendar, general)
+5. The document is stored locally and its full text is available to the Assistant immediately
+
+### How the Assistant Uses Your Documents
+
+Once uploaded, the Assistant **automatically reads all your documents** at the start of every conversation. You don't need to tell it to look anything up — it already knows:
+
+- What standards you should be covering this week (from your pacing guide)
+- When holidays and breaks fall (from your school calendar)
+- What vocabulary and essential questions go with each unit (from your curriculum framework)
+- What's coming up next quarter (from your scope & sequence)
+
+**Example questions that work better with uploaded resources:**
+
+- "Create a worksheet for what I'm teaching next week" — uses your pacing guide to pick the right standards and topics
+- "Generate a lesson plan for the first two weeks of Q3" — combines your pacing calendar, standards, and school calendar to plan around holidays
+- "What standards should I focus on before the benchmark test?" — cross-references your pacing guide with the standards database
+- "Am I on track with my pacing?" — compares your teaching calendar against your pacing guide
+
+### Tips
+
+- **Upload your pacing guide first** — this single document transforms the Assistant from a generic standards tool into a curriculum-aware planning partner
+- **Keep documents current** — if your department updates the pacing mid-year, upload the new version
+- **Add descriptions** — a clear description like "District US History Pacing Calendar 2025-2026" helps you manage multiple files
+- Documents are stored locally at `~/.graider_data/documents/` and never leave your machine
 
 ---
 
@@ -921,7 +969,7 @@ These resources can enhance AI grading and lesson planning accuracy.
 
 ### Overview
 
-The Graider Assistant is a built-in AI chat that can answer questions about your students, grades, and analytics using your actual grading data. Powered by Claude (Anthropic), it queries your local files and never sends student PII outside your machine.
+The Graider Assistant is a built-in AI chat that helps you understand student performance, plan curriculum-aligned lessons, generate worksheets, and manage your gradebook. Powered by Claude (Anthropic), it has access to your grading data, curriculum standards, uploaded resources, teaching calendar, and persistent memory — all queried locally. No student PII leaves your machine.
 
 ### Getting Started
 
@@ -932,77 +980,122 @@ The Graider Assistant is a built-in AI chat that can answer questions about your
 
 ### What You Can Ask
 
-| Type of Question | Example |
-|-----------------|---------|
+| Category | Example Questions |
+|----------|------------------|
 | **Grade diagnostics** | "What caused the low grades on Cornell Notes?" |
-| **Omission impact** | "How much did incomplete sections affect scores?" |
-| **Lesson planning** | "Based on student performance, what should I teach next?" |
+| **Lesson planning** | "Create a lesson plan for what I'm teaching next week" |
+| **Worksheet creation** | "Create a Cornell Notes worksheet about the American Revolution" |
+| **Standards alignment** | "What standards should I be covering this quarter?" |
+| **Pacing & calendar** | "Am I on track with my pacing guide?" / "What's on my calendar next week?" |
 | **Period comparison** | "Which period did best on this assignment?" |
-| **Feedback themes** | "What were the common feedback themes?" |
-| **Class overview** | "What's the class average?" |
-| **Student lookup** | "How is Maria doing?" |
-| **Grade filtering** | "Show students below 60 on Cornell Notes" |
-| **At-risk students** | "Which students need attention?" |
-| **Student strengths** | "What are students' biggest strengths?" |
-| **Assignment stats** | "What's the average on the Chapter 5 Quiz?" |
-| **List assignments** | "What assignments have been graded?" |
+| **Student lookup** | "How is Maria doing?" / "What are her parent's contact details?" |
+| **At-risk students** | "Which students need attention?" / "Who has missing work?" |
+| **Document generation** | "Create a study guide for Unit 3" / "Write a parent letter about upcoming exams" |
 | **Focus automation** | "Create a Focus assignment called Quiz 3 worth 100 points" |
 | **Export grades** | "Export grades for Period 3 as a Focus CSV" |
+| **Scheduling** | "Schedule the Colonization lesson starting Monday" |
+
+### Curriculum & Resource Awareness
+
+The Assistant automatically knows your **full curriculum standards** and the contents of **every document you've uploaded** in the Resources tab. You don't need to tell it to look anything up — it already has this context at the start of every conversation.
+
+This means it can:
+- Reference specific standard codes (e.g., SS.8.A.1.1) when generating content
+- Pull from your pacing guide to know what you should be teaching on any given week
+- Use your school calendar to plan around holidays and breaks
+- Combine standards + pacing + calendar to create lessons that fit your actual schedule
+
+**To get the most out of this, upload your pacing guide and school calendar in the Resources tab.** See [Resources Tab](#resources-tab) for details on what to upload.
+
+### Voice Mode
+
+Talk to the Assistant instead of typing. Voice mode uses your browser's speech recognition (free, no extra API needed) and can optionally read responses aloud using ElevenLabs.
+
+**To use voice mode:**
+
+1. Click the **speaker icon** in the input bar to enable voice mode
+2. Click the **microphone button** to start speaking
+3. The mic stays active while you talk — it waits for a natural pause (~2 seconds of silence) before sending
+4. You can also press the mic button again to send immediately
+5. Your words appear as a live transcript while you speak
+
+**Voice responses (optional):**
+- Requires an `ELEVENLABS_API_KEY` in your `.env` file
+- When configured, the assistant reads its responses aloud
+- Click anywhere or send a new message to interrupt the audio
+
+### Persistent Memory
+
+The Assistant remembers important facts across conversations. When you share preferences, class structure, or workflow habits, it saves them automatically so you don't have to repeat yourself.
+
+**What it remembers:**
+- Class structure ("Period 3 is my honors class")
+- Preferences ("I like Cornell Notes worksheets with 10 vocabulary terms")
+- Workflow habits ("I always do a bell ringer at the start of class")
+- Student context ("I have 5 ELL students in Period 4")
+
+**Managing memory:**
+- **Clear Memory** button in the header erases all saved facts (requires confirmation)
+- **Clear Chat** button clears the conversation window but **keeps all memories intact**
+- Memory persists across browser sessions and server restarts
+
+### Teaching Calendar
+
+The Assistant can read and manage your teaching calendar:
+
+- **View schedule**: "What am I teaching this week?" / "What's coming up?"
+- **Schedule lessons**: "Put the Revolution lesson on Tuesday" — places saved lesson plans onto specific dates
+- **Add holidays**: "We're off next Friday" / "Add Spring Break March 17-21"
+- **Multi-day lessons**: Automatically skips weekends and holidays when scheduling multi-day units
+
+### Stopping and Clearing
+
+**Stop mid-response:** If the Assistant is generating a response and you want to cancel (wrong question, too long, etc.), click the **red stop button** that replaces the send button during streaming. This immediately stops the response, the TTS audio, and any tool execution.
+
+**Clear chat:** Click **Clear Chat** in the header to clear the conversation window. This resets the chat but **preserves your persistent memory** — the Assistant will still remember your preferences and class info in the next conversation.
 
 ### Available Tools
 
-The assistant has access to 7 tools that query your local grading data:
+The assistant has access to tools that query your local data:
 
 | Tool | What It Does |
 |------|-------------|
-| **Query Grades** | Search and filter grades by student name, assignment, period, score range, or letter grade |
-| **Student Summary** | Get a comprehensive view of one student: all grades, average, trend (improving/declining/stable), category breakdowns, strengths and weaknesses |
-| **Class Analytics** | Class-wide stats: average, grade distribution (A/B/C/D/F), top performers, students needing attention |
-| **Assignment Stats** | Statistics for a specific assignment: count, mean, median, min, max, standard deviation |
-| **Analyze Grade Causes** | Deep analysis of WHY students got their grades: rubric category breakdowns, most commonly skipped questions, score impact of omissions, weakest areas |
-| **Feedback Patterns** | Aggregated analysis of feedback across an assignment: common strengths, areas for growth, skill frequency counts, feedback samples from high and low scorers |
-| **Compare Periods** | Side-by-side comparison of class periods: averages, grade distributions, category breakdowns, omission rates |
-| **Recommend Next Lesson** | Data-driven lesson recommendations: analyzes weaknesses, cross-references curriculum standards, identifies specific topics and skills to focus on |
-| **List Assignments** | Show all graded assignments with student counts and average scores |
-| **Create Focus Assignment** | Launch browser automation to create an assignment in Focus gradebook (requires VPortal credentials) |
-| **Export Grades CSV** | Generate Focus-compatible CSV files grouped by period |
+| **Query Grades** | Search and filter grades by student, assignment, period, or score range |
+| **Student Summary** | Deep dive into one student: all grades, trends, category breakdowns, strengths and weaknesses |
+| **Class Analytics** | Class-wide stats: average, grade distribution, top/bottom performers |
+| **Assignment Stats** | Statistics for a specific assignment: mean, median, min, max, standard deviation |
+| **Analyze Grade Causes** | WHY students got their grades: rubric breakdowns, skipped questions, score impact of omissions |
+| **Feedback Patterns** | Common strengths and growth areas across an assignment, feedback samples from high/low scorers |
+| **Compare Periods** | Side-by-side period comparison: averages, distributions, category scores, omission rates |
+| **Recommend Next Lesson** | Data-driven lesson recommendations with differentiated suggestions by class level (advanced/standard/support) and IEP/504 accommodation analysis |
+| **Lookup Student Info** | Roster info, parent contacts, student schedules, 504 status. Supports batch lookup. |
+| **Missing Assignments** | Find who hasn't submitted work — by student, period, or assignment |
+| **Generate Worksheet** | Create downloadable worksheets (Cornell Notes, fill-in-blank, short-answer, vocabulary) with embedded answer keys for AI grading |
+| **Generate Document** | Create formatted Word documents (study guides, parent letters, rubrics, lesson outlines) |
+| **Get Standards** | Look up curriculum standards with full details: vocabulary, learning targets, essential questions |
+| **List Resources** | See what supporting documents you've uploaded |
+| **Read Resource** | Read the full text of a specific uploaded document |
+| **Calendar Tools** | View, schedule lessons, and add holidays to your teaching calendar |
+| **Save Memory** | Save important facts for future conversations |
+| **Focus Automation** | Create assignments in Focus gradebook, export Focus-compatible CSVs |
 
 ### Deep Analytics Examples
-
-The assistant's most powerful capability is analyzing **why** students performed the way they did:
 
 **"What caused the low grades on Cornell Notes Slavery and Resistance?"**
 > The assistant finds: writing_quality was weakest (avg 12.7), 64.8% of students had omissions, summary section was skipped most (15% of students), and students with omissions averaged 13.3 points lower than those who completed everything.
 
+**"Create a worksheet for what I'm teaching next week"**
+> The assistant checks your pacing guide, finds the standards you should be covering, pulls relevant vocabulary and learning targets, and generates a downloadable worksheet with an embedded answer key — all aligned to your actual schedule.
+
 **"Based on student performance, what should I teach next?"**
-> The assistant analyzes category weaknesses, unanswered questions, and developing skills, then cross-references your state's curriculum standards (FL US History) to recommend specific topics, essential questions, and learning targets for your next lesson.
-
-**"Compare my classes on the last assignment"**
-> Returns per-period averages, grade distributions, category scores, and omission rates so you can see exactly where each class struggled.
-
-### Tool Indicators
-
-While the assistant works, you'll see inline badges showing what's happening:
-
-- **"Querying grades..."** → The assistant is searching your grade data
-- **"Queried grades ✓"** → Data retrieved successfully, now composing response
-
-### Suggested Prompts
-
-When the chat is empty, four suggested prompts appear as clickable chips:
-- "What's the class average?"
-- "Which students need attention?"
-- "Show assignment statistics"
-- "Create a Focus assignment"
-
-Click any prompt to send it instantly.
+> Analyzes category weaknesses and developing skills, then cross-references your curriculum standards to recommend specific topics. Provides differentiated suggestions for advanced, standard, and support classes.
 
 ### Conversation Management
 
-- Click **Clear** in the top-right to start a fresh conversation
-- Conversations are stored in memory only (not saved to disk)
-- Sessions auto-expire after 2 hours of inactivity
-- Each browser session gets a unique conversation thread
+- **Clear Chat**: Clears the conversation window. Memory is preserved.
+- **Clear Memory**: Erases all saved facts from previous conversations (requires confirmation).
+- Conversations auto-expire after 2 hours of inactivity.
+- Chat history persists in your browser between page loads.
 
 ### Focus SIS Automation
 
@@ -1207,6 +1300,76 @@ Upload and manage student rosters:
 ### Class Periods
 
 Upload separate rosters for each class period for organized grading.
+
+### Focus Roster Import (Volusia County)
+
+Instead of manually uploading CSV rosters, you can import your class rosters directly from Focus SIS. Graider logs into Focus through VPortal, runs a saved report, and automatically populates your class periods with student names, IDs, parent contacts, schedules, and 504 status.
+
+#### Prerequisites
+
+1. **VPortal credentials** saved in Settings > Tools > District Portal
+2. **Teacher Name** set in Settings (Graider matches your last name to filter your classes)
+3. A **saved report in Focus** called exactly **"Student Data"** with the right columns (see below)
+
+#### Setting Up the Saved Report in Focus
+
+This is the most important step. You need to create a saved report in Focus **once**, and Graider will reuse it every time you import.
+
+**Step-by-step:**
+
+1. Log into **Focus** through VPortal
+2. Go to **Reports > Saved Reports**
+3. Click **New Report** (or edit an existing one)
+4. Name the report exactly: **Student Data**
+5. Add the following columns to the report:
+
+| Column | Required? | What Graider Uses It For |
+|--------|-----------|--------------------------|
+| **Last, First** (student name) | Required | Student name on rosters and grading |
+| **Student ID** | Required | Matching grades to students, Focus CSV exports |
+| **Local ID** | Recommended | Secondary identifier |
+| **Teacher / Period** | Required | Determines which period each student belongs to and filters to your classes only |
+| **504 Plan** | Recommended | Flags students with 504 accommodations for modified feedback |
+| **Primary Contact - First Name** | Recommended | Parent/guardian name |
+| **Primary Contact - Last Name** | Recommended | Parent/guardian name |
+| **Primary Contact - Relationship** | Recommended | Relationship to student |
+| **Primary Contact - Cell Phone** | Recommended | Parent phone for communications |
+| **Primary Contact - Call Out Number** | Optional | Alternate phone |
+| **Primary Contact - Email** | Recommended | Parent email for sending feedback |
+| **Secondary Contact - First Name** | Optional | Second guardian name |
+| **Secondary Contact - Last Name** | Optional | Second guardian name |
+| **Secondary Contact - Relationship** | Optional | Relationship to student |
+| **Secondary Contact - Cell Phone** | Optional | Second guardian phone |
+| **Third Contact - First Name** | Optional | Third contact name |
+| **Third Contact - Last Name** | Optional | Third contact name |
+| **Third Contact - Email** | Optional | Third contact email |
+| **Third Contact - Cell Phone** | Optional | Third contact phone |
+
+6. **Save the report**
+
+> **Important:** The report must be named exactly **"Student Data"** — Graider looks for this name when it runs the import.
+
+#### Running the Import
+
+1. Go to **Settings > Class Periods**
+2. Click **Import from Focus**
+3. A browser window opens and logs into VPortal automatically
+4. **Check your phone for 2FA approval** if prompted
+5. Graider navigates to your saved report, runs it, and downloads the CSV
+6. Students are automatically grouped by period based on the "Teacher / Period" column
+7. Only your classes appear (filtered by your last name)
+
+#### What Gets Imported
+
+After a successful import, each period roster includes:
+- Student name, Student ID, Local ID
+- 504 plan status
+- Up to 3 parent/guardian contacts with names, relationships, phone numbers, and emails
+- Each student's full class schedule (all periods, teachers, and course codes)
+
+#### Re-importing
+
+You can re-run the import anytime — beginning of a new quarter, after schedule changes, or when new students enroll. The saved report in Focus stays in place, so it's just one click.
 
 ### IEP/504 Accommodations
 
@@ -1496,64 +1659,33 @@ Each student's file contains:
 
 ## Recent Updates (February 2026)
 
-### New Features
+### AI Assistant Enhancements
 
-- **B.E.S.T. Rubric Presets**: Quick Presets row in Settings > Grading for Florida teachers — one-click ELA, Math, Science, and Social Studies rubric weights aligned with Florida B.E.S.T. standards
-- **Onboarding Rubric Step**: New step in the onboarding wizard that recommends a B.E.S.T. preset matched to the teacher's subject (FL) or Standard rubric (all other states)
-- **Policy 428 Compliance**: Banner in Results tab and notice in Focus Export modal reminding FL teachers that AI-assisted grades require review before recording
-- **Approval Gate**: "I have reviewed and approve" checkbox required before any grade export — resets when new results arrive
-- **Letter Grade Export**: "Include Letter Grade column" option in Focus Export modal adds a `Letter_Grade` column to CSV output
-- **Ensemble Grading**: Run assignments through multiple AI models (GPT-4, Claude, Gemini) and use median score for more reliable grading
-- **Multi-Provider AI Support**: Choose from OpenAI (GPT-4o, GPT-4o-mini), Anthropic (Claude 3.5 Sonnet, Haiku), and Google (Gemini 2.0 Flash, Pro)
-- **Assessment Generator**: Create standards-aligned assessments with multiple question types (MC, Short Answer, Extended Response, True/False, Matching)
-- **Student Portal**: Publish assessments with join codes for students to take online
-- **Teacher Dashboard**: Monitor published assessments, view submissions, track scores
-- **Saved Assessments**: Save assessments locally for reuse (makeup exams)
-- **Makeup Exam Mode**: Restrict assessments to specific students only
-- **Period Organization**: Organize published assessments by class period
-- **Accommodation Integration**: Apply IEP/504 accommodations when publishing
-- **DOK Level Configuration**: Set Depth of Knowledge distribution for assessments
-- **Platform Export**: Export assessments to Canvas QTI, Kahoot, Quizlet, Google Forms
-- **Missing Assignments Tracker**: See which students haven't uploaded their work in Analytics
-- **Assignment Aliases**: Renamed assignments still match old student submissions
-- **Student Progress Tracking**: Personalized feedback based on historical performance
-- **Skill Pattern Detection**: Tracks skills beyond rubric categories (reading comprehension, critical thinking, etc.)
-- **Baseline Deviation Detection**: Flags submissions that deviate significantly from student's typical work
-- **AI Model Selection**: Choose between GPT-4o (better quality) and GPT-4o-mini (lower cost)
-- **Individual Upload**: Grade paper/handwritten assignments by uploading photos
-- **Handwritten Assignment Support**: Auto-uses GPT-4o vision for image-based submissions
-- **Results Sorting**: Sort by time, name, score, assignment, or grade
-- **Results Filtering**: Filter results by handwritten vs typed assignments
-- **Toast Notifications**: Real-time popups when assignments are graded (can be disabled)
-- **API Error Handling**: Automatic stop on errors with prominent alerts
-- **Separate AI/Plagiarism Detection**: Independent indicators with confidence levels
-- **Timestamps**: Date and time shown for each graded result
-- **Activity Monitor Improvements**: Horizontal collapsible design, auto-expand on errors
-- **FERPA Compliance**: Full PII sanitization, audit logging, data management tools
-- **State Configuration**: Select your state for standards alignment
-- **World History Standards**: Added Florida World History standards (20 benchmarks)
-- **Cloud Deployment**: Railway + Supabase for production hosting
+- **Full Curriculum Standards Access**: The Assistant now knows ALL your curriculum standards at the start of every conversation — no keyword search needed. It can reference specific standard codes when generating lessons, worksheets, and assessments.
+- **Resource-Aware Context**: Uploaded documents (pacing guides, school calendars, curriculum frameworks) are automatically read into the Assistant's context. It can answer "What should I teach next week?" using your actual pacing calendar.
+- **Teaching Calendar**: Schedule lessons, add holidays, and view your upcoming calendar directly through the Assistant. Multi-day lessons auto-skip weekends and holidays.
+- **Persistent Memory**: The Assistant remembers facts you share across conversations — class structure, preferences, workflow habits. No need to repeat yourself each session.
+- **Voice Conversation**: Talk to the Assistant using your browser's microphone. Continuous listening with natural pause detection (~2 seconds of silence before sending). Optional voice responses via ElevenLabs.
+- **Stop Mid-Response**: Cancel any response or document generation in progress with the stop button — no page refresh needed.
+- **Clear Chat Without Losing Memory**: Clear the conversation window while keeping all saved memories intact.
+- **Worksheet & Document Generation**: Create downloadable worksheets (Cornell Notes, fill-in-blank, vocabulary) with embedded answer keys, or formatted Word documents (study guides, parent letters, rubrics). Saves directly to Grading Setup.
+- **Student Info & Contact Lookup**: Look up roster info, parent contacts, student schedules, and 504 status. Supports batch lookup for multiple students at once.
+- **Missing Assignments Tool**: Find who hasn't submitted work — search by student, period, or assignment.
+- **Differentiated Lesson Recommendations**: Lesson suggestions now include separate recommendations for advanced, standard, and support classes with DOK-appropriate standards, plus IEP/504 accommodation analysis.
 
-### UI Improvements
+### Grading Improvements
 
-- Theme toggle simplified (icon only)
-- Authenticity summary in Results tab
-- Privacy & Data section in Settings
-- Handwritten indicator icon in Results table
-- AI model selector in Settings
-- Solid modal backgrounds (not transparent)
-- Matching question visual interface in Student Portal
-- Text input for written answer questions
+- **Multi-Provider Multipass Grading**: Claude (Anthropic) and Gemini (Google) models now support the full multipass grading pipeline, same as OpenAI. All providers produce per-question scoring, rubric breakdowns, and personalized feedback.
+- **History-Aware Feedback**: Students with 3+ graded assignments receive personalized feedback that references their improvement trends, consistent strengths, and developing skills.
+- **Token Cost Tracking**: Track API costs across all AI providers (OpenAI, Anthropic, Google) per grading session. Costs are logged to CSV for long-term tracking and visible in the cost analytics panel.
+- **GPT-4o Feedback Generation**: Final feedback generation upgraded to GPT-4o for higher-quality, more specific student feedback.
 
----
+### Other
 
-- **AI Assistant (Claude)**: Built-in chat that queries your grading data — ask about class averages, student summaries, assignment stats, at-risk students
+- **Ensemble Grading**: Run assignments through multiple AI models simultaneously and use the median score for more reliable grading
+- **Assessment Generator**: Create standards-aligned assessments with multiple question types, DOK level distribution, and export to Canvas QTI, Kahoot, Quizlet, or Google Forms
+- **Student Portal**: Publish assessments with join codes for students to take online, with accommodation support and makeup exam mode
 - **Focus SIS Automation**: Create assignments in Focus gradebook via browser automation from the Assistant
-- **VPortal Credentials**: Save district portal login in Settings > Tools for Focus automation
+- **Outlook Email Integration**: Send feedback emails through your district Outlook account with SSO login support
 
-### UI Improvements
-
-- Assistant tab with streaming chat, tool indicators, and suggested prompts
-- VPortal credential management in Settings > Tools
-
-*Last updated: February 14, 2026*
+*Last updated: February 15, 2026*
