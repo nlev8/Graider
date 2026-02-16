@@ -27,6 +27,7 @@ import { supabase } from "./services/supabase";
 import LoginScreen from "./components/LoginScreen";
 import AssistantChat from "./components/AssistantChat";
 import OnboardingWizard from "./components/OnboardingWizard";
+import TutorialOverlay, { TUTORIAL_STEPS } from "./components/TutorialOverlay";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
 
 // Tab configuration
@@ -1081,6 +1082,8 @@ function App() {
 
   const [activeTab, setActiveTab] = useState("grade");
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
   const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy, billing
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
@@ -4487,10 +4490,31 @@ ${signature}`;
           onComplete={(navigateTo) => {
             setShowOnboardingWizard(false);
             if (navigateTo === "builder") setActiveTab("builder");
+            if (!localStorage.getItem("graider-tutorial-complete")) {
+              setTutorialStep(0);
+              setShowTutorial(true);
+            }
           }}
           addToast={addToast}
           theme={theme}
           toggleTheme={toggleTheme}
+        />
+      )}
+
+      {/* Tutorial Overlay */}
+      {showTutorial && (
+        <TutorialOverlay
+          currentStep={tutorialStep}
+          onNext={() => setTutorialStep((s) => Math.min(s + 1, TUTORIAL_STEPS.length - 1))}
+          onBack={() => setTutorialStep((s) => Math.max(s - 1, 0))}
+          onSkip={() => {
+            setShowTutorial(false);
+            setTutorialStep(0);
+            localStorage.setItem("graider-tutorial-complete", "true");
+          }}
+          setActiveTab={setActiveTab}
+          setSettingsTab={setSettingsTab}
+          setPlannerMode={setPlannerMode}
         />
       )}
 
@@ -6241,6 +6265,7 @@ ${signature}`;
 
           {/* Navigation */}
           <nav
+            data-tutorial="sidebar-nav"
             style={{
               flex: 1,
               padding: sidebarCollapsed ? "10px 8px 0 8px" : "0 10px",
@@ -6364,7 +6389,7 @@ ${signature}`;
             }}
           >
             {/* Left: Auto-Grade & Start/Stop */}
-            <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            <div data-tutorial="grade-toolbar" style={{ display: "flex", alignItems: "center", gap: "15px" }}>
               <div
                 style={{ display: "flex", alignItems: "center", gap: "10px" }}
               >
@@ -6427,7 +6452,28 @@ ${signature}`;
               )}
             </div>
 
-            {/* Right: Theme Toggle */}
+            {/* Right: Tutorial Replay + Theme Toggle */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              onClick={() => { setTutorialStep(0); setShowTutorial(true); }}
+              title="Replay tutorial"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 36,
+                height: 36,
+                borderRadius: "8px",
+                border: "1px solid var(--glass-border)",
+                background: "var(--glass-bg)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: 700,
+              }}
+            >
+              ?
+            </button>
             <button
               onClick={toggleTheme}
               style={{
@@ -6449,13 +6495,14 @@ ${signature}`;
             >
               <Icon name={theme === "dark" ? "Sun" : "Moon"} size={18} />
             </button>
+            </div>
           </div>
 
           <div style={{ padding: "30px", flex: 1, overflowY: "auto" }}>
             <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
               {/* Grade Tab */}
               {activeTab === "grade" && (
-                <div className="fade-in">
+                <div data-tutorial="grade-card" className="fade-in">
                   {/* Error Alert Banner */}
                   {status.error && (
                     <div
@@ -6843,6 +6890,7 @@ ${signature}`;
                     {/* Period Filter - Show when periods exist */}
                     {periods.length > 0 && (
                       <div
+                        data-tutorial="grade-period-filter"
                         style={{
                           padding: "15px",
                           background:
@@ -6907,6 +6955,7 @@ ${signature}`;
 
                     {/* Student Filter */}
                     <div
+                      data-tutorial="grade-student-filter"
                       style={{
                         padding: "15px",
                         background:
@@ -7049,6 +7098,7 @@ ${signature}`;
                     {/* Assignment Filter */}
                     {savedAssignments.length > 0 && (
                       <div
+                        data-tutorial="grade-assignment-filter"
                         style={{
                           padding: "15px",
                           background:
@@ -7568,6 +7618,7 @@ ${signature}`;
 
                     {/* Individual Upload - For Paper/Handwritten Assignments */}
                     <div
+                      data-tutorial="grade-individual"
                       style={{
                         marginTop: "20px",
                         padding: "20px",
@@ -8034,7 +8085,7 @@ ${signature}`;
                   }}
                 >
                   {/* Results Table */}
-                  <div className="glass-card" style={{ padding: "25px" }}>
+                  <div data-tutorial="results-card" className="glass-card" style={{ padding: "25px" }}>
                     <div style={{ marginBottom: "20px" }}>
                       <h2
                         style={{
@@ -8138,6 +8189,7 @@ ${signature}`;
                       })()}
                       {status.results.length > 0 && (
                         <div
+                          data-tutorial="results-filters"
                           style={{
                             display: "flex",
                             gap: "10px",
@@ -8351,6 +8403,7 @@ ${signature}`;
                           {/* Approval Gate Checkbox */}
                           {status.results.length > 0 && (
                             <label
+                              data-tutorial="results-approval"
                               style={{
                                 display: "flex", alignItems: "center", gap: "8px",
                                 padding: "6px 14px", borderRadius: "8px", cursor: "pointer",
@@ -8371,7 +8424,7 @@ ${signature}`;
                             </label>
                           )}
                           {/* Focus SIS Group */}
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(99,102,241,0.06)" }}>
+                          <div data-tutorial="results-focus" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(99,102,241,0.06)" }}>
                           <button
                             onClick={() => setFocusExportModal(true)}
                             className="btn btn-primary"
@@ -8458,7 +8511,7 @@ ${signature}`;
                           </button>
                           </div>
                           {/* Email Actions Group */}
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(234,179,8,0.06)" }}>
+                          <div data-tutorial="results-email" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(234,179,8,0.06)" }}>
                           <button
                             onClick={async () => {
                               setOutlookExportLoading(true);
@@ -10030,7 +10083,7 @@ ${signature}`;
                   >
                     {/* General Tab */}
                     {settingsTab === "general" && (
-                      <>
+                      <div data-tutorial="settings-general">
                     <div>
                       <label className="label">Assignments Folder</label>
                       <div style={{ display: "flex", gap: "10px" }}>
@@ -10248,13 +10301,14 @@ ${signature}`;
                         Run Setup Wizard Again
                       </button>
                     </div>
-                      </>
+                      </div>
                     )}
 
                     {/* Grading Tab */}
                     {settingsTab === "grading" && (
                       <>
                     <div
+                      data-tutorial="settings-grading"
                       style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(3, 1fr)",
@@ -10570,7 +10624,7 @@ ${signature}`;
                     {settingsTab === "ai" && (
                       <>
                     {/* AI Model Selection */}
-                    <div>
+                    <div data-tutorial="settings-ai">
                       <h3
                         style={{
                           fontSize: "1.1rem",
@@ -11234,7 +11288,7 @@ ${signature}`;
 
                     {/* Integration Tab (now Tools) */}
                     {settingsTab === "integration" && (
-                      <>
+                      <div data-tutorial="settings-integration">
                     {/* Available EdTech Tools */}
                     <div>
                       <h3
@@ -11905,7 +11959,7 @@ ${signature}`;
                         </div>
                       </div>
                     </div>
-                      </>
+                      </div>
                     )}
 
                     {/* Classroom Tab */}
@@ -11913,6 +11967,7 @@ ${signature}`;
                       <>
                     {/* Add Student from Screenshot Section */}
                     <div
+                      data-tutorial="settings-classroom"
                       style={{
                         borderTop: "1px solid var(--glass-border)",
                         paddingTop: "25px",
@@ -13103,7 +13158,7 @@ ${signature}`;
 
                     {/* Privacy Tab */}
                     {settingsTab === "privacy" && (
-                      <>
+                      <div data-tutorial="settings-privacy">
                     {/* FERPA Compliance & Data Privacy */}
                     <div>
                       <h3
@@ -13880,7 +13935,7 @@ ${signature}`;
                         </div>
                       )}
                     </div>
-                      </>
+                      </div>
                     )}
 
                     {/* Billing Tab */}
@@ -13991,7 +14046,7 @@ ${signature}`;
 
               {/* Resources Tab */}
               {activeTab === "resources" && (
-                <div className="fade-in glass-card" style={{ padding: "25px" }}>
+                <div data-tutorial="resources-upload" className="fade-in glass-card" style={{ padding: "25px" }}>
                   <h2
                     style={{
                       fontSize: "1.3rem",
@@ -15258,7 +15313,7 @@ ${signature}`;
               )}
 
               {/* Assistant Tab — always mounted so chat persists across tab switches */}
-              <div className={activeTab === "assistant" ? "fade-in glass-card" : ""} style={{
+              <div data-tutorial="assistant-chat" className={activeTab === "assistant" ? "fade-in glass-card" : ""} style={{
                 padding: 0,
                 overflow: "hidden",
                 display: activeTab === "assistant" ? "block" : "none",
@@ -15268,9 +15323,10 @@ ${signature}`;
 
               {/* Builder Tab */}
               {activeTab === "builder" && (
-                <div className="fade-in">
+                <div data-tutorial="builder-card" className="fade-in">
                   {/* Saved Assignments - Collapsible */}
                   <div
+                    data-tutorial="builder-saved"
                     className="glass-card"
                     style={{ padding: "15px 20px", marginBottom: "20px" }}
                   >
@@ -15762,6 +15818,7 @@ ${signature}`;
 
                     {/* Import Document */}
                     <div
+                      data-tutorial="builder-import"
                       style={{
                         marginBottom: "25px",
                         padding: "20px",
@@ -16137,6 +16194,7 @@ ${signature}`;
 
                     {/* Marker Library */}
                     <div
+                      data-tutorial="builder-markers"
                       style={{
                         marginBottom: "25px",
                         padding: "15px 20px",
@@ -16206,7 +16264,7 @@ ${signature}`;
                     </div>
 
                     {/* Rubric Type Selector */}
-                    <div style={{ marginBottom: "25px" }}>
+                    <div data-tutorial="builder-rubric" style={{ marginBottom: "25px" }}>
                       <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <Icon name="Scale" size={16} style={{ color: "#8b5cf6" }} />
                         Assignment Rubric
@@ -16360,7 +16418,7 @@ ${signature}`;
                     </div>
 
                     {/* Grading Notes */}
-                    <div style={{ marginBottom: "25px" }}>
+                    <div data-tutorial="builder-notes" style={{ marginBottom: "25px" }}>
                       <label className="label">
                         Assignment-Specific Grading Notes
                       </label>
@@ -16379,7 +16437,7 @@ ${signature}`;
                     </div>
 
                     {/* Questions */}
-                    <div style={{ marginBottom: "20px" }}>
+                    <div data-tutorial="builder-questions" style={{ marginBottom: "20px" }}>
                       <div
                         style={{
                           display: "flex",
@@ -16578,6 +16636,7 @@ ${signature}`;
 
                     {/* Export Buttons */}
                     <div
+                      data-tutorial="builder-save"
                       style={{
                         display: "flex",
                         gap: "15px",
@@ -16638,7 +16697,7 @@ ${signature}`;
 
               {/* Analytics Tab */}
               {activeTab === "analytics" && (
-                <div className="fade-in">
+                <div data-tutorial="analytics-card" className="fade-in">
                   {!filteredAnalytics || filteredAnalytics.error ? (
                     <div
                       className="glass-card"
@@ -16661,6 +16720,7 @@ ${signature}`;
                     <>
                       {/* Period Filter */}
                       <div
+                        data-tutorial="analytics-filters"
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -16796,6 +16856,7 @@ ${signature}`;
 
                       {/* Stats Cards */}
                       <div
+                        data-tutorial="analytics-stats"
                         style={{
                           display: "grid",
                           gridTemplateColumns: "repeat(4, 1fr)",
@@ -16879,6 +16940,7 @@ ${signature}`;
 
                       {/* Charts */}
                       <div
+                        data-tutorial="analytics-charts"
                         style={{
                           display: "grid",
                           gridTemplateColumns: "1fr 2fr",
@@ -17008,6 +17070,7 @@ ${signature}`;
 
                       {/* Proficiency vs Growth Scatterplot */}
                       <div
+                        data-tutorial="analytics-scatter"
                         className="glass-card"
                         style={{ padding: "25px", marginBottom: "20px" }}
                       >
@@ -17238,6 +17301,7 @@ ${signature}`;
 
                       {/* Student Progress */}
                       <div
+                        data-tutorial="analytics-progress"
                         className="glass-card"
                         style={{
                           padding: "25px",
@@ -17516,6 +17580,7 @@ ${signature}`;
 
                       {/* Needs Attention + Top Performers */}
                       <div
+                        data-tutorial="analytics-alerts"
                         style={{
                           display: "grid",
                           gridTemplateColumns: "1fr 1fr",
@@ -18662,9 +18727,10 @@ ${signature}`;
 
               {/* Planner Tab */}
               {activeTab === "planner" && (
-                <div className="fade-in">
+                <div data-tutorial="planner-card" className="fade-in">
                   {/* Mode Toggle */}
                   <div
+                    data-tutorial="planner-modes"
                     style={{
                       display: "flex",
                       gap: "10px",

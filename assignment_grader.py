@@ -368,7 +368,7 @@ def filter_questions_from_response(response_text: str) -> str:
     return '\n'.join(filtered_lines).strip()
 
 
-def _strip_template_lines(response: str, marker_text: str, template_text: str) -> str:
+def _strip_template_lines(response: str, marker_text: str, template_text: str, is_short_answer: bool = False) -> str:
     """Remove template/prompt lines from extracted response by comparing with template.
 
     After the marker heading (e.g., 'SUMMARY'), the template may contain instruction
@@ -435,7 +435,8 @@ def _strip_template_lines(response: str, marker_text: str, template_text: str) -
                 tl_pos = line_cleaned.find(tl)
                 remainder = line_cleaned[tl_pos + len(tl):].strip()
                 # Only keep if there's meaningful student content after the template
-                if len(remainder) >= 10:
+                min_remainder = 2 if is_short_answer else 10
+                if len(remainder) >= min_remainder:
                     # Find the same position in the original (non-lowered) line
                     orig_cleaned = re.sub(r'[_\s]+', ' ', line).strip()
                     partial_strip = orig_cleaned[tl_pos + len(tl):].strip()
@@ -1080,7 +1081,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     'start': pos,
                     'end': content_end_pos,
                     'end_marker': end_marker,
-                    'match_type': match_type
+                    'match_type': match_type,
+                    'section_type': marker.get('type', 'written') if isinstance(marker, dict) else 'written',
                 })
 
         # Sort by position in document
@@ -1144,6 +1146,16 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             marker_text = mp['marker']
             content_start = mp['end']
             end_marker = mp.get('end_marker')
+            section_type = mp.get('section_type', 'written')
+            # Detect short-answer from explicit type OR from marker name containing FITB keywords
+            marker_name_hint = mp['marker'].lower()
+            is_short_answer = (
+                section_type in ('fill-blank', 'fill_in_blank', 'vocabulary', 'matching')
+                or 'fill-in' in marker_name_hint
+                or 'fill in' in marker_name_hint
+                or 'fitb' in marker_name_hint
+                or 'blanks' in marker_name_hint
+            )
 
             # Check if this marker should be excluded from grading
             marker_lower = marker_text.lower().strip()
@@ -1343,7 +1355,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                             after_colon = text_only.split(':', 1)[1].strip()
                         else:
                             after_colon = text_only
-                        if len(after_colon) < 3:
+                        min_answer_len = 1 if is_short_answer else 3
+                        if len(after_colon) < min_answer_len:
                             # Truly blank — if it looks like a vocab term (Term: ___), track it
                             if ':' in text_only:
                                 term = text_only.split(':', 1)[0].strip()
@@ -1354,7 +1367,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     student_lines.append(line)
 
                 # If no student content remains, it's blank
-                if not student_lines or sum(len(l) for l in student_lines) < 10:
+                min_content_len = 3 if is_short_answer else 10
+                if not student_lines or sum(len(l) for l in student_lines) < min_content_len:
                     is_blank = True
                 else:
                     # Use filtered response
@@ -1363,12 +1377,15 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             # CRITICAL: Strip template lines from response using original template
             # This removes instruction/prompt text that appears between the marker
             # heading and the student's actual response (e.g., "Summarize the key events...")
-            if not is_blank and template_text:
-                response = _strip_template_lines(response, marker_text, template_text)
+            # SKIP for FITB sections: the template lines ARE the questions — the student's
+            # answer is the filled-in version, so stripping would remove their work.
+            if not is_blank and template_text and not is_short_answer:
+                response = _strip_template_lines(response, marker_text, template_text, is_short_answer=is_short_answer)
 
             # CRITICAL: Filter out questions/prompts from response
             # This prevents detecting "What was the cause?" as a student answer
-            if not is_blank:
+            # SKIP for FITB: the prompts are the fill-in sentences themselves
+            if not is_blank and not is_short_answer:
                 response = filter_questions_from_response(response)
                 if not response or len(response.strip()) < 3:
                     is_blank = True
@@ -1382,7 +1399,8 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                 resp_stripped = re.sub(r'\((?:pp?\.?\s*\d+[\-–]\d+|\d+\s*(?:pts?|points?))\)', '', resp_clean)
                 resp_stripped = re.sub(r'(?i)^response\s*:\s*', '', resp_stripped).strip()
                 resp_stripped = re.sub(r'[_\-\s]+$', '', resp_stripped).strip()
-                if len(resp_stripped) < 15:
+                min_response_len = 3 if is_short_answer else 15
+                if len(resp_stripped) < min_response_len:
                     is_blank = True
 
             if not is_blank:
