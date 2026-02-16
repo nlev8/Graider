@@ -40,12 +40,80 @@ GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 CREDS_FILE = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
 AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
 
-MODEL = "claude-sonnet-4-20250514"
+ASSISTANT_MODELS = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-20250514",
+}
+DEFAULT_MODEL = "haiku"
 MAX_TOKENS = 4096
+
+
+def _get_assistant_model():
+    """Read assistant_model from settings, default to haiku."""
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            settings = json.load(f)
+        choice = settings.get("assistant_model", DEFAULT_MODEL)
+        return ASSISTANT_MODELS.get(choice, ASSISTANT_MODELS[DEFAULT_MODEL])
+    except Exception:
+        return ASSISTANT_MODELS[DEFAULT_MODEL]
 
 # In-memory conversation store {session_id: {"messages": [...], "last_active": timestamp}}
 conversations = {}
 CONVERSATION_TTL = 7200  # 2 hours
+CONVERSATIONS_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_conversations.json")
+
+
+def _persist_conversation(session_id):
+    """Save a single conversation to disk so it survives server restarts."""
+    try:
+        os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
+        # Load existing file
+        all_convs = {}
+        if os.path.exists(CONVERSATIONS_FILE):
+            with open(CONVERSATIONS_FILE, 'r', encoding='utf-8') as f:
+                all_convs = json.load(f)
+
+        conv = conversations.get(session_id)
+        if conv:
+            # Only persist text messages (skip binary/image content blocks)
+            safe_messages = []
+            for m in conv["messages"]:
+                if isinstance(m.get("content"), str):
+                    safe_messages.append(m)
+                elif isinstance(m.get("content"), list):
+                    # Keep only text blocks from multimodal messages
+                    text_parts = [b for b in m["content"] if isinstance(b, dict) and b.get("type") == "text"]
+                    if text_parts:
+                        safe_messages.append({"role": m["role"], "content": text_parts[0]["text"]})
+            all_convs[session_id] = {
+                "messages": safe_messages[-40:],  # Keep last 40 messages max
+                "last_active": conv["last_active"],
+            }
+        else:
+            all_convs.pop(session_id, None)
+
+        # Prune old sessions (>24h)
+        cutoff = time.time() - 86400
+        all_convs = {k: v for k, v in all_convs.items() if v.get("last_active", 0) > cutoff}
+
+        with open(CONVERSATIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(all_convs, f, indent=2)
+    except Exception as e:
+        logger.warning("Failed to persist conversation %s: %s", session_id, e)
+
+
+def _load_conversation(session_id):
+    """Load a conversation from disk if it exists."""
+    try:
+        if os.path.exists(CONVERSATIONS_FILE):
+            with open(CONVERSATIONS_FILE, 'r', encoding='utf-8') as f:
+                all_convs = json.load(f)
+            if session_id in all_convs:
+                return all_convs[session_id]
+    except Exception as e:
+        logger.warning("Failed to load conversation %s: %s", session_id, e)
+    return None
 
 # Per-session TTS mute flag — set by frontend to stop ElevenLabs mid-stream
 tts_muted_sessions = set()
@@ -692,9 +760,14 @@ def assistant_chat():
     # Cleanup stale sessions periodically
     _cleanup_stale_sessions()
 
-    # Get or create conversation
+    # Get or create conversation — restore from disk if server restarted
     if session_id not in conversations:
-        conversations[session_id] = {"messages": [], "last_active": time.time()}
+        restored = _load_conversation(session_id)
+        if restored:
+            conversations[session_id] = restored
+            logger.info("Restored conversation %s from disk (%d messages)", session_id, len(restored.get("messages", [])))
+        else:
+            conversations[session_id] = {"messages": [], "last_active": time.time()}
 
     conv = conversations[session_id]
     conv["last_active"] = time.time()
@@ -771,6 +844,7 @@ def assistant_chat():
         total_tts_chars = 0
 
         # Tool use loop — may need multiple rounds
+        active_model = _get_assistant_model()
         max_rounds = 5
         for _ in range(max_rounds):
             try:
@@ -778,7 +852,7 @@ def assistant_chat():
                 tool_use_blocks = []
 
                 with client.messages.stream(
-                    model=MODEL,
+                    model=active_model,
                     max_tokens=MAX_TOKENS,
                     system=_build_system_prompt(),
                     messages=messages,
@@ -923,8 +997,9 @@ def assistant_chat():
                 yield f"data: {json.dumps({'type': 'error', 'content': f'Error: {str(e)}'})}\n\n"
                 break
 
-        # Update stored conversation with the final messages
+        # Update stored conversation with the final messages and persist to disk
         conv["messages"] = messages
+        _persist_conversation(session_id)
 
         # Flush remaining TTS audio (skip if muted)
         if tts_stream:
@@ -957,7 +1032,7 @@ def assistant_chat():
         if total_input_tokens > 0 or total_tts_chars > 0:
             cost_info = _record_assistant_cost(
                 total_input_tokens, total_output_tokens,
-                MODEL, total_tts_chars
+                active_model, total_tts_chars
             )
             yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
 
@@ -983,8 +1058,9 @@ def clear_conversation():
     """Clear conversation history for a session."""
     data = request.json or {}
     session_id = data.get("session_id")
-    if session_id and session_id in conversations:
-        del conversations[session_id]
+    if session_id:
+        conversations.pop(session_id, None)
+        _persist_conversation(session_id)  # Removes from disk file
     return jsonify({"status": "cleared"})
 
 

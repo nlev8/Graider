@@ -440,38 +440,127 @@ async function findAndFillComment(page, assignmentName, commentText) {
   // Each row has: icon cells, Assignment name (as a link), Points, Percent, Grade, Comment, etc.
   // We need to find the row with the matching assignment name, then click its Comment cell.
 
-  // Get all table rows on the student detail page
+  // Get all assignment links on the student detail page.
+  // Each assignment row has an <a> tag with the assignment name.
+  // We match against the link text, NOT the full row text, to avoid
+  // false matches from grade/points data in other cells.
   const allRows = await page.locator('table tr').all();
   let targetRow = null;
   const assignLower = assignmentName.toLowerCase().trim();
 
-  emit('status', { message: 'Scanning ' + allRows.length + ' rows for assignment "' + assignmentName + '"...' });
+  // Collect all rows that have an assignment link with their names
+  var candidates = [];
+  for (var ri = 0; ri < allRows.length; ri++) {
+    var row = allRows[ri];
+    // Assignment name is in an <a> tag inside the row
+    var link = row.locator('a').first();
+    var linkText = '';
+    try {
+      linkText = await link.textContent();
+      linkText = (linkText || '').trim();
+    } catch (e) {
+      continue;
+    }
+    if (!linkText) continue;
+    candidates.push({ row: row, name: linkText, nameLower: linkText.toLowerCase() });
+  }
 
-  for (const row of allRows) {
-    // Get the full text of the row to check if it contains our assignment name
-    const rowText = await row.textContent().catch(() => '');
-    const rowTextLower = rowText.toLowerCase();
+  emit('status', { message: 'Found ' + candidates.length + ' assignments, matching "' + assignmentName + '"...' });
 
-    // Check for exact or partial match
-    if (rowTextLower.includes(assignLower)) {
-      targetRow = row;
-      emit('status', { message: 'Found exact row match for "' + assignmentName + '"' });
+  // Pass 1: Exact match (assignment link text equals or contains our full name)
+  for (var ci = 0; ci < candidates.length; ci++) {
+    var c = candidates[ci];
+    if (c.nameLower === assignLower || c.nameLower.includes(assignLower) || assignLower.includes(c.nameLower)) {
+      targetRow = c.row;
+      emit('status', { message: 'Exact match: "' + c.name + '"' });
       break;
     }
   }
 
-  // Fallback: try word-based matching
+  // Pass 2: Normalized match (strip punctuation, extra spaces, common prefixes)
   if (!targetRow) {
-    const assignWords = assignLower.split(/\s+/).filter(w => w.length > 3);
-    for (const row of allRows) {
-      const rowText = await row.textContent().catch(() => '');
-      const rowTextLower = rowText.toLowerCase();
-      const matchCount = assignWords.filter(w => rowTextLower.includes(w)).length;
-      if (matchCount >= Math.min(3, assignWords.length) && matchCount > 0) {
-        targetRow = row;
-        emit('status', { message: 'Found word match (' + matchCount + '/' + assignWords.length + ' words)' });
+    var normalize = function(s) {
+      return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    };
+    var assignNorm = normalize(assignmentName);
+    for (var ci2 = 0; ci2 < candidates.length; ci2++) {
+      var c2 = candidates[ci2];
+      var candNorm = normalize(c2.name);
+      if (candNorm === assignNorm || candNorm.includes(assignNorm) || assignNorm.includes(candNorm)) {
+        targetRow = c2.row;
+        emit('status', { message: 'Normalized match: "' + c2.name + '"' });
         break;
       }
+    }
+  }
+
+  // Pass 3: Best word-overlap match using Jaccard similarity.
+  // Requires >60% overlap AND the best score among all candidates.
+  // This prevents "Cornell Notes Slavery and Resistance" from matching
+  // "Cornell Notes The Growth of the Cotton Industry and Slavery pp 344-345"
+  // because the latter has many unmatched words, lowering its Jaccard score.
+  if (!targetRow) {
+    var stopWords = ['the', 'and', 'for', 'from', 'with', 'that', 'this', 'are', 'was', 'were', 'has', 'have', 'had'];
+    var getSignificantWords = function(s) {
+      return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function(w) {
+        return w.length > 2 && stopWords.indexOf(w) === -1;
+      });
+    };
+    var assignWords = getSignificantWords(assignmentName);
+    var bestScore = 0;
+    var bestCandidate = null;
+
+    for (var ci3 = 0; ci3 < candidates.length; ci3++) {
+      var c3 = candidates[ci3];
+      var candWords = getSignificantWords(c3.name);
+
+      // Count words from our assignment found in candidate (with fuzzy matching)
+      var matchedFromAssign = 0;
+      for (var wi = 0; wi < assignWords.length; wi++) {
+        var aw = assignWords[wi];
+        // Exact match first
+        if (candWords.indexOf(aw) !== -1) {
+          matchedFromAssign++;
+        } else {
+          // Fuzzy: match if one word starts with the other, or edit distance <= 2
+          for (var cwi = 0; cwi < candWords.length; cwi++) {
+            var cw = candWords[cwi];
+            if (aw.length >= 4 && cw.length >= 4) {
+              // Prefix match (e.g., "resist" matches "resistence" and "resistance")
+              var minLen = Math.min(aw.length, cw.length);
+              var shared = 0;
+              for (var chi = 0; chi < minLen; chi++) {
+                if (aw[chi] === cw[chi]) shared++; else break;
+              }
+              if (shared >= Math.max(minLen - 2, Math.floor(minLen * 0.7))) {
+                matchedFromAssign++;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Jaccard-like: intersection / union
+      // Union = unique words from both sides
+      var allWordsSet = {};
+      assignWords.forEach(function(w) { allWordsSet[w] = true; });
+      candWords.forEach(function(w) { allWordsSet[w] = true; });
+      var unionSize = Object.keys(allWordsSet).length;
+      var jaccardScore = unionSize > 0 ? matchedFromAssign / unionSize : 0;
+
+      // Also compute recall: what fraction of our words matched
+      var recall = assignWords.length > 0 ? matchedFromAssign / assignWords.length : 0;
+
+      if (jaccardScore > bestScore && recall >= 0.5) {
+        bestScore = jaccardScore;
+        bestCandidate = c3;
+      }
+    }
+
+    if (bestCandidate && bestScore >= 0.4) {
+      targetRow = bestCandidate.row;
+      emit('status', { message: 'Best word match (score ' + bestScore.toFixed(2) + '): "' + bestCandidate.name + '"' });
     }
   }
 

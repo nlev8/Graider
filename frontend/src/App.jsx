@@ -8073,23 +8073,6 @@ ${signature}`;
                           ` of ${status.results.length}`}
                         )
                       </h2>
-                      {/* Policy 428 Compliance Banner (FL only) */}
-                      {config.state === "FL" && status.results.length > 0 && (
-                        <div style={{
-                          display: "flex", alignItems: "center", gap: "8px",
-                          padding: "8px 14px", marginBottom: "12px",
-                          background: "rgba(99,102,241,0.08)",
-                          border: "1px solid rgba(99,102,241,0.15)",
-                          borderRadius: "8px", fontSize: "0.8rem",
-                          color: "var(--text-secondary)",
-                        }}>
-                          <Icon name="Shield" size={15} style={{ color: "#818cf8", flexShrink: 0 }} />
-                          <span>
-                            <strong style={{ color: "var(--text-primary)" }}>Policy 428:</strong>{" "}
-                            AI-suggested grades — teacher review and approval required before export
-                          </span>
-                        </div>
-                      )}
                       {/* Assignment Stats - shows when assignment filter is active */}
                       {resultsAssignmentFilter && (() => {
                         const assignmentResults = status.results.filter(r => (r.assignment || r.filename) === resultsAssignmentFilter);
@@ -11783,6 +11766,39 @@ ${signature}`;
                           No templates uploaded yet. Upload a sample file from your assessment platform to get started.
                         </div>
                       )}
+                    </div>
+
+                    {/* Assistant Model Selection */}
+                    <div>
+                      <h3 style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        marginTop: "25px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}>
+                        <Icon name="Sparkles" size={20} style={{ color: "#6366f1" }} />
+                        AI Assistant Model
+                      </h3>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <select
+                          className="input"
+                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                          value={config.assistant_model || "haiku"}
+                          onChange={(e) => {
+                            var updated = { ...config, assistant_model: e.target.value };
+                            setConfig(updated);
+                            api.saveGlobalSettings(updated).then(() => {
+                              addToast("Assistant model set to " + (e.target.value === "haiku" ? "Haiku (fast, low cost)" : "Sonnet (higher quality)"), "success");
+                            });
+                          }}
+                        >
+                          <option value="haiku">Haiku 4.5 — Fast, low cost ($0.80/$4 per 1M tokens)</option>
+                          <option value="sonnet">Sonnet 4 — Higher quality ($3/$15 per 1M tokens)</option>
+                        </select>
+                      </div>
                     </div>
 
                     {/* District Portal (VPortal) Credentials */}
@@ -22911,20 +22927,6 @@ ${signature}`;
               and Score columns.
             </p>
 
-            {/* Policy 428 notice for FL teachers */}
-            {config.state === "FL" && (
-              <div style={{
-                display: "flex", alignItems: "center", gap: "8px",
-                padding: "8px 12px", marginBottom: "15px",
-                background: "rgba(99,102,241,0.08)",
-                border: "1px solid rgba(99,102,241,0.15)",
-                borderRadius: "8px", fontSize: "0.78rem",
-                color: "var(--text-secondary)",
-              }}>
-                <Icon name="Shield" size={14} style={{ color: "#818cf8", flexShrink: 0 }} />
-                Policy 428: Grades must be teacher-approved before export
-              </div>
-            )}
 
             {/* Group results by assignment */}
             {(() => {
