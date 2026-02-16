@@ -17,6 +17,11 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from "recharts";
 import Icon from "./components/Icon";
 import { AssignmentPlayer } from "./components";
@@ -1089,6 +1094,8 @@ function App() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [analytics, setAnalytics] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentSortCol, setStudentSortCol] = useState("name");
+  const [studentSortDir, setStudentSortDir] = useState("asc");
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
@@ -2464,6 +2471,11 @@ function App() {
       avg_cost_per_student: filteredGrades.length > 0 ? Math.round(filteredCostTotal / filteredGrades.length * 10000) / 10000 : 0,
     } : analytics.cost_summary;
 
+    // Filter category_stats by student name
+    const filteredCategoryStats = (analytics.category_stats || []).filter((s) =>
+      studentNameMatchesPeriod(s.name, analyticsClassStudents),
+    );
+
     return {
       ...analytics,
       all_grades: filteredGrades,
@@ -2472,6 +2484,7 @@ function App() {
       attention_needed: filteredAttention,
       top_performers: filteredTop,
       cost_summary: filteredCostSummary,
+      category_stats: filteredCategoryStats,
     };
   }, [analytics, analyticsClassPeriod, analyticsClassStudents]);
 
@@ -10229,7 +10242,7 @@ ${signature}`;
                     </div>
 
                     {/* Notifications */}
-                    <div>
+                    <div style={{ marginTop: "30px" }}>
                       <h3
                         style={{
                           fontSize: "1.1rem",
@@ -11283,6 +11296,60 @@ ${signature}`;
                         </button>
                       </div>
                     </div>
+
+                    {/* Assistant Model Selection */}
+                    <div>
+                      <h3 style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        marginTop: "25px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}>
+                        <Icon name="Sparkles" size={20} style={{ color: "#6366f1" }} />
+                        AI Assistant Model
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                        Choose which AI model powers the Teaching Assistant chat.
+                      </p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <select
+                          className="input"
+                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                          value={config.assistant_model || "haiku"}
+                          onChange={(e) => {
+                            var updated = { ...config, assistant_model: e.target.value };
+                            setConfig(updated);
+                            api.saveGlobalSettings(updated).then(() => {
+                              var labels = {
+                                "haiku": "Haiku 4.5 (fast, low cost)",
+                                "sonnet": "Sonnet 4 (higher quality)",
+                                "gpt-4o-mini": "GPT-4o Mini (fast, low cost)",
+                                "gpt-4o": "GPT-4o (best quality)",
+                                "gemini-flash": "Gemini Flash (fast, low cost)",
+                                "gemini-pro": "Gemini Pro (balanced)"
+                              };
+                              addToast("Assistant model set to " + (labels[e.target.value] || e.target.value), "success");
+                            });
+                          }}
+                        >
+                          <optgroup label="Anthropic">
+                            <option value="haiku">Haiku 4.5 — Fast, low cost ($0.80/$4 per 1M tokens)</option>
+                            <option value="sonnet">Sonnet 4 — Higher quality ($3/$15 per 1M tokens)</option>
+                          </optgroup>
+                          <optgroup label="OpenAI">
+                            <option value="gpt-4o-mini">GPT-4o Mini — Fast, low cost ($0.15/$0.60 per 1M tokens)</option>
+                            <option value="gpt-4o">GPT-4o — Best quality ($2.50/$10 per 1M tokens)</option>
+                          </optgroup>
+                          <optgroup label="Google">
+                            <option value="gemini-flash">Gemini 2.0 Flash — Fast, low cost ($0.10/$0.40 per 1M tokens)</option>
+                            <option value="gemini-pro">Gemini 2.0 Pro — Balanced ($1.25/$5 per 1M tokens)</option>
+                          </optgroup>
+                        </select>
+                      </div>
+                    </div>
                       </>
                     )}
 
@@ -11820,39 +11887,6 @@ ${signature}`;
                           No templates uploaded yet. Upload a sample file from your assessment platform to get started.
                         </div>
                       )}
-                    </div>
-
-                    {/* Assistant Model Selection */}
-                    <div>
-                      <h3 style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        marginBottom: "15px",
-                        marginTop: "25px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}>
-                        <Icon name="Sparkles" size={20} style={{ color: "#6366f1" }} />
-                        AI Assistant Model
-                      </h3>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <select
-                          className="input"
-                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
-                          value={config.assistant_model || "haiku"}
-                          onChange={(e) => {
-                            var updated = { ...config, assistant_model: e.target.value };
-                            setConfig(updated);
-                            api.saveGlobalSettings(updated).then(() => {
-                              addToast("Assistant model set to " + (e.target.value === "haiku" ? "Haiku (fast, low cost)" : "Sonnet (higher quality)"), "success");
-                            });
-                          }}
-                        >
-                          <option value="haiku">Haiku 4.5 — Fast, low cost ($0.80/$4 per 1M tokens)</option>
-                          <option value="sonnet">Sonnet 4 — Higher quality ($3/$15 per 1M tokens)</option>
-                        </select>
-                      </div>
                     </div>
 
                     {/* District Portal (VPortal) Credentials */}
@@ -17162,29 +17196,29 @@ ${signature}`;
                             />
                             <Tooltip
                               cursor={{ strokeDasharray: "3 3" }}
-                              contentStyle={{
-                                background: "var(--modal-content-bg)",
-                                border: "1px solid var(--glass-border)",
-                                borderRadius: "8px",
-                                color: "var(--text-primary)",
+                              content={({ active, payload }) => {
+                                if (!active || !payload || !payload.length) return null;
+                                const d = payload[0]?.payload;
+                                if (!d) return null;
+                                return (
+                                  <div style={{
+                                    background: "var(--modal-content-bg)",
+                                    border: "1px solid var(--glass-border)",
+                                    borderRadius: "8px",
+                                    padding: "10px 14px",
+                                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                                  }}>
+                                    <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)", marginBottom: "6px" }}>
+                                      {d.name}
+                                    </div>
+                                    <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "3px" }}>
+                                      <span>Avg Score: {d.proficiency}%</span>
+                                      <span>Growth: {d.growth > 0 ? "+" : ""}{d.growth} pts</span>
+                                      <span>Assignments: {d.assignments}</span>
+                                    </div>
+                                  </div>
+                                );
                               }}
-                              labelStyle={{ color: "var(--text-primary)" }}
-                              itemStyle={{ color: "var(--text-secondary)" }}
-                              formatter={(value, name) => {
-                                if (name === "Growth")
-                                  return [
-                                    value > 0 ? `+${value}` : value,
-                                    "Growth (pts)",
-                                  ];
-                                if (name === "Proficiency")
-                                  return [`${value}%`, "Avg Score"];
-                                if (name === "Assignments")
-                                  return [value, "# Graded"];
-                                return [value, name];
-                              }}
-                              labelFormatter={(_, payload) =>
-                                payload[0]?.payload?.name || ""
-                              }
                             />
                             <Legend
                               verticalAlign="bottom"
@@ -17480,6 +17514,80 @@ ${signature}`;
                             );
                           })()}
 
+                        {selectedStudent &&
+                          (() => {
+                            const studentCats = (filteredAnalytics.category_stats || []).find(
+                              (s) => s.name === selectedStudent,
+                            );
+                            if (!studentCats) return null;
+                            const allCats = filteredAnalytics.category_stats || [];
+                            const classAvg = {
+                              content: allCats.length > 0 ? Math.round(allCats.reduce((sum, s) => sum + (s.content || 0), 0) / allCats.length) : 0,
+                              completeness: allCats.length > 0 ? Math.round(allCats.reduce((sum, s) => sum + (s.completeness || 0), 0) / allCats.length) : 0,
+                              writing: allCats.length > 0 ? Math.round(allCats.reduce((sum, s) => sum + (s.writing || 0), 0) / allCats.length) : 0,
+                              effort: allCats.length > 0 ? Math.round(allCats.reduce((sum, s) => sum + (s.effort || 0), 0) / allCats.length) : 0,
+                            };
+                            const radarData = [
+                              { category: "Content", student: studentCats.content || 0, classAvg: classAvg.content },
+                              { category: "Completeness", student: studentCats.completeness || 0, classAvg: classAvg.completeness },
+                              { category: "Writing", student: studentCats.writing || 0, classAvg: classAvg.writing },
+                              { category: "Effort", student: studentCats.effort || 0, classAvg: classAvg.effort },
+                            ];
+                            const catDetails = [
+                              { key: "content", label: "Content Accuracy", icon: "CheckCircle", color: "#6366f1" },
+                              { key: "completeness", label: "Completeness", icon: "ListChecks", color: "#8b5cf6" },
+                              { key: "writing", label: "Writing Quality", icon: "PenTool", color: "#a855f7" },
+                              { key: "effort", label: "Effort & Engagement", icon: "Zap", color: "#c084fc" },
+                            ];
+                            return (
+                              <div style={{ marginBottom: "20px" }}>
+                                <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <Icon name="Target" size={18} />
+                                  Rubric Performance
+                                </h4>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "start" }}>
+                                  <div style={{ display: "flex", justifyContent: "center" }}>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                      <RadarChart data={radarData}>
+                                        <PolarGrid stroke="rgba(148,163,184,0.3)" />
+                                        <PolarAngleAxis dataKey="category" tick={{ fill: "var(--text-secondary)", fontSize: 12 }} />
+                                        <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "var(--text-secondary)", fontSize: 10 }} />
+                                        <Radar name="Student" dataKey="student" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} />
+                                        <Radar name="Class Avg" dataKey="classAvg" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.1} />
+                                        <Legend />
+                                      </RadarChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                    {catDetails.map((cat) => {
+                                      const score = studentCats[cat.key] || 0;
+                                      const avg = classAvg[cat.key] || 0;
+                                      const diff = score - avg;
+                                      const barColor = score >= 80 ? "#4ade80" : score >= 60 ? "#60a5fa" : score >= 40 ? "#fbbf24" : "#f87171";
+                                      return (
+                                        <div key={cat.key} style={{ background: "rgba(255,255,255,0.03)", borderRadius: "10px", padding: "12px" }}>
+                                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                                            <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: 600 }}>
+                                              <Icon name={cat.icon} size={14} color={cat.color} />
+                                              {cat.label}
+                                            </span>
+                                            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: barColor }}>{score}%</span>
+                                          </div>
+                                          <div style={{ height: "6px", background: "rgba(148,163,184,0.15)", borderRadius: "3px", overflow: "hidden" }}>
+                                            <div style={{ height: "100%", width: Math.min(score, 100) + "%", background: barColor, borderRadius: "3px", transition: "width 0.5s ease" }} />
+                                          </div>
+                                          <div style={{ fontSize: "0.75rem", color: diff >= 0 ? "#4ade80" : "#f87171", marginTop: "4px" }}>
+                                            {diff >= 0 ? "+" : ""}{diff}% vs class avg
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                         {!selectedStudent && (
                           <p
                             style={{
@@ -17493,20 +17601,54 @@ ${signature}`;
                         )}
 
                         {(() => {
-                          const filtered = selectedStudent
-                            ? (filteredAnalytics.student_progress || []).filter(
-                                (s) => s.name === selectedStudent,
-                              )
-                            : filteredAnalytics.student_progress || [];
-                          const allGrades = filtered.flatMap((s) =>
-                            (s.grades || []).map((g) => ({
-                              ...g,
-                              student: s.name.split(" ")[0],
-                            })),
-                          );
-                          const chartData = allGrades.sort((a, b) =>
-                            (a.date || "").localeCompare(b.date || ""),
-                          );
+                          let chartData = [];
+
+                          if (selectedStudent) {
+                            // Single student: show their individual grades over time
+                            const studentData = (filteredAnalytics.student_progress || []).find(
+                              (s) => s.name === selectedStudent,
+                            );
+                            chartData = (studentData?.grades || [])
+                              .slice()
+                              .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+                              .map((g) => ({
+                                assignment: g.assignment,
+                                score: g.score,
+                                date: g.date,
+                              }));
+                          } else {
+                            // All students: show class average per assignment
+                            const assignmentMap = {};
+                            const assignmentOrder = [];
+                            for (const s of filteredAnalytics.student_progress || []) {
+                              for (const g of s.grades || []) {
+                                const key = g.assignment || "Unknown";
+                                if (!assignmentMap[key]) {
+                                  assignmentMap[key] = { scores: [], date: g.date || "" };
+                                  assignmentOrder.push(key);
+                                }
+                                assignmentMap[key].scores.push(g.score);
+                                if (g.date > assignmentMap[key].date) {
+                                  assignmentMap[key].date = g.date;
+                                }
+                              }
+                            }
+                            // Sort by the most recent date for each assignment
+                            assignmentOrder.sort((a, b) =>
+                              (assignmentMap[a].date || "").localeCompare(assignmentMap[b].date || ""),
+                            );
+                            chartData = assignmentOrder.map((name) => {
+                              const scores = assignmentMap[name].scores;
+                              const avg = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
+                              return {
+                                assignment: name,
+                                score: avg,
+                                count: scores.length,
+                                date: assignmentMap[name].date,
+                              };
+                            });
+                          }
+
                           const chartWidth = Math.max(
                             800,
                             chartData.length * 80,
@@ -17557,11 +17699,29 @@ ${signature}`;
                                         border: "1px solid var(--glass-border)",
                                         borderRadius: "8px",
                                       }}
-                                      formatter={(value) => [
-                                        value + "%",
-                                        "Score",
-                                      ]}
-                                      labelFormatter={(label) => label}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload || !payload.length) return null;
+                                        const d = payload[0]?.payload;
+                                        if (!d) return null;
+                                        return (
+                                          <div style={{
+                                            background: "var(--modal-content-bg)",
+                                            border: "1px solid var(--glass-border)",
+                                            borderRadius: "8px",
+                                            padding: "10px 14px",
+                                            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                                          }}>
+                                            <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)", marginBottom: "4px" }}>
+                                              {d.assignment}
+                                            </div>
+                                            <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "2px" }}>
+                                              <span>{selectedStudent ? "Score" : "Class Avg"}: {d.score}%</span>
+                                              {d.count && <span>Students: {d.count}</span>}
+                                              {d.date && <span>Date: {d.date}</span>}
+                                            </div>
+                                          </div>
+                                        );
+                                      }}
                                     />
                                     <Line
                                       type="monotone"
@@ -18627,16 +18787,77 @@ ${signature}`;
                         <table>
                           <thead>
                             <tr>
-                              <th>Student</th>
-                              <th style={{ textAlign: "center" }}>
-                                Assignments
-                              </th>
-                              <th style={{ textAlign: "center" }}>Average</th>
-                              <th style={{ textAlign: "center" }}>Trend</th>
+                              {[
+                                { key: "name", label: "Student" },
+                                { key: "assignments", label: "Assignments" },
+                                { key: "average", label: "Average" },
+                                { key: "content", label: "Content", small: true },
+                                { key: "completeness", label: "Complete", small: true },
+                                { key: "writing", label: "Writing", small: true },
+                                { key: "effort", label: "Effort", small: true },
+                                { key: "trend", label: "Trend" },
+                              ].map((col) => (
+                                <th
+                                  key={col.key}
+                                  onClick={() => {
+                                    if (studentSortCol === col.key) {
+                                      setStudentSortDir(studentSortDir === "asc" ? "desc" : "asc");
+                                    } else {
+                                      setStudentSortCol(col.key);
+                                      setStudentSortDir(col.key === "name" ? "asc" : "desc");
+                                    }
+                                  }}
+                                  style={{
+                                    textAlign: col.key === "name" ? "left" : "center",
+                                    fontSize: col.small ? "0.8rem" : undefined,
+                                    cursor: "pointer",
+                                    userSelect: "none",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {col.label}
+                                  {studentSortCol === col.key ? (
+                                    <span style={{ marginLeft: "4px", fontSize: "0.7rem" }}>
+                                      {studentSortDir === "asc" ? "\u25B2" : "\u25BC"}
+                                    </span>
+                                  ) : (
+                                    <span style={{ marginLeft: "4px", fontSize: "0.7rem", opacity: 0.3 }}>{"\u25BC"}</span>
+                                  )}
+                                </th>
+                              ))}
                             </tr>
                           </thead>
                           <tbody>
-                            {(filteredAnalytics.student_progress || []).map(
+                            {(() => {
+                              const catStats = filteredAnalytics.category_stats || [];
+                              const rows = (filteredAnalytics.student_progress || []).slice();
+                              const trendOrder = { improving: 2, steady: 1, declining: 0 };
+                              rows.sort((a, b) => {
+                                let av, bv;
+                                if (studentSortCol === "name") {
+                                  av = a.name.toLowerCase();
+                                  bv = b.name.toLowerCase();
+                                } else if (studentSortCol === "assignments") {
+                                  av = (a.grades || []).length;
+                                  bv = (b.grades || []).length;
+                                } else if (studentSortCol === "average") {
+                                  av = a.average || 0;
+                                  bv = b.average || 0;
+                                } else if (studentSortCol === "trend") {
+                                  av = trendOrder[a.trend] ?? 1;
+                                  bv = trendOrder[b.trend] ?? 1;
+                                } else {
+                                  const ac = catStats.find((c) => c.name === a.name);
+                                  const bc = catStats.find((c) => c.name === b.name);
+                                  av = ac ? (ac[studentSortCol] || 0) : 0;
+                                  bv = bc ? (bc[studentSortCol] || 0) : 0;
+                                }
+                                if (av < bv) return studentSortDir === "asc" ? -1 : 1;
+                                if (av > bv) return studentSortDir === "asc" ? 1 : -1;
+                                return 0;
+                              });
+                              return rows;
+                            })().map(
                               (s, i) => (
                                 <tr
                                   key={i}
@@ -18687,6 +18908,24 @@ ${signature}`;
                                       {s.average}%
                                     </span>
                                   </td>
+                                  {(() => {
+                                    const cats = (filteredAnalytics.category_stats || []).find((c) => c.name === s.name);
+                                    const catKeys = ["content", "completeness", "writing", "effort"];
+                                    return catKeys.map((key) => {
+                                      const val = cats ? (cats[key] || 0) : 0;
+                                      const barColor = val >= 80 ? "#4ade80" : val >= 60 ? "#60a5fa" : val >= 40 ? "#fbbf24" : "#f87171";
+                                      return (
+                                        <td key={key} style={{ textAlign: "center", padding: "8px 6px" }}>
+                                          <div style={{ display: "flex", alignItems: "center", gap: "4px", justifyContent: "center" }}>
+                                            <div style={{ width: "40px", height: "6px", background: "rgba(148,163,184,0.15)", borderRadius: "3px", overflow: "hidden" }}>
+                                              <div style={{ height: "100%", width: Math.min(val, 100) + "%", background: barColor, borderRadius: "3px" }} />
+                                            </div>
+                                            <span style={{ fontSize: "0.75rem", fontWeight: 600, color: barColor, minWidth: "28px" }}>{val}%</span>
+                                          </div>
+                                        </td>
+                                      );
+                                    });
+                                  })()}
                                   <td style={{ textAlign: "center" }}>
                                     <span
                                       style={{

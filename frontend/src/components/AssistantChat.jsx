@@ -6,15 +6,17 @@ import { useVoice } from '../hooks/useVoice'
 const API_BASE = ''
 
 const SUGGESTED_PROMPTS = [
+  { text: "How is my class doing across the rubric categories?", icon: "Target" },
   { text: "What caused the low grades on the last assignment?", icon: "Search" },
   { text: "What should I teach next based on student performance?", icon: "Lightbulb" },
   { text: "Which students need attention?", icon: "AlertTriangle" },
-  { text: "Compare my class periods on the last assignment", icon: "BarChart3" },
 ]
 
 const MORE_PROMPTS = [
   "What's the class average?",
   "How is [student name] doing?",
+  "Which rubric category is my class weakest in?",
+  "Compare my class periods on the last assignment",
   "Show students below 60 on Cornell Notes",
   "How much did incomplete sections affect scores?",
   "What were the common feedback themes?",
@@ -613,7 +615,7 @@ export default function AssistantChat({ addToast }) {
                 Ask about your students
               </h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '400px' }}>
-                I can look up grades, show analytics, compare assignments, create worksheets from readings, and help with Focus gradebook.
+                I can analyze rubric performance, spot trends, look up grades, compare assignments, create worksheets from readings, and help with Focus gradebook.
               </p>
             </div>
             <div style={{

@@ -24,6 +24,16 @@ try:
 except ImportError:
     anthropic = None
 
+try:
+    import openai as openai_pkg
+except ImportError:
+    openai_pkg = None
+
+try:
+    import google.generativeai as genai_pkg
+except ImportError:
+    genai_pkg = None
+
 from backend.services.assistant_tools import (
     TOOL_DEFINITIONS, execute_tool,
     _load_standards, _extract_pdf_text, _extract_docx_text,
@@ -41,15 +51,22 @@ CREDS_FILE = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
 AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
 
 ASSISTANT_MODELS = {
-    "haiku": "claude-haiku-4-5-20251001",
-    "sonnet": "claude-sonnet-4-20250514",
+    # Anthropic
+    "haiku": {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"},
+    "sonnet": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+    # OpenAI
+    "gpt-4o-mini": {"provider": "openai", "model": "gpt-4o-mini"},
+    "gpt-4o": {"provider": "openai", "model": "gpt-4o"},
+    # Google
+    "gemini-flash": {"provider": "gemini", "model": "gemini-2.0-flash"},
+    "gemini-pro": {"provider": "gemini", "model": "gemini-2.0-pro-exp-02-05"},
 }
 DEFAULT_MODEL = "haiku"
 MAX_TOKENS = 4096
 
 
 def _get_assistant_model():
-    """Read assistant_model from settings, default to haiku."""
+    """Read assistant_model from settings, return {provider, model} dict."""
     try:
         with open(SETTINGS_FILE, 'r') as f:
             settings = json.load(f)
@@ -57,6 +74,91 @@ def _get_assistant_model():
         return ASSISTANT_MODELS.get(choice, ASSISTANT_MODELS[DEFAULT_MODEL])
     except Exception:
         return ASSISTANT_MODELS[DEFAULT_MODEL]
+
+
+def _convert_tools_for_openai(anthropic_tools):
+    """Convert Anthropic tool definitions to OpenAI function calling format."""
+    return [{
+        "type": "function",
+        "function": {
+            "name": t["name"],
+            "description": t.get("description", ""),
+            "parameters": t.get("input_schema", {"type": "object", "properties": {}})
+        }
+    } for t in anthropic_tools]
+
+
+def _convert_messages_for_openai(messages, system_prompt):
+    """Convert Anthropic-style messages to OpenAI format."""
+    oai_messages = [{"role": "system", "content": system_prompt}]
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        # Handle Anthropic tool_result messages (sent as "user" with content list)
+        if role == "user" and isinstance(content, list):
+            # Check if these are tool results
+            if content and isinstance(content[0], dict) and content[0].get("type") == "tool_result":
+                for tr in content:
+                    oai_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tr.get("tool_use_id", ""),
+                        "content": tr.get("content", "")
+                    })
+                continue
+            # Multimodal content blocks — extract text
+            text_parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            oai_messages.append({"role": "user", "content": " ".join(text_parts) if text_parts else str(content)})
+            continue
+
+        # Handle assistant messages with tool_use blocks
+        if role == "assistant" and isinstance(content, list):
+            text_parts = []
+            tool_calls = []
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        text_parts.append(block["text"])
+                    elif block.get("type") == "tool_use":
+                        tool_calls.append({
+                            "id": block["id"],
+                            "type": "function",
+                            "function": {
+                                "name": block["name"],
+                                "arguments": json.dumps(block.get("input", {}))
+                            }
+                        })
+            msg_dict = {"role": "assistant", "content": " ".join(text_parts) if text_parts else None}
+            if tool_calls:
+                msg_dict["tool_calls"] = tool_calls
+            oai_messages.append(msg_dict)
+            continue
+
+        oai_messages.append({"role": role, "content": content if isinstance(content, str) else str(content)})
+    return oai_messages
+
+
+def _convert_tools_for_gemini(anthropic_tools):
+    """Convert Anthropic tool definitions to Gemini function declarations."""
+    declarations = []
+    for t in anthropic_tools:
+        schema = t.get("input_schema", {})
+        # Gemini doesn't support additionalProperties — strip it
+        props = schema.get("properties", {})
+        cleaned_props = {}
+        for k, v in props.items():
+            cleaned = {kk: vv for kk, vv in v.items() if kk != "additionalProperties"}
+            cleaned_props[k] = cleaned
+        declarations.append(genai_pkg.types.FunctionDeclaration(
+            name=t["name"],
+            description=t.get("description", ""),
+            parameters={
+                "type": "object",
+                "properties": cleaned_props,
+                "required": schema.get("required", [])
+            }
+        ))
+    return declarations
 
 # In-memory conversation store {session_id: {"messages": [...], "last_active": timestamp}}
 conversations = {}
@@ -404,6 +506,141 @@ def _load_assessment_templates():
     return templates
 
 
+def _load_analytics_snapshot():
+    """Build a compact analytics summary from master_grades.csv for the system prompt.
+
+    Returns a short text block with class averages, rubric category performance,
+    student trends, and attention flags — enough for proactive recommendations
+    without needing a tool call.
+    """
+    import csv
+    from collections import defaultdict
+
+    # Locate master_grades.csv
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    settings_file = os.path.expanduser("~/.graider_global_settings.json")
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, 'r') as f:
+                gs = json.load(f)
+            output_folder = gs.get('output_folder', output_folder)
+        except Exception:
+            pass
+
+    master_file = os.path.join(output_folder, "master_grades.csv")
+    if not os.path.exists(master_file):
+        return ""
+
+    try:
+        students = defaultdict(list)
+        categories = defaultdict(lambda: {"content": [], "completeness": [], "writing": [], "effort": []})
+        all_scores = []
+
+        # Map CSV column names to internal keys
+        col_map = {
+            "name": "Student Name",
+            "score": "Overall Score",
+            "approval": "Approved",
+            "content": "Content Accuracy",
+            "completeness": "Completeness",
+            "writing": "Writing Quality",
+            "effort": "Effort Engagement",
+        }
+
+        with open(master_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Skip rejected grades
+                if row.get(col_map["approval"], "").lower() == "rejected":
+                    continue
+                try:
+                    score = float(row.get(col_map["score"], 0))
+                except (ValueError, TypeError):
+                    continue
+                name = row.get(col_map["name"], "").strip()
+                if not name:
+                    continue
+                all_scores.append(score)
+                students[name].append(score)
+                # Category breakdowns
+                for cat in ["content", "completeness", "writing", "effort"]:
+                    try:
+                        val = float(row.get(col_map[cat], 0))
+                        if val > 0:
+                            categories[name][cat].append(val)
+                    except (ValueError, TypeError):
+                        pass
+
+        if not all_scores:
+            return ""
+
+        # Class-wide stats
+        class_avg = round(sum(all_scores) / len(all_scores), 1)
+        total_students = len(students)
+        total_assignments = len(all_scores)
+
+        # Category multipliers (same as analytics_routes.py)
+        multipliers = {"content": 2.5, "completeness": 4, "writing": 5, "effort": 6.67}
+        class_cats = {}
+        for cat, mult in multipliers.items():
+            all_vals = []
+            for name in categories:
+                vals = categories[name][cat]
+                if vals:
+                    all_vals.append(sum(vals) / len(vals) * mult)
+            class_cats[cat] = round(sum(all_vals) / len(all_vals), 1) if all_vals else 0
+
+        # Find weakest and strongest categories
+        cat_labels = {"content": "Content Accuracy", "completeness": "Completeness",
+                      "writing": "Writing Quality", "effort": "Effort & Engagement"}
+        sorted_cats = sorted(class_cats.items(), key=lambda x: x[1])
+        weakest = sorted_cats[0] if sorted_cats else None
+        strongest = sorted_cats[-1] if sorted_cats else None
+
+        # Student trends (improving/declining counts)
+        improving = 0
+        declining = 0
+        attention_students = []
+        for name, scores in students.items():
+            avg = round(sum(scores) / len(scores), 1)
+            if len(scores) >= 3:
+                first_half = scores[:len(scores) // 2]
+                second_half = scores[len(scores) // 2:]
+                first_avg = sum(first_half) / len(first_half)
+                second_avg = sum(second_half) / len(second_half)
+                if second_avg - first_avg >= 3:
+                    improving += 1
+                elif first_avg - second_avg >= 3:
+                    declining += 1
+            if avg < 70:
+                attention_students.append(name)
+
+        # Build compact summary
+        lines = []
+        lines.append(f"Class Overview: {total_students} students, {total_assignments} graded assignments, class average {class_avg}%")
+
+        cat_line = ", ".join(f"{cat_labels[c]}: {v}%" for c, v in sorted_cats)
+        lines.append(f"Rubric Categories: {cat_line}")
+
+        if weakest and strongest and weakest[0] != strongest[0]:
+            lines.append(f"Strongest: {cat_labels[strongest[0]]} ({strongest[1]}%). Weakest: {cat_labels[weakest[0]]} ({weakest[1]}%)")
+
+        trend_parts = []
+        if improving:
+            trend_parts.append(f"{improving} improving")
+        if declining:
+            trend_parts.append(f"{declining} declining")
+        if attention_students:
+            trend_parts.append(f"{len(attention_students)} below 70%")
+        if trend_parts:
+            lines.append(f"Student Trends: {', '.join(trend_parts)}")
+
+        return "\n".join(lines)
+
+    except Exception:
+        return ""
+
+
 def _build_system_prompt():
     """Build the system prompt dynamically, injecting teacher info from settings."""
     teacher_name = ""
@@ -607,6 +844,13 @@ STANDARDS & RESOURCES: The full curriculum standards and uploaded reference docu
         if rubric_data.get("generous"):
             prompt += "Mode: Generous grading enabled (benefit of the doubt on borderline scores)\n"
 
+    # Inject live analytics snapshot so the assistant can proactively reference performance
+    analytics_snapshot = _load_analytics_snapshot()
+    if analytics_snapshot:
+        prompt += "\n\n## CURRENT CLASS PERFORMANCE\n"
+        prompt += "Live snapshot from graded assignments. Use this to proactively offer insights and recommendations without waiting for a tool call. For deeper analysis, use tools like analyze_grade_causes or get_student_summary.\n"
+        prompt += analytics_snapshot
+
     # Inject available ed-tech tools
     if available_tools:
         prompt += "\n\n## AVAILABLE ED-TECH TOOLS\n"
@@ -741,12 +985,30 @@ def _cleanup_stale_sessions():
 @assistant_bp.route('/api/assistant/chat', methods=['POST'])
 def assistant_chat():
     """Stream chat responses with tool use via SSE."""
-    if anthropic is None:
-        return jsonify({"error": "anthropic package not installed. Run: pip install anthropic"}), 500
+    model_info = _get_assistant_model()
+    provider = model_info["provider"]
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY not set in .env"}), 500
+    # Validate provider SDK + API key
+    if provider == "anthropic":
+        if anthropic is None:
+            return jsonify({"error": "anthropic package not installed. Run: pip install anthropic"}), 500
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY not set in .env"}), 500
+    elif provider == "openai":
+        if openai_pkg is None:
+            return jsonify({"error": "openai package not installed. Run: pip install openai"}), 500
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return jsonify({"error": "OPENAI_API_KEY not set in .env"}), 500
+    elif provider == "gemini":
+        if genai_pkg is None:
+            return jsonify({"error": "google-generativeai package not installed. Run: pip install google-generativeai"}), 500
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            return jsonify({"error": "GEMINI_API_KEY not set in .env"}), 500
+    else:
+        return jsonify({"error": f"Unknown provider: {provider}"}), 500
 
     data = request.json
     if not data or not data.get("messages"):
@@ -792,7 +1054,6 @@ def assistant_chat():
         # Clear any stale cancel flag for this session
         cancelled_sessions.discard(session_id)
 
-        client = anthropic.Anthropic(api_key=api_key)
         messages = list(conv["messages"])
 
         # Voice mode: set up TTS streaming
@@ -844,62 +1105,206 @@ def assistant_chat():
         total_tts_chars = 0
 
         # Tool use loop — may need multiple rounds
-        active_model = _get_assistant_model()
+        active_model_info = model_info
+        active_model = active_model_info["model"]
+        active_provider = active_model_info["provider"]
+        system_prompt = _build_system_prompt()
         max_rounds = 5
         for _ in range(max_rounds):
             try:
                 full_response_text = ""
                 tool_use_blocks = []
 
-                with client.messages.stream(
-                    model=active_model,
-                    max_tokens=MAX_TOKENS,
-                    system=_build_system_prompt(),
-                    messages=messages,
-                    tools=TOOL_DEFINITIONS
-                ) as stream:
-                    for event in stream:
-                        # Check if user cancelled
-                        if session_id in cancelled_sessions:
-                            break
-
-                        if event.type == "content_block_start":
-                            if hasattr(event.content_block, 'type'):
-                                if event.content_block.type == "tool_use":
+                # ── ANTHROPIC STREAMING ──
+                if active_provider == "anthropic":
+                    client = anthropic.Anthropic(api_key=api_key)
+                    with client.messages.stream(
+                        model=active_model,
+                        max_tokens=MAX_TOKENS,
+                        system=system_prompt,
+                        messages=messages,
+                        tools=TOOL_DEFINITIONS
+                    ) as stream:
+                        for event in stream:
+                            if session_id in cancelled_sessions:
+                                break
+                            if event.type == "content_block_start":
+                                if hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
                                     tool_use_blocks.append({
                                         "id": event.content_block.id,
                                         "name": event.content_block.name,
                                         "input_json": ""
                                     })
                                     yield f"data: {json.dumps({'type': 'tool_start', 'tool': event.content_block.name, 'id': event.content_block.id})}\n\n"
+                            elif event.type == "content_block_delta":
+                                if hasattr(event.delta, 'text'):
+                                    full_response_text += event.delta.text
+                                    yield f"data: {json.dumps({'type': 'text_delta', 'content': event.delta.text})}\n\n"
+                                    if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                                        for sent in sentence_buffer.add(event.delta.text):
+                                            text_to_speak = sent + " "
+                                            tts_stream.send_text(text_to_speak)
+                                            total_tts_chars += len(text_to_speak)
+                                elif hasattr(event.delta, 'partial_json'):
+                                    if tool_use_blocks:
+                                        tool_use_blocks[-1]["input_json"] += event.delta.partial_json
+                            yield from _flush_audio_queue()
 
-                        elif event.type == "content_block_delta":
-                            if hasattr(event.delta, 'text'):
-                                full_response_text += event.delta.text
-                                yield f"data: {json.dumps({'type': 'text_delta', 'content': event.delta.text})}\n\n"
+                    try:
+                        final_msg = stream.get_final_message()
+                        if final_msg and hasattr(final_msg, 'usage') and final_msg.usage:
+                            total_input_tokens += final_msg.usage.input_tokens or 0
+                            total_output_tokens += final_msg.usage.output_tokens or 0
+                    except Exception:
+                        pass
 
-                                # Pipe text to TTS (skip if muted mid-stream)
-                                if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                                    for sent in sentence_buffer.add(event.delta.text):
-                                        text_to_speak = sent + " "
-                                        tts_stream.send_text(text_to_speak)
-                                        total_tts_chars += len(text_to_speak)
+                # ── OPENAI STREAMING ──
+                elif active_provider == "openai":
+                    oai_client = openai_pkg.OpenAI(api_key=api_key)
+                    oai_messages = _convert_messages_for_openai(messages, system_prompt)
+                    oai_tools = _convert_tools_for_openai(TOOL_DEFINITIONS)
 
-                            elif hasattr(event.delta, 'partial_json'):
-                                if tool_use_blocks:
-                                    tool_use_blocks[-1]["input_json"] += event.delta.partial_json
+                    stream = oai_client.chat.completions.create(
+                        model=active_model,
+                        messages=oai_messages,
+                        tools=oai_tools,
+                        max_tokens=MAX_TOKENS,
+                        stream=True
+                    )
 
-                        # Flush audio after every event type (not just text deltas)
+                    # Accumulate tool call deltas by index
+                    pending_tool_calls = {}  # index -> {id, name, arguments}
+                    for chunk in stream:
+                        if session_id in cancelled_sessions:
+                            break
+                        choice = chunk.choices[0] if chunk.choices else None
+                        if not choice:
+                            continue
+                        delta = choice.delta
+
+                        # Text content
+                        if delta and delta.content:
+                            full_response_text += delta.content
+                            yield f"data: {json.dumps({'type': 'text_delta', 'content': delta.content})}\n\n"
+                            if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                                for sent in sentence_buffer.add(delta.content):
+                                    text_to_speak = sent + " "
+                                    tts_stream.send_text(text_to_speak)
+                                    total_tts_chars += len(text_to_speak)
+
+                        # Tool call deltas
+                        if delta and delta.tool_calls:
+                            for tc_delta in delta.tool_calls:
+                                idx = tc_delta.index
+                                if idx not in pending_tool_calls:
+                                    pending_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                                if tc_delta.id:
+                                    pending_tool_calls[idx]["id"] = tc_delta.id
+                                if tc_delta.function and tc_delta.function.name:
+                                    pending_tool_calls[idx]["name"] = tc_delta.function.name
+                                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': tc_delta.function.name, 'id': tc_delta.id or pending_tool_calls[idx]['id']})}\n\n"
+                                if tc_delta.function and tc_delta.function.arguments:
+                                    pending_tool_calls[idx]["arguments"] += tc_delta.function.arguments
+
                         yield from _flush_audio_queue()
 
-                # Capture token usage from this round
-                try:
-                    final_msg = stream.get_final_message()
-                    if final_msg and hasattr(final_msg, 'usage') and final_msg.usage:
-                        total_input_tokens += final_msg.usage.input_tokens or 0
-                        total_output_tokens += final_msg.usage.output_tokens or 0
-                except Exception:
-                    pass  # Stream may have been interrupted by cancellation
+                        # Capture usage from final chunk
+                        if chunk.usage:
+                            total_input_tokens += chunk.usage.prompt_tokens or 0
+                            total_output_tokens += chunk.usage.completion_tokens or 0
+
+                    # Convert accumulated tool calls to tool_use_blocks
+                    for idx in sorted(pending_tool_calls.keys()):
+                        tc = pending_tool_calls[idx]
+                        if tc["name"]:
+                            tool_use_blocks.append({
+                                "id": tc["id"] or f"call_{idx}",
+                                "name": tc["name"],
+                                "input_json": tc["arguments"]
+                            })
+
+                # ── GEMINI STREAMING ──
+                elif active_provider == "gemini":
+                    genai_pkg.configure(api_key=api_key)
+                    gemini_tools = _convert_tools_for_gemini(TOOL_DEFINITIONS)
+                    gemini_model = genai_pkg.GenerativeModel(
+                        active_model,
+                        system_instruction=system_prompt,
+                        tools=[genai_pkg.types.Tool(function_declarations=gemini_tools)]
+                    )
+
+                    # Build Gemini chat history from messages
+                    gemini_history = []
+                    for msg in messages:
+                        role = msg.get("role", "user")
+                        content = msg.get("content", "")
+                        gemini_role = "model" if role == "assistant" else "user"
+
+                        if isinstance(content, list):
+                            # Handle tool results
+                            parts = []
+                            for block in content:
+                                if isinstance(block, dict):
+                                    if block.get("type") == "tool_result":
+                                        parts.append(genai_pkg.types.Part.from_function_response(
+                                            name="tool_response",
+                                            response={"result": block.get("content", "")}
+                                        ))
+                                    elif block.get("type") == "text":
+                                        parts.append(block["text"])
+                                    elif block.get("type") == "tool_use":
+                                        parts.append(genai_pkg.types.Part.from_function_response(
+                                            name=block.get("name", ""),
+                                            response=block.get("input", {})
+                                        ))
+                            if parts:
+                                gemini_history.append({"role": gemini_role, "parts": parts})
+                        else:
+                            gemini_history.append({"role": gemini_role, "parts": [content]})
+
+                    # Start chat and send last user message
+                    chat = gemini_model.start_chat(history=gemini_history[:-1] if gemini_history else [])
+                    last_parts = gemini_history[-1]["parts"] if gemini_history else ["Hello"]
+
+                    response = chat.send_message(last_parts, stream=True)
+                    for chunk in response:
+                        if session_id in cancelled_sessions:
+                            break
+                        if chunk.text:
+                            full_response_text += chunk.text
+                            yield f"data: {json.dumps({'type': 'text_delta', 'content': chunk.text})}\n\n"
+                            if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                                for sent in sentence_buffer.add(chunk.text):
+                                    text_to_speak = sent + " "
+                                    tts_stream.send_text(text_to_speak)
+                                    total_tts_chars += len(text_to_speak)
+                        yield from _flush_audio_queue()
+
+                    # Check for function calls in the final response
+                    try:
+                        for candidate in response.candidates:
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'function_call') and part.function_call:
+                                    fc = part.function_call
+                                    tool_id = f"gemini_{fc.name}_{uuid.uuid4().hex[:8]}"
+                                    tool_use_blocks.append({
+                                        "id": tool_id,
+                                        "name": fc.name,
+                                        "input_json": json.dumps(dict(fc.args)) if fc.args else "{}"
+                                    })
+                                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': fc.name, 'id': tool_id})}\n\n"
+                    except Exception:
+                        pass
+
+                    # Capture token usage
+                    try:
+                        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                            total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+                            total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+                    except Exception:
+                        pass
+
+                # ── POST-STREAM (shared across all providers) ──
 
                 # If cancelled or no tool calls, we're done
                 if session_id in cancelled_sessions:
@@ -920,19 +1325,16 @@ def assistant_chat():
                         tts_stream.send_text(text_to_speak)
                         total_tts_chars += len(text_to_speak)
                     tts_stream.flush()
-                    # Wait for ElevenLabs to signal generation complete (isFinal)
                     tts_stream.wait_for_flush(timeout=5.0)
-                    # Flush all generated audio to the frontend
                     yield from _flush_audio_queue()
 
-                # Build the assistant message with all content blocks
+                # Build the assistant message with all content blocks (Anthropic format for conversation store)
                 assistant_content = []
                 if full_response_text:
                     assistant_content.append({"type": "text", "text": full_response_text})
 
                 tool_results = []
                 for tb in tool_use_blocks:
-                    # Check cancellation before each tool — skip remaining tools
                     if session_id in cancelled_sessions:
                         break
 
@@ -948,22 +1350,17 @@ def assistant_chat():
                         "input": tool_input
                     })
 
-                    # Flush any pending audio before tool execution (which may take seconds)
                     yield from _flush_audio_queue()
 
-                    # Execute the tool
                     _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
                     result = execute_tool(tb["name"], tool_input)
                     result_str = json.dumps(result)
 
-                    # Flush audio that arrived during tool execution
                     yield from _flush_audio_queue()
 
-                    # Send tool result preview to client
                     preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
                     event_data = {'type': 'tool_result', 'tool': tb['name'], 'id': tb['id'], 'result_preview': preview}
 
-                    # Include download URL(s) from any tool that generates files
                     if isinstance(result, dict):
                         dl_url = result.get('download_url')
                         dl_name = result.get('filename')
@@ -982,19 +1379,18 @@ def assistant_chat():
                         "content": result_str
                     })
 
-                # If cancelled mid-tool-loop, stop — don't send partial results to Claude
                 if session_id in cancelled_sessions:
                     break
 
-                # Add assistant message and tool results to conversation
+                # Add assistant message and tool results to conversation (stored in Anthropic format)
                 messages.append({"role": "assistant", "content": assistant_content})
                 messages.append({"role": "user", "content": tool_results})
 
-            except anthropic.APIError as e:
-                yield f"data: {json.dumps({'type': 'error', 'content': f'API error: {str(e)}'})}\n\n"
-                break
             except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Error: {str(e)}'})}\n\n"
+                error_msg = str(e)
+                if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
+                    error_msg = f"API error ({active_provider}): {error_msg}"
+                yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
                 break
 
         # Update stored conversation with the final messages and persist to disk
