@@ -223,6 +223,15 @@ export function useVoice({ onTranscript }) {
     streamDoneRef.current = true
   }, [])
 
+  // Reset buffering state for clean playback after a pause (e.g. tool execution gap)
+  const prepareForNewSegment = useCallback(() => {
+    bufferingRef.current = true
+    if (bufferTimerRef.current) {
+      clearTimeout(bufferTimerRef.current)
+      bufferTimerRef.current = null
+    }
+  }, [])
+
   const enqueueAudioChunk = useCallback((base64Mp3) => {
     streamDoneRef.current = false  // Stream is actively sending chunks
     audioQueueRef.current.push(base64Mp3)
@@ -324,5 +333,6 @@ export function useVoice({ onTranscript }) {
     enqueueAudioChunk,
     markStreamDone,
     waitForPlaybackDone,
+    prepareForNewSegment,
   }
 }

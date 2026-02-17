@@ -310,6 +310,7 @@ export default function AssistantChat({ addToast }) {
               // showing the tool spinner — let the AI finish its sentence
               if (voiceModeRef.current) {
                 await voice.waitForPlaybackDone()
+                voice.prepareForNewSegment()  // Reset buffering for clean post-tool audio
               }
               setMessages(prev => {
                 const updated = [...prev]
@@ -768,7 +769,7 @@ export default function AssistantChat({ addToast }) {
                         className={tc.status === 'running' ? 'spin' : ''}
                       />
                       {tc.status === 'done'
-                        ? (toolNameMap[tc.tool] || tc.tool).replace(/ing /, 'ed ').replace(/Querying/, 'Queried').replace(/Loading/, 'Loaded').replace(/Analyzing/, 'Analyzed').replace(/Getting/, 'Got').replace(/Listing/, 'Listed').replace(/Creating/, 'Created').replace(/Exporting/, 'Exported').replace(/Generating/, 'Generated')
+                        ? (toolNameMap[tc.tool] || tc.tool).replace(/^Querying/, 'Queried').replace(/^Loading/, 'Loaded').replace(/^Analyzing/, 'Analyzed').replace(/^Getting/, 'Got').replace(/^Listing/, 'Listed').replace(/^Creating/, 'Created').replace(/^Exporting/, 'Exported').replace(/^Generating/, 'Generated').replace(/^Reading/, 'Read').replace(/^Checking/, 'Checked').replace(/^Scheduling/, 'Scheduled').replace(/^Adding/, 'Added').replace(/^Saving/, 'Saved').replace(/^Looking/, 'Looked')
                         : (toolNameMap[tc.tool] || tc.tool) + '...'}
                     </span>
                   ))}
@@ -842,6 +843,39 @@ export default function AssistantChat({ addToast }) {
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Floating stop button during streaming */}
+      {isStreaming && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '8px 0',
+        }}>
+          <button
+            onClick={stopStreaming}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 20px',
+              background: 'var(--glass-bg)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '20px',
+              color: 'var(--text-primary)',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--glass-bg)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <rect x="0" y="0" width="12" height="12" rx="2" />
+            </svg>
+            Stop generating
+          </button>
+        </div>
+      )}
 
       {/* Voice interim transcript */}
       {voice.isListening && voice.transcript && (

@@ -214,13 +214,13 @@ class ElevenLabsTTSStream:
             yield chunk
 
     def _keepalive_loop(self):
-        """Send a space every 15s to prevent ElevenLabs 20s idle timeout."""
+        """Send a space every 10s to prevent ElevenLabs 20s idle timeout."""
         while not self._closed:
-            time.sleep(5)
+            time.sleep(3)
             if self._closed:
                 break
             elapsed = time.time() - self._last_send
-            if elapsed >= 15:
+            if elapsed >= 10:
                 try:
                     self._send_json({"text": " "})
                     self._last_send = time.time()

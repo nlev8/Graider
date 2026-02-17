@@ -1114,6 +1114,7 @@ def assistant_chat():
             try:
                 full_response_text = ""
                 tool_use_blocks = []
+                deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
 
                 # ── ANTHROPIC STREAMING ──
                 if active_provider == "anthropic":
@@ -1135,7 +1136,8 @@ def assistant_chat():
                                         "name": event.content_block.name,
                                         "input_json": ""
                                     })
-                                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': event.content_block.name, 'id': event.content_block.id})}\n\n"
+                                    # Defer tool_start until after TTS flush so voice finishes its sentence
+                                    deferred_tool_starts.append({'type': 'tool_start', 'tool': event.content_block.name, 'id': event.content_block.id})
                             elif event.type == "content_block_delta":
                                 if hasattr(event.delta, 'text'):
                                     full_response_text += event.delta.text
@@ -1202,7 +1204,8 @@ def assistant_chat():
                                     pending_tool_calls[idx]["id"] = tc_delta.id
                                 if tc_delta.function and tc_delta.function.name:
                                     pending_tool_calls[idx]["name"] = tc_delta.function.name
-                                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': tc_delta.function.name, 'id': tc_delta.id or pending_tool_calls[idx]['id']})}\n\n"
+                                    # Defer tool_start until after TTS flush
+                                    deferred_tool_starts.append({'type': 'tool_start', 'tool': tc_delta.function.name, 'id': tc_delta.id or pending_tool_calls[idx]['id']})
                                 if tc_delta.function and tc_delta.function.arguments:
                                     pending_tool_calls[idx]["arguments"] += tc_delta.function.arguments
 
@@ -1292,7 +1295,8 @@ def assistant_chat():
                                         "name": fc.name,
                                         "input_json": json.dumps(dict(fc.args)) if fc.args else "{}"
                                     })
-                                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': fc.name, 'id': tool_id})}\n\n"
+                                    # Defer tool_start until after TTS flush
+                                    deferred_tool_starts.append({'type': 'tool_start', 'tool': fc.name, 'id': tool_id})
                     except Exception:
                         pass
 
@@ -1327,6 +1331,10 @@ def assistant_chat():
                     tts_stream.flush()
                     tts_stream.wait_for_flush(timeout=5.0)
                     yield from _flush_audio_queue()
+
+                # Now that voice audio is fully sent, notify frontend about tool calls
+                for ts_event in deferred_tool_starts:
+                    yield f"data: {json.dumps(ts_event)}\n\n"
 
                 # Build the assistant message with all content blocks (Anthropic format for conversation store)
                 assistant_content = []
