@@ -959,13 +959,17 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     marker_config = file_markers if use_section_points else None
                     effort_points = matched_config.get('effortPoints', 15) if use_section_points else 15
                 else:
-                    # NO MATCHING CONFIG FOUND - this is a potential problem!
-                    # Extract assignment name from filename
-                    if ' - ' in filepath.name:
-                        submitted_assignment = filepath.name.split(' - ', 1)[1]
-                        submitted_assignment = os.path.splitext(submitted_assignment)[0]
-                    else:
-                        submitted_assignment = os.path.splitext(filepath.name)[0]
+                    # NO MATCHING CONFIG FOUND
+                    # Use parse_filename to properly strip student name prefix
+                    import re
+                    parsed = parse_filename(filepath.name)
+                    submitted_assignment = parsed.get('assignment_part', '') or os.path.splitext(filepath.name)[0]
+                    # Clean up: remove trailing (N) version numbers and extensions
+                    submitted_assignment = re.sub(r'\s*\(\d+\)\s*$', '', submitted_assignment).strip()
+                    submitted_assignment = re.sub(r'\.docx?\s*$', '', submitted_assignment, flags=re.IGNORECASE).strip()
+                    submitted_assignment = re.sub(r'\.pdf\s*$', '', submitted_assignment, flags=re.IGNORECASE).strip()
+                    # Replace underscores with spaces for display
+                    submitted_assignment = submitted_assignment.replace('_', ' ').strip()
 
                     # Check if we're using a fallback config that doesn't match
                     fallback_title = assignment_config.get('title', '') if assignment_config else ''
@@ -1205,6 +1209,74 @@ STANDARD CLASS GRADING EXPECTATIONS:
 - Grade fairly according to grade-level expectations
 """
 
+                # Inject resubmission context so feedback references improvements
+                if filepath.name in resubmissions:
+                    sid = student_info.get('student_id', '')
+                    prev_r = None
+
+                    # Source 1: Current session results (has full breakdown + feedback)
+                    for r in grading_state["results"]:
+                        if r.get("student_id") == sid and r.get("assignment") == matched_title:
+                            prev_r = r
+                            break
+
+                    # Source 2: Master CSV fallback (prior session)
+                    if prev_r is None:
+                        try:
+                            master_csv = Path(output_folder) / "master_grades.csv"
+                            if master_csv.exists():
+                                import csv as csv_mod
+                                with open(master_csv, 'r', encoding='utf-8') as csvf:
+                                    reader = csv_mod.DictReader(csvf)
+                                    for row in reader:
+                                        if (row.get('Student ID', '') == sid and
+                                            row.get('Assignment', '').strip().lower() == matched_title.strip().lower()):
+                                            prev_r = {
+                                                "score": row.get('Overall Score', '?'),
+                                                "letter_grade": row.get('Letter Grade', '?'),
+                                                "feedback": row.get('Feedback', ''),
+                                                "breakdown": {}
+                                            }
+                                            break
+                        except Exception:
+                            pass
+
+                    if prev_r:
+                        prev_score = prev_r.get("score", "?")
+                        prev_grade = prev_r.get("letter_grade", "?")
+                        prev_breakdown = prev_r.get("breakdown", {})
+                        prev_feedback = str(prev_r.get("feedback", ""))
+                        if len(prev_feedback) > 500:
+                            prev_feedback = prev_feedback[:500] + "..."
+
+                        breakdown_lines = ""
+                        if prev_breakdown:
+                            breakdown_lines = (
+                                f"- Content Accuracy: {prev_breakdown.get('content_accuracy', '?')}/40\n"
+                                f"- Completeness: {prev_breakdown.get('completeness', '?')}/25\n"
+                                f"- Writing Quality: {prev_breakdown.get('writing_quality', '?')}/20\n"
+                                f"- Effort & Engagement: {prev_breakdown.get('effort_engagement', '?')}/15"
+                            )
+
+                        resub_context = (
+                            "\n\nRESUBMISSION CONTEXT:\n"
+                            "This student is resubmitting a previously graded assignment. "
+                            "Compare their new work to the previous submission and highlight specific improvements.\n\n"
+                            f"Previous submission:\n"
+                            f"- Score: {prev_score} ({prev_grade})\n"
+                            f"{breakdown_lines}\n"
+                            f"- Previous feedback: {prev_feedback}\n\n"
+                            "FEEDBACK INSTRUCTIONS FOR RESUBMISSION:\n"
+                            "1. Start feedback by acknowledging this is a resubmission and that the student took the initiative to improve their work\n"
+                            "2. Specifically call out what improved compared to the previous submission "
+                            "(e.g., 'Your definition of X is now much more complete - last time you missed the key detail about Y')\n"
+                            "3. If breakdown categories improved, mention which areas showed growth\n"
+                            "4. If some areas still need work, note them as 'still developing' rather than as failures\n"
+                            "5. End with encouragement about their growth mindset and willingness to revise\n"
+                        )
+                        file_ai_notes += resub_context
+                        print(f"  🔄 Injected resubmission context (prev score: {prev_score})")
+
                 # Read file
                 file_data = read_assignment_file(filepath)
                 if not file_data:
@@ -1348,125 +1420,171 @@ STANDARD CLASS GRADING EXPECTATIONS:
         api_error_occurred = False
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
-            # Submit all files as futures
-            future_to_file = {}
-            for i, filepath in enumerate(new_files):
+            # Submit files in batches for responsive stop and ordered results
+            file_index = 0
+            stop_break = False
+            while file_index < len(new_files) and not stop_break:
                 if grading_state.get("stop_requested", False):
-                    break
-                future = executor.submit(grade_single_file, filepath, i + 1, len(new_files))
-                future_to_file[future] = (filepath, i + 1)
-
-            # Process completed futures as they finish
-            for future in concurrent.futures.as_completed(future_to_file):
-                if grading_state.get("stop_requested", False):
-                    # Cancel remaining futures
-                    for f in future_to_file:
-                        f.cancel()
                     grading_state["log"].append("")
                     grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
                     break
 
-                filepath, file_num = future_to_file[future]
+                # Submit next batch
+                batch_end = min(file_index + PARALLEL_WORKERS, len(new_files))
+                future_to_file = {}
+                for i in range(file_index, batch_end):
+                    filepath = new_files[i]
+                    future = executor.submit(grade_single_file, filepath, i + 1, len(new_files))
+                    future_to_file[future] = (filepath, i + 1)
 
-                try:
-                    result = future.result()
-                except Exception as e:
-                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                    grading_state["log"].append(f"  ❌ Error: {str(e)}")
-                    continue
-
-                # Update progress
-                completed += 1
-                grading_state["progress"] = completed
-                grading_state["current_file"] = filepath.name
-
-                # Handle failed grading
-                if not result.get("success"):
-                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                    grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
-
-                    # Stop on API errors
-                    if result.get("is_api_error"):
-                        api_error_occurred = True
-                        grading_state["log"].append("")
-                        grading_state["log"].append("=" * 50)
-                        grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
-                        grading_state["log"].append("=" * 50)
-                        grading_state["error"] = f"API Error: {result.get('error')}"
-                        # Cancel remaining futures
+                # Wait for batch to complete, check stop between results
+                for future in concurrent.futures.as_completed(future_to_file):
+                    if grading_state.get("stop_requested", False):
                         for f in future_to_file:
                             f.cancel()
+                        grading_state["log"].append("")
+                        grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
+                        stop_break = True
                         break
-                    continue
 
-                # Log success
-                student_info = result["student_info"]
-                grade_result = result["grade_result"]
+                    filepath, file_num = future_to_file[future]
 
-                grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
-                for msg in result.get("log_messages", []):
-                    grading_state["log"].append(msg)
+                    try:
+                        result = future.result()
+                    except Exception as e:
+                        grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                        grading_state["log"].append(f"  ❌ Error: {str(e)}")
+                        continue
 
-                # Build grade record for export
-                file_data = result.get("file_data", {})
-                if file_data.get("type") == "text":
-                    student_content = file_data.get("content", "")[:5000]
-                    full_content = file_data.get("content", "")[:10000]
-                else:
-                    student_content = "[Image file]"
-                    full_content = "[Image file]"
+                    # Update progress
+                    completed += 1
+                    grading_state["progress"] = completed
+                    grading_state["current_file"] = filepath.name
 
-                grade_record = {
-                    **student_info,
-                    **grade_result,
-                    "filename": filepath.name,
-                    "assignment": result["matched_title"],
-                    "period": result["student_period"],
-                    "grading_period": grading_period,
-                    "has_markers": False,
-                    "config_mismatch": result.get("config_mismatch", False),
-                    "config_mismatch_reason": result.get("config_mismatch_reason", ""),
-                    "ai_model": ai_model
-                }
-                all_grades.append(grade_record)
+                    # Handle failed grading
+                    if not result.get("success"):
+                        grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                        grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
 
-                # Add to results for UI (remove any existing result for same file first - for regrading)
-                grading_state["results"] = [r for r in grading_state["results"] if r.get("filename") != filepath.name]
-                grading_state["results"].append({
-                    "student_name": student_info['student_name'],
-                    "student_id": student_info.get('student_id', ''),
-                    "student_email": student_info.get('email', ''),
-                    "filename": filepath.name,
-                    "filepath": str(filepath),
-                    "assignment": result["matched_title"],
-                    "period": result["student_period"],
-                    "score": int(float(grade_result.get('score', 0) or 0)),
-                    "letter_grade": grade_result.get('letter_grade', 'N/A'),
-                    "feedback": grade_result.get('feedback', ''),
-                    "student_content": student_content,
-                    "full_content": full_content,
-                    "breakdown": grade_result.get('breakdown', {}),
-                    "student_responses": grade_result.get('student_responses', []),
-                    "unanswered_questions": grade_result.get('unanswered_questions', []),
-                    "ai_detection": grade_result.get('ai_detection', {}),
-                    "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
-                    "baseline_deviation": result.get("baseline_deviation", {}),
-                    "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
-                    "marker_status": result.get("marker_status", "unverified"),
-                    "is_resubmission": filepath.name in resubmissions,
-                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
-                    "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
-                    "token_usage": grade_result.get('token_usage', {})
-                })
+                        # Stop on API errors
+                        if result.get("is_api_error"):
+                            api_error_occurred = True
+                            grading_state["log"].append("")
+                            grading_state["log"].append("=" * 50)
+                            grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
+                            grading_state["log"].append("=" * 50)
+                            grading_state["error"] = f"API Error: {result.get('error')}"
+                            for f in future_to_file:
+                                f.cancel()
+                            stop_break = True
+                            break
+                        continue
 
-                # Accumulate session cost
-                usage = grade_result.get('token_usage', {})
-                if usage:
-                    grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
-                    grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
-                    grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
-                    grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
+                    # Log success
+                    student_info = result["student_info"]
+                    grade_result = result["grade_result"]
+
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
+                    for msg in result.get("log_messages", []):
+                        grading_state["log"].append(msg)
+
+                    # Build grade record for export
+                    file_data = result.get("file_data", {})
+                    if file_data.get("type") == "text":
+                        student_content = file_data.get("content", "")[:5000]
+                        full_content = file_data.get("content", "")[:10000]
+                    else:
+                        student_content = "[Image file]"
+                        full_content = "[Image file]"
+
+                    grade_record = {
+                        **student_info,
+                        **grade_result,
+                        "filename": filepath.name,
+                        "assignment": result["matched_title"],
+                        "period": result["student_period"],
+                        "grading_period": grading_period,
+                        "has_markers": False,
+                        "config_mismatch": result.get("config_mismatch", False),
+                        "config_mismatch_reason": result.get("config_mismatch_reason", ""),
+                        "ai_model": ai_model,
+                        "email_approval": "pending"
+                    }
+
+                    # Resubmission handling: only replace if new score >= old score
+                    new_score = int(float(grade_result.get('score', 0) or 0))
+                    is_resub = filepath.name in resubmissions
+                    previous_result = None
+                    previous_score = None
+
+                    if is_resub:
+                        sid = student_info.get('student_id', '')
+                        assign = result["matched_title"]
+                        for r in grading_state["results"]:
+                            if r.get("student_id") == sid and r.get("assignment") == assign:
+                                previous_result = r
+                                previous_score = int(float(r.get("score", 0) or 0))
+                                break
+
+                        if previous_score is not None and new_score < previous_score:
+                            grading_state["log"].append(f"  ↳ Kept original grade ({previous_score}) — resubmission scored lower ({new_score})")
+                            if previous_result:
+                                previous_result["is_resubmission"] = True
+                                previous_result["resubmission_score"] = new_score
+                                previous_result["kept_higher"] = True
+                            continue
+
+                    all_grades.append(grade_record)
+
+                    # Add to results for UI (remove any existing result for same file first - for regrading)
+                    grading_state["results"] = [r for r in grading_state["results"] if r.get("filename") != filepath.name]
+                    # If resubmission replacing old student+assignment result, remove that too
+                    if is_resub and previous_result:
+                        sid = student_info.get('student_id', '')
+                        assign = result["matched_title"]
+                        grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
+
+                    grading_state["results"].append({
+                        "student_name": student_info['student_name'],
+                        "student_id": student_info.get('student_id', ''),
+                        "student_email": student_info.get('email', ''),
+                        "filename": filepath.name,
+                        "filepath": str(filepath),
+                        "assignment": result["matched_title"],
+                        "period": result["student_period"],
+                        "score": new_score,
+                        "letter_grade": grade_result.get('letter_grade', 'N/A'),
+                        "feedback": grade_result.get('feedback', ''),
+                        "student_content": student_content,
+                        "full_content": full_content,
+                        "breakdown": grade_result.get('breakdown', {}),
+                        "student_responses": grade_result.get('student_responses', []),
+                        "unanswered_questions": grade_result.get('unanswered_questions', []),
+                        "ai_detection": grade_result.get('ai_detection', {}),
+                        "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
+                        "baseline_deviation": result.get("baseline_deviation", {}),
+                        "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
+                        "marker_status": result.get("marker_status", "unverified"),
+                        "is_resubmission": is_resub,
+                        "previous_score": previous_score,
+                        "kept_higher": False,
+                        "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
+                        "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
+                        "token_usage": grade_result.get('token_usage', {}),
+                        "email_approval": "pending"
+                    })
+
+                    # Accumulate session cost
+                    usage = grade_result.get('token_usage', {})
+                    if usage:
+                        grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
+                        grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
+                        grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
+                        grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
+
+                # Advance to next batch
+                file_index = batch_end
 
         # Handle API error - stop and save
         if api_error_occurred:
@@ -1892,6 +2010,60 @@ def _remove_from_master_csv(result):
         print(f"Could not remove from master_grades.csv: {e}")
 
 
+def _sync_approval_to_master_csv(result, approval_status):
+    """Update the Approved column in master_grades.csv for a specific result."""
+    import re
+    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    master_file = os.path.join(output_folder, "master_grades.csv")
+    if not os.path.exists(master_file):
+        return
+
+    student_id = str(result.get('student_id', ''))
+    assignment = result.get('assignment', '')
+    if not student_id or not assignment:
+        return
+
+    def normalize(name):
+        n = name.strip()
+        n = re.sub(r'\s*\(\d+\)\s*$', '', n)
+        n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)
+        n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)
+        return n.strip().lower()
+
+    try:
+        with open(master_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            header = list(reader.fieldnames or [])
+            rows = list(reader)
+
+        # Add Approved column if missing (legacy CSV)
+        if 'Approved' not in header:
+            feedback_idx = header.index('Feedback') if 'Feedback' in header else -1
+            if feedback_idx >= 0:
+                header.insert(feedback_idx + 1, 'Approved')
+            else:
+                header.append('Approved')
+            for row in rows:
+                row['Approved'] = ''
+
+        updated = False
+        target_norm = normalize(assignment)
+        for row in rows:
+            row_sid = row.get('Student ID', '')
+            row_assign_norm = normalize(row.get('Assignment', ''))
+            if row_sid == student_id and row_assign_norm == target_norm:
+                row['Approved'] = approval_status
+                updated = True
+
+        if updated:
+            with open(master_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=header)
+                writer.writeheader()
+                writer.writerows(rows)
+    except Exception as e:
+        print(f"Could not sync approval to master_grades.csv: {e}")
+
+
 # ══════════════════════════════════════════════════════════════
 # DELETE SINGLE RESULT
 # ══════════════════════════════════════════════════════════════
@@ -1959,6 +2131,7 @@ def update_approval():
         if r.get('filename') == filename:
             r['email_approval'] = approval
             save_results(grading_state["results"])
+            _sync_approval_to_master_csv(r, approval)
             return jsonify({"status": "updated", "filename": filename, "approval": approval})
 
     return jsonify({"error": "Result not found"}), 404
@@ -1978,6 +2151,7 @@ def update_approvals_bulk():
         filename = r.get('filename')
         if filename in approvals:
             r['email_approval'] = approvals[filename]
+            _sync_approval_to_master_csv(r, approvals[filename])
             updated += 1
 
     if updated > 0:
@@ -2375,6 +2549,27 @@ def list_periods():
 
     except Exception as e:
         return jsonify({"error": str(e)})
+
+
+# ══════════════════════════════════════════════════════════════
+# USER MANUAL
+# ══════════════════════════════════════════════════════════════
+
+_user_manual_cache = {}
+
+@app.route('/api/user-manual', methods=['GET'])
+def get_user_manual():
+    """Return User_Manual.md content as JSON."""
+    try:
+        if 'content' not in _user_manual_cache:
+            manual_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'User_Manual.md')
+            if not os.path.exists(manual_path):
+                return jsonify({"error": "User manual not found"}), 404
+            with open(manual_path, 'r', encoding='utf-8') as f:
+                _user_manual_cache['content'] = f.read()
+        return jsonify({"content": _user_manual_cache['content']})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ══════════════════════════════════════════════════════════════
