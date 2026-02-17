@@ -902,7 +902,7 @@ def query_grades(student_name=None, assignment=None, period=None,
     filtered = []
     for row in rows:
         if student_name:
-            if student_name.lower() not in row["student_name"].lower():
+            if not _fuzzy_name_match(student_name, row["student_name"]):
                 continue
         if assignment:
             if assignment.lower() not in row["assignment"].lower():
@@ -2372,7 +2372,7 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
 
     # Mode 1: Specific student
     if student_name:
-        matches = [(sid, d) for sid, d in student_data.items() if student_name.lower() in d["name"].lower()]
+        matches = [(sid, d) for sid, d in student_data.items() if _fuzzy_name_match(student_name, d["name"])]
         if not matches:
             return {"error": f"No student found matching '{student_name}'"}
         sid, data = matches[0]
