@@ -11485,7 +11485,7 @@ ${signature}`;
                           onChange={(e) => {
                             var updated = { ...config, assistant_model: e.target.value };
                             setConfig(updated);
-                            api.saveGlobalSettings(updated).then(() => {
+                            api.saveGlobalSettings({ globalAINotes, config: updated }).then(() => {
                               var labels = {
                                 "haiku": "Haiku 4.5 (fast, low cost)",
                                 "sonnet": "Sonnet 4 (higher quality)",
@@ -11539,7 +11539,7 @@ ${signature}`;
                           onChange={(e) => {
                             var updated = { ...config, assistant_voice: e.target.value };
                             setConfig(updated);
-                            api.saveGlobalSettings(updated).then(() => {
+                            api.saveGlobalSettings({ globalAINotes, config: updated }).then(() => {
                               addToast("Voice set to " + e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1), "success");
                             });
                           }}

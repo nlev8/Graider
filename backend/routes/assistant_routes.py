@@ -70,7 +70,8 @@ def _get_assistant_model():
     try:
         with open(SETTINGS_FILE, 'r') as f:
             settings = json.load(f)
-        choice = settings.get("assistant_model", DEFAULT_MODEL)
+        # Check config sub-object first, then top-level for backwards compat
+        choice = settings.get("config", {}).get("assistant_model") or settings.get("assistant_model", DEFAULT_MODEL)
         return ASSISTANT_MODELS.get(choice, ASSISTANT_MODELS[DEFAULT_MODEL])
     except Exception:
         return ASSISTANT_MODELS[DEFAULT_MODEL]
@@ -1073,7 +1074,8 @@ def assistant_chat():
                 voice_choice = None
                 try:
                     with open(SETTINGS_FILE, 'r') as f:
-                        voice_choice = json.load(f).get("assistant_voice")
+                        settings = json.load(f)
+                    voice_choice = settings.get("config", {}).get("assistant_voice") or settings.get("assistant_voice")
                 except Exception:
                     pass
                 tts_stream = OpenAITTSStream(voice=voice_choice)
@@ -1609,7 +1611,8 @@ def get_voice_config():
     voice = os.environ.get("OPENAI_TTS_VOICE", "nova")
     try:
         with open(SETTINGS_FILE, 'r') as f:
-            voice = json.load(f).get("assistant_voice", voice)
+            settings = json.load(f)
+        voice = settings.get("config", {}).get("assistant_voice") or settings.get("assistant_voice", voice)
     except Exception:
         pass
     return jsonify({
