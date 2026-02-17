@@ -1046,12 +1046,18 @@ def get_class_analytics(period=None):
     all_scores = [r["score"] for r in rows]
     class_avg = round(sum(all_scores) / len(all_scores), 1) if all_scores else 0
 
+    # Grade distribution by unique student averages, not raw submissions
+    student_avg_scores = []
+    for name, grades in students.items():
+        s_scores = [g["score"] for g in grades]
+        student_avg_scores.append(round(sum(s_scores) / len(s_scores), 1))
+
     grade_dist = {
-        "A": len([s for s in all_scores if s >= 90]),
-        "B": len([s for s in all_scores if 80 <= s < 90]),
-        "C": len([s for s in all_scores if 70 <= s < 80]),
-        "D": len([s for s in all_scores if 60 <= s < 70]),
-        "F": len([s for s in all_scores if s < 60])
+        "A": len([s for s in student_avg_scores if s >= 90]),
+        "B": len([s for s in student_avg_scores if 80 <= s < 90]),
+        "C": len([s for s in student_avg_scores if 70 <= s < 80]),
+        "D": len([s for s in student_avg_scores if 60 <= s < 70]),
+        "F": len([s for s in student_avg_scores if s < 60])
     }
 
     # Student averages for ranking
@@ -1126,13 +1132,16 @@ def list_assignments_tool():
 
     assignments = defaultdict(list)
     for row in rows:
-        assignments[row["assignment"]].append(row["score"])
+        assignments[row["assignment"]].append(row)
 
     result = []
-    for name, scores in sorted(assignments.items()):
+    for name, items in sorted(assignments.items()):
+        scores = [r["score"] for r in items]
+        unique_students = set(r["student_name"] for r in items)
         result.append({
             "assignment": name,
-            "student_count": len(scores),
+            "student_count": len(unique_students),
+            "submission_count": len(scores),
             "average_score": round(sum(scores) / len(scores), 1) if scores else 0
         })
 
@@ -1480,12 +1489,23 @@ def compare_periods(assignment_name=None):
     period_data = []
     for p, items in sorted(by_period.items()):
         scores = [_safe_int_score(r.get('score')) for r in items]
+
+        # Count unique students and compute grade dist from per-student averages
+        period_students = defaultdict(list)
+        for r in items:
+            sname = r.get('student_name', r.get('name', 'Unknown'))
+            period_students[sname].append(_safe_int_score(r.get('score')))
+
+        student_avg_scores = []
+        for sname, s_scores in period_students.items():
+            student_avg_scores.append(round(sum(s_scores) / len(s_scores), 1))
+
         grade_dist = {
-            "A": len([s for s in scores if s >= 90]),
-            "B": len([s for s in scores if 80 <= s < 90]),
-            "C": len([s for s in scores if 70 <= s < 80]),
-            "D": len([s for s in scores if 60 <= s < 70]),
-            "F": len([s for s in scores if s < 60])
+            "A": len([s for s in student_avg_scores if s >= 90]),
+            "B": len([s for s in student_avg_scores if 80 <= s < 90]),
+            "C": len([s for s in student_avg_scores if 70 <= s < 80]),
+            "D": len([s for s in student_avg_scores if 60 <= s < 70]),
+            "F": len([s for s in student_avg_scores if s < 60])
         }
 
         # Category averages
@@ -1506,7 +1526,8 @@ def compare_periods(assignment_name=None):
 
         period_data.append({
             "period": p,
-            "student_count": len(items),
+            "student_count": len(period_students),
+            "submission_count": len(items),
             "average": round(sum(scores) / len(scores), 1) if scores else 0,
             "median": round(statistics.median(scores), 1) if scores else 0,
             "grade_distribution": grade_dist,
