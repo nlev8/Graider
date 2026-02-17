@@ -2351,24 +2351,68 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
     if not rows:
         return {"error": "No grading data available"}
 
-    period_assigns, assign_display, merge_map = _get_period_assignments(rows)
+    # Use roster to map student_id -> class period (authoritative)
+    roster = _load_roster()
+    roster_period_map = {}  # student_id -> normalized class period
+    for s in roster:
+        if s.get("student_id"):
+            roster_period_map[s["student_id"]] = _normalize_period(s["period"])
 
-    # Build per-student data keyed by student_id (merges name variants like "vincent scar" + "Vincent Ray Scarola")
+    # Build per-student data keyed by student_id
     student_data = defaultdict(lambda: {"assigns": set(), "period": "", "name": ""})
     for r in rows:
         sid = r.get("student_id", "")
         name = r["student_name"]
         if not sid or sid == "UNKNOWN":
             continue
-        p = _normalize_period(r.get("period", "") or r.get("quarter", ""))
         norm_assign = _normalize_assignment_name(r["assignment"])
-        norm_assign = merge_map.get(norm_assign, norm_assign)
         student_data[sid]["assigns"].add(norm_assign)
-        if p:
-            student_data[sid]["period"] = p
-        # Keep the longest name variant as display name
+        # Class period from roster (authoritative), not grading quarter
+        if not student_data[sid]["period"] and sid in roster_period_map:
+            student_data[sid]["period"] = roster_period_map[sid]
         if len(name) > len(student_data[sid]["name"]):
             student_data[sid]["name"] = name
+
+    # Build assignment list per CLASS PERIOD (what other students in same period submitted)
+    class_period_assigns = defaultdict(set)
+    assign_display = {}
+    for sid, data in student_data.items():
+        p = data["period"]
+        if not p:
+            continue
+        for norm_assign in data["assigns"]:
+            class_period_assigns[p].add(norm_assign)
+
+    # Build display name map from rows
+    for r in rows:
+        norm = _normalize_assignment_name(r["assignment"])
+        if norm not in assign_display or len(r["assignment"]) > len(assign_display[norm]):
+            assign_display[norm] = r["assignment"]
+
+    # Merge truncated assignment names
+    all_norms = sorted(assign_display.keys(), key=len, reverse=True)
+    merge_map = {}
+    for i, short in enumerate(all_norms):
+        if short in merge_map:
+            continue
+        short_lower = short.lower()
+        for long in all_norms[:i]:
+            if long in merge_map:
+                continue
+            if len(short_lower) >= 20 and long.lower().startswith(short_lower) and short_lower != long.lower():
+                merge_map[short] = long
+                break
+
+    if merge_map:
+        for p in class_period_assigns:
+            class_period_assigns[p] = {merge_map.get(n, n) for n in class_period_assigns[p]}
+        for sid in student_data:
+            student_data[sid]["assigns"] = {merge_map.get(n, n) for n in student_data[sid]["assigns"]}
+        for short, long in merge_map.items():
+            if short in assign_display:
+                if long not in assign_display or len(assign_display[short]) > len(assign_display[long]):
+                    assign_display[long] = assign_display[short]
+                del assign_display[short]
 
     # Mode 1: Specific student
     if student_name:
@@ -2377,7 +2421,7 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
             return {"error": f"No student found matching '{student_name}'"}
         sid, data = matches[0]
         p = data["period"]
-        all_assigns = period_assigns.get(p, set())
+        all_assigns = class_period_assigns.get(p, set())
         missing = all_assigns - data["assigns"]
         return {
             "student_name": data["name"],
@@ -2392,7 +2436,7 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
     # Mode 2: By period — all students missing work
     if period:
         period_norm = _normalize_period(period)
-        all_assigns = period_assigns.get(period_norm, set())
+        all_assigns = class_period_assigns.get(period_norm, set())
         if not all_assigns:
             return {"error": f"No graded assignments found for {period_norm}"}
 
