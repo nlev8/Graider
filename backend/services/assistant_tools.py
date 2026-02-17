@@ -2339,11 +2339,37 @@ def list_document_styles_tool():
         return {"error": "Failed to list styles: " + str(e)}
 
 
+def _load_saved_assignments():
+    """Load saved assignment configs from ~/.graider_assignments/.
+    Returns list of dicts with normalized name and display title."""
+    saved = []
+    if not os.path.exists(ASSIGNMENTS_DIR):
+        return saved
+    for f in sorted(os.listdir(ASSIGNMENTS_DIR)):
+        if not f.endswith('.json'):
+            continue
+        try:
+            with open(os.path.join(ASSIGNMENTS_DIR, f), 'r', encoding='utf-8') as fh:
+                data = json.load(fh)
+            title = data.get('title', f.replace('.json', ''))
+            saved.append({
+                "title": title,
+                "norm": _normalize_assignment_name(title),
+            })
+        except Exception:
+            pass
+    return saved
+
+
 def get_missing_assignments(student_name=None, period=None, assignment_name=None):
     """Find missing/unsubmitted assignments.
 
+    Compares student submissions against saved assignment configs
+    (the assignments the teacher set up to grade), NOT against what
+    other students submitted.
+
     Three modes:
-    1. student_name → list assignments this student hasn't submitted
+    1. student_name → list saved assignments this student hasn't submitted
     2. period → list all students in that period with missing work
     3. assignment_name → list students who are missing that specific assignment
     """
@@ -2351,12 +2377,22 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
     if not rows:
         return {"error": "No grading data available"}
 
+    # Load saved assignment configs — the source of truth for what should be graded
+    saved_assignments = _load_saved_assignments()
+    if not saved_assignments:
+        return {"error": "No saved assignment configs found in Grading Setup"}
+
+    saved_norms = {a["norm"] for a in saved_assignments}
+    saved_display = {a["norm"]: a["title"] for a in saved_assignments}
+
     # Use roster to map student_id -> class period (authoritative)
     roster = _load_roster()
-    roster_period_map = {}  # student_id -> normalized class period
+    roster_period_map = {}
+    roster_name_map = {}
     for s in roster:
         if s.get("student_id"):
             roster_period_map[s["student_id"]] = _normalize_period(s["period"])
+            roster_name_map[s["student_id"]] = s["name"]
 
     # Build per-student data keyed by student_id
     student_data = defaultdict(lambda: {"assigns": set(), "period": "", "name": ""})
@@ -2366,53 +2402,31 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
         if not sid or sid == "UNKNOWN":
             continue
         norm_assign = _normalize_assignment_name(r["assignment"])
-        student_data[sid]["assigns"].add(norm_assign)
-        # Class period from roster (authoritative), not grading quarter
+        # Only track assignments that match a saved config
+        if norm_assign in saved_norms:
+            student_data[sid]["assigns"].add(norm_assign)
+        else:
+            # Try fuzzy match against saved assignment titles
+            for sn in saved_norms:
+                sd = saved_display.get(sn, sn)
+                if _fuzzy_name_match(norm_assign, sn) or _normalize_assignment_name(sd).startswith(norm_assign[:20]) or norm_assign.startswith(_normalize_assignment_name(sd)[:20]):
+                    student_data[sid]["assigns"].add(sn)
+                    break
+            else:
+                # Still record it so submitted count is accurate
+                student_data[sid]["assigns"].add(norm_assign)
         if not student_data[sid]["period"] and sid in roster_period_map:
             student_data[sid]["period"] = roster_period_map[sid]
-        if len(name) > len(student_data[sid]["name"]):
+        if sid in roster_name_map and len(roster_name_map[sid]) > len(student_data[sid]["name"]):
+            student_data[sid]["name"] = roster_name_map[sid]
+        elif len(name) > len(student_data[sid]["name"]):
             student_data[sid]["name"] = name
 
-    # Build assignment list per CLASS PERIOD (what other students in same period submitted)
-    class_period_assigns = defaultdict(set)
-    assign_display = {}
-    for sid, data in student_data.items():
-        p = data["period"]
-        if not p:
-            continue
-        for norm_assign in data["assigns"]:
-            class_period_assigns[p].add(norm_assign)
-
-    # Build display name map from rows
-    for r in rows:
-        norm = _normalize_assignment_name(r["assignment"])
-        if norm not in assign_display or len(r["assignment"]) > len(assign_display[norm]):
-            assign_display[norm] = r["assignment"]
-
-    # Merge truncated assignment names
-    all_norms = sorted(assign_display.keys(), key=len, reverse=True)
-    merge_map = {}
-    for i, short in enumerate(all_norms):
-        if short in merge_map:
-            continue
-        short_lower = short.lower()
-        for long in all_norms[:i]:
-            if long in merge_map:
-                continue
-            if len(short_lower) >= 20 and long.lower().startswith(short_lower) and short_lower != long.lower():
-                merge_map[short] = long
-                break
-
-    if merge_map:
-        for p in class_period_assigns:
-            class_period_assigns[p] = {merge_map.get(n, n) for n in class_period_assigns[p]}
-        for sid in student_data:
-            student_data[sid]["assigns"] = {merge_map.get(n, n) for n in student_data[sid]["assigns"]}
-        for short, long in merge_map.items():
-            if short in assign_display:
-                if long not in assign_display or len(assign_display[short]) > len(assign_display[long]):
-                    assign_display[long] = assign_display[short]
-                del assign_display[short]
+    # Also add roster students who have NO grading data at all
+    for sid, period in roster_period_map.items():
+        if sid not in student_data:
+            student_data[sid]["period"] = period
+            student_data[sid]["name"] = roster_name_map.get(sid, "Unknown")
 
     # Mode 1: Specific student
     if student_name:
@@ -2420,66 +2434,60 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
         if not matches:
             return {"error": f"No student found matching '{student_name}'"}
         sid, data = matches[0]
-        p = data["period"]
-        all_assigns = class_period_assigns.get(p, set())
-        missing = all_assigns - data["assigns"]
+        # Compare against saved assignments only
+        submitted_saved = data["assigns"] & saved_norms
+        missing = saved_norms - data["assigns"]
         return {
             "student_name": data["name"],
-            "period": p,
-            "submitted_count": len(data["assigns"]),
-            "total_in_period": len(all_assigns),
+            "period": data["period"],
+            "submitted_count": len(submitted_saved),
+            "total_assignments": len(saved_norms),
             "missing_count": len(missing),
-            "submitted": sorted(assign_display.get(n, n) for n in data["assigns"]),
-            "missing": sorted(assign_display.get(n, n) for n in missing),
+            "submitted": sorted(saved_display.get(n, n) for n in submitted_saved),
+            "missing": sorted(saved_display.get(n, n) for n in missing),
         }
 
     # Mode 2: By period — all students missing work
     if period:
         period_norm = _normalize_period(period)
-        all_assigns = class_period_assigns.get(period_norm, set())
-        if not all_assigns:
-            return {"error": f"No graded assignments found for {period_norm}"}
-
         students_missing = []
         for sid, data in student_data.items():
             if data["period"] != period_norm:
                 continue
-            missing = all_assigns - data["assigns"]
+            missing = saved_norms - data["assigns"]
+            submitted_saved = data["assigns"] & saved_norms
             if missing:
                 students_missing.append({
                     "student_name": data["name"],
                     "missing_count": len(missing),
-                    "submitted_count": len(data["assigns"]),
-                    "missing": sorted(assign_display.get(n, n) for n in missing),
+                    "submitted_count": len(submitted_saved),
+                    "missing": sorted(saved_display.get(n, n) for n in missing),
                 })
         students_missing.sort(key=lambda x: -x["missing_count"])
 
         return {
             "period": period_norm,
-            "total_assignments": len(all_assigns),
+            "total_assignments": len(saved_norms),
             "students_with_missing": len(students_missing),
             "students": students_missing[:30],
         }
 
     # Mode 3: By assignment — which students are missing it
     if assignment_name:
-        target_norm = _normalize_assignment_name(assignment_name)
-        # Find matching assignment across all periods
-        found_in_periods = set()
-        for p, assigns in period_assigns.items():
-            for a in assigns:
-                if assignment_name.lower() in assign_display.get(a, a).lower() or assignment_name.lower() in a.lower():
-                    target_norm = a
-                    found_in_periods.add(p)
+        # Find matching saved assignment
+        target_norm = None
+        for sa in saved_assignments:
+            if assignment_name.lower() in sa["title"].lower() or assignment_name.lower() in sa["norm"].lower():
+                target_norm = sa["norm"]
+                break
+        if not target_norm:
+            return {"error": f"No saved assignment found matching '{assignment_name}'"}
 
-        if not found_in_periods:
-            return {"error": f"No assignment found matching '{assignment_name}'"}
-
-        display_name = assign_display.get(target_norm, assignment_name)
+        display_name = saved_display.get(target_norm, assignment_name)
         missing_students = []
         submitted_students = []
         for sid, data in student_data.items():
-            if data["period"] not in found_in_periods:
+            if not data["period"]:
                 continue
             if target_norm in data["assigns"]:
                 submitted_students.append({"student_name": data["name"], "period": data["period"]})
@@ -2489,7 +2497,6 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
         missing_students.sort(key=lambda x: (x["period"], x["student_name"]))
         return {
             "assignment": display_name,
-            "periods_assigned": sorted(found_in_periods),
             "submitted_count": len(submitted_students),
             "missing_count": len(missing_students),
             "missing_students": missing_students,
