@@ -769,17 +769,17 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "get_calendar",
-        "description": "Read the teaching calendar — scheduled lessons and holidays for a date range. Use when the teacher asks 'what am I teaching this week?', 'what's on my calendar?', 'what's coming up?', or anything about their schedule.",
+        "description": "Read the teaching calendar — scheduled lessons and holidays for a date range. AUTHORITATIVE source for what the teacher is teaching. If scheduled_lessons is non-empty, those lessons ARE scheduled — always reference them by title and topic. Use when the teacher asks 'what am I teaching this week?', 'what's on my calendar?', 'generate a worksheet for Tuesday', or anything about their schedule. When asked about a specific day, set both start_date and end_date to that exact date.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "start_date": {
                     "type": "string",
-                    "description": "Start date in YYYY-MM-DD format. Defaults to today."
+                    "description": "Start date in YYYY-MM-DD format. Defaults to today. For a specific day like 'Tuesday Feb 17', use '2026-02-17'."
                 },
                 "end_date": {
                     "type": "string",
-                    "description": "End date in YYYY-MM-DD format. Defaults to 7 days from start."
+                    "description": "End date in YYYY-MM-DD format. Defaults to 7 days from start. For a specific day, set equal to start_date."
                 }
             }
         }
