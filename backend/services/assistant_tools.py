@@ -179,6 +179,19 @@ def _load_results():
         return []
 
 
+def _normalize_period(p):
+    """Normalize period strings so '6', 'period 6', 'Period 6', 'Period_6' all match."""
+    if not p or p == 'all':
+        return p
+    import re
+    s = p.strip().lower().replace('_', ' ')
+    # Extract just the number if present
+    m = re.search(r'\d+', s)
+    if m:
+        return f"Period {m.group()}"
+    return p
+
+
 def _load_master_csv(period_filter='all'):
     """Load and parse the master grades CSV, then merge in any results from
     the results JSON that aren't already present. This ensures the Assistant
@@ -194,6 +207,7 @@ def _load_master_csv(period_filter='all'):
 
     output_folder = _get_output_folder()
     master_file = os.path.join(output_folder, "master_grades.csv")
+    period_filter = _normalize_period(period_filter)
 
     rows = []
     seen_keys = set()  # (student_id, normalized_assignment)
@@ -206,7 +220,7 @@ def _load_master_csv(period_filter='all'):
                 for row in reader:
                     if not row.get("Student Name"):
                         continue
-                    if period_filter != 'all' and row.get("Quarter", "") != period_filter:
+                    if period_filter != 'all' and _normalize_period(row.get("Quarter", "")) != period_filter:
                         continue
                     sid = row.get("Student ID", "")
                     assign = row.get("Assignment", "")
@@ -284,7 +298,7 @@ def _load_master_csv(period_filter='all'):
         # Not in master CSV — add it from results JSON
         breakdown = r.get("breakdown", {})
         period = r.get("period", "") or name_to_period.get(rname.lower().strip(), "")
-        if period_filter != 'all' and period_filter not in (period, ""):
+        if period_filter != 'all' and _normalize_period(period) != period_filter and period != "":
             continue
         rows.append({
             "student_name": rname if len(rname) > 5 else next((row["student_name"] for row in rows if row["student_id"] == sid), rname),
@@ -1049,7 +1063,8 @@ def get_class_analytics(period=None):
     # Get roster count for the requested period (authoritative student count)
     roster = _load_roster()
     if period and period != 'all':
-        roster_for_period = [s for s in roster if s["period"].lower() == period.lower()]
+        norm_p = _normalize_period(period)
+        roster_for_period = [s for s in roster if _normalize_period(s["period"]) == norm_p]
     else:
         roster_for_period = roster
     roster_student_count = len(roster_for_period) if roster_for_period else None
@@ -1498,7 +1513,7 @@ def compare_periods(assignment_name=None):
     roster = _load_roster()
     roster_by_period = defaultdict(list)
     for s in roster:
-        roster_by_period[s["period"]].append(s)
+        roster_by_period[_normalize_period(s["period"])].append(s)
 
     # Group by period
     by_period = defaultdict(list)
@@ -1545,7 +1560,7 @@ def compare_periods(assignment_name=None):
                              if r.get('unanswered_questions') and len(r.get('unanswered_questions', [])) > 0)
 
         # Use roster count (authoritative) if available, else graded count
-        roster_match = roster_by_period.get(p, [])
+        roster_match = roster_by_period.get(_normalize_period(p), [])
         total_students = len(roster_match) if roster_match else len(period_students)
 
         period_data.append({
