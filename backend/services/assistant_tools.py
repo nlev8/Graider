@@ -1046,6 +1046,14 @@ def get_class_analytics(period=None):
     all_scores = [r["score"] for r in rows]
     class_avg = round(sum(all_scores) / len(all_scores), 1) if all_scores else 0
 
+    # Get roster count for the requested period (authoritative student count)
+    roster = _load_roster()
+    if period and period != 'all':
+        roster_for_period = [s for s in roster if s["period"].lower() == period.lower()]
+    else:
+        roster_for_period = roster
+    roster_student_count = len(roster_for_period) if roster_for_period else None
+
     # Grade distribution by unique student averages, not raw submissions
     student_avg_scores = []
     for name, grades in students.items():
@@ -1079,9 +1087,15 @@ def get_class_analytics(period=None):
     top_performers = student_avgs[:5]
     attention_needed = [s for s in student_avgs if s["average"] < 70 or s["trend"] == "declining"]
 
+    # Use roster count when available, fall back to graded student count
+    total_students = roster_student_count if roster_student_count else len(students)
+    students_not_graded = max(0, total_students - len(students)) if roster_student_count else 0
+
     return {
         "class_average": class_avg,
-        "total_students": len(students),
+        "total_students": total_students,
+        "students_with_grades": len(students),
+        "students_not_graded": students_not_graded,
         "total_grades": len(rows),
         "grade_distribution": grade_dist,
         "top_performers": top_performers,
@@ -1480,6 +1494,12 @@ def compare_periods(assignment_name=None):
     if not results:
         return {"error": "No grading results available"}
 
+    # Load roster for authoritative student counts per period
+    roster = _load_roster()
+    roster_by_period = defaultdict(list)
+    for s in roster:
+        roster_by_period[s["period"]].append(s)
+
     # Group by period
     by_period = defaultdict(list)
     for r in results:
@@ -1490,7 +1510,7 @@ def compare_periods(assignment_name=None):
     for p, items in sorted(by_period.items()):
         scores = [_safe_int_score(r.get('score')) for r in items]
 
-        # Count unique students and compute grade dist from per-student averages
+        # Count unique graded students and compute grade dist from per-student averages
         period_students = defaultdict(list)
         for r in items:
             sname = r.get('student_name', r.get('name', 'Unknown'))
@@ -1524,9 +1544,14 @@ def compare_periods(assignment_name=None):
         with_omissions = sum(1 for r in items
                              if r.get('unanswered_questions') and len(r.get('unanswered_questions', [])) > 0)
 
+        # Use roster count (authoritative) if available, else graded count
+        roster_match = roster_by_period.get(p, [])
+        total_students = len(roster_match) if roster_match else len(period_students)
+
         period_data.append({
             "period": p,
-            "student_count": len(period_students),
+            "student_count": total_students,
+            "students_with_grades": len(period_students),
             "submission_count": len(items),
             "average": round(sum(scores) / len(scores), 1) if scores else 0,
             "median": round(statistics.median(scores), 1) if scores else 0,
