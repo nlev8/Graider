@@ -1338,7 +1338,7 @@ def assistant_chat():
                         tts_stream.send_text(text_to_speak)
                         total_tts_chars += len(text_to_speak)
                     tts_stream.flush()
-                    tts_stream.wait_for_flush(timeout=5.0)
+                    tts_stream.wait_for_flush(timeout=15.0)
                     yield from _flush_audio_queue()
 
                 # Now that voice audio is fully sent, notify frontend about tool calls
@@ -1423,7 +1423,7 @@ def assistant_chat():
                     tts_stream.send_text(text_to_speak)
                     total_tts_chars += len(text_to_speak)
                 tts_stream.flush()
-                tts_stream.wait_for_flush(timeout=5.0)
+                tts_stream.wait_for_flush(timeout=15.0)
             tts_stream.close()
             # Drain final audio chunks (only if not muted)
             if audio_out_queue and session_id not in tts_muted_sessions:
