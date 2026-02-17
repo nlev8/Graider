@@ -22,8 +22,8 @@ export function useVoice({ onTranscript }) {
   const bufferingRef = useRef(true)
   const bufferTimerRef = useRef(null)
   const streamDoneRef = useRef(false)
-  const PRE_BUFFER_CHUNKS = 3
-  const PRE_BUFFER_MS = 600
+  const PRE_BUFFER_CHUNKS = 5
+  const PRE_BUFFER_MS = 2000
   const SILENCE_TIMEOUT_MS = 4000
 
   // Keep ref in sync for use in callbacks
@@ -173,13 +173,14 @@ export function useVoice({ onTranscript }) {
 
   const playNextChunk = useCallback(async () => {
     if (audioQueueRef.current.length === 0) {
-      // If the SSE stream is still sending, wait longer for more chunks
-      // (tool calls and text generation can cause multi-second gaps between audio)
-      const maxRetries = streamDoneRef.current ? 1 : 8
+      // If the SSE stream is still sending, wait longer for more chunks.
+      // On slow connections (hotspot), TTS API calls can take 2-3s each,
+      // so we need a generous window to avoid premature silence.
+      const maxRetries = streamDoneRef.current ? 2 : 20
       for (let i = 0; i < maxRetries; i++) {
         await new Promise(r => setTimeout(r, 500))
         if (audioQueueRef.current.length > 0) break
-        if (streamDoneRef.current) break  // Stream ended, no point waiting more
+        if (streamDoneRef.current) break
       }
       if (audioQueueRef.current.length === 0) {
         isPlayingRef.current = false

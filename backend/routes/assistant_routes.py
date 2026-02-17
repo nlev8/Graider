@@ -217,7 +217,7 @@ def _load_conversation(session_id):
         logger.warning("Failed to load conversation %s: %s", session_id, e)
     return None
 
-# Per-session TTS mute flag — set by frontend to stop ElevenLabs mid-stream
+# Per-session TTS mute flag — set by frontend to stop TTS mid-stream
 tts_muted_sessions = set()
 
 # Per-session cancellation flag — stops the tool loop when user clicks Stop
@@ -228,8 +228,9 @@ RUBRIC_FILE = os.path.expanduser("~/.graider_rubric.json")
 MEMORY_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
 ASSISTANT_COSTS_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_costs.json")
 
-# ElevenLabs pricing — approximate per-character cost (varies by plan tier)
-ELEVENLABS_COST_PER_CHAR = 0.00024  # ~$0.24 per 1K chars (mid-tier estimate)
+# OpenAI TTS pricing — $0.015 per 1K characters (tts-1 model)
+TTS_COST_PER_CHAR = 0.000015
+OPENAI_TTS_VOICES = ["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
 PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 ACCOMMODATIONS_FILE = os.path.join(GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
 TEMPLATES_DIR = os.path.join(GRAIDER_DATA_DIR, "assessment_templates")
@@ -903,13 +904,13 @@ def _audit_log(action, details=""):
 logger = logging.getLogger(__name__)
 
 
-def _record_assistant_cost(input_tokens, output_tokens, model, elevenlabs_chars=0):
+def _record_assistant_cost(input_tokens, output_tokens, model, tts_chars=0):
     """Record assistant API usage to persistent JSON file."""
     from assignment_grader import MODEL_PRICING
 
     pricing = MODEL_PRICING.get(model, {"input": 0, "output": 0})
     claude_cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
-    tts_cost = elevenlabs_chars * ELEVENLABS_COST_PER_CHAR
+    tts_cost = tts_chars * TTS_COST_PER_CHAR
     total_cost = round(claude_cost + tts_cost, 6)
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -917,8 +918,8 @@ def _record_assistant_cost(input_tokens, output_tokens, model, elevenlabs_chars=
         "claude_input_tokens": 0,
         "claude_output_tokens": 0,
         "claude_cost": 0,
-        "elevenlabs_chars": 0,
-        "elevenlabs_cost": 0,
+        "tts_chars": 0,
+        "tts_cost": 0,
         "total_cost": 0,
         "api_calls": 0,
     }
@@ -942,8 +943,8 @@ def _record_assistant_cost(input_tokens, output_tokens, model, elevenlabs_chars=
         t["claude_input_tokens"] = t.get("claude_input_tokens", 0) + input_tokens
         t["claude_output_tokens"] = t.get("claude_output_tokens", 0) + output_tokens
         t["claude_cost"] = round(t.get("claude_cost", 0) + claude_cost, 6)
-        t["elevenlabs_chars"] = t.get("elevenlabs_chars", 0) + elevenlabs_chars
-        t["elevenlabs_cost"] = round(t.get("elevenlabs_cost", 0) + tts_cost, 6)
+        t["tts_chars"] = t.get("tts_chars", 0) + tts_chars
+        t["tts_cost"] = round(t.get("tts_cost", 0) + tts_cost, 6)
         t["total_cost"] = round(t.get("total_cost", 0) + total_cost, 6)
         t["api_calls"] = t.get("api_calls", 0) + 1
 
@@ -954,8 +955,8 @@ def _record_assistant_cost(input_tokens, output_tokens, model, elevenlabs_chars=
         d["claude_input_tokens"] = d.get("claude_input_tokens", 0) + input_tokens
         d["claude_output_tokens"] = d.get("claude_output_tokens", 0) + output_tokens
         d["claude_cost"] = round(d.get("claude_cost", 0) + claude_cost, 6)
-        d["elevenlabs_chars"] = d.get("elevenlabs_chars", 0) + elevenlabs_chars
-        d["elevenlabs_cost"] = round(d.get("elevenlabs_cost", 0) + tts_cost, 6)
+        d["tts_chars"] = d.get("tts_chars", 0) + tts_chars
+        d["tts_cost"] = round(d.get("tts_cost", 0) + tts_cost, 6)
         d["total_cost"] = round(d.get("total_cost", 0) + total_cost, 6)
         d["api_calls"] = d.get("api_calls", 0) + 1
 
@@ -1066,10 +1067,16 @@ def assistant_chat():
 
         if voice_mode:
             try:
-                from backend.services.elevenlabs_service import (
-                    ElevenLabsTTSStream, SentenceBuffer
+                from backend.services.openai_tts_service import (
+                    OpenAITTSStream, SentenceBuffer
                 )
-                tts_stream = ElevenLabsTTSStream()
+                voice_choice = None
+                try:
+                    with open(SETTINGS_FILE, 'r') as f:
+                        voice_choice = json.load(f).get("assistant_voice")
+                except Exception:
+                    pass
+                tts_stream = OpenAITTSStream(voice=voice_choice)
                 tts_stream.connect()
                 sentence_buffer = SentenceBuffer()
                 audio_out_queue = queue.Queue()
@@ -1472,7 +1479,7 @@ def clear_conversation():
 
 @assistant_bp.route('/api/assistant/mute-tts', methods=['POST'])
 def mute_tts():
-    """Mute TTS for a session — stops sending text to ElevenLabs mid-stream."""
+    """Mute TTS for a session — stops sending text to TTS mid-stream."""
     data = request.json or {}
     session_id = data.get("session_id")
     if session_id:
@@ -1508,8 +1515,8 @@ def get_assistant_costs():
                 "claude_input_tokens": 0,
                 "claude_output_tokens": 0,
                 "claude_cost": 0,
-                "elevenlabs_chars": 0,
-                "elevenlabs_cost": 0,
+                "tts_chars": 0,
+                "tts_cost": 0,
                 "total_cost": 0,
                 "api_calls": 0,
             },
@@ -1598,12 +1605,16 @@ def get_credentials():
 @assistant_bp.route('/api/assistant/voice-config', methods=['GET'])
 def get_voice_config():
     """Return voice TTS configuration status."""
-    api_key = os.environ.get("ELEVENLABS_API_KEY", "")
-    voice_id = os.environ.get(
-        "ELEVENLABS_VOICE_ID", "UgBBYS2sOqTuMpoF3BR0"
-    )
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    voice = os.environ.get("OPENAI_TTS_VOICE", "nova")
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            voice = json.load(f).get("assistant_voice", voice)
+    except Exception:
+        pass
     return jsonify({
         "enabled": bool(api_key),
-        "voice_id": voice_id,
-        "voice_name": "James",
+        "voice": voice,
+        "voice_name": voice.capitalize(),
+        "voices": OPENAI_TTS_VOICES,
     })

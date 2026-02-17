@@ -45,6 +45,7 @@ const TABS = [
   { id: "resources", label: "Resources", icon: "FolderOpen" },
   { id: "assistant", label: "Assistant", icon: "Sparkles" },
   { id: "settings", label: "Settings", icon: "Settings" },
+  { id: "help", label: "Help", icon: "HelpCircle" },
 ];
 
 // Marker libraries by subject
@@ -1089,6 +1090,9 @@ function App() {
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [helpManual, setHelpManual] = useState("");
+  const [helpSearch, setHelpSearch] = useState("");
+  const [helpExpanded, setHelpExpanded] = useState({});
   const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy, billing
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
@@ -1157,7 +1161,7 @@ function App() {
   const [missingStudentFilter, setMissingStudentFilter] = useState(""); // Student to check for missing assignments
   const [missingUploadedFiles, setMissingUploadedFiles] = useState([]); // Files in folder for missing check
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
-  const [skipVerified, setSkipVerified] = useState(false); // Skip verified grades on regrade
+  const [skipVerified, setSkipVerified] = useState(false); // When true, regrade ALL including verified
   const [excludeGradedStudents, setExcludeGradedStudents] = useState(false); // Exclude students already in results
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
@@ -1865,6 +1869,16 @@ function App() {
       if (status.results && status.results.length > 0) {
         const costStr = status.session_cost?.total_cost > 0 ? ` (API cost: $${status.session_cost.total_cost.toFixed(4)})` : "";
         addToast(`Grading complete! ${status.results.length} assignments graded.${costStr}`, "success");
+        // Resubmission summary notification
+        const resubCount = status.results.filter(r => r.is_resubmission).length;
+        if (resubCount > 0) {
+          const keptCount = status.results.filter(r => r.is_resubmission && r.kept_higher).length;
+          const improvedCount = resubCount - keptCount;
+          let msg = resubCount + " resubmission(s) detected.";
+          if (improvedCount > 0) msg += " " + improvedCount + " improved.";
+          if (keptCount > 0) msg += " " + keptCount + " kept original (higher) grade.";
+          addToast(msg, "info", 8000);
+        }
       }
     }
   }, [status.is_running, status.current_file, status.results]);
@@ -2142,6 +2156,16 @@ function App() {
           setVportalConfigured(data.configured || false);
           if (data.email) setVportalEmail(data.email);
         })
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+  // Lazy-load user manual when Help tab is first opened
+  useEffect(() => {
+    if (activeTab === "help" && !helpManual) {
+      fetch("/api/user-manual")
+        .then(r => r.json())
+        .then(data => { if (data.content) setHelpManual(data.content); })
         .catch(() => {});
     }
   }, [activeTab]);
@@ -2735,7 +2759,7 @@ function App() {
         // Pass selected files (null means grade all new files)
         selectedFiles: filesToGrade,
         // Skip verified grades on regrade (only regrade unverified)
-        skipVerified: skipVerified,
+        skipVerified: !skipVerified,
         // Pass the period name for differentiated grading expectations
         classPeriod: selectedPeriodName,
         // Pass ensemble models if enabled (need at least 2 models)
@@ -6465,28 +6489,8 @@ ${signature}`;
               )}
             </div>
 
-            {/* Right: Tutorial Replay + Theme Toggle */}
+            {/* Right: Theme Toggle */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <button
-              onClick={() => { setTutorialStep(0); setShowTutorial(true); }}
-              title="Replay tutorial"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 36,
-                height: 36,
-                borderRadius: "8px",
-                border: "1px solid var(--glass-border)",
-                background: "var(--glass-bg)",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                fontWeight: 700,
-              }}
-            >
-              ?
-            </button>
             <button
               onClick={toggleTheme}
               style={{
@@ -7534,7 +7538,7 @@ ${signature}`;
                               <span
                                 style={{ fontWeight: 600, color: "#fbbf24" }}
                               >
-                                Skip Verified Grades (Regrade Only Unverified)
+                                Regrade All (Including Verified)
                               </span>
                               <p
                                 style={{
@@ -7543,18 +7547,7 @@ ${signature}`;
                                   margin: "4px 0 0 0",
                                 }}
                               >
-                                {
-                                  status.results.filter(
-                                    (r) => r.marker_status === "unverified",
-                                  ).length
-                                }{" "}
-                                unverified assignments will be regraded.{" "}
-                                {
-                                  status.results.filter(
-                                    (r) => r.marker_status === "verified",
-                                  ).length
-                                }{" "}
-                                verified grades will be kept.
+                                {`Check to also regrade ${status.results.filter((r) => r.marker_status === "verified").length} verified grades. ${status.results.filter((r) => r.marker_status === "unverified").length} unverified will always be regraded.`}
                               </p>
                             </div>
                           </label>
@@ -7596,7 +7589,7 @@ ${signature}`;
                             <span
                               style={{ fontWeight: 600, color: "#22c55e" }}
                             >
-                              Exclude Already Graded Students
+                              Exclude Already Graded Files
                             </span>
                             <p
                               style={{
@@ -7605,7 +7598,7 @@ ${signature}`;
                                 margin: "4px 0 0 0",
                               }}
                             >
-                              Skip files for {(() => {
+                              Skip {(() => {
                                 // Filter results by current assignment filter
                                 let relevantResults = status.results;
                                 if (gradeFilterAssignment) {
@@ -7618,9 +7611,9 @@ ${signature}`;
                                     return names.some(n => rAssign.includes(n) || rFile.includes(n) || n.includes(rAssign));
                                   });
                                 }
-                                return [...new Set(relevantResults.map((r) => r.student_name))].length;
-                              })()} student(s) who already have results{gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
-                              Only grade new students.
+                                return relevantResults.length;
+                              })()} file(s) already graded{gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
+                              Only grade new files.
                             </p>
                           </div>
                         </label>
@@ -8123,6 +8116,8 @@ ${signature}`;
                                 return false;
                               if (resultsFilter === "unverified" && r.marker_status !== "verified")
                                 return false;
+                              if (resultsFilter === "resubmission" && !r.is_resubmission)
+                                return false;
                               if (resultsFilter === "approved" && emailApprovals[idx] !== "approved")
                                 return false;
                               if (resultsFilter === "unapproved" && emailApprovals[idx] === "approved")
@@ -8263,6 +8258,7 @@ ${signature}`;
                             <option value="verified">Verified Only</option>
                             <option value="unverified">Unverified Only</option>
                             <option value="mismatched">⚠️ Config Mismatch</option>
+                            <option value="resubmission">🔄 Resubmissions</option>
                           </select>
                           {/* Period Filter Dropdown */}
                           {sortedPeriods.length > 0 && (
@@ -8344,6 +8340,7 @@ ${signature}`;
                                 if (resultsFilter === "verified" && r.marker_status !== "verified") return;
                                 if (resultsFilter === "unverified" && r.marker_status !== "unverified") return;
                                 if (resultsFilter === "mismatched" && !r.config_mismatch) return;
+                                if (resultsFilter === "resubmission" && !r.is_resubmission) return;
                                 if (resultsFilter === "approved" && emailApprovals[idx] !== "approved") return;
                                 if (resultsFilter === "unapproved" && emailApprovals[idx] === "approved") return;
                                 if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
@@ -8517,7 +8514,7 @@ ${signature}`;
                             style={{ opacity: gradesApproved ? 1 : 0.5 }}
                             title={!gradesApproved ? "Approve grades first" : vportalConfigured ? "Upload feedback comments to Focus gradebook" : "Configure VPortal credentials in Settings first"}
                           >
-                            <Icon name="MessageSquareText" size={18} />
+                            <Icon name="MessageSquare" size={18} />
                             {focusCommentsStatus.status === "running"
                               ? "Uploading " + focusCommentsStatus.entered + "/" + focusCommentsStatus.total + "..."
                               : "Upload Comments"}
@@ -8981,6 +8978,7 @@ ${signature}`;
                                     if (resultsFilter === "typed" && r.is_handwritten) return;
                                     if (resultsFilter === "verified" && r.marker_status !== "verified") return;
                                     if (resultsFilter === "unverified" && r.marker_status !== "verified") return;
+                                    if (resultsFilter === "resubmission" && !r.is_resubmission) return;
                                     if (resultsFilter === "approved" && emailApprovals[i] !== "approved") return;
                                     if (resultsFilter === "unapproved" && emailApprovals[i] === "approved") return;
                                     if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
@@ -9223,6 +9221,11 @@ ${signature}`;
                                   !r.config_mismatch
                                 )
                                   return false;
+                                if (
+                                  resultsFilter === "resubmission" &&
+                                  !r.is_resubmission
+                                )
+                                  return false;
                                 // Apply approval filter
                                 if (resultsFilter === "approved" || resultsFilter === "unapproved") {
                                   const idx = status.results.findIndex((orig) => orig.filename === r.filename);
@@ -9372,7 +9375,12 @@ ${signature}`;
                                         )}
                                         {r.is_resubmission && (
                                           <span
-                                            title="RESUBMISSION: This is a newer version of a previously graded assignment."
+                                            title={r.kept_higher
+                                              ? "RESUBMISSION: Kept original grade (" + r.score + "). New submission scored " + r.resubmission_score + "."
+                                              : r.previous_score != null
+                                                ? "RESUBMISSION: Improved from " + r.previous_score + " \u2192 " + r.score
+                                                : "RESUBMISSION: This is a newer version of a previously graded assignment."
+                                            }
                                             style={{
                                               display: "inline-flex",
                                               alignItems: "center",
@@ -9380,14 +9388,15 @@ ${signature}`;
                                               width: "20px",
                                               height: "20px",
                                               borderRadius: "4px",
-                                              background:
-                                                "rgba(59, 130, 246, 0.15)",
-                                              color: "#3b82f6",
+                                              background: r.kept_higher
+                                                ? "rgba(251, 191, 36, 0.15)"
+                                                : "rgba(59, 130, 246, 0.15)",
+                                              color: r.kept_higher ? "#fbbf24" : "#3b82f6",
                                               cursor: "help",
                                             }}
                                           >
                                             <Icon
-                                              name="RefreshCw"
+                                              name={r.kept_higher ? "ShieldCheck" : "RefreshCw"}
                                               size={12}
                                             />
                                           </span>
@@ -10032,6 +10041,160 @@ ${signature}`;
                       </>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Help Tab */}
+              {activeTab === "help" && (
+                <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {/* Tutorial Replay Card */}
+                  <div className="glass-card" style={{
+                    padding: "24px",
+                    background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))",
+                    border: "1px solid rgba(99,102,241,0.25)",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+                      <div>
+                        <h3 style={{ margin: "0 0 4px", fontSize: "1.1rem", color: "var(--text-primary)" }}>
+                          <Icon name="PlayCircle" size={18} style={{ marginRight: 8, verticalAlign: "middle", color: "var(--accent)" }} />
+                          Interactive Tutorial
+                        </h3>
+                        <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                          Walk through all 37 steps to learn every feature in Graider
+                        </p>
+                      </div>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => { setTutorialStep(0); setShowTutorial(true); }}
+                        style={{ padding: "10px 24px", fontWeight: 600, fontSize: "0.9rem" }}
+                      >
+                        <Icon name="PlayCircle" size={16} style={{ marginRight: 6 }} />
+                        Replay Tutorial
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div style={{ position: "relative" }}>
+                    <Icon name="Search" size={16} style={{
+                      position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+                      color: "var(--text-muted)", pointerEvents: "none",
+                    }} />
+                    <input
+                      type="text"
+                      placeholder="Search the user manual..."
+                      value={helpSearch}
+                      onChange={e => {
+                        const q = e.target.value;
+                        setHelpSearch(q);
+                        if (q.trim()) {
+                          // Auto-expand matching sections
+                          const expanded = {};
+                          helpManual.split(/^## /m).slice(1).forEach((sec, i) => {
+                            if (sec.toLowerCase().includes(q.toLowerCase())) expanded[i] = true;
+                          });
+                          setHelpExpanded(expanded);
+                        } else {
+                          setHelpExpanded({});
+                        }
+                      }}
+                      style={{
+                        width: "100%", padding: "12px 16px 12px 40px",
+                        borderRadius: "12px", border: "1px solid var(--glass-border)",
+                        background: "var(--glass-bg)", color: "var(--text-primary)",
+                        fontSize: "0.9rem", outline: "none", boxSizing: "border-box",
+                      }}
+                    />
+                    {helpSearch && (
+                      <button onClick={() => { setHelpSearch(""); setHelpExpanded({}); }} style={{
+                        position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                        background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 4,
+                      }}>
+                        <Icon name="X" size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Manual Sections */}
+                  {!helpManual ? (
+                    <div className="glass-card" style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+                      <Icon name="Loader" size={20} style={{ animation: "spin 1s linear infinite", marginBottom: 8 }} />
+                      <div>Loading user manual...</div>
+                    </div>
+                  ) : (() => {
+                    const sections = helpManual.split(/^## /m).slice(1).map((raw, i) => {
+                      const nlIdx = raw.indexOf("\n");
+                      return { title: raw.substring(0, nlIdx).trim(), body: raw.substring(nlIdx + 1).trim(), index: i };
+                    });
+                    const query = helpSearch.trim().toLowerCase();
+                    const filtered = query
+                      ? sections.filter(s => s.title.toLowerCase().includes(query) || s.body.toLowerCase().includes(query))
+                      : sections;
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="glass-card" style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
+                          <Icon name="SearchX" size={24} style={{ marginBottom: 8, opacity: 0.5 }} />
+                          <div>No sections match "{helpSearch}"</div>
+                        </div>
+                      );
+                    }
+                    return filtered.map(sec => {
+                      const isOpen = !!helpExpanded[sec.index];
+                      return (
+                        <div key={sec.index} className="glass-card" style={{ padding: 0, overflow: "hidden" }}>
+                          <div
+                            onClick={() => setHelpExpanded(prev => ({ ...prev, [sec.index]: !prev[sec.index] }))}
+                            style={{
+                              display: "flex", alignItems: "center", justifyContent: "space-between",
+                              padding: "14px 20px", cursor: "pointer", userSelect: "none",
+                            }}
+                          >
+                            <span style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--text-primary)" }}>{sec.title}</span>
+                            <Icon name={isOpen ? "ChevronDown" : "ChevronRight"} size={16} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                          </div>
+                          {isOpen && (
+                            <div style={{
+                              padding: "0 20px 18px",
+                              fontSize: "0.88rem",
+                              lineHeight: 1.7,
+                              color: "var(--text-secondary)",
+                              borderTop: "1px solid var(--glass-border)",
+                              paddingTop: "14px",
+                            }}>
+                              <div dangerouslySetInnerHTML={{ __html: (() => {
+                                let html = sec.body;
+                                // Code blocks
+                                html = html.replace(/```[\s\S]*?```/g, m => {
+                                  const inner = m.slice(3, -3).replace(/^\w+\n/, "");
+                                  return '<pre style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;overflow-x:auto;font-size:0.82em;margin:8px 0"><code>' + inner.replace(/</g, "&lt;").replace(/>/g, "&gt;") + '</code></pre>';
+                                });
+                                // Sub-sub headings
+                                html = html.replace(/^#### (.+)$/gm, '<h5 style="margin:12px 0 4px;font-size:0.9em;color:var(--text-primary)">$1</h5>');
+                                // Sub headings
+                                html = html.replace(/^### (.+)$/gm, '<h4 style="margin:14px 0 6px;font-size:0.95em;color:var(--text-primary)">$1</h4>');
+                                // Bold
+                                html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                                // Italic
+                                html = html.replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+                                // Inline code
+                                html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(99,102,241,0.15);padding:2px 6px;border-radius:4px;font-size:0.85em">$1</code>');
+                                // Links
+                                html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent-light);text-decoration:underline">$1</a>');
+                                // Unordered lists
+                                html = html.replace(/^[-*] (.+)$/gm, '<li style="margin-left:16px;list-style:disc">$1</li>');
+                                // Ordered lists
+                                html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin-left:16px;list-style:decimal">$1</li>');
+                                // Paragraphs
+                                html = html.replace(/\n\n/g, '<br/><br/>');
+                                html = html.replace(/\n/g, '<br/>');
+                                return html;
+                              })() }} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
 
@@ -11347,6 +11510,49 @@ ${signature}`;
                             <option value="gemini-flash">Gemini 2.0 Flash — Fast, low cost ($0.10/$0.40 per 1M tokens)</option>
                             <option value="gemini-pro">Gemini 2.0 Pro — Balanced ($1.25/$5 per 1M tokens)</option>
                           </optgroup>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Assistant Voice Selection */}
+                    <div>
+                      <h3 style={{
+                        fontSize: "1.1rem",
+                        fontWeight: 700,
+                        marginBottom: "15px",
+                        marginTop: "25px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}>
+                        <Icon name="Mic" size={20} style={{ color: "#6366f1" }} />
+                        Assistant Voice
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                        Choose the voice used for voice-mode responses.
+                      </p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <select
+                          className="input"
+                          style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                          value={config.assistant_voice || "nova"}
+                          onChange={(e) => {
+                            var updated = { ...config, assistant_voice: e.target.value };
+                            setConfig(updated);
+                            api.saveGlobalSettings(updated).then(() => {
+                              addToast("Voice set to " + e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1), "success");
+                            });
+                          }}
+                        >
+                          <option value="alloy">Alloy — Neutral, balanced</option>
+                          <option value="ash">Ash — Warm, conversational</option>
+                          <option value="coral">Coral — Friendly, expressive</option>
+                          <option value="echo">Echo — Smooth, articulate</option>
+                          <option value="fable">Fable — Storytelling, animated</option>
+                          <option value="nova">Nova — Bright, engaging (default)</option>
+                          <option value="onyx">Onyx — Deep, authoritative</option>
+                          <option value="sage">Sage — Calm, thoughtful</option>
+                          <option value="shimmer">Shimmer — Light, cheerful</option>
                         </select>
                       </div>
                     </div>
