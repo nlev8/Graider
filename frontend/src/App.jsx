@@ -1103,6 +1103,10 @@ function App() {
   const [analyticsPeriod, setAnalyticsPeriod] = useState("all"); // Quarter filter (Q1, Q2, etc.)
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState(""); // Class period filter (Period 1, etc.)
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]); // Students in selected class period
+  const [distributionView, setDistributionView] = useState("overall"); // overall, by_period, by_assignment
+  const [selectedAssignments, setSelectedAssignments] = useState(new Set()); // empty = all
+  const [assignmentDropdownOpen, setAssignmentDropdownOpen] = useState(false);
+  const [periodStudentMap, setPeriodStudentMap] = useState({}); // { "Period 1": [{first, last}, ...], ... }
   // Resizable column widths for Results table (in px, initialized on first render)
   const [colWidths, setColWidths] = useState(null);
   const tableRef = useRef(null);
@@ -1975,7 +1979,7 @@ function App() {
     periodStudents,
   ]);
 
-  // Fetch analytics when tab opens
+  // Fetch analytics when tab opens and when new results arrive
   useEffect(() => {
     if (activeTab === "analytics") {
       api
@@ -1983,7 +1987,7 @@ function App() {
         .then((data) => setAnalytics(data))
         .catch(console.error);
     }
-  }, [activeTab, analyticsPeriod]);
+  }, [activeTab, analyticsPeriod, status.results.length]);
 
   // Load class period students for analytics filtering
   useEffect(() => {
@@ -1999,7 +2003,22 @@ function App() {
       .catch(() => setAnalyticsClassStudents([]));
   }, [analyticsClassPeriod]);
 
-  // Load uploaded files for missing assignments in analytics
+  // Load all period rosters for By-Period distribution view
+  useEffect(() => {
+    if (activeTab !== "analytics" || periods.length === 0) return;
+    Promise.all(
+      periods.map((p) =>
+        api.getPeriodStudents(p.filename).then((data) => ({ name: p.period_name, students: data.students || [] }))
+          .catch(() => ({ name: p.period_name, students: [] }))
+      )
+    ).then((results) => {
+      const map = {};
+      results.forEach((r) => { map[r.name] = r.students; });
+      setPeriodStudentMap(map);
+    });
+  }, [activeTab, periods]);
+
+  // Load uploaded files for missing assignments in analytics (refresh as grading adds results)
   useEffect(() => {
     if (activeTab !== "analytics" || !config.assignments_folder) {
       return;
@@ -2012,7 +2031,7 @@ function App() {
       })
       .catch(() => setMissingUploadedFiles([]))
       .finally(() => setMissingFilesLoading(false));
-  }, [activeTab, config.assignments_folder]);
+  }, [activeTab, config.assignments_folder, status.results.length]);
 
   // Clear selected standards when grade/subject/state changes
   useEffect(() => {
@@ -2536,6 +2555,58 @@ function App() {
       category_stats: filteredCategoryStats,
     };
   }, [analytics, analyticsClassPeriod, analyticsClassStudents]);
+
+  // Unique assignment names for the assignment picker dropdown
+  const uniqueAssignmentNames = useMemo(() => {
+    if (!filteredAnalytics) return [];
+    const names = new Set();
+    (filteredAnalytics.all_grades || []).forEach((g) => { if (g.assignment) names.add(g.assignment); });
+    return [...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [filteredAnalytics]);
+
+  // Compute grade distribution grouped by class period or assignment
+  const distributionData = useMemo(() => {
+    if (!filteredAnalytics || distributionView === "overall") return null;
+    let grades = filteredAnalytics.all_grades || [];
+    if (grades.length === 0) return [];
+    // When by_assignment with specific selections, filter to those assignments
+    if (distributionView === "by_assignment" && selectedAssignments.size > 0) {
+      grades = grades.filter((g) => selectedAssignments.has(g.assignment));
+    }
+    const groups = {};
+    if (distributionView === "by_period") {
+      // Group by actual class period using period rosters
+      const periodNames = Object.keys(periodStudentMap);
+      if (periodNames.length === 0) return [];
+      grades.forEach((g) => {
+        const period = periodNames.find((pn) => studentNameMatchesPeriod(g.student_name, periodStudentMap[pn]));
+        if (!period) return;
+        if (!groups[period]) groups[period] = [];
+        groups[period].push(g.score);
+      });
+    } else {
+      grades.forEach((g) => {
+        const key = g.assignment || "Unknown";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(g.score);
+      });
+    }
+    return Object.entries(groups).map(([name, scores]) => {
+      const mean = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : 0;
+      const passing = scores.filter((s) => s >= 60).length;
+      return {
+        name: name.length > 20 ? name.slice(0, 20) + "..." : name,
+        A: scores.filter((s) => s >= 90).length,
+        B: scores.filter((s) => s >= 80 && s < 90).length,
+        C: scores.filter((s) => s >= 70 && s < 80).length,
+        D: scores.filter((s) => s >= 60 && s < 70).length,
+        F: scores.filter((s) => s < 60).length,
+        total: scores.length,
+        mean,
+        passRate: scores.length > 0 ? Math.round(passing / scores.length * 1000) / 10 : 0,
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }, [filteredAnalytics, distributionView, selectedAssignments, periodStudentMap]);
 
   // Grading functions
   const handleStartGrading = async () => {
@@ -6299,12 +6370,12 @@ ${signature}`;
               <img
                 src={theme === "light" ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
                 alt="Graider brain"
-                style={{ width: 80, height: 80, marginTop: 40, marginBottom: -70 }}
+                style={{ width: 80, height: 80, marginTop: 25, marginBottom: -70 }}
               />
               <img
                 src={theme === "light" ? "/graider-wordmark-light.png" : "/graider-wordmark-dark.png"}
                 alt="Graider"
-                style={{ width: "85%", marginTop: 20, marginBottom: -20 }}
+                style={{ width: "85%", marginTop: 20, marginBottom: -35 }}
               />
             </div>
           )}
@@ -17217,73 +17288,102 @@ ${signature}`;
                         }}
                       >
                         <div className="glass-card" style={{ padding: "25px" }}>
-                          <h3
-                            style={{
-                              fontSize: "1.1rem",
-                              fontWeight: 700,
-                              marginBottom: "20px",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "10px",
-                            }}
-                          >
-                            <Icon name="PieChart" size={20} />
-                            Grade Distribution
-                          </h3>
-                          <ResponsiveContainer width="100%" height={200}>
-                            <PieChart>
-                              <Pie
-                                data={[
-                                  {
-                                    name: "A",
-                                    value:
-                                      filteredAnalytics.class_stats
-                                        ?.grade_distribution?.A || 0,
-                                  },
-                                  {
-                                    name: "B",
-                                    value:
-                                      filteredAnalytics.class_stats
-                                        ?.grade_distribution?.B || 0,
-                                  },
-                                  {
-                                    name: "C",
-                                    value:
-                                      filteredAnalytics.class_stats
-                                        ?.grade_distribution?.C || 0,
-                                  },
-                                  {
-                                    name: "D",
-                                    value:
-                                      filteredAnalytics.class_stats
-                                        ?.grade_distribution?.D || 0,
-                                  },
-                                  {
-                                    name: "F",
-                                    value:
-                                      filteredAnalytics.class_stats
-                                        ?.grade_distribution?.F || 0,
-                                  },
-                                ].filter((d) => d.value > 0)}
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={70}
-                                dataKey="value"
-                                label={({ name, value }) => `${name}: ${value}`}
-                              >
-                                {[
-                                  "#4ade80",
-                                  "#60a5fa",
-                                  "#fbbf24",
-                                  "#f97316",
-                                  "#ef4444",
-                                ].map((c, i) => (
-                                  <Cell key={i} fill={c} />
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
+                              <Icon name="PieChart" size={20} />
+                              Grade Distribution
+                            </h3>
+                            <div style={{ display: "flex", gap: "2px", background: "var(--glass-bg)", borderRadius: "8px", padding: "2px" }}>
+                              {[{ id: "overall", label: "Overall" }, { id: "by_period", label: "By Period" }, { id: "by_assignment", label: "By Assignment" }].map((v) => (
+                                <button key={v.id} onClick={() => { setDistributionView(v.id); if (v.id !== "by_assignment") setAssignmentDropdownOpen(false); }} style={{ padding: "5px 10px", borderRadius: "6px", border: "none", background: distributionView === v.id ? "var(--accent-primary)" : "transparent", color: distributionView === v.id ? "white" : "var(--text-secondary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: distributionView === v.id ? 600 : 500, transition: "all 0.2s" }}>{v.label}</button>
+                              ))}
+                            </div>
+                          </div>
+                          {distributionView === "by_assignment" && uniqueAssignmentNames.length > 0 && (
+                            <div style={{ position: "relative", marginBottom: "10px" }}>
+                              <button onClick={() => setAssignmentDropdownOpen(!assignmentDropdownOpen)} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "var(--glass-bg)", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.75rem", width: "100%" }}>
+                                <Icon name="Filter" size={13} />
+                                <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedAssignments.size === 0 ? "All Assignments (" + uniqueAssignmentNames.length + ")" : selectedAssignments.size + " of " + uniqueAssignmentNames.length + " selected"}</span>
+                                <Icon name={assignmentDropdownOpen ? "ChevronUp" : "ChevronDown"} size={13} />
+                              </button>
+                              {assignmentDropdownOpen && (
+                                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, marginTop: "4px", background: "var(--modal-content-bg)", border: "1px solid var(--glass-border)", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.3)", maxHeight: "180px", overflowY: "auto", padding: "4px" }}>
+                                  <button onClick={() => { setSelectedAssignments(new Set()); }} style={{ width: "100%", padding: "5px 8px", border: "none", background: selectedAssignments.size === 0 ? "var(--accent-primary)" : "transparent", color: selectedAssignments.size === 0 ? "white" : "var(--text-secondary)", borderRadius: "4px", cursor: "pointer", fontSize: "0.73rem", textAlign: "left", fontWeight: 600 }}>All Assignments</button>
+                                  {uniqueAssignmentNames.map((name) => {
+                                    const checked = selectedAssignments.has(name);
+                                    return (
+                                      <label key={name} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "0.73rem", color: "var(--text-primary)", background: checked ? "rgba(var(--accent-primary-rgb, 99,102,241), 0.1)" : "transparent" }}>
+                                        <input type="checkbox" checked={checked} onChange={() => { setSelectedAssignments((prev) => { const next = new Set(prev); if (next.has(name)) next.delete(name); else next.add(name); return next; }); }} style={{ accentColor: "var(--accent-primary)" }} />
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {distributionView === "overall" ? (
+                            <>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <PieChart>
+                                  <Pie
+                                    data={[
+                                      { name: "A", value: filteredAnalytics.class_stats?.grade_distribution?.A || 0 },
+                                      { name: "B", value: filteredAnalytics.class_stats?.grade_distribution?.B || 0 },
+                                      { name: "C", value: filteredAnalytics.class_stats?.grade_distribution?.C || 0 },
+                                      { name: "D", value: filteredAnalytics.class_stats?.grade_distribution?.D || 0 },
+                                      { name: "F", value: filteredAnalytics.class_stats?.grade_distribution?.F || 0 },
+                                    ].filter((d) => d.value > 0)}
+                                    cx="50%" cy="50%" outerRadius={70} dataKey="value"
+                                    label={({ name, value }) => name + ": " + value}
+                                  >
+                                    {["#4ade80", "#60a5fa", "#fbbf24", "#f97316", "#ef4444"].map((c, i) => (
+                                      <Cell key={i} fill={c} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip />
+                                </PieChart>
+                              </ResponsiveContainer>
+                              <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginTop: "8px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                <span>Mean: {filteredAnalytics.class_stats?.class_average || 0}%</span>
+                                <span>Pass rate: {filteredAnalytics.class_stats?.total_assignments > 0 ? Math.round(((filteredAnalytics.class_stats.grade_distribution?.A || 0) + (filteredAnalytics.class_stats.grade_distribution?.B || 0) + (filteredAnalytics.class_stats.grade_distribution?.C || 0) + (filteredAnalytics.class_stats.grade_distribution?.D || 0)) / filteredAnalytics.class_stats.total_assignments * 1000) / 10 : 0}%</span>
+                              </div>
+                            </>
+                          ) : distributionView === "by_assignment" && selectedAssignments.size === 0 ? (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: "var(--text-secondary)", fontSize: "0.85rem", textAlign: "center", padding: "0 20px" }}>
+                              Select assignments above to compare
+                            </div>
+                          ) : (
+                            <>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <BarChart data={distributionData || []}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+                                  <XAxis dataKey="name" tick={{ fill: "var(--text-secondary)", fontSize: 11 }} interval={0} angle={distributionView === "by_assignment" ? -25 : 0} textAnchor={distributionView === "by_assignment" ? "end" : "middle"} height={distributionView === "by_assignment" ? 50 : 30} />
+                                  <YAxis tick={{ fill: "var(--text-secondary)" }} allowDecimals={false} />
+                                  <Tooltip contentStyle={{ background: "var(--modal-content-bg)", border: "1px solid var(--glass-border)", borderRadius: "8px" }} />
+                                  <Bar dataKey="A" stackId="grades" fill="#4ade80" />
+                                  <Bar dataKey="B" stackId="grades" fill="#60a5fa" />
+                                  <Bar dataKey="C" stackId="grades" fill="#fbbf24" />
+                                  <Bar dataKey="D" stackId="grades" fill="#f97316" />
+                                  <Bar dataKey="F" stackId="grades" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                              <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginTop: "6px", fontSize: "0.7rem" }}>
+                                {[{ label: "A", color: "#4ade80" }, { label: "B", color: "#60a5fa" }, { label: "C", color: "#fbbf24" }, { label: "D", color: "#f97316" }, { label: "F", color: "#ef4444" }].map((g) => (
+                                  <span key={g.label} style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--text-secondary)" }}>
+                                    <span style={{ width: 10, height: 10, borderRadius: 2, background: g.color, display: "inline-block" }} />
+                                    {g.label}
+                                  </span>
                                 ))}
-                              </Pie>
-                              <Tooltip />
-                            </PieChart>
-                          </ResponsiveContainer>
+                              </div>
+                              {distributionData && distributionData.length > 0 && (
+                                <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginTop: "8px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                  <span>Mean: {Math.round(distributionData.reduce((s, d) => s + d.mean * d.total, 0) / Math.max(1, distributionData.reduce((s, d) => s + d.total, 0)) * 10) / 10}%</span>
+                                  <span>Pass rate: {Math.round(distributionData.reduce((s, d) => s + d.total - d.F, 0) / Math.max(1, distributionData.reduce((s, d) => s + d.total, 0)) * 1000) / 10}%</span>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
 
                         <div className="glass-card" style={{ padding: "25px" }}>
@@ -18718,10 +18818,10 @@ ${signature}`;
                                             style={{
                                               padding: "6px 12px",
                                               background:
-                                                "rgba(251,191,36,0.2)",
+                                                "rgba(251,191,36,0.15)",
                                               borderRadius: "6px",
                                               fontSize: "0.85rem",
-                                              color: "#fbbf24",
+                                              color: "#111",
                                             }}
                                           >
                                             {a}
@@ -18978,10 +19078,10 @@ ${signature}`;
                                                       style={{
                                                         padding: "2px 8px",
                                                         background:
-                                                          "rgba(251,191,36,0.2)",
+                                                          "rgba(251,191,36,0.15)",
                                                         borderRadius: "4px",
                                                         fontSize: "0.75rem",
-                                                        color: "#fbbf24",
+                                                        color: "#111",
                                                       }}
                                                     >
                                                       {a}

@@ -1170,9 +1170,11 @@ The Assistant can read and manage your teaching calendar:
 
 **Clear chat:** Click **Clear Chat** in the header to clear the conversation window. This resets the chat but **preserves your persistent memory** — the Assistant will still remember your preferences and class info in the next conversation.
 
-### Available Tools
+### Available Tools (54 Total)
 
-The assistant has access to tools that query your local data:
+The assistant has access to 54 tools organized into nine categories. All tools query local data — no student PII leaves your machine.
+
+#### Grading & Data (10 tools)
 
 | Tool | What It Does |
 |------|-------------|
@@ -1180,20 +1182,96 @@ The assistant has access to tools that query your local data:
 | **Student Summary** | Deep dive into one student: all grades, trends, category breakdowns, strengths and weaknesses |
 | **Class Analytics** | Class-wide stats: average, grade distribution, top/bottom performers |
 | **Assignment Stats** | Statistics for a specific assignment: mean, median, min, max, standard deviation |
+| **List Assignments** | List all graded assignments with student count and average score |
 | **Analyze Grade Causes** | WHY students got their grades: rubric breakdowns, skipped questions, score impact of omissions |
 | **Feedback Patterns** | Common strengths and growth areas across an assignment, feedback samples from high/low scorers |
 | **Compare Periods** | Side-by-side period comparison: averages, distributions, category scores, omission rates |
-| **Recommend Next Lesson** | Data-driven lesson recommendations with differentiated suggestions by class level (advanced/standard/support) and IEP/504 accommodation analysis |
-| **Lookup Student Info** | Roster info, parent contacts, student schedules, 504 status. Supports batch lookup. |
 | **Missing Assignments** | Find who hasn't submitted work — by student, period, or assignment |
+| **Save Assignment Config** | Save or update an assignment config in Grading Setup (point values, rubric type, grading notes) |
+
+#### Advanced Analytics (6 tools)
+
+| Tool | What It Does |
+|------|-------------|
+| **Grade Trends** | Track scores over time for a student or class — shows improving, declining, or stable direction |
+| **Rubric Weakness** | Find the consistently weakest rubric categories across all assignments (content, completeness, writing, effort) |
+| **Flag At-Risk Students** | Combine declining trends, missing work, and low rubric scores into a risk score — sorted by urgency |
+| **Compare Assignments** | Side-by-side comparison of two assignments: mean, median, grade distribution, category averages |
+| **Grade Distribution** | A/B/C/D/F counts and percentages per assignment or period — ready for admin reports and data meetings |
+| **Detect Score Outliers** | Flag scores more than 2 standard deviations from class mean — possible mis-grades or suspicious scores |
+
+#### Student Tools (4 tools)
+
+| Tool | What It Does |
+|------|-------------|
+| **Lookup Student Info** | Roster info, parent contacts, student schedules, 504 status. Supports batch lookup |
+| **Student Accommodations** | Get a student's IEP/504 accommodation details — presets, notes, and how they affect grading |
+| **Student Streak** | Show consecutive improvement or decline streaks across recent assignments |
+| **Recommend Next Lesson** | Data-driven lesson recommendations with differentiated suggestions by class level (advanced/standard/support) and IEP/504 accommodation analysis |
+
+#### Content Generation (9 tools)
+
+| Tool | What It Does |
+|------|-------------|
 | **Generate Worksheet** | Create downloadable worksheets (Cornell Notes, fill-in-blank, short-answer, vocabulary) with embedded answer keys for AI grading |
 | **Generate Document** | Create formatted Word documents (study guides, parent letters, rubrics, lesson outlines) |
+| **Generate CSV** | Create downloadable spreadsheets (XLSX or CSV) — Wayground quizzes, data exports, custom reports |
+| **Save Document Style** | Save visual formatting (fonts, sizes, colors, spacing) so future documents of the same type match |
+| **List Document Styles** | See what document visual styles have been saved |
 | **Get Standards** | Look up curriculum standards with full details: vocabulary, learning targets, essential questions |
+| **List All Standards** | Quick index of every standard code with a short summary |
 | **List Resources** | See what supporting documents you've uploaded |
 | **Read Resource** | Read the full text of a specific uploaded document |
-| **Calendar Tools** | View, schedule lessons, and add holidays to your teaching calendar |
-| **Save Memory** | Save important facts for future conversations |
-| **Focus Automation** | Create assignments in Focus gradebook, export Focus-compatible CSVs |
+
+#### EdTech Quiz Generators (6 tools — zero cost, no AI API calls)
+
+| Tool | What It Does |
+|------|-------------|
+| **Generate Kahoot Quiz** | Create a Kahoot-compatible .xlsx quiz from standards vocabulary and sample assessments |
+| **Generate Blooket Set** | Create a Blooket-compatible .csv question set |
+| **Generate Gimkit Kit** | Create a Gimkit-compatible .csv kit (question, correct answer, incorrect answers) |
+| **Generate Quizlet Set** | Create a Quizlet-compatible .txt flashcard set (term/definition pairs) |
+| **Generate Nearpod Questions** | Create a formatted .docx with questions for Nearpod copy-paste |
+| **Generate Canvas QTI** | Create a Canvas QTI 1.2 .xml file for LMS import |
+
+#### Planning & Classroom (7 tools)
+
+| Tool | What It Does |
+|------|-------------|
+| **Suggest Remediation** | Map student weaknesses to activities — Kahoot/Blooket/Gimkit activities, review worksheets, grouping strategies |
+| **Align to Standards** | Show which standards a topic covers and which remain unassessed |
+| **Pacing Status** | Are you ahead, behind, or on track? Compares calendar progress vs. total standards |
+| **Generate Bell Ringer** | Quick warm-up activity from yesterday's or today's lesson vocabulary and standards |
+| **Generate Exit Ticket** | 2-3 quick check questions from today's lesson for formative assessment |
+| **Suggest Grouping** | Create student groups by performance — heterogeneous (mixed) or homogeneous (similar levels) |
+| **Generate Sub Plans** | Build substitute teacher plans from your calendar and saved lessons — formatted as a Word doc |
+
+#### Communication & Reporting (4 tools)
+
+| Tool | What It Does |
+|------|-------------|
+| **Generate Progress Report** | Printable progress report for one student or a full class period |
+| **Report Card Comments** | Template-based report card comments generated from score patterns — not AI-generated |
+| **Draft Student Feedback** | Structured feedback: strengths, growth areas, examples, and next steps from full grade history |
+| **Parent Conference Notes** | Conference agenda with data, talking points, and action items for a specific student |
+
+#### Calendar & Memory (5 tools)
+
+| Tool | What It Does |
+|------|-------------|
+| **Get Calendar** | View scheduled lessons and holidays for a date range |
+| **Schedule Lesson** | Place a saved lesson plan onto a specific date on the teaching calendar |
+| **Add Calendar Holiday** | Add holidays or breaks to the calendar (single-day or multi-day) |
+| **Get Recent Lessons** | List saved lesson plans — topics, standards covered, vocabulary, and objectives per day |
+| **Save Memory** | Save important facts for future conversations (preferences, class structure, workflow habits) |
+
+#### Focus SIS & Email (3 tools)
+
+| Tool | What It Does |
+|------|-------------|
+| **Create Focus Assignment** | Create an assignment in Focus gradebook via browser automation (requires VPortal credentials) |
+| **Export Grades CSV** | Export grades as Focus SIS-compatible CSV files with Student ID and Score columns |
+| **Send Parent Emails** | Send personalized emails to parents via Outlook with template placeholders — always previews before sending |
 
 ### Deep Analytics Examples
 
