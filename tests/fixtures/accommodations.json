@@ -1,0 +1,14 @@
+{
+  "S003": {
+    "presets": ["extended_time", "simplified_prompts", "graphic_organizer"],
+    "notes": "Carol has an IEP for reading comprehension. Allow 1.5x time on written assignments. Provide graphic organizers for note-taking."
+  },
+  "S005": {
+    "presets": ["extended_time", "reduced_workload", "oral_responses"],
+    "notes": "Emma has a 504 plan. Extended time on all assessments. May provide oral responses for written work. Chunk assignments into smaller sections."
+  },
+  "S009": {
+    "presets": ["extended_time", "preferential_seating"],
+    "notes": "Iris has a 504 plan for ADHD. Extended time and preferential seating. Check for understanding frequently."
+  }
+}

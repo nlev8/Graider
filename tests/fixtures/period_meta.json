@@ -1,0 +1,20 @@
+{
+  "period_1": {
+    "period_name": "Period 1",
+    "class_level": "standard",
+    "course_code": "SS7C",
+    "course_name": "Civics"
+  },
+  "period_2": {
+    "period_name": "Period 2",
+    "class_level": "standard",
+    "course_code": "SS7C",
+    "course_name": "Civics"
+  },
+  "period_3": {
+    "period_name": "Period 3",
+    "class_level": "advanced",
+    "course_code": "SS7C-H",
+    "course_name": "Civics Honors"
+  }
+}

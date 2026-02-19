@@ -1,0 +1,16 @@
+{
+  "config": {
+    "teacher_name": "Ms. Test Teacher",
+    "subject": "Civics",
+    "school_name": "Test Middle School",
+    "teacher_email": "teacher@test.edu",
+    "email_signature": "Ms. Test Teacher\nCivics, Period 1-3\nTest Middle School",
+    "grade_level": "7",
+    "state": "FL",
+    "grading_period": "Q3",
+    "assistant_model": "haiku",
+    "availableTools": ["kahoot", "blooket", "gimkit", "quizlet", "nearpod", "canvas"]
+  },
+  "globalAINotes": "Focus on primary source analysis. Students should cite specific evidence.",
+  "output_folder": "/tmp/graider_test_results"
+}

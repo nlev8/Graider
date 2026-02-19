@@ -1,0 +1,170 @@
+[
+  {
+    "student_name": "Alice Johnson",
+    "student_id": "S001",
+    "assignment": "Chapter 1 Notes",
+    "score": 92,
+    "letter_grade": "A",
+    "period": "Period 1",
+    "graded_at": "2026-01-15T10:00:00",
+    "breakdown": {
+      "content_accuracy": 95,
+      "completeness": 90,
+      "writing_quality": 88,
+      "effort_engagement": 94
+    },
+    "skills_demonstrated": {
+      "strengths": ["Detailed note-taking", "Key vocabulary identified"],
+      "developing": ["Summary writing"]
+    },
+    "unanswered_questions": [],
+    "feedback": "Excellent work on identifying key concepts. Summary could include more supporting details."
+  },
+  {
+    "student_name": "Bob Martinez",
+    "student_id": "S002",
+    "assignment": "Chapter 1 Notes",
+    "score": 78,
+    "letter_grade": "C",
+    "period": "Period 1",
+    "graded_at": "2026-01-15T10:00:00",
+    "breakdown": {
+      "content_accuracy": 75,
+      "completeness": 80,
+      "writing_quality": 72,
+      "effort_engagement": 85
+    },
+    "skills_demonstrated": {
+      "strengths": ["Effort shown"],
+      "developing": ["Content accuracy", "Writing quality"]
+    },
+    "unanswered_questions": ["Question 3"],
+    "feedback": "Good effort but some key concepts were missed. Review vocabulary definitions."
+  },
+  {
+    "student_name": "Carol Williams",
+    "student_id": "S003",
+    "assignment": "Chapter 1 Notes",
+    "score": 65,
+    "letter_grade": "D",
+    "period": "Period 1",
+    "graded_at": "2026-01-15T10:00:00",
+    "breakdown": {
+      "content_accuracy": 60,
+      "completeness": 70,
+      "writing_quality": 55,
+      "effort_engagement": 75
+    },
+    "skills_demonstrated": {
+      "strengths": ["Attempted all sections"],
+      "developing": ["Content accuracy", "Writing quality", "Summary writing"]
+    },
+    "unanswered_questions": ["Question 3", "Question 5"],
+    "feedback": "Several key concepts were incomplete. Writing needs more detail and clarity."
+  },
+  {
+    "student_name": "Emma Davis",
+    "student_id": "S005",
+    "assignment": "Chapter 1 Notes",
+    "score": 45,
+    "letter_grade": "F",
+    "period": "Period 1",
+    "graded_at": "2026-01-15T10:00:00",
+    "breakdown": {
+      "content_accuracy": 40,
+      "completeness": 50,
+      "writing_quality": 35,
+      "effort_engagement": 55
+    },
+    "skills_demonstrated": {
+      "strengths": [],
+      "developing": ["Content accuracy", "Completeness", "Writing quality", "Note-taking"]
+    },
+    "unanswered_questions": ["Question 2", "Question 3", "Question 5", "Question 7"],
+    "feedback": "Many sections incomplete. Needs significant support with reading comprehension and note-taking skills."
+  },
+  {
+    "student_name": "Alice Johnson",
+    "student_id": "S001",
+    "assignment": "Bill of Rights Quiz",
+    "score": 88,
+    "letter_grade": "B",
+    "period": "Period 1",
+    "graded_at": "2026-02-01T10:00:00",
+    "breakdown": {
+      "content_accuracy": 90,
+      "completeness": 85,
+      "writing_quality": 86,
+      "effort_engagement": 90
+    },
+    "skills_demonstrated": {
+      "strengths": ["Constitutional knowledge", "Amendment identification"],
+      "developing": ["Application of rights to scenarios"]
+    },
+    "unanswered_questions": [],
+    "feedback": "Strong understanding of the Bill of Rights. Work on applying amendments to modern scenarios."
+  },
+  {
+    "student_name": "Emma Davis",
+    "student_id": "S005",
+    "assignment": "Bill of Rights Quiz",
+    "score": 50,
+    "letter_grade": "F",
+    "period": "Period 1",
+    "graded_at": "2026-02-01T10:00:00",
+    "breakdown": {
+      "content_accuracy": 45,
+      "completeness": 55,
+      "writing_quality": 38,
+      "effort_engagement": 62
+    },
+    "skills_demonstrated": {
+      "strengths": ["Attempted quiz"],
+      "developing": ["Amendment knowledge", "Constitutional vocabulary", "Writing quality"]
+    },
+    "unanswered_questions": ["Question 4", "Question 6", "Question 8"],
+    "feedback": "Struggled with identifying specific amendments. Review Bill of Rights vocabulary and key protections."
+  },
+  {
+    "student_name": "Alice Johnson",
+    "student_id": "S001",
+    "assignment": "Branches of Government Essay",
+    "score": 85,
+    "letter_grade": "B",
+    "period": "Period 1",
+    "graded_at": "2026-02-10T10:00:00",
+    "breakdown": {
+      "content_accuracy": 88,
+      "completeness": 82,
+      "writing_quality": 84,
+      "effort_engagement": 86
+    },
+    "skills_demonstrated": {
+      "strengths": ["Essay structure", "Use of evidence"],
+      "developing": ["Counterargument analysis"]
+    },
+    "unanswered_questions": [],
+    "feedback": "Well-organized essay with strong evidence. Consider addressing opposing viewpoints for a more complete analysis."
+  },
+  {
+    "student_name": "Emma Davis",
+    "student_id": "S005",
+    "assignment": "Branches of Government Essay",
+    "score": 55,
+    "letter_grade": "F",
+    "period": "Period 1",
+    "graded_at": "2026-02-10T10:00:00",
+    "breakdown": {
+      "content_accuracy": 50,
+      "completeness": 58,
+      "writing_quality": 42,
+      "effort_engagement": 70
+    },
+    "skills_demonstrated": {
+      "strengths": ["Improved effort"],
+      "developing": ["Essay structure", "Use of evidence", "Content knowledge"]
+    },
+    "unanswered_questions": ["Question 2"],
+    "feedback": "Shows improved effort but essay lacks supporting evidence. Review the three branches and their functions."
+  }
+]

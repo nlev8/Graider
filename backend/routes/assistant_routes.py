@@ -232,6 +232,11 @@ ASSISTANT_COSTS_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_costs.json")
 # OpenAI TTS pricing — $0.015 per 1K characters (tts-1 model)
 TTS_COST_PER_CHAR = 0.000015
 OPENAI_TTS_VOICES = ["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
+
+# Token cost guardrails
+MAX_TOOL_RESPONSE_CHARS = 8000   # Truncate tool results larger than this
+COST_WARNING_THRESHOLD = 0.25    # Warn teacher when per-query cost exceeds this
+MAX_TOOL_ROUNDS = 3              # Max tool loop iterations (was 5)
 PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 ACCOMMODATIONS_FILE = os.path.join(GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
 TEMPLATES_DIR = os.path.join(GRAIDER_DATA_DIR, "assessment_templates")
@@ -718,7 +723,7 @@ Available tools:
 - compare_periods: Compare performance across class periods — averages, grade distributions, category breakdowns, omission rates per period.
 - recommend_next_lesson: Analyze weaknesses and recommend what to teach next. Now includes DIFFERENTIATED recommendations by class level (advanced/standard/support) with DOK-appropriate standards, and IEP/504 accommodation analysis. Use when teacher asks "what should I teach next?", "how should I differentiate?", or "what lesson would help?"
 - lookup_student_info: Look up student roster and contact information — student IDs, local IDs, grade level, period, course codes, student email, parent emails, parent phone numbers, 504 plan status, detailed contacts (up to 3 with names, relationships, and roles), and full student schedule (all periods with teachers and courses). Search by name, ID, or list all students in a period. Supports BATCH lookup via student_ids array. Use this when the teacher asks for contact info, emails, parent emails, phone numbers, student IDs, who a student's other teachers are, or 504/accommodation status. IMPORTANT: query_grades results include student_id — when you need parent emails for multiple students (e.g., failing students), first use query_grades to get their student_ids, then use lookup_student_info with the student_ids array to get all their contacts in one call.
-- get_missing_assignments: Find missing/unsubmitted work. Search by student (what are they missing?), by period (who has missing work?), or by assignment (who hasn't turned in X?). Use this when teacher asks about missing work, incomplete submissions, or which students haven't turned in assignments.
+- get_missing_assignments: Find missing/unsubmitted work. Four modes: (1) by student_name — what assignments are they missing? (2) by period — who in that period has missing work? (3) by assignment_name — who hasn't turned in X? (4) NO params or period="all" — compact summary of ALL periods showing zero-submission students. IMPORTANT: When the teacher asks "who hasn't submitted anything" or "students with zero submissions", call with NO parameters (or period="all") to get the all-periods summary in ONE call. Do NOT call once per period.
 - generate_worksheet: Create downloadable worksheet documents (Cornell Notes, fill-in-blank, short-answer, vocabulary) with built-in answer keys for AI grading. Automatically saved to Grading Setup. When the teacher uploads a textbook page or reading and asks for a worksheet, ALWAYS use this tool. Extract vocab terms, write questions with expected answers, and include summary key points. The worksheet will have an invisible answer key embedded for consistent grading.
 - generate_document: Create formatted Word documents with rich typography (headings, bold, italic, lists, tables). Use for study guides, reference sheets, parent letters, lesson outlines, rubrics, or any document. NOT for gradeable worksheets.
 - save_document_style: Save the visual formatting of a document (fonts, sizes, colors) as a reusable style. Use when the teacher says they like how a document looks and want that same look for future documents of that type.
@@ -760,7 +765,42 @@ When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar 
 
 CRITICAL: The teaching calendar is the SOURCE OF TRUTH for what the teacher is teaching on any given day. If get_calendar returns a scheduled lesson for a date, that lesson IS what the teacher is teaching — use its title, unit, and topic for any worksheet/document generation. The pacing guide and curriculum map are REFERENCE materials for planning; the calendar is what's ACTUALLY scheduled. Never override calendar entries with pacing guide suggestions.
 
-STANDARDS & RESOURCES: The full curriculum standards and uploaded reference documents (pacing guides, calendars, curriculum docs) are included in your context above. Use them directly when generating curriculum-aligned content — you already know all the standards and have the pacing guide content. Reference specific standard codes. For additional standard details (learning targets, essential questions), use get_standards with a topic keyword. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools."""
+STANDARDS & RESOURCES: The full curriculum standards and uploaded reference documents (pacing guides, calendars, curriculum docs) are included in your context above. Use them directly when generating curriculum-aligned content — you already know all the standards and have the pacing guide content. Reference specific standard codes. For additional standard details (learning targets, essential questions), use get_standards with a topic keyword. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools.
+
+EDTECH QUIZ GENERATORS (zero-cost, no AI API calls):
+- generate_kahoot_quiz: Create Kahoot-compatible .xlsx quiz from standards/grades/content. Questions built from vocabulary and sample assessments.
+- generate_blooket_set: Create Blooket-compatible .csv question set with MC questions.
+- generate_gimkit_kit: Create Gimkit-compatible .csv (Question, Correct Answer, Incorrect Answer 1-3).
+- generate_quizlet_set: Create Quizlet-compatible .txt flashcard set (tab-separated term/definition).
+- generate_nearpod_questions: Create formatted .docx with questions for Nearpod copy-paste.
+- generate_canvas_qti: Create Canvas QTI 1.2 .xml for LMS import.
+
+When asked to create a quiz for Kahoot, Blooket, Gimkit, Quizlet, Nearpod, or Canvas, use the corresponding generate_* tool. These pull from standards vocabulary, sample assessments, and grade weakness data — zero cost, no AI API needed. All accept optional topic, assignment_name (weak areas), question_count, and difficulty parameters.
+
+ADVANCED ANALYTICS:
+- get_grade_trends: Track student/class scores over time with direction (improving/declining/stable). Use for individual student or class-wide trends.
+- get_rubric_weakness: Find consistently weakest rubric categories across ALL assignments. Shows gap between strongest and weakest categories.
+- flag_at_risk_students: Combine declining trends + missing work + low rubric categories into risk scores. Use when asked "who should I be worried about?" or "which students need help?"
+- compare_assignments: Side-by-side stats for two assignments (mean, median, distribution, category shifts, who improved/declined).
+
+PLANNING & CLASSROOM:
+- suggest_remediation: Map student weaknesses to concrete activities using the teacher's enabled edtech tools. Recommends specific Kahoot/Blooket/worksheet activities.
+- align_to_standards: Show which standards a topic covers and which remain unassessed. Use for curriculum mapping.
+- get_pacing_status: Compare calendar progress vs total standards — ahead/behind/on-track. Shows coverage percentage.
+- generate_bell_ringer: Quick 2-3 question warm-up from yesterday's lesson vocab/standards. Zero cost.
+- generate_exit_ticket: 2-3 quick check questions from today's lesson or a specified topic. Zero cost.
+- suggest_grouping: Create student groups by performance — heterogeneous (mixed) or homogeneous (similar). Uses grade data for balanced grouping.
+- generate_sub_plans: Build substitute teacher plans from calendar + saved lessons. Generates structured plans with objectives, vocabulary, and procedures.
+
+COMMUNICATION & REPORTING:
+- generate_progress_report: Structured progress report data for a student or period. Use with generate_document for a printable Word doc.
+- generate_report_card_comments: Template-based comments from score patterns (NOT AI-generated). Deterministic templates filled with real data.
+- draft_student_feedback: Structured feedback: strengths, growth areas, specific examples, next steps from full grade history.
+- generate_parent_conference_notes: Conference agenda with performance data, talking points, and action items.
+
+STUDENT INFO:
+- get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
+- get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:
@@ -1120,9 +1160,18 @@ def assistant_chat():
         active_model = active_model_info["model"]
         active_provider = active_model_info["provider"]
         system_prompt = _build_system_prompt()
-        max_rounds = 5
-        for _ in range(max_rounds):
+        max_rounds = MAX_TOOL_ROUNDS
+        for _round_idx in range(max_rounds):
             try:
+                # Per-round cost check — warn and stop if getting expensive
+                if _round_idx > 0 and total_input_tokens > 0:
+                    from assignment_grader import MODEL_PRICING
+                    _pricing = MODEL_PRICING.get(active_model, {"input": 0, "output": 0})
+                    _est_cost = (total_input_tokens * _pricing["input"] + total_output_tokens * _pricing["output"]) / 1_000_000
+                    if _est_cost > COST_WARNING_THRESHOLD:
+                        yield f"data: {json.dumps({'type': 'cost_warning', 'estimated_cost': round(_est_cost, 4), 'rounds_used': _round_idx})}\n\n"
+                        break  # Stop the tool loop — too expensive
+
                 full_response_text = ""
                 tool_use_blocks = []
                 deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
@@ -1374,6 +1423,8 @@ def assistant_chat():
                     _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
                     result = execute_tool(tb["name"], tool_input)
                     result_str = json.dumps(result)
+                    if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
+                        result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'
 
                     yield from _flush_audio_queue()
 
@@ -1449,6 +1500,8 @@ def assistant_chat():
                 total_input_tokens, total_output_tokens,
                 active_model, total_tts_chars
             )
+            if cost_info.get("total_cost", 0) > COST_WARNING_THRESHOLD:
+                cost_info["high_cost"] = True
             yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"

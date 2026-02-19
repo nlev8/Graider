@@ -1,0 +1,52 @@
+{
+  "scheduled_lessons": [
+    {
+      "id": "lesson-001",
+      "date": "2026-02-16",
+      "unit": "Unit 3 - Constitution",
+      "lesson_title": "Bill of Rights Review",
+      "day_number": 1,
+      "lesson_file": "Unit 3 - Constitution/Bill of Rights Review.json"
+    },
+    {
+      "id": "lesson-002",
+      "date": "2026-02-17",
+      "unit": "Unit 3 - Constitution",
+      "lesson_title": "Amendments 11-27",
+      "day_number": 2,
+      "lesson_file": "Unit 3 - Constitution/Amendments 11-27.json"
+    },
+    {
+      "id": "lesson-003",
+      "date": "2026-02-18",
+      "unit": "Unit 3 - Constitution",
+      "lesson_title": "Checks and Balances",
+      "day_number": 3,
+      "lesson_file": "Unit 3 - Constitution/Checks and Balances.json"
+    },
+    {
+      "id": "lesson-004",
+      "date": "2026-02-19",
+      "unit": "Unit 3 - Constitution",
+      "lesson_title": "Federalism",
+      "day_number": 4,
+      "lesson_file": null
+    },
+    {
+      "id": "lesson-005",
+      "date": "2026-02-20",
+      "unit": "Unit 3 - Constitution",
+      "lesson_title": "Unit 3 Assessment Review",
+      "day_number": 5,
+      "lesson_file": null
+    }
+  ],
+  "holidays": [
+    {
+      "date": "2026-02-23",
+      "name": "Presidents' Day (Observed)",
+      "end_date": null
+    }
+  ],
+  "school_days": {}
+}

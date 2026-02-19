@@ -85,19 +85,6 @@ def _safe_int_score(val):
         return 0
 
 
-def _normalize_period(period):
-    """Normalize period name: 'Period_5' -> 'Period 5', 'period 5' -> 'Period 5', '5' -> 'Period 5'."""
-    import re
-    p = period.strip().replace('_', ' ')
-    # Bare number: '2' -> 'Period 2'
-    if re.match(r'^\d+$', p):
-        return f'Period {p}'
-    # Capitalize: 'period 5' -> 'Period 5'
-    if p.lower().startswith('period'):
-        return 'Period' + p[6:]
-    return p
-
-
 def _normalize_assignment_name(name):
     """Normalize assignment name for comparison (strips suffixes like (1), .docx)."""
     import re
@@ -539,17 +526,17 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "get_missing_assignments",
-        "description": "Find missing/unsubmitted assignments. Three modes: (1) by student name — shows which assignments they submitted and which are missing, (2) by period — shows all students with missing work, (3) by assignment — shows which students haven't submitted a specific assignment. Compares each student's grades against all assignments graded in their period.",
+        "description": "Find missing/unsubmitted assignments. Four modes: (1) by student_name — which assignments are they missing? (2) by period — who in that period has missing work? (3) NO params or period='all' — compact summary of ALL periods with zero-submission students. Use this when asked 'who hasn't submitted anything' across all classes. (4) by assignment_name — who hasn't turned in X? IMPORTANT: For 'students with no submissions' across all periods, call with NO parameters — do NOT call once per period.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "student_name": {
                     "type": "string",
-                    "description": "Student name to check missing work for (partial match)"
+                    "description": "Student name to check missing work for (fuzzy match)"
                 },
                 "period": {
                     "type": "string",
-                    "description": "Period to check (e.g., 'Period 2', '2'). Shows all students with missing work."
+                    "description": "Period to check (e.g., 'Period 2', '2'). Use 'all' or omit for all-periods summary."
                 },
                 "assignment_name": {
                     "type": "string",
@@ -878,6 +865,104 @@ TOOL_DEFINITIONS = [
                 }
             },
             "required": ["filename"]
+        }
+    },
+    {
+        "name": "send_parent_emails",
+        "description": "Send personalized emails to parents/guardians via Outlook. Use when teacher asks to email or notify parents about missing work, grades, behavior, or announcements. Supports template placeholders: {student_first_name}, {student_last_name}, {student_name}, {parent_name}, {period}, {teacher_name}, {subject_area}. Can target specific students or auto-find students with zero submissions. IMPORTANT: Always do a dry_run first to show the teacher a preview before actually sending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "email_subject": {
+                    "type": "string",
+                    "description": "Email subject line. Supports {student_first_name} etc."
+                },
+                "email_body": {
+                    "type": "string",
+                    "description": "Email body text. Use placeholders and newlines for paragraphs."
+                },
+                "student_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of student names to email parents of."
+                },
+                "period": {
+                    "type": "string",
+                    "description": "Email all parents in this period."
+                },
+                "zero_submissions": {
+                    "type": "boolean",
+                    "description": "If true, auto-target students with zero assignment submissions."
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "If true, preview emails without sending. ALWAYS use dry_run first."
+                }
+            },
+            "required": ["email_subject", "email_body"]
+        }
+    },
+    {
+        "name": "save_assignment_config",
+        "description": "Save or update an assignment config in Grading Setup. Use when teacher asks to save an assignment, update point values, rename, change rubric type, or modify grading notes for an existing assignment. Can update individual fields without overwriting the entire config. IMPORTANT: If the teacher uploaded a document, always include document_text so the editor can display and mark it.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Assignment title (used as filename). If updating existing, must match exactly."
+                },
+                "document_text": {
+                    "type": "string",
+                    "description": "Full text content of the assignment document. Include this when saving a new assignment from an uploaded file so the editor can display it."
+                },
+                "questions": {
+                    "type": "array",
+                    "description": "Array of question objects: {id, type, prompt, points, marker, expected_answer}",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "type": {"type": "string", "enum": ["short_answer", "vocab_term", "written", "fill_in_blank"]},
+                            "prompt": {"type": "string"},
+                            "points": {"type": "integer"},
+                            "marker": {"type": "string"},
+                            "expected_answer": {"type": "string"}
+                        },
+                        "required": ["type", "prompt", "points"]
+                    }
+                },
+                "totalPoints": {
+                    "type": "integer",
+                    "description": "Total points for the assignment"
+                },
+                "effortPoints": {
+                    "type": "integer",
+                    "description": "Points allocated for effort (default 15)"
+                },
+                "gradingNotes": {
+                    "type": "string",
+                    "description": "Grading notes / expected answers for the AI grader"
+                },
+                "rubricType": {
+                    "type": "string",
+                    "enum": ["standard", "cornell-notes", "fill-in-blank"],
+                    "description": "Rubric type"
+                },
+                "customMarkers": {
+                    "type": "array",
+                    "description": "Section markers: [{start, points, type}]",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "start": {"type": "string"},
+                            "points": {"type": "integer"},
+                            "type": {"type": "string"}
+                        }
+                    }
+                }
+            },
+            "required": ["title"]
         }
     }
 ]
@@ -1627,7 +1712,7 @@ def _load_accommodations():
 
 def _load_settings():
     """Load teacher settings (subject, state, grade level, AI notes)."""
-    settings_path = os.path.expanduser("~/.graider_settings.json")
+    settings_path = SETTINGS_FILE
     if os.path.exists(settings_path):
         try:
             with open(settings_path, 'r', encoding='utf-8') as f:
@@ -2361,31 +2446,102 @@ def _load_saved_assignments():
     return saved
 
 
-def get_missing_assignments(student_name=None, period=None, assignment_name=None):
-    """Find missing/unsubmitted assignments.
+def _match_assignment_to_config(assign_name, saved_norms, saved_display):
+    """Try to match an assignment name to a saved config. Returns the matched
+    norm key or None."""
+    norm = _normalize_assignment_name(assign_name)
+    if norm in saved_norms:
+        return norm
+    norm_lower = norm.lower()
+    for sn in saved_norms:
+        sn_lower = sn.lower()
+        sd = saved_display.get(sn, sn)
+        sd_norm = _normalize_assignment_name(sd).lower()
+        if (norm_lower.startswith(sn_lower[:25]) or
+                sn_lower.startswith(norm_lower[:25]) or
+                norm_lower.startswith(sd_norm[:25]) or
+                sd_norm.startswith(norm_lower[:25])):
+            return sn
+    return None
 
-    Compares student submissions against saved assignment configs
-    (the assignments the teacher set up to grade), NOT against what
-    other students submitted.
 
-    Three modes:
-    1. student_name → list saved assignments this student hasn't submitted
-    2. period → list all students in that period with missing work
-    3. assignment_name → list students who are missing that specific assignment
-    """
+def _scan_submission_folder(roster_name_map, saved_norms, saved_display):
+    """Scan the assignments folder for submitted files. Returns a dict of
+    student_id -> set of matched saved config norm keys.
+    This catches submissions that haven't been graded yet."""
+    import re
+    settings = _load_settings()
+    folder = settings.get('config', {}).get('assignments_folder', '')
+    if not folder or not os.path.isdir(folder):
+        return {}
+
+    # Build reverse lookup: lowercase "first last" -> student_id
+    # from roster names (handles "First Middle Last" by using first+last)
+    name_to_sid = {}
+    for sid, full_name in roster_name_map.items():
+        # Clean punctuation and split
+        clean = re.sub(r'[,;.\'"]+', ' ', full_name).split()
+        if len(clean) >= 2:
+            # Store as "first last" (skip middle names)
+            key = (clean[0].lower(), clean[-1].lower())
+            name_to_sid[key] = sid
+
+    result = defaultdict(set)
+    supported = {'.docx', '.pdf', '.txt', '.jpg', '.jpeg', '.png'}
+
+    for filename in os.listdir(folder):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in supported:
+            continue
+
+        # Parse filename: FirstName_LastName_AssignmentName.ext
+        # Handle stray spaces: "Lillian _Scott_Cornell Notes..."
+        base = os.path.splitext(filename)[0]
+        parts = base.split('_', 2)
+        if len(parts) < 3:
+            continue
+
+        first = parts[0].strip().lower()
+        last = parts[1].strip().lower()
+        assign_part = parts[2].strip()
+
+        if not first or not last or not assign_part:
+            continue
+
+        # Match student to roster
+        sid = name_to_sid.get((first, last))
+        if not sid:
+            # Try fuzzy: check all roster entries
+            file_name_str = f"{parts[0].strip()} {parts[1].strip()}"
+            for roster_sid, roster_name in roster_name_map.items():
+                if _fuzzy_name_match(file_name_str, roster_name):
+                    sid = roster_sid
+                    break
+        if not sid:
+            continue
+
+        # Match assignment to saved config
+        matched_config = _match_assignment_to_config(assign_part, saved_norms, saved_display)
+        if matched_config:
+            result[sid].add(matched_config)
+
+    return dict(result)
+
+
+def _build_missing_assignments_data():
+    """Shared helper: build per-student submission data from master CSV + roster +
+    assignments folder. Returns (student_data, saved_norms, saved_display, error)
+    where student_data is dict keyed by student_id with {assigns: set, period: str, name: str}."""
     rows = _load_master_csv()
-    if not rows:
-        return {"error": "No grading data available"}
 
-    # Load saved assignment configs — the source of truth for what should be graded
     saved_assignments = _load_saved_assignments()
     if not saved_assignments:
-        return {"error": "No saved assignment configs found in Grading Setup"}
+        return None, None, None, {"error": "No saved assignment configs found in Grading Setup"}
 
     saved_norms = {a["norm"] for a in saved_assignments}
     saved_display = {a["norm"]: a["title"] for a in saved_assignments}
 
-    # Use roster to map student_id -> class period (authoritative)
+    # Roster is authoritative for student_id -> period mapping
     roster = _load_roster()
     roster_period_map = {}
     roster_name_map = {}
@@ -2396,37 +2552,62 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
 
     # Build per-student data keyed by student_id
     student_data = defaultdict(lambda: {"assigns": set(), "period": "", "name": ""})
-    for r in rows:
-        sid = r.get("student_id", "")
-        name = r["student_name"]
-        if not sid or sid == "UNKNOWN":
-            continue
-        norm_assign = _normalize_assignment_name(r["assignment"])
-        # Only track assignments that match a saved config
-        if norm_assign in saved_norms:
-            student_data[sid]["assigns"].add(norm_assign)
-        else:
-            # Try fuzzy match against saved assignment titles
-            for sn in saved_norms:
-                sd = saved_display.get(sn, sn)
-                if _fuzzy_name_match(norm_assign, sn) or _normalize_assignment_name(sd).startswith(norm_assign[:20]) or norm_assign.startswith(_normalize_assignment_name(sd)[:20]):
-                    student_data[sid]["assigns"].add(sn)
-                    break
-            else:
-                # Still record it so submitted count is accurate
-                student_data[sid]["assigns"].add(norm_assign)
+
+    # Pass 1: graded results from master CSV
+    if rows:
+        for r in rows:
+            sid = r.get("student_id", "")
+            name = r["student_name"]
+            if not sid or sid == "UNKNOWN":
+                continue
+            matched = _match_assignment_to_config(r["assignment"], saved_norms, saved_display)
+            if matched:
+                student_data[sid]["assigns"].add(matched)
+            # Set period from roster (authoritative)
+            if not student_data[sid]["period"] and sid in roster_period_map:
+                student_data[sid]["period"] = roster_period_map[sid]
+            # Use longest name available (roster preferred)
+            if sid in roster_name_map and len(roster_name_map[sid]) > len(student_data[sid]["name"]):
+                student_data[sid]["name"] = roster_name_map[sid]
+            elif len(name) > len(student_data[sid]["name"]):
+                student_data[sid]["name"] = name
+
+    # Pass 2: ungraded submissions from assignments folder
+    folder_submissions = _scan_submission_folder(roster_name_map, saved_norms, saved_display)
+    for sid, assigns in folder_submissions.items():
+        student_data[sid]["assigns"].update(assigns)
         if not student_data[sid]["period"] and sid in roster_period_map:
             student_data[sid]["period"] = roster_period_map[sid]
         if sid in roster_name_map and len(roster_name_map[sid]) > len(student_data[sid]["name"]):
             student_data[sid]["name"] = roster_name_map[sid]
-        elif len(name) > len(student_data[sid]["name"]):
-            student_data[sid]["name"] = name
 
-    # Also add roster students who have NO grading data at all
+    # Add roster students with NO data at all
     for sid, period in roster_period_map.items():
         if sid not in student_data:
             student_data[sid]["period"] = period
             student_data[sid]["name"] = roster_name_map.get(sid, "Unknown")
+
+    return dict(student_data), saved_norms, saved_display, None
+
+
+def get_missing_assignments(student_name=None, period=None, assignment_name=None):
+    """Find missing/unsubmitted assignments.
+
+    Compares student submissions against saved assignment configs
+    (the assignments the teacher set up to grade), NOT against what
+    other students submitted.
+
+    Four modes:
+    1. student_name → list saved assignments this student hasn't submitted
+    2. period → list all students in that period with missing work
+    3. period="all" → summary of ALL periods (zero-submission students highlighted)
+    4. assignment_name → list students who are missing that specific assignment
+
+    If no params provided, defaults to period="all" (all-periods summary).
+    """
+    student_data, saved_norms, saved_display, err = _build_missing_assignments_data()
+    if err:
+        return err
 
     # Mode 1: Specific student
     if student_name:
@@ -2434,7 +2615,6 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
         if not matches:
             return {"error": f"No student found matching '{student_name}'"}
         sid, data = matches[0]
-        # Compare against saved assignments only
         submitted_saved = data["assigns"] & saved_norms
         missing = saved_norms - data["assigns"]
         return {
@@ -2447,8 +2627,8 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
             "missing": sorted(saved_display.get(n, n) for n in missing),
         }
 
-    # Mode 2: By period — all students missing work
-    if period:
+    # Mode 2: By period — students missing work in ONE period (compact response)
+    if period and _normalize_period(period) != "all":
         period_norm = _normalize_period(period)
         students_missing = []
         for sid, data in student_data.items():
@@ -2461,7 +2641,6 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
                     "student_name": data["name"],
                     "missing_count": len(missing),
                     "submitted_count": len(submitted_saved),
-                    "missing": sorted(saved_display.get(n, n) for n in missing),
                 })
         students_missing.sort(key=lambda x: -x["missing_count"])
 
@@ -2469,40 +2648,72 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
             "period": period_norm,
             "total_assignments": len(saved_norms),
             "students_with_missing": len(students_missing),
-            "students": students_missing[:30],
+            "students": students_missing[:25],
         }
 
-    # Mode 3: By assignment — which students are missing it
-    if assignment_name:
-        # Find matching saved assignment
-        target_norm = None
-        for sa in saved_assignments:
-            if assignment_name.lower() in sa["title"].lower() or assignment_name.lower() in sa["norm"].lower():
-                target_norm = sa["norm"]
-                break
-        if not target_norm:
-            return {"error": f"No saved assignment found matching '{assignment_name}'"}
-
-        display_name = saved_display.get(target_norm, assignment_name)
-        missing_students = []
-        submitted_students = []
+    # Mode 3: All periods — summary across all periods (default when no params)
+    if not assignment_name:
+        period_summaries = defaultdict(lambda: {"total": 0, "zero_submissions": [], "some_missing": 0})
         for sid, data in student_data.items():
-            if not data["period"]:
+            p = data["period"]
+            if not p:
                 continue
-            if target_norm in data["assigns"]:
-                submitted_students.append({"student_name": data["name"], "period": data["period"]})
-            else:
-                missing_students.append({"student_name": data["name"], "period": data["period"]})
+            period_summaries[p]["total"] += 1
+            submitted_saved = data["assigns"] & saved_norms
+            missing = saved_norms - data["assigns"]
+            if len(submitted_saved) == 0 and len(missing) > 0:
+                period_summaries[p]["zero_submissions"].append(data["name"])
+            elif len(missing) > 0:
+                period_summaries[p]["some_missing"] += 1
 
-        missing_students.sort(key=lambda x: (x["period"], x["student_name"]))
+        result_periods = []
+        all_zero = []
+        for p in sorted(period_summaries.keys()):
+            info = period_summaries[p]
+            result_periods.append({
+                "period": p,
+                "total_students": info["total"],
+                "zero_submissions": len(info["zero_submissions"]),
+                "some_missing": info["some_missing"],
+                "all_complete": info["total"] - len(info["zero_submissions"]) - info["some_missing"],
+            })
+            for name in info["zero_submissions"]:
+                all_zero.append({"student_name": name, "period": p})
+
         return {
-            "assignment": display_name,
-            "submitted_count": len(submitted_students),
-            "missing_count": len(missing_students),
-            "missing_students": missing_students,
+            "total_assignments": len(saved_norms),
+            "period_summary": result_periods,
+            "zero_submission_students": all_zero,
+            "zero_submission_count": len(all_zero),
         }
 
-    return {"error": "Provide student_name, period, or assignment_name to search"}
+    # Mode 4: By assignment — which students are missing it
+    target_norm = None
+    for sa in _load_saved_assignments():
+        if assignment_name.lower() in sa["title"].lower() or assignment_name.lower() in sa["norm"].lower():
+            target_norm = sa["norm"]
+            break
+    if not target_norm:
+        return {"error": f"No saved assignment found matching '{assignment_name}'"}
+
+    display_name = saved_display.get(target_norm, assignment_name)
+    missing_students = []
+    submitted_count = 0
+    for sid, data in student_data.items():
+        if not data["period"]:
+            continue
+        if target_norm in data["assigns"]:
+            submitted_count += 1
+        else:
+            missing_students.append({"student_name": data["name"], "period": data["period"]})
+
+    missing_students.sort(key=lambda x: (x["period"], x["student_name"]))
+    return {
+        "assignment": display_name,
+        "submitted_count": submitted_count,
+        "missing_count": len(missing_students),
+        "missing_students": missing_students,
+    }
 
 
 # ═══════════════════════════════════════════════════════
@@ -2985,6 +3196,321 @@ def read_resource_tool(filename):
 
 
 # ═══════════════════════════════════════════════════════
+# SAVE ASSIGNMENT CONFIG
+# ═══════════════════════════════════════════════════════
+
+def save_assignment_config(title, document_text=None, questions=None, totalPoints=None,
+                           effortPoints=None, gradingNotes=None, rubricType=None,
+                           customMarkers=None):
+    """Save or update an assignment config in Grading Setup.
+
+    Merge-updates: loads existing config if present, applies only the
+    provided fields, and writes back. This lets the assistant update
+    point values or questions without wiping the rest of the config.
+    """
+    import time
+
+    if not title or not title.strip():
+        return {"error": "Title is required."}
+
+    safe_title = ''.join(c for c in title if c.isalnum() or c in ' -_').strip()
+    if not safe_title:
+        return {"error": "Title contains no valid characters."}
+
+    os.makedirs(ASSIGNMENTS_DIR, exist_ok=True)
+    config_path = os.path.join(ASSIGNMENTS_DIR, safe_title + '.json')
+
+    # Load existing config if present
+    existing = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+
+    # Merge updates
+    existing["title"] = title
+    if document_text is not None:
+        existing["importedDoc"] = {
+            "text": document_text,
+            "html": "",
+            "filename": safe_title + ".docx",
+            "loading": False,
+        }
+    if questions is not None:
+        # Ensure each question has an id
+        ts = int(time.time() * 1000)
+        for i, q in enumerate(questions):
+            if not q.get("id"):
+                q["id"] = ts + i
+        existing["questions"] = questions
+    if totalPoints is not None:
+        existing["totalPoints"] = totalPoints
+    if effortPoints is not None:
+        existing["effortPoints"] = effortPoints
+    if gradingNotes is not None:
+        existing["gradingNotes"] = gradingNotes
+    if rubricType is not None:
+        existing["rubricType"] = rubricType
+    if customMarkers is not None:
+        existing["customMarkers"] = customMarkers
+
+    # Ensure required fields exist with defaults
+    defaults = {
+        "subject": "", "totalPoints": 100, "instructions": "",
+        "aliases": [], "customMarkers": [], "excludeMarkers": [],
+        "gradingNotes": "", "questions": [], "responseSections": [],
+        "rubricType": "standard", "customRubric": None,
+        "useSectionPoints": False, "sectionTemplate": "Custom",
+        "effortPoints": 15, "completionOnly": False,
+        "countsTowardsGrade": True,
+    }
+    for key, default_val in defaults.items():
+        if key not in existing:
+            existing[key] = default_val
+
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(existing, f, indent=2)
+
+    q_count = len(existing.get("questions", []))
+    q_total = sum(q.get("points", 0) for q in existing.get("questions", []))
+
+    return {
+        "status": "saved",
+        "config_name": safe_title,
+        "title": title,
+        "questions_count": q_count,
+        "questions_points": q_total,
+        "total_points": existing.get("totalPoints", 100),
+        "message": "Assignment config saved with " + str(q_count) + " questions (" + str(q_total) + " pts + " + str(existing.get("effortPoints", 15)) + " effort).",
+    }
+
+
+# ═══════════════════════════════════════════════════════
+# SEND PARENT EMAILS
+# ═══════════════════════════════════════════════════════
+
+def _load_email_config():
+    """Load teacher email config (teacher_name, teacher_email, signature)."""
+    config_path = os.path.expanduser("~/.graider_email_config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _parse_student_name(name):
+    """Parse 'Last, First Middle' or 'First Last' into components.
+
+    Returns dict with first_name, last_name, full_name (as 'First Last').
+    """
+    if not name:
+        return {"first_name": "Student", "last_name": "", "full_name": "Student"}
+
+    name = name.strip()
+    for sep in [',', ';']:
+        if sep in name:
+            parts = name.split(sep, 1)
+            last = parts[0].strip()
+            after = parts[1].strip()
+            first = after.split()[0] if after else last
+            return {
+                "first_name": first,
+                "last_name": last,
+                "full_name": first + " " + last,
+            }
+    words = name.split()
+    return {
+        "first_name": words[0],
+        "last_name": words[-1] if len(words) > 1 else "",
+        "full_name": name,
+    }
+
+
+def _fill_email_template(template, replacements):
+    """Replace {placeholders} in a template string."""
+    result = template
+    for key, value in replacements.items():
+        result = result.replace("{" + key + "}", str(value))
+    return result
+
+
+def send_parent_emails(email_subject, email_body, student_names=None, period=None,
+                       zero_submissions=False, dry_run=True):
+    """Send personalized emails to parents/guardians via Outlook automation.
+
+    Resolves target students, fills template placeholders, and either
+    previews (dry_run) or triggers the Playwright Outlook sender.
+    """
+    # Load parent contacts
+    if not os.path.exists(PARENT_CONTACTS_FILE):
+        return {"error": "No parent contacts imported. Upload class list in Settings first."}
+
+    try:
+        with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
+            contacts = json.load(f)
+    except Exception as e:
+        return {"error": "Failed to load parent contacts: " + str(e)}
+
+    if not contacts:
+        return {"error": "Parent contacts file is empty."}
+
+    # Load teacher settings
+    settings = _load_settings()
+    config = settings.get('config', {})
+    email_config = _load_email_config()
+    teacher_name = email_config.get('teacher_name', '') or config.get('teacher_name', 'Your Teacher')
+    subject_area = config.get('subject', '')
+    email_signature = email_config.get('email_signature', '')
+
+    # Build reverse map: normalized student name → (student_id, contact data)
+    name_to_contact = {}
+    for student_id, contact in contacts.items():
+        sname = contact.get('student_name', '')
+        if sname:
+            name_to_contact[sname] = (student_id, contact)
+
+    # Resolve target students
+    target_students = []  # list of (student_id, contact_data, period)
+
+    if zero_submissions:
+        missing_data = get_missing_assignments(period="all")
+        if "error" in missing_data:
+            return {"error": "Could not check missing assignments: " + missing_data["error"]}
+
+        zero_list = missing_data.get("zero_submission_students", [])
+        if not zero_list:
+            return {"message": "No students with zero submissions found.", "total_emails": 0}
+
+        for entry in zero_list:
+            sname = entry.get("student_name", "")
+            speriod = entry.get("period", "")
+
+            # Try exact match first, then fuzzy
+            matched = False
+            for cname, (sid, cdata) in name_to_contact.items():
+                if _fuzzy_name_match(sname, cname):
+                    target_students.append((sid, cdata, speriod))
+                    matched = True
+                    break
+            if not matched:
+                target_students.append((None, {"student_name": sname}, speriod))
+
+    elif student_names:
+        for search_name in student_names:
+            matched = False
+            for cname, (sid, cdata) in name_to_contact.items():
+                if _fuzzy_name_match(search_name, cname):
+                    speriod = cdata.get('period', '')
+                    target_students.append((sid, cdata, speriod))
+                    matched = True
+                    break
+            if not matched:
+                target_students.append((None, {"student_name": search_name}, ""))
+
+    elif period:
+        target_period = _normalize_period(period)
+        for sid, cdata in contacts.items():
+            cperiod = cdata.get('period', '')
+            if _normalize_period(cperiod) == target_period:
+                target_students.append((sid, cdata, cperiod))
+
+    else:
+        return {"error": "Provide student_names, period, or set zero_submissions=true to target students."}
+
+    # Build email payloads
+    emails = []
+    skipped = []
+
+    for sid, cdata, speriod in target_students:
+        parent_emails = cdata.get('parent_emails', [])
+        sname = cdata.get('student_name', 'Student')
+
+        if not parent_emails:
+            skipped.append(sname)
+            continue
+
+        parsed = _parse_student_name(sname)
+        parent_name = cdata.get('primary_contact_name', '')
+        if not parent_name:
+            parent_name = "Parent/Guardian"
+
+        replacements = {
+            "student_first_name": parsed["first_name"],
+            "student_last_name": parsed["last_name"],
+            "student_name": parsed["full_name"],
+            "parent_name": parent_name,
+            "period": speriod or cdata.get('period', ''),
+            "teacher_name": teacher_name,
+            "subject_area": subject_area,
+        }
+
+        filled_subject = _fill_email_template(email_subject, replacements)
+        filled_body = _fill_email_template(email_body, replacements)
+
+        # Append teacher signature
+        if email_signature:
+            filled_body += "\n\n" + email_signature
+        elif teacher_name and teacher_name != 'Your Teacher':
+            filled_body += "\n\n" + teacher_name
+
+        to_email = parent_emails[0]
+        cc_emails = parent_emails[1:] if len(parent_emails) > 1 else []
+
+        emails.append({
+            "to": to_email,
+            "cc": ', '.join(cc_emails) if cc_emails else '',
+            "subject": filled_subject,
+            "body": filled_body,
+            "student_name": sname,
+        })
+
+    if not emails and skipped:
+        return {
+            "error": "No parent emails found for any targeted students.",
+            "skipped_students": skipped,
+        }
+    if not emails:
+        return {"error": "No matching students found."}
+
+    # Dry run: return preview
+    if dry_run:
+        previews = []
+        for e in emails[:3]:
+            previews.append({
+                "to": e["to"],
+                "cc": e.get("cc", ""),
+                "subject": e["subject"],
+                "body": e["body"][:500] + ("..." if len(e["body"]) > 500 else ""),
+                "student_name": e["student_name"],
+            })
+        return {
+            "dry_run": True,
+            "preview_count": len(previews),
+            "total_emails": len(emails),
+            "previews": previews,
+            "skipped_students": skipped,
+            "message": "Preview of " + str(len(emails)) + " email(s). Confirm to send.",
+        }
+
+    # Actually send via Outlook/Playwright
+    try:
+        from backend.routes.email_routes import launch_outlook_sender
+        result = launch_outlook_sender(emails)
+        result["skipped_students"] = skipped
+        result["total_emails"] = len(emails)
+        return result
+    except ImportError:
+        return {"error": "Outlook sender not available. Check backend installation."}
+    except Exception as e:
+        return {"error": "Failed to launch Outlook sender: " + str(e)}
+
+
+# ═══════════════════════════════════════════════════════
 # TOOL DISPATCH
 # ═══════════════════════════════════════════════════════
 
@@ -3016,11 +3542,70 @@ TOOL_HANDLERS = {
     "add_calendar_holiday": add_calendar_holiday,
     "list_resources": list_resources_tool,
     "read_resource": read_resource_tool,
+    "send_parent_emails": send_parent_emails,
+    "save_assignment_config": save_assignment_config,
 }
+
+# ═══════════════════════════════════════════════════════
+# MERGE SUBMODULE TOOLS (deferred to avoid circular imports)
+# ═══════════════════════════════════════════════════════
+
+_submodules_merged = False
+_merge_in_progress = False
+
+
+def _merge_submodules():
+    """Lazily merge tool definitions from submodules on first access.
+    Uses a reentrancy guard to handle circular imports gracefully:
+    if a submodule triggers this module to load, the nested call is a no-op.
+    Only marks as complete when ALL submodules loaded successfully."""
+    global _submodules_merged, _merge_in_progress
+    if _submodules_merged or _merge_in_progress:
+        return
+    _merge_in_progress = True
+
+    submodules = [
+        ("backend.services.assistant_tools_edtech", "EDTECH_TOOL_DEFINITIONS", "EDTECH_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_analytics", "ANALYTICS_TOOL_DEFINITIONS", "ANALYTICS_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_planning", "PLANNING_TOOL_DEFINITIONS", "PLANNING_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_communication", "COMMUNICATION_TOOL_DEFINITIONS", "COMMUNICATION_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_student", "STUDENT_TOOL_DEFINITIONS", "STUDENT_TOOL_HANDLERS"),
+    ]
+
+    existing_names = {td["name"] for td in TOOL_DEFINITIONS}
+    all_loaded = True
+    import importlib
+    for mod_name, defs_attr, handlers_attr in submodules:
+        try:
+            mod = importlib.import_module(mod_name)
+            defs = getattr(mod, defs_attr, None)
+            handlers = getattr(mod, handlers_attr, None)
+            if defs is None or handlers is None:
+                all_loaded = False
+                continue
+            for td in defs:
+                if td["name"] not in existing_names:
+                    TOOL_DEFINITIONS.append(td)
+                    existing_names.add(td["name"])
+            for name, handler in handlers.items():
+                if name not in TOOL_HANDLERS:
+                    TOOL_HANDLERS[name] = handler
+        except (ImportError, AttributeError):
+            all_loaded = False
+
+    _merge_in_progress = False
+    if all_loaded:
+        _submodules_merged = True
+
+
+# Attempt merge immediately — works when this module is loaded first (normal app startup).
+# If circular import prevents full merge, execute_tool() retries via _merge_submodules().
+_merge_submodules()
 
 
 def execute_tool(tool_name, tool_input):
     """Execute a tool by name with the given input."""
+    _merge_submodules()  # Ensure submodule tools are registered
     handler = TOOL_HANDLERS.get(tool_name)
     if not handler:
         return {"error": f"Unknown tool: {tool_name}"}

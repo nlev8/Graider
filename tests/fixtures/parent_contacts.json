@@ -1,0 +1,44 @@
+{
+  "S001": {
+    "student_name": "Alice Johnson",
+    "period": "Period 1",
+    "parent_emails": ["parent.johnson@email.com"],
+    "parent_phones": ["555-0101"],
+    "primary_contact_name": "Mrs. Johnson"
+  },
+  "S002": {
+    "student_name": "Bob Martinez",
+    "period": "Period 1",
+    "parent_emails": ["martinez.family@email.com"],
+    "parent_phones": ["555-0102"],
+    "primary_contact_name": "Mr. Martinez"
+  },
+  "S003": {
+    "student_name": "Carol Williams",
+    "period": "Period 1",
+    "parent_emails": ["williams.c@email.com", "williams.d@email.com"],
+    "parent_phones": ["555-0103"],
+    "primary_contact_name": "Mrs. Williams"
+  },
+  "S005": {
+    "student_name": "Emma Davis",
+    "period": "Period 1",
+    "parent_emails": ["davis.parents@email.com"],
+    "parent_phones": ["555-0105"],
+    "primary_contact_name": "Mr. Davis"
+  },
+  "S006": {
+    "student_name": "Frank Brown",
+    "period": "Period 2",
+    "parent_emails": ["brown.frank@email.com"],
+    "parent_phones": ["555-0106"],
+    "primary_contact_name": "Mrs. Brown"
+  },
+  "S011": {
+    "student_name": "Kate Thomas",
+    "period": "Period 3",
+    "parent_emails": ["thomas.family@email.com"],
+    "parent_phones": ["555-0111"],
+    "primary_contact_name": "Mr. Thomas"
+  }
+}
