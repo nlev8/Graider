@@ -46,20 +46,21 @@ def test_handlers_are_callable():
 
 
 def test_tool_count():
-    """Verify we have the expected 52 tools (29 original + 23 new)."""
-    assert len(at.TOOL_DEFINITIONS) >= 52, f"Expected >= 52 tools, got {len(at.TOOL_DEFINITIONS)}"
-    assert len(at.TOOL_HANDLERS) >= 52, f"Expected >= 52 handlers, got {len(at.TOOL_HANDLERS)}"
+    """Verify we have the expected 54 tools (29 original + 25 new)."""
+    assert len(at.TOOL_DEFINITIONS) >= 54, f"Expected >= 54 tools, got {len(at.TOOL_DEFINITIONS)}"
+    assert len(at.TOOL_HANDLERS) >= 54, f"Expected >= 54 handlers, got {len(at.TOOL_HANDLERS)}"
 
 
 def test_new_tools_present():
-    """Verify all 23 new tools are registered."""
+    """Verify all 25 new tools are registered."""
     names = set(td["name"] for td in at.TOOL_DEFINITIONS)
     new_tools = [
         # EdTech (6)
         "generate_kahoot_quiz", "generate_blooket_set", "generate_gimkit_kit",
         "generate_quizlet_set", "generate_nearpod_questions", "generate_canvas_qti",
-        # Analytics (4)
+        # Analytics (6)
         "get_grade_trends", "get_rubric_weakness", "flag_at_risk_students", "compare_assignments",
+        "get_grade_distribution", "detect_score_outliers",
         # Planning (7)
         "suggest_remediation", "align_to_standards", "get_pacing_status",
         "generate_bell_ringer", "generate_exit_ticket", "suggest_grouping", "generate_sub_plans",

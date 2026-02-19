@@ -88,6 +88,49 @@ ANALYTICS_TOOL_DEFINITIONS = [
             "required": ["assignment_a", "assignment_b"]
         }
     },
+    {
+        "name": "get_grade_distribution",
+        "description": "Histogram-ready A/B/C/D/F counts and percentages per assignment or period. Use when teacher needs grade distribution for admin reports, report cards, or data meetings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "assignment": {
+                    "type": "string",
+                    "description": "Assignment name to filter (partial match). Omit for all assignments combined."
+                },
+                "period": {
+                    "type": "string",
+                    "description": "Filter by period. Omit for all periods."
+                },
+                "group_by": {
+                    "type": "string",
+                    "enum": ["assignment", "period", "none"],
+                    "description": "Group results by assignment, period, or combined (default 'none')"
+                }
+            }
+        }
+    },
+    {
+        "name": "detect_score_outliers",
+        "description": "Flag scores more than 2 standard deviations from class mean — possible mis-grades, cheating, or data entry errors. Use before publishing grades or when teacher asks about suspicious scores.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "assignment": {
+                    "type": "string",
+                    "description": "Assignment name (partial match). Omit to scan all assignments."
+                },
+                "period": {
+                    "type": "string",
+                    "description": "Filter by period. Omit for all periods."
+                },
+                "threshold": {
+                    "type": "number",
+                    "description": "Number of standard deviations for outlier cutoff (default 2.0)"
+                }
+            }
+        }
+    },
 ]
 
 
@@ -426,6 +469,133 @@ def compare_assignments(assignment_a, assignment_b):
     }
 
 
+def get_grade_distribution(assignment=None, period=None, group_by=None):
+    """Histogram-ready A/B/C/D/F counts and percentages."""
+    group_by = group_by or "none"
+    rows = _load_master_csv(period_filter=period or "all")
+    if not rows:
+        return {"error": "No grade data found."}
+
+    if assignment:
+        norm = _normalize_assignment_name(assignment).lower()
+        rows = [r for r in rows if norm in _normalize_assignment_name(r.get("assignment", "")).lower()]
+        if not rows:
+            return {"error": f"No grades found for '{assignment}'."}
+
+    def _dist(score_list):
+        """Build distribution from a list of scores."""
+        total = len(score_list)
+        if total == 0:
+            return None
+        buckets = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+        for s in score_list:
+            if s >= 90:
+                buckets["A"] += 1
+            elif s >= 80:
+                buckets["B"] += 1
+            elif s >= 70:
+                buckets["C"] += 1
+            elif s >= 60:
+                buckets["D"] += 1
+            else:
+                buckets["F"] += 1
+        pcts = {g: round(c / total * 100, 1) for g, c in buckets.items()}
+        avg = round(sum(score_list) / total, 1)
+        pass_rate = round((buckets["A"] + buckets["B"] + buckets["C"]) / total * 100, 1)
+        return {
+            "count": total,
+            "mean": avg,
+            "pass_rate": pass_rate,
+            "counts": buckets,
+            "percentages": pcts,
+        }
+
+    if group_by == "assignment":
+        groups = defaultdict(list)
+        for r in rows:
+            groups[r.get("assignment", "unknown")].append(_safe_int_score(r.get("score")))
+        results = []
+        for name, scores in sorted(groups.items()):
+            d = _dist(scores)
+            if d:
+                results.append({"assignment": name, **d})
+        return {"group_by": "assignment", "distributions": results}
+
+    if group_by == "period":
+        groups = defaultdict(list)
+        for r in rows:
+            groups[r.get("period", "unknown")].append(_safe_int_score(r.get("score")))
+        results = []
+        for name, scores in sorted(groups.items()):
+            d = _dist(scores)
+            if d:
+                results.append({"period": name, **d})
+        return {"group_by": "period", "distributions": results}
+
+    # Default: combined
+    scores = [_safe_int_score(r.get("score")) for r in rows]
+    d = _dist(scores)
+    if not d:
+        return {"error": "No valid scores found."}
+    return {"group_by": "none", **d}
+
+
+def detect_score_outliers(assignment=None, period=None, threshold=None):
+    """Flag scores more than N standard deviations from the assignment mean."""
+    threshold = threshold if threshold is not None else 2.0
+    rows = _load_master_csv(period_filter=period or "all")
+    if not rows:
+        return {"error": "No grade data found."}
+
+    # Group by assignment
+    assign_groups = defaultdict(list)
+    for r in rows:
+        assign_groups[r.get("assignment", "unknown")].append(r)
+
+    if assignment:
+        norm = _normalize_assignment_name(assignment).lower()
+        filtered = {a: rs for a, rs in assign_groups.items()
+                    if norm in _normalize_assignment_name(a).lower()}
+        if not filtered:
+            return {"error": f"No grades found for '{assignment}'."}
+        assign_groups = filtered
+
+    outliers = []
+    for assign_name, assign_rows in assign_groups.items():
+        scores = [_safe_int_score(r.get("score")) for r in assign_rows]
+        if len(scores) < 3:
+            continue  # Need enough data for meaningful std dev
+        mean = sum(scores) / len(scores)
+        stdev = statistics.stdev(scores)
+        if stdev == 0:
+            continue  # All identical scores — no outliers possible
+        cutoff_low = mean - (threshold * stdev)
+        cutoff_high = mean + (threshold * stdev)
+
+        for r in assign_rows:
+            score = _safe_int_score(r.get("score"))
+            if score < cutoff_low or score > cutoff_high:
+                z_score = round((score - mean) / stdev, 2)
+                outliers.append({
+                    "student": r.get("student_name", "unknown"),
+                    "assignment": assign_name,
+                    "score": score,
+                    "class_mean": round(mean, 1),
+                    "class_stdev": round(stdev, 1),
+                    "z_score": z_score,
+                    "direction": "above" if score > mean else "below",
+                })
+
+    outliers.sort(key=lambda x: abs(x["z_score"]), reverse=True)
+
+    return {
+        "outlier_count": len(outliers),
+        "threshold_stdev": threshold,
+        "assignments_scanned": len(assign_groups),
+        "outliers": outliers[:30],  # Cap for token efficiency
+    }
+
+
 # ═══════════════════════════════════════════════════════
 # HANDLER MAP
 # ═══════════════════════════════════════════════════════
@@ -435,4 +605,6 @@ ANALYTICS_TOOL_HANDLERS = {
     "get_rubric_weakness": get_rubric_weakness,
     "flag_at_risk_students": flag_at_risk_students,
     "compare_assignments": compare_assignments,
+    "get_grade_distribution": get_grade_distribution,
+    "detect_score_outliers": detect_score_outliers,
 }

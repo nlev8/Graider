@@ -619,15 +619,38 @@ TOOL_DEFINITIONS = [
                 },
                 "content": {
                     "type": "array",
-                    "description": "Ordered content blocks. Text supports **bold** and *italic* markdown.",
+                    "description": "Ordered content blocks. Text supports **bold** and *italic* markdown. Visual blocks (math, number_line, coordinate_plane, graph, box_plot, shape) embed images.",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "type": {"type": "string", "enum": ["heading", "paragraph", "bullet_list", "numbered_list", "table"]},
+                            "type": {"type": "string", "enum": ["heading", "paragraph", "bullet_list", "numbered_list", "table", "math", "number_line", "coordinate_plane", "graph", "box_plot", "shape"]},
                             "text": {"type": "string", "description": "Text content (heading/paragraph)"},
                             "level": {"type": "integer", "description": "Heading level 1-3"},
                             "items": {"type": "array", "items": {"type": "string"}, "description": "List items"},
-                            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Table rows (first = header)"}
+                            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Table rows (first = header)"},
+                            "latex": {"type": "string", "description": "LaTeX math expression for type=math (e.g., '\\\\frac{-b \\\\pm \\\\sqrt{b^2-4ac}}{2a}')"},
+                            "font_size": {"type": "integer", "description": "Font size for math rendering (default 20)"},
+                            "min": {"type": "number", "description": "Min value for number_line"},
+                            "max": {"type": "number", "description": "Max value for number_line"},
+                            "points": {"description": "Points to plot. number_line: array of numbers. coordinate_plane: array of [x,y] pairs."},
+                            "labels": {"type": "array", "items": {"type": "string"}, "description": "Labels for points or data sets"},
+                            "title": {"type": "string", "description": "Title for visual blocks"},
+                            "blank": {"type": "boolean", "description": "If true, create blank template for students to fill in"},
+                            "x_range": {"type": "array", "items": {"type": "number"}, "description": "coordinate_plane: [min, max] for x-axis"},
+                            "y_range": {"type": "array", "items": {"type": "number"}, "description": "coordinate_plane: [min, max] for y-axis"},
+                            "graph_type": {"type": "string", "enum": ["bar", "line", "scatter"], "description": "Type of graph for type=graph"},
+                            "categories": {"type": "array", "items": {"type": "string"}, "description": "Bar chart category labels"},
+                            "values": {"type": "array", "items": {"type": "number"}, "description": "Bar chart values"},
+                            "x_data": {"type": "array", "items": {"type": "number"}, "description": "X values for line/scatter graphs"},
+                            "y_data": {"type": "array", "items": {"type": "number"}, "description": "Y values for line/scatter graphs"},
+                            "x_label": {"type": "string", "description": "X-axis label for graphs"},
+                            "y_label": {"type": "string", "description": "Y-axis label for graphs"},
+                            "show_trend": {"type": "boolean", "description": "Show trend line on scatter plot"},
+                            "data": {"type": "array", "description": "box_plot: array of number arrays (one per data set)"},
+                            "shape_type": {"type": "string", "enum": ["triangle", "rectangle"], "description": "Shape type for type=shape"},
+                            "base": {"type": "number", "description": "Triangle base length"},
+                            "height": {"type": "number", "description": "Shape height (triangle or rectangle)"},
+                            "width": {"type": "number", "description": "Rectangle width"}
                         },
                         "required": ["type"]
                     }
@@ -3570,6 +3593,8 @@ def _merge_submodules():
         ("backend.services.assistant_tools_planning", "PLANNING_TOOL_DEFINITIONS", "PLANNING_TOOL_HANDLERS"),
         ("backend.services.assistant_tools_communication", "COMMUNICATION_TOOL_DEFINITIONS", "COMMUNICATION_TOOL_HANDLERS"),
         ("backend.services.assistant_tools_student", "STUDENT_TOOL_DEFINITIONS", "STUDENT_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_ai", "AI_TOOL_DEFINITIONS", "AI_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_stem", "STEM_TOOL_DEFINITIONS", "STEM_TOOL_HANDLERS"),
     ]
 
     existing_names = {td["name"] for td in TOOL_DEFINITIONS}

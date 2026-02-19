@@ -782,6 +782,8 @@ ADVANCED ANALYTICS:
 - get_rubric_weakness: Find consistently weakest rubric categories across ALL assignments. Shows gap between strongest and weakest categories.
 - flag_at_risk_students: Combine declining trends + missing work + low rubric categories into risk scores. Use when asked "who should I be worried about?" or "which students need help?"
 - compare_assignments: Side-by-side stats for two assignments (mean, median, distribution, category shifts, who improved/declined).
+- get_grade_distribution: Histogram-ready A/B/C/D/F counts and percentages. Can group by assignment or period. Use for admin reports and data meetings.
+- detect_score_outliers: Flag scores >2 standard deviations from class mean — catches possible mis-grades, cheating, or data entry errors before publishing.
 
 PLANNING & CLASSROOM:
 - suggest_remediation: Map student weaknesses to concrete activities using the teacher's enabled edtech tools. Recommends specific Kahoot/Blooket/worksheet activities.

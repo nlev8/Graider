@@ -53,16 +53,18 @@ def list_assignments():
     if not os.path.exists(ASSIGNMENTS_DIR):
         return jsonify({"assignments": [], "assignmentData": {}})
 
-    assignments = []
+    files_with_mtime = []
     assignment_data = {}  # Map of name -> {aliases: [...]}
 
     for f in os.listdir(ASSIGNMENTS_DIR):
         if f.endswith('.json'):
             name = f.replace('.json', '')
-            assignments.append(name)
+            filepath = os.path.join(ASSIGNMENTS_DIR, f)
+            mtime = os.path.getmtime(filepath)
+            files_with_mtime.append((name, mtime))
             # Load assignment to get aliases and completion status
             try:
-                with open(os.path.join(ASSIGNMENTS_DIR, f), 'r') as af:
+                with open(filepath, 'r') as af:
                     data = json.load(af)
                     imported_doc = data.get("importedDoc") or {}
                     assignment_data[name] = {
@@ -76,7 +78,11 @@ def list_assignments():
             except:
                 assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": ""}
 
-    return jsonify({"assignments": sorted(assignments), "assignmentData": assignment_data})
+    # Sort newest first by file modification time
+    files_with_mtime.sort(key=lambda x: x[1], reverse=True)
+    assignments = [name for name, _ in files_with_mtime]
+
+    return jsonify({"assignments": assignments, "assignmentData": assignment_data})
 
 
 @assignment_bp.route('/api/load-assignment')

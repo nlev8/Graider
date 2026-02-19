@@ -16,6 +16,7 @@ def test_all_new_tools_documented():
         "generate_kahoot_quiz", "generate_blooket_set", "generate_gimkit_kit",
         "generate_quizlet_set", "generate_nearpod_questions", "generate_canvas_qti",
         "get_grade_trends", "get_rubric_weakness", "flag_at_risk_students", "compare_assignments",
+        "get_grade_distribution", "detect_score_outliers",
         "suggest_remediation", "align_to_standards", "get_pacing_status",
         "generate_bell_ringer", "generate_exit_ticket", "suggest_grouping", "generate_sub_plans",
         "generate_progress_report", "generate_report_card_comments",

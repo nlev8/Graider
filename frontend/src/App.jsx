@@ -8395,7 +8395,6 @@ ${signature}`;
                               {savedAssignments
                                 .map((name) => (savedAssignmentData[name] || {}).title || name)
                                 .filter((title, i, arr) => arr.indexOf(title) === i)
-                                .sort()
                                 .map((title) => (
                                   <option key={title} value={title} title={title}>
                                     {title.length > 35 ? title.substring(0, 35) + "..." : title}
@@ -15655,7 +15654,7 @@ ${signature}`;
                 overflow: "hidden",
                 display: activeTab === "assistant" ? "block" : "none",
               }}>
-                <AssistantChat addToast={addToast} />
+                <AssistantChat addToast={addToast} subject={config.subject} />
               </div>
 
               {/* Builder Tab */}

@@ -58,6 +58,43 @@ def save_figure(fig, filepath: str):
 
 
 # =============================================================================
+# LATEX / MATH NOTATION
+# =============================================================================
+
+def render_latex(latex: str, font_size: int = 20) -> str:
+    """Render a LaTeX math expression to a base64 PNG using matplotlib mathtext.
+
+    Supports fractions, exponents, roots, integrals, summations, Greek letters,
+    and most standard LaTeX math notation — no external LaTeX install needed.
+
+    Args:
+        latex: LaTeX math string (e.g., r'\\frac{1}{2}').
+        font_size: Font size for the rendered expression.
+
+    Returns:
+        Base64 encoded PNG image string (data:image/png;base64,...).
+    """
+    plt = _get_plt()
+
+    fig = plt.figure(figsize=(0.01, 0.01))
+    fig.text(0.5, 0.5, f"${latex}$", fontsize=font_size,
+             ha='center', va='center',
+             transform=fig.transFigure)
+    fig.patch.set_alpha(0)
+
+    # Render to buffer to calculate bounding box, then re-render tight
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                pad_inches=0.1, facecolor='white', edgecolor='none')
+    buf.seek(0)
+    img_str = base64.b64encode(buf.read()).decode('utf-8')
+    buf.close()
+    plt.close(fig)
+
+    return f"data:image/png;base64,{img_str}"
+
+
+# =============================================================================
 # NUMBER LINES
 # =============================================================================
 

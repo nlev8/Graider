@@ -2784,7 +2784,7 @@ def read_docx_file_structured(filepath: str) -> dict:
             elif element.tag.endswith('tbl'):
                 table = Table(element, doc)
                 rows = table.rows
-                if len(rows) == 2:
+                if len(rows) >= 2:
                     header_cell_text = rows[0].cells[0].text
                     match = tag_pattern.search(header_cell_text)
                     if match:
@@ -2792,7 +2792,14 @@ def read_docx_file_structured(filepath: str) -> dict:
                         tag_id = match.group(2)
                         # Strip the hidden tag from visible text
                         visible_header = tag_pattern.sub('', header_cell_text).strip()
-                        response = rows[1].cells[0].text.strip()
+                        # Collect response text from ALL rows after the header
+                        # (handles cases where Enter key or word processors add extra rows)
+                        response_parts = []
+                        for r_idx in range(1, len(rows)):
+                            cell_text = rows[r_idx].cells[0].text.strip()
+                            if cell_text:
+                                response_parts.append(cell_text)
+                        response = '\n'.join(response_parts)
                         tables_found.append({
                             "tag_type": tag_type,
                             "tag_id": tag_id,
@@ -2906,6 +2913,123 @@ def extract_from_tables(table_data, exclude_markers=None):
         summary += " Excluded " + str(len(excluded_sections)) + " section(s)."
 
     print(f"  📊 Table extraction: {answered_q}/{total_q} answered")
+
+    return {
+        "extracted_responses": extracted,
+        "blank_questions": blank_questions,
+        "total_questions": max(total_q, 1),
+        "answered_questions": answered_q,
+        "extraction_summary": summary,
+        "excluded_sections": excluded_sections,
+        "missing_sections": blank_questions
+    }
+
+
+def extract_from_graider_text(document_text, exclude_markers=None):
+    """Extract student responses from plain text containing [GRAIDER:TYPE:ID] markers.
+
+    Fallback for when structured table reading fails (e.g., tables were flattened
+    by Google Docs, copy-paste, or format conversion).  Parses the text between
+    consecutive GRAIDER markers to capture student answers.
+
+    Args:
+        document_text: Plain text that may contain [GRAIDER:...] tags.
+        exclude_markers: List of section names to skip.
+
+    Returns:
+        Same shape as extract_from_tables(), or None if no GRAIDER tags found.
+    """
+    tag_pattern = re.compile(r'\[GRAIDER:(VOCAB|QUESTION|SUMMARY):([^\]]+)\]')
+    matches = list(tag_pattern.finditer(document_text))
+
+    if not matches:
+        return None
+
+    print(f"  📝 Graider text fallback: Found {len(matches)} GRAIDER markers in plain text")
+
+    extracted = []
+    blank_questions = []
+    excluded_sections = []
+    exclude_lower = [em.lower().strip() for em in exclude_markers] if exclude_markers else []
+
+    type_map = {
+        "VOCAB": "vocab_term",
+        "QUESTION": "numbered_question",
+        "SUMMARY": "summary"
+    }
+
+    for i, match in enumerate(matches):
+        tag_type = match.group(1)
+        tag_id = match.group(2)
+
+        # Text after the tag up to the next tag (or GRAIDER_TABLE_V1 marker or end of doc)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(document_text)
+        raw_block = document_text[start:end]
+        # Truncate at GRAIDER_TABLE_V1 marker if present (end-of-worksheet sentinel)
+        marker_pos = raw_block.find('GRAIDER_TABLE_V1')
+        if marker_pos != -1:
+            raw_block = raw_block[:marker_pos]
+        raw_block = raw_block.strip()
+
+        # The block contains: "  visible_header  (N pts)\nstudent answer\n..."
+        # Split into lines, skip the header line (contains the term/question + pts),
+        # and grab everything else as the student response.
+        lines = [ln.strip() for ln in raw_block.split('\n') if ln.strip()]
+
+        # First non-empty line is typically the visible header (term + pts)
+        header = lines[0] if lines else ""
+        # Student response is everything after the header line,
+        # filtering out section headers and metadata that appear between markers
+        section_headers = {'vocabulary', 'questions', 'summary', 'question', 'vocab'}
+        response_lines = []
+        for ln in lines[1:]:
+            # Skip section headers and metadata
+            if ln.lower() in section_headers:
+                continue
+            if 'GRAIDER_TABLE_V1' in ln:
+                continue
+            response_lines.append(ln)
+        response = '\n'.join(response_lines).strip()
+
+        # Check exclusion
+        header_lower = header.lower()
+        is_excluded = any(em in header_lower for em in exclude_lower)
+        if is_excluded:
+            excluded_sections.append(header)
+            continue
+
+        # Build question label
+        if tag_type == "VOCAB":
+            question = tag_id
+        elif tag_type == "QUESTION":
+            question = header
+        elif tag_type == "SUMMARY":
+            question = "Summary"
+        else:
+            question = header
+
+        # Check if blank
+        response_cleaned = re.sub(r'[_\s]', '', response)
+        if len(response_cleaned) < 2:
+            blank_questions.append(question)
+            continue
+
+        extracted.append({
+            "question": question,
+            "answer": response,
+            "type": type_map.get(tag_type, "numbered_question"),
+            "section": tag_type,
+            "tag_id": tag_id
+        })
+
+    total_q = len(extracted) + len(blank_questions)
+    answered_q = len(extracted)
+    summary = f"Graider text fallback: Found {answered_q} responses out of {total_q} sections."
+    if blank_questions:
+        summary += f" {len(blank_questions)} left blank."
+
+    print(f"  📝 Graider text extraction: {answered_q}/{total_q} answered")
 
     return {
         "extracted_responses": extracted,
@@ -3539,14 +3663,18 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         assignment_data = {**assignment_data, "content": content}
         print(f"  🧹 Stripped embedded answer key from document")
 
-    # Priority: Graider structured tables > regex extraction
+    # Priority: Graider structured tables > Graider text fallback > regex extraction
     extraction_result = None
     graider_tables = assignment_data.get("graider_tables")
     if graider_tables:
         print(f"  📊 Parallel detection: Using Graider table extraction ({len(graider_tables)} tables)")
         extraction_result = extract_from_tables(graider_tables, exclude_markers)
     elif assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+        # Try GRAIDER tag plain-text fallback before generic extraction
+        if '[GRAIDER:' in content:
+            extraction_result = extract_from_graider_text(content, exclude_markers)
+        if not extraction_result or not extraction_result.get("extracted_responses"):
+            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
 
     if extraction_result and extraction_result.get("extracted_responses"):
         # Filter out FITB and vocab items — only send written responses to detection
@@ -4296,7 +4424,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     content = assignment_data.get("content", "")
 
     # === EXTRACTION ===
-    # Priority: Graider structured tables > regex extraction
+    # Priority: Graider structured tables > Graider text fallback > regex extraction
     extraction_result = None
 
     # Check for Graider table data (structured worksheets)
@@ -4305,7 +4433,11 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         print(f"  📊 Multi-pass: Using Graider table extraction ({len(graider_tables)} tables)")
         extraction_result = extract_from_tables(graider_tables, exclude_markers)
     elif assignment_data.get("type") == "text" and content:
-        extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+        # Try GRAIDER tag plain-text fallback before generic extraction
+        if '[GRAIDER:' in content:
+            extraction_result = extract_from_graider_text(content, exclude_markers)
+        if not extraction_result or not extraction_result.get("extracted_responses"):
+            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
 
     if extraction_result:
         answered = extraction_result.get("answered_questions", 0)
@@ -5107,15 +5239,20 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
             }
         else:
             # Normal extraction for non-FITB assignments
-            # Debug: Log markers being used
-            marker_count = len(custom_markers) if custom_markers else 0
-            print(f"  🔍 Extraction using {marker_count} markers")
-            if custom_markers and marker_count > 0:
-                for i, m in enumerate(custom_markers[:3]):  # Show first 3
-                    marker_text = m.get('start', m) if isinstance(m, dict) else m
-                    print(f"      Marker {i+1}: {marker_text[:50]}...")
+            # Priority: GRAIDER tag plain-text fallback > custom marker extraction
+            if '[GRAIDER:' in content:
+                extraction_result = extract_from_graider_text(content, exclude_markers)
 
-            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+            if not extraction_result or not extraction_result.get("extracted_responses"):
+                # Debug: Log markers being used
+                marker_count = len(custom_markers) if custom_markers else 0
+                print(f"  🔍 Extraction using {marker_count} markers")
+                if custom_markers and marker_count > 0:
+                    for i, m in enumerate(custom_markers[:3]):  # Show first 3
+                        marker_text = m.get('start', m) if isinstance(m, dict) else m
+                        print(f"      Marker {i+1}: {marker_text[:50]}...")
+
+                extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
             if extraction_result:
                 extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config, extraction_mode)
                 answered = extraction_result.get("answered_questions", 0)
