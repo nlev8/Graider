@@ -290,12 +290,15 @@ export default function AssistantChat({ addToast }) {
                 const updated = [...prev]
                 const last = updated[updated.length - 1]
                 if (last && last.role === 'assistant') {
-                  // Insert paragraph break once when new text arrives after tool calls completed
+                  // Insert paragraph break when new text arrives after tool calls completed,
+                  // but only if the existing content ends at a sentence boundary (not mid-sentence)
                   let separator = ''
                   if (last.content && !last._postToolBreak
                       && last.toolCalls && last.toolCalls.length > 0
                       && last.toolCalls.every(tc => tc.status === 'done')) {
-                    separator = '\n\n'
+                    const trimmed = last.content.trimEnd()
+                    const lastChar = trimmed.charAt(trimmed.length - 1)
+                    separator = /[.!?:)\]\n]/.test(lastChar) ? '\n\n' : ' '
                   }
                   updated[updated.length - 1] = {
                     ...last,
@@ -318,6 +321,7 @@ export default function AssistantChat({ addToast }) {
                 if (last && last.role === 'assistant') {
                   updated[updated.length - 1] = {
                     ...last,
+                    _postToolBreak: false,  // Reset so next text batch gets a paragraph break
                     toolCalls: [...(last.toolCalls || []), {
                       id: event.id,
                       tool: event.tool,
@@ -352,6 +356,12 @@ export default function AssistantChat({ addToast }) {
               if (voiceModeRef.current && event.audio) {
                 voice.enqueueAudioChunk(event.audio)
               }
+            } else if (event.type === 'cost_warning') {
+              if (addToast) addToast(
+                'High token usage: ~$' + event.estimated_cost.toFixed(4) + ' after ' + event.rounds_used + ' tool rounds. Query stopped to save cost.',
+                'warning',
+                8000
+              )
             } else if (event.type === 'cost') {
               setMessages(prev => {
                 const updated = [...prev]
@@ -362,6 +372,9 @@ export default function AssistantChat({ addToast }) {
                 return updated
               })
               setSessionCost(prev => prev + (event.total_cost || 0))
+              if (event.high_cost && addToast) {
+                addToast('Expensive query: $' + event.total_cost.toFixed(4) + '. Try a more specific question to reduce cost.', 'warning', 8000)
+              }
             } else if (event.type === 'error') {
               setMessages(prev => {
                 const updated = [...prev]
@@ -831,11 +844,15 @@ export default function AssistantChat({ addToast }) {
                 <div style={{
                   marginTop: '6px',
                   fontSize: '0.7rem',
-                  color: 'var(--text-secondary)',
-                  opacity: 0.6,
+                  color: msg.cost.total_cost > 0.25 ? '#f87171' :
+                         msg.cost.total_cost > 0.05 ? '#fbbf24' :
+                         'var(--text-secondary)',
+                  opacity: msg.cost.total_cost > 0.05 ? 0.9 : 0.6,
+                  fontWeight: msg.cost.total_cost > 0.25 ? 600 : 400,
                 }}>
                   ${msg.cost.total_cost.toFixed(4)}
                   {msg.cost.tts_cost > 0 ? ' (incl. voice)' : ''}
+                  {msg.cost.total_cost > 0.25 ? ' — high cost' : ''}
                 </div>
               )}
             </div>
@@ -843,39 +860,6 @@ export default function AssistantChat({ addToast }) {
         ))}
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Floating stop button during streaming */}
-      {isStreaming && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          padding: '8px 0',
-        }}>
-          <button
-            onClick={stopStreaming}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 20px',
-              background: 'var(--glass-bg)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: '20px',
-              color: 'var(--text-primary)',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'var(--glass-bg)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-              <rect x="0" y="0" width="12" height="12" rx="2" />
-            </svg>
-            Stop generating
-          </button>
-        </div>
-      )}
 
       {/* Voice interim transcript */}
       {voice.isListening && voice.transcript && (

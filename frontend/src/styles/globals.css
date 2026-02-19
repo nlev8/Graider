@@ -219,6 +219,16 @@ body {
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
 /* Input styles */
 .input {
   width: 100%;

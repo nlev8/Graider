@@ -6156,7 +6156,7 @@ def save_to_master_csv(grades: list, output_folder: str):
         'Period', 'Assignment', 'Unit', 'Quarter',
         'Overall Score', 'Letter Grade',
         'Content Accuracy', 'Completeness', 'Writing Quality', 'Effort Engagement',
-        'Feedback',
+        'Feedback', 'Approved',
         'API Cost', 'Input Tokens', 'Output Tokens', 'API Calls', 'AI Model'
     ]
 
@@ -6190,8 +6190,9 @@ def save_to_master_csv(grades: list, output_folder: str):
         if sid and sid != "UNKNOWN" and assignment:
             new_keys.add((sid, _normalize_assignment(assignment)))
 
-    # Read existing rows, filtering out any that will be replaced
+    # Read existing rows, filtering out any that will be replaced (only if new score >= old)
     existing_rows = []
+    kept_old_keys = set()
     if master_file.exists():
         try:
             with open(master_file, 'r', newline='', encoding='utf-8') as f:
@@ -6201,11 +6202,24 @@ def save_to_master_csv(grades: list, output_folder: str):
                     if len(row) >= 7:
                         row_sid = row[1]       # Student ID column
                         row_assign = row[6]    # Assignment column
-                        if (row_sid, _normalize_assignment(row_assign)) in new_keys:
-                            continue  # Skip — will be replaced by new grade
+                        key = (row_sid, _normalize_assignment(row_assign))
+                        if key in new_keys:
+                            # Compare scores — only replace if new is higher or equal
+                            old_score = float(row[9]) if len(row) > 9 and row[9] else 0
+                            new_grade = next((g for g in grades if g.get('student_id') == row_sid and _normalize_assignment(g.get('assignment', '')) == key[1]), None)
+                            new_score = float(new_grade.get('score', 0) or 0) if new_grade else 0
+                            if new_score >= old_score:
+                                continue  # Replace — new is higher or equal
+                            else:
+                                kept_old_keys.add(key)
+                                # Keep old row, skip the new grade
                     existing_rows.append(row)
         except Exception as e:
             print(f"  Note: Could not read existing master CSV: {e}")
+
+    # Filter out grades where old score was kept
+    if kept_old_keys:
+        grades = [g for g in grades if (g.get('student_id', ''), _normalize_assignment(g.get('assignment', ''))) not in kept_old_keys]
 
     # Write full file: header + existing (deduplicated) + new grades
     with open(master_file, 'w', newline='', encoding='utf-8') as f:
@@ -6242,6 +6256,7 @@ def save_to_master_csv(grades: list, output_folder: str):
                 breakdown.get('writing_quality', 0),
                 breakdown.get('effort_engagement', 0),
                 grade.get('feedback', '').replace('\r', ' ').replace('\n', ' ')[:500],
+                grade.get('email_approval', 'pending'),
                 token_usage.get('total_cost', ''),
                 token_usage.get('total_input_tokens', ''),
                 token_usage.get('total_output_tokens', ''),

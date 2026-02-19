@@ -68,7 +68,7 @@ def init_auth(app):
         host = request.host.split(':')[0]
         if host in ('localhost', '127.0.0.1'):
             g.user_id = 'local-dev'
-            g.user_email = 'dev@localhost'
+            g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
             return None
 
         # Skip non-API routes (static files, index.html, etc.)

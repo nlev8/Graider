@@ -357,6 +357,51 @@ _outlook_send_state = {
 }
 
 
+def launch_outlook_sender(emails):
+    """Write email payloads to temp file and spawn the Playwright Outlook sender.
+
+    Args:
+        emails: list of dicts with keys: to, cc, subject, body, student_name
+
+    Returns:
+        dict with status and total count, or error
+    """
+    if _outlook_send_state.get("status") == "running":
+        return {"error": "Already sending. Check status or wait."}
+
+    if not emails:
+        return {"error": "No emails to send"}
+
+    tmp_file = os.path.join(GRAIDER_DATA_DIR, "tmp_outlook_emails.json")
+    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
+    with open(tmp_file, 'w') as f:
+        json.dump({"emails": emails}, f)
+
+    _outlook_send_state.update({
+        "status": "running",
+        "sent": 0,
+        "failed": 0,
+        "total": len(emails),
+        "message": "Starting Outlook...",
+        "log": [],
+    })
+
+    script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
+    proc = subprocess.Popen(
+        [sys.executable, script_path, tmp_file],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    _outlook_send_state["process"] = proc
+
+    thread = threading.Thread(target=_read_outlook_output, args=(proc,), daemon=True)
+    thread.start()
+
+    return {"status": "started", "total": len(emails)}
+
+
 def _read_outlook_output(proc):
     """Background thread: read subprocess stdout and update state."""
     for line in proc.stdout:
@@ -393,9 +438,6 @@ def _read_outlook_output(proc):
 @email_bp.route('/api/send-outlook-emails', methods=['POST'])
 def send_outlook_emails():
     """Start sending emails via Playwright Outlook automation."""
-    if _outlook_send_state.get("status") == "running":
-        return jsonify({"error": "Already sending. Check status or wait."}), 409
-
     try:
         data = request.json or {}
         email_type = data.get("type", "parent")
@@ -498,37 +540,10 @@ def send_outlook_emails():
         if not emails:
             return jsonify({"error": "No emails to send (no matching contacts)"}), 400
 
-        # Write temp JSON for the Playwright script
-        tmp_file = os.path.join(GRAIDER_DATA_DIR, "tmp_outlook_emails.json")
-        os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
-        with open(tmp_file, 'w') as f:
-            json.dump({"emails": emails}, f)
-
-        # Reset state
-        _outlook_send_state.update({
-            "status": "running",
-            "sent": 0,
-            "failed": 0,
-            "total": len(emails),
-            "message": "Starting Outlook...",
-            "log": [],
-        })
-
-        # Spawn Playwright script
-        script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
-        proc = subprocess.Popen(
-            [sys.executable, script_path, tmp_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
-        _outlook_send_state["process"] = proc
-
-        thread = threading.Thread(target=_read_outlook_output, args=(proc,), daemon=True)
-        thread.start()
-
-        return jsonify({"status": "started", "total": len(emails)})
+        result = launch_outlook_sender(emails)
+        if "error" in result:
+            return jsonify(result), 409
+        return jsonify(result)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -401,6 +401,7 @@ def generate_document(title, content, style_name=None, save_to_builder=False):
             "customMarkers": [],
             "excludeMarkers": [],
             "gradingNotes": "",
+            "questions": [],
             "responseSections": [],
             "rubricType": "standard",
             "customRubric": None,

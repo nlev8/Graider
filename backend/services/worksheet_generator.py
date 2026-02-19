@@ -311,7 +311,13 @@ def generate_worksheet(title, worksheet_type, vocab_terms=None, questions=None,
 def _build_assignment_config(title, worksheet_type, vocab_terms, questions,
                              summary_prompt, summary_key_points, total_points,
                              subject=None):
-    """Build a Grading Setup-compatible assignment config from worksheet data."""
+    """Build a Grading Setup-compatible assignment config from worksheet data.
+
+    Generates both customMarkers (as objects with start/points/type) and
+    questions[] (individual question objects) so the editor can render them.
+    """
+    import time
+
     rubric_map = {
         "cornell-notes": "cornell-notes",
         "fill-in-blank": "fill-in-blank",
@@ -319,13 +325,70 @@ def _build_assignment_config(title, worksheet_type, vocab_terms, questions,
         "vocabulary": "fill-in-blank"
     }
 
-    markers = []
-    if vocab_terms:
-        markers.append("VOCABULARY")
-    if questions:
-        markers.append("QUESTIONS")
+    effort_points = 15
+    content_points = total_points - effort_points
+
+    # Count total items to distribute points across
+    num_items = len(vocab_terms or []) + len(questions or [])
     if summary_prompt:
-        markers.append("SUMMARY")
+        num_items += 1
+    per_item = round(content_points / num_items) if num_items > 0 else 0
+
+    # Build customMarkers as objects and questions[] for the editor
+    marker_objects = []
+    question_objects = []
+    ts = int(time.time() * 1000)
+
+    if vocab_terms:
+        vocab_points = per_item * len(vocab_terms)
+        marker_objects.append({
+            "start": "VOCABULARY",
+            "points": vocab_points,
+            "type": "vocab_term"
+        })
+        for i, v in enumerate(vocab_terms):
+            pts = round(vocab_points / len(vocab_terms))
+            question_objects.append({
+                "id": ts + i,
+                "type": "vocab_term",
+                "prompt": v.get('term', ''),
+                "points": pts,
+                "marker": "VOCABULARY",
+                "expected_answer": v.get('definition', ''),
+            })
+
+    if questions:
+        q_points = per_item * len(questions)
+        marker_objects.append({
+            "start": "QUESTIONS",
+            "points": q_points,
+            "type": "short_answer"
+        })
+        for i, q in enumerate(questions):
+            pts = round(q_points / len(questions))
+            question_objects.append({
+                "id": ts + 1000 + i,
+                "type": "short_answer",
+                "prompt": q.get('question', ''),
+                "points": pts,
+                "marker": "QUESTIONS",
+                "expected_answer": q.get('expected_answer', ''),
+            })
+
+    if summary_prompt:
+        s_points = per_item
+        marker_objects.append({
+            "start": "SUMMARY",
+            "points": s_points,
+            "type": "written"
+        })
+        question_objects.append({
+            "id": ts + 2000,
+            "type": "written",
+            "prompt": summary_prompt,
+            "points": s_points,
+            "marker": "SUMMARY",
+        })
 
     # Build grading notes with answer key
     grading_notes_parts = []
@@ -352,15 +415,16 @@ def _build_assignment_config(title, worksheet_type, vocab_terms, questions,
         "totalPoints": total_points,
         "instructions": "",
         "aliases": [],
-        "customMarkers": markers,
+        "customMarkers": marker_objects,
         "excludeMarkers": [],
         "gradingNotes": "\n".join(grading_notes_parts),
+        "questions": question_objects,
         "responseSections": [],
         "rubricType": rubric_map.get(worksheet_type, "standard"),
         "customRubric": None,
-        "useSectionPoints": False,
+        "useSectionPoints": True,
         "sectionTemplate": "Custom",
-        "effortPoints": 15,
+        "effortPoints": effort_points,
         "completionOnly": False,
         "countsTowardsGrade": True,
         "importedDoc": None,  # Populated by generate_worksheet() after file creation

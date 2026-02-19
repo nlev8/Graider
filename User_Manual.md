@@ -5,63 +5,44 @@
 2. [Grade Tab - Grading Assignments](#grade-tab---grading-assignments)
 3. [Results Tab](#results-tab)
 4. [Exports](#exports)
-5. [Bilingual Feedback (ELL Support)](#bilingual-feedback-ell-support)
-6. [Assignment Builder](#assignment-builder)
-7. [Analytics Tab](#analytics-tab)
-8. [Lesson Planner](#lesson-planner)
-9. [Assessment Generator](#assessment-generator)
-10. [Student Portal](#student-portal)
-11. [Teacher Dashboard](#teacher-dashboard)
-12. [Resources Tab](#resources-tab)
-13. [Assistant Tab](#assistant-tab)
-14. [Settings](#settings)
-15. [IEP/504 Accommodations](#iep504-accommodations)
-16. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-17. [Student Progress Tracking](#student-progress-tracking)
-18. [Troubleshooting](#troubleshooting)
+5. [Resubmissions](#resubmissions)
+6. [Authenticity Detection](#authenticity-detection)
+7. [Bilingual Feedback (ELL Support)](#bilingual-feedback-ell-support)
+8. [Assignment Builder](#assignment-builder)
+9. [Analytics Tab](#analytics-tab)
+10. [Lesson Planner](#lesson-planner)
+11. [Assessment Generator](#assessment-generator)
+12. [Student Portal](#student-portal)
+13. [Teacher Dashboard](#teacher-dashboard)
+14. [Resources Tab](#resources-tab)
+15. [Assistant Tab](#assistant-tab)
+16. [Settings](#settings)
+17. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+18. [Student Progress Tracking](#student-progress-tracking)
+19. [Troubleshooting](#troubleshooting)
+20. [Tips for Best Results](#tips-for-best-results)
+21. [Keyboard Shortcuts](#keyboard-shortcuts)
+22. [Support](#support)
 
 ---
 
 ## Getting Started
 
-### Running Graider
-
-```bash
-cd /Users/alexc/Downloads/Graider/backend
-python app.py
-```
-
-The app opens automatically at **http://localhost:3000**
-
-> **Note:** The frontend is pre-built and served by the Flask backend. No separate frontend process needed.
-
-### Live Version
-
-Access the live version at **[graider.live](https://graider.live)**
+Access Graider at **[app.graider.live](https://app.graider.live)**
 
 ### First-Time Setup
 
-1. **API Keys**: Create a `.env` file in the `backend` folder:
-   ```
-   OPENAI_API_KEY=sk-your-key-here
-   ANTHROPIC_API_KEY=your-anthropic-key     # Optional, for Claude
-   RESEND_API_KEY=your-resend-key           # For email
-   SUPABASE_URL=your-supabase-url           # For Student Portal
-   SUPABASE_ANON_KEY=your-anon-key
-   SUPABASE_SERVICE_KEY=your-service-key
-   ```
-
-2. **Folders**: In Settings, configure:
+1. **Folders**: In Settings, configure:
    - **Assignments Folder**: Where student submissions are (e.g., OneDrive sync folder)
    - **Output Folder**: Where graded results go
    - **Roster File**: Excel file with student names and emails
 
-3. **Configuration**: Set your:
+2. **Configuration**: Set your:
    - State (for standards alignment)
    - Grade Level
    - Subject
 
-4. **Rubric Selection** (Onboarding Wizard):
+3. **Rubric Selection** (Onboarding Wizard):
    - After setting your state, grade level, and subject, the onboarding wizard prompts you to choose a grading rubric
    - **Florida teachers**: If your state is set to Florida, you'll see a B.E.S.T. rubric preset matched to your subject (e.g., ELA, Math, Science, Social Studies) with pre-configured category weights
    - **All other teachers**: You'll see the Standard rubric preset
@@ -383,6 +364,54 @@ Text files ready to copy/paste or import:
 
 ---
 
+## Resubmissions
+
+When students resubmit assignments for a higher grade, Graider automatically detects the resubmission and applies a **"keep higher grade"** policy.
+
+### How Resubmission Detection Works
+
+Graider groups files by student name and assignment title. When multiple versions exist (e.g., `Essay (1).docx` and `Essay (2).docx`), the newer file is flagged as a resubmission. The activity log shows a summary:
+
+```
+🔄 2 resubmission(s) detected — grading latest versions
+  ↳ Essay (2).docx
+```
+
+### Keep Higher Grade
+
+When a resubmission is graded:
+
+- **New score >= old score:** The new grade replaces the old one. The result shows a blue 🔄 icon with a tooltip like *"Improved from 72 → 85"*.
+- **New score < old score:** The original (higher) grade is kept. The result shows a yellow 🛡 icon with a tooltip like *"Kept original grade (85). New submission scored 68."* The activity log notes: `Kept original grade (85) — resubmission scored lower (68)`.
+
+This ensures students are never penalized for attempting to improve their work.
+
+### Resubmission Indicators in Results
+
+| Icon | Color | Meaning |
+|------|-------|---------|
+| 🔄 Refresh | Blue | Resubmission replaced the old grade (score improved or equal) |
+| 🛡 Shield | Yellow | Original grade kept (resubmission scored lower) |
+
+Hover over any resubmission icon to see the old and new scores.
+
+### Filtering Resubmissions
+
+Use the **filter dropdown** in the Results tab and select **"🔄 Resubmissions"** to show only resubmitted assignments. This helps you quickly review which students resubmitted and whether their grades improved.
+
+### Master CSV Behavior
+
+The master grades CSV (`master_grades.csv`) follows the same keep-higher-grade policy. When a resubmission is exported, the old row is only replaced if the new score is higher or equal. Lower-scoring resubmissions do not overwrite existing entries.
+
+### Grading Completion Notification
+
+After grading completes, if any resubmissions were detected, a notification banner appears summarizing:
+- Total resubmissions found
+- How many improved their grade
+- How many kept the original (higher) grade
+
+---
+
 ## Authenticity Detection
 
 Each result shows two separate indicators:
@@ -400,6 +429,20 @@ Each result shows two separate indicators:
 - **Likely** (red) - Strong indicators of plagiarism
 
 Hover over badges to see detailed explanations.
+
+### Writing Style Profiling
+
+Each student builds a unique writing fingerprint over time. When a student has 3+ graded assignments, the system tracks baseline writing patterns and flags sudden changes that may indicate AI use:
+
+| Metric Tracked | What It Catches |
+|----------------|-----------------|
+| **Complexity Score** | Sudden jump from simple to advanced writing |
+| **Sentence Length** | Student who writes short sentences suddenly writes long, complex ones |
+| **Academic Vocabulary** | Appearance of sophisticated terms not in the student's history |
+| **Word Length** | Average word length shifts dramatically between assignments |
+| **Spelling Patterns** | Student who typically misspells words suddenly produces error-free text |
+
+The system compares each new submission against the student's established baseline. Large deviations trigger AI detection flags with confidence percentages. This works alongside the standard AI detection — the writing profile provides additional context about whether a submission matches the student's typical work.
 
 ### Authenticity Summary
 
@@ -682,6 +725,25 @@ Track which students haven't uploaded their assignments:
 - Matches by student name and assignment name in filename
 - Supports renamed assignments (see Assignment Aliases below)
 
+### Rubric Performance
+
+When assignments are graded with rubric categories, the Analytics tab shows rubric-level performance data:
+
+- **Radar Chart** — Visual breakdown of average scores by rubric category (e.g., content accuracy, writing quality, completeness). Quickly see which categories are strongest and weakest across the class.
+- **Category Columns** — The student overview table includes individual columns for each rubric category, so you can see per-student breakdowns at a glance.
+- **Sortable Columns** — Click any column header (name, score, or rubric category) to sort the table. Useful for finding which students scored lowest in a specific category.
+
+### Diagnostic Cause Analysis
+
+Understanding *why* students scored low is more useful than knowing *that* they scored low. The Analytics tab and Assistant both support diagnostic analysis:
+
+- **Rubric Category Breakdowns** — See average scores per rubric category across the entire assignment. Identify if low grades were caused by weak writing, missing content, or incomplete sections.
+- **Omission Impact Analysis** — Compare students who completed all sections vs. those who skipped sections. The system calculates the average score gap (e.g., students with omissions averaged 13.3 points lower).
+- **Section Skip Rates** — See which sections students skipped most often (e.g., "Summary section skipped by 15% of students").
+- **Feedback Pattern Aggregation** — Common strengths and growth areas across all students, with frequency counts.
+
+You can also ask the Assistant for diagnostic analysis directly — see [Assistant Tab](#assistant-tab) for examples.
+
 ### Student Performance
 
 Click on individual students to see their performance history and trends.
@@ -735,6 +797,46 @@ The AI creates a comprehensive plan including:
   - Materials list
   - Homework
   - Teacher notes
+
+### Brainstorm Mode
+
+Before committing to a full lesson plan, brainstorm multiple approaches to the same standard:
+
+1. Select the standards you want to cover
+2. Click **Brainstorm Ideas**
+3. The AI generates 5 diverse lesson concepts, each with a different teaching approach:
+   - **Activity-Based** — Hands-on tasks, station rotations, interactive activities
+   - **Discussion** — Socratic seminar, class debates, guided questioning
+   - **Project-Based** — Student research, presentations, creative products
+   - **Simulation** — Role-play, mock events, scenario-based learning
+   - **Primary Sources** — Document analysis, evidence-based reasoning
+4. Each idea shows: Title, Approach, Hook, Key Activity, and Assessment Type
+5. Click an idea to select it, then generate a full lesson plan from that concept
+
+### Multiple Variations
+
+Compare three different teaching approaches side-by-side before deciding which one works best for your class:
+
+| Variation | Focus | Best For |
+|-----------|-------|----------|
+| **Activity-Based** | Hands-on learning, station rotations, interactive tasks | Kinesthetic learners, engagement |
+| **Discussion & Analysis** | Socratic questioning, primary sources, class debates | Critical thinking, depth |
+| **Project-Based** | Student research, presentations, creative products | Long-term retention, ownership |
+
+Each variation includes a complete lesson plan with timing, different activities aligned to the same standards, unique essential questions and assessments, and a one-click button to select and use.
+
+### Standards Browser
+
+Every standard in the planner includes rich benchmark data to guide lesson planning:
+
+- **DOK Level** — Color-coded badges showing Depth of Knowledge (1-4)
+- **Essential Questions** — Driving questions for inquiry-based learning
+- **Learning Targets** — Student-friendly "I can..." statements
+- **Key Vocabulary** — Terms students need to master, shown as clickable tags
+- **Item Specifications** — How the standard is typically assessed
+- **Sample Assessment** — Example test question with answer choices
+
+Click **Show Details** on any standard card to expand it and see all of this information. Standards are searchable and filterable by topic, DOK level, and keyword.
 
 ### Exporting
 
@@ -1038,6 +1140,20 @@ The Assistant remembers important facts across conversations. When you share pre
 - **Clear Memory** button in the header erases all saved facts (requires confirmation)
 - **Clear Chat** button clears the conversation window but **keeps all memories intact**
 - Memory persists across browser sessions and server restarts
+
+### Class Performance Awareness
+
+The Assistant is automatically aware of live rubric performance data from your most recent grading sessions. It can proactively recommend instructional changes based on actual student results:
+
+- **Rubric category analysis** — The assistant knows which rubric categories are strongest and weakest across your classes, and can recommend targeted lessons
+- **Data-driven lesson recommendations** — Ask "What should I teach next?" and the assistant cross-references student weaknesses with your curriculum standards to suggest specific topics
+- **Period differentiation** — Recommendations are tailored per class level (advanced, standard, support) with DOK-appropriate standards
+- **IEP/504 accommodation analysis** — Lesson suggestions account for students with accommodations
+
+**Example:**
+> "Based on the Slavery and Resistance assignment, what should my next lesson focus on?"
+>
+> The assistant analyzes rubric breakdowns (writing_quality was weakest at avg 12.7), identifies content gaps (Summary section skipped by 15%), checks developing skills, cross-references curriculum standards, and returns actionable lesson recommendations with specific topics and standards.
 
 ### Teaching Calendar
 
@@ -1688,4 +1804,4 @@ Each student's file contains:
 - **Focus SIS Automation**: Create assignments in Focus gradebook via browser automation from the Assistant
 - **Outlook Email Integration**: Send feedback emails through your district Outlook account with SSO login support
 
-*Last updated: February 15, 2026*
+*Last updated: February 16, 2026*

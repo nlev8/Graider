@@ -290,6 +290,276 @@
       ],
       "vocabulary": ["judicial review", "precedent", "majority opinion", "dissent", "constitutional", "unconstitutional", "appeal"],
       "sample_assessment": "Which Supreme Court case established the principle of judicial review? A) Brown v. Board of Education B) Marbury v. Madison C) Miranda v. Arizona D) Tinker v. Des Moines"
+    },
+    {
+      "code": "SS.7.E.1.1",
+      "benchmark": "Explain how the principles of a market and mixed economy helped to develop the United States into a democratic nation.",
+      "topics": ["Market Economy", "Mixed Economy", "Democracy", "Economic Systems"],
+      "dok": 2,
+      "item_specs": "Students explain the relationship between economic freedom and democratic governance. Items may include scenarios comparing economic systems.",
+      "essential_questions": [
+        "How does a market economy support democratic values?",
+        "What is the difference between a market economy and a mixed economy?"
+      ],
+      "learning_targets": [
+        "I can explain the basic principles of a market economy.",
+        "I can describe how a mixed economy combines market and government elements.",
+        "I can connect economic freedom to the development of American democracy."
+      ],
+      "vocabulary": ["market economy", "mixed economy", "free enterprise", "private property", "economic freedom", "capitalism", "supply and demand"],
+      "sample_assessment": "Which feature of a market economy MOST supports democratic principles? A) Government sets all prices B) Individuals can own property and start businesses C) A central authority controls production D) The government provides all goods and services"
+    },
+    {
+      "code": "SS.7.E.1.2",
+      "benchmark": "Discuss the importance of borrowing and lending in the United States, the government's role in controlling financial institutions, and list the advantages and disadvantages of using credit.",
+      "topics": ["Credit", "Borrowing and Lending", "Financial Institutions", "Government Regulation"],
+      "dok": 2,
+      "item_specs": "Students identify advantages and disadvantages of credit use and explain government regulation of financial institutions. Items may include scenarios about borrowing decisions.",
+      "essential_questions": [
+        "Why is borrowing and lending important in a market economy?",
+        "What are the benefits and risks of using credit?"
+      ],
+      "learning_targets": [
+        "I can explain why borrowing and lending are important to the economy.",
+        "I can describe the government's role in regulating financial institutions.",
+        "I can list advantages and disadvantages of using credit."
+      ],
+      "vocabulary": ["credit", "interest", "loan", "debt", "borrower", "lender", "Federal Reserve", "regulation", "credit score"],
+      "sample_assessment": "Which is a DISADVANTAGE of using credit? A) Being able to make large purchases over time B) Building a positive financial history C) Paying more than the original price due to interest D) Having access to emergency funds"
+    },
+    {
+      "code": "SS.7.E.1.3",
+      "benchmark": "Review the concepts of supply and demand, choice, scarcity, and opportunity cost as they relate to the development of the mixed market economy in the United States.",
+      "topics": ["Supply and Demand", "Scarcity", "Opportunity Cost", "Choice"],
+      "dok": 2,
+      "item_specs": "Students apply economic concepts to real-world scenarios. Items may include supply and demand graphs or decision-making situations involving trade-offs.",
+      "essential_questions": [
+        "How do supply and demand affect prices?",
+        "Why must individuals and societies make economic choices?"
+      ],
+      "learning_targets": [
+        "I can explain the law of supply and demand.",
+        "I can define scarcity and explain how it forces economic choices.",
+        "I can identify opportunity cost in everyday decisions."
+      ],
+      "vocabulary": ["supply", "demand", "scarcity", "opportunity cost", "trade-off", "choice", "consumer", "producer", "equilibrium"],
+      "sample_assessment": "A student decides to work after school instead of joining the soccer team. The opportunity cost of this decision is: A) The money earned from the job B) The experience of playing soccer C) The time spent at work D) The cost of soccer equipment"
+    },
+    {
+      "code": "SS.7.E.1.4",
+      "benchmark": "Discuss the function of financial institutions in the development of a market economy.",
+      "topics": ["Financial Institutions", "Banks", "Market Economy"],
+      "dok": 2,
+      "item_specs": "Students identify roles of financial institutions and how they support economic growth. Items may include scenarios about banking services.",
+      "essential_questions": [
+        "What role do banks and financial institutions play in the economy?",
+        "How do financial institutions help individuals and businesses?"
+      ],
+      "learning_targets": [
+        "I can describe the main functions of banks and financial institutions.",
+        "I can explain how banks help the economy grow through lending.",
+        "I can identify different types of financial institutions."
+      ],
+      "vocabulary": ["bank", "savings account", "checking account", "investment", "deposit", "withdrawal", "financial institution", "credit union"],
+      "sample_assessment": "Which is a PRIMARY function of banks in a market economy? A) Setting prices for consumer goods B) Accepting deposits and making loans C) Collecting taxes for the government D) Manufacturing currency"
+    },
+    {
+      "code": "SS.7.E.1.5",
+      "benchmark": "Assess how profits, incentives, and competition motivate individuals, households, and businesses in a free market economy.",
+      "topics": ["Profit", "Incentives", "Competition", "Free Market"],
+      "dok": 3,
+      "item_specs": "Students analyze how economic motivations drive behavior in a free market. Items may include scenarios about business decisions or consumer behavior.",
+      "essential_questions": [
+        "How do profits and incentives drive economic decisions?",
+        "Why is competition important in a free market economy?"
+      ],
+      "learning_targets": [
+        "I can explain how the profit motive drives business decisions.",
+        "I can describe how incentives influence economic behavior.",
+        "I can assess how competition benefits consumers."
+      ],
+      "vocabulary": ["profit", "incentive", "competition", "entrepreneur", "free market", "consumer", "producer", "revenue", "cost"],
+      "sample_assessment": "How does competition MOST benefit consumers in a free market economy? A) It eliminates all small businesses B) It leads to lower prices and better products C) It reduces the number of choices available D) It allows one company to control the market"
+    },
+    {
+      "code": "SS.7.E.1.6",
+      "benchmark": "Compare the national budget process to the personal budget process.",
+      "topics": ["Budget", "National Budget", "Personal Finance", "Government Spending"],
+      "dok": 2,
+      "item_specs": "Students compare budgeting at the national and personal levels. Items may include budget scenarios or charts showing income and expenditures.",
+      "essential_questions": [
+        "How is the national budget similar to a personal budget?",
+        "Why is budgeting important for both governments and individuals?"
+      ],
+      "learning_targets": [
+        "I can describe the basic steps of creating a personal budget.",
+        "I can explain how the national budget process works.",
+        "I can compare similarities and differences between personal and national budgets."
+      ],
+      "vocabulary": ["budget", "income", "expenses", "surplus", "deficit", "national debt", "revenue", "expenditure", "appropriation"],
+      "sample_assessment": "When the federal government spends MORE money than it collects in revenue, this creates a: A) Surplus B) Deficit C) Balanced budget D) Tax refund"
+    },
+    {
+      "code": "SS.7.E.2.1",
+      "benchmark": "Explain how federal, state, and local taxes support the economy as a function of the United States government.",
+      "topics": ["Taxes", "Government Revenue", "Public Services"],
+      "dok": 2,
+      "item_specs": "Students identify types of taxes and explain how tax revenue funds government services. Items may include scenarios about tax-funded services.",
+      "essential_questions": [
+        "Why does the government collect taxes?",
+        "How do taxes at different levels of government support the economy?"
+      ],
+      "learning_targets": [
+        "I can identify different types of taxes (income, sales, property).",
+        "I can explain how taxes fund government services.",
+        "I can describe the role of taxes at the federal, state, and local levels."
+      ],
+      "vocabulary": ["tax", "income tax", "sales tax", "property tax", "revenue", "public services", "Internal Revenue Service (IRS)", "taxpayer"],
+      "sample_assessment": "Which government service is MOST commonly funded by local property taxes? A) National defense B) Social Security C) Public schools D) International trade agreements"
+    },
+    {
+      "code": "SS.7.E.2.2",
+      "benchmark": "Describe the banking system in the United States and its impact on the money supply.",
+      "topics": ["Banking System", "Money Supply", "Federal Reserve"],
+      "dok": 2,
+      "item_specs": "Students describe how the banking system and Federal Reserve influence the money supply. Items may include scenarios about monetary policy.",
+      "essential_questions": [
+        "How does the banking system affect the amount of money in the economy?",
+        "What role does the Federal Reserve play in the banking system?"
+      ],
+      "learning_targets": [
+        "I can describe the structure of the U.S. banking system.",
+        "I can explain the role of the Federal Reserve.",
+        "I can describe how banks impact the money supply through lending."
+      ],
+      "vocabulary": ["Federal Reserve", "money supply", "interest rate", "monetary policy", "central bank", "reserve requirement", "currency"],
+      "sample_assessment": "Which institution is responsible for regulating the money supply in the United States? A) The U.S. Treasury B) The Federal Reserve C) The Securities and Exchange Commission D) The Internal Revenue Service"
+    },
+    {
+      "code": "SS.7.E.2.3",
+      "benchmark": "Identify and describe United States laws and regulations adopted to promote economic competition.",
+      "topics": ["Economic Regulation", "Antitrust", "Competition", "Government Role"],
+      "dok": 2,
+      "item_specs": "Students identify laws that prevent monopolies and promote fair competition. Items may include scenarios about business practices.",
+      "essential_questions": [
+        "Why does the government regulate business practices?",
+        "How do antitrust laws protect consumers and competition?"
+      ],
+      "learning_targets": [
+        "I can explain why the government regulates economic competition.",
+        "I can identify key laws that prevent monopolies.",
+        "I can describe how regulations promote fair business practices."
+      ],
+      "vocabulary": ["antitrust", "monopoly", "regulation", "Sherman Antitrust Act", "competition", "consumer protection", "fair trade"],
+      "sample_assessment": "The PRIMARY purpose of antitrust laws is to: A) Increase government revenue B) Prevent one company from controlling an entire industry C) Reduce international trade D) Set minimum wages for workers"
+    },
+    {
+      "code": "SS.7.E.2.4",
+      "benchmark": "Identify entrepreneurs from various gender, social, and ethnic backgrounds who started a business seeking to make a profit.",
+      "topics": ["Entrepreneurship", "Diversity", "Business", "Profit"],
+      "dok": 1,
+      "item_specs": "Students identify diverse entrepreneurs and their contributions to the economy. Items may include matching entrepreneurs to their achievements.",
+      "essential_questions": [
+        "How have entrepreneurs from diverse backgrounds contributed to the American economy?",
+        "What qualities help entrepreneurs succeed?"
+      ],
+      "learning_targets": [
+        "I can identify entrepreneurs from various backgrounds.",
+        "I can explain how entrepreneurship contributes to economic growth.",
+        "I can describe the role of profit in motivating entrepreneurs."
+      ],
+      "vocabulary": ["entrepreneur", "profit", "innovation", "risk", "small business", "startup", "free enterprise"],
+      "sample_assessment": "An entrepreneur is BEST defined as someone who: A) Works for a large corporation B) Starts a business and takes on financial risk C) Invests only in government bonds D) Manages a nonprofit organization"
+    },
+    {
+      "code": "SS.7.E.2.5",
+      "benchmark": "Explain how economic institutions impact the national economy.",
+      "topics": ["Economic Institutions", "National Economy", "Government Agencies"],
+      "dok": 2,
+      "item_specs": "Students explain how institutions such as the Federal Reserve, SEC, and other agencies influence the national economy. Items may include matching institutions to their functions.",
+      "essential_questions": [
+        "What economic institutions influence the U.S. economy?",
+        "How do these institutions promote economic stability?"
+      ],
+      "learning_targets": [
+        "I can identify major economic institutions in the United States.",
+        "I can explain how the Federal Reserve influences the economy.",
+        "I can describe how government agencies regulate economic activity."
+      ],
+      "vocabulary": ["Federal Reserve", "Securities and Exchange Commission (SEC)", "Federal Deposit Insurance Corporation (FDIC)", "economic institution", "regulation", "monetary policy"],
+      "sample_assessment": "Which institution protects bank depositors by insuring their accounts? A) The Federal Reserve B) The SEC C) The FDIC D) The IRS"
+    },
+    {
+      "code": "SS.7.E.3.1",
+      "benchmark": "Explain how international trade requires a system for exchanging currency between and among nations.",
+      "topics": ["International Trade", "Currency Exchange", "Global Economy"],
+      "dok": 2,
+      "item_specs": "Students explain the need for currency exchange in international trade. Items may include scenarios about buying goods from other countries.",
+      "essential_questions": [
+        "Why is a system of currency exchange necessary for international trade?",
+        "How does currency exchange work between nations?"
+      ],
+      "learning_targets": [
+        "I can explain why nations need to exchange currency to trade.",
+        "I can describe how exchange rates work.",
+        "I can give examples of international trade requiring currency conversion."
+      ],
+      "vocabulary": ["exchange rate", "currency", "international trade", "import", "export", "foreign exchange", "global economy"],
+      "sample_assessment": "A U.S. company wants to buy goods from Japan. Before purchasing, the company must: A) Get permission from the President B) Convert U.S. dollars to Japanese yen C) Move its headquarters to Japan D) Stop trading with other countries"
+    },
+    {
+      "code": "SS.7.E.3.2",
+      "benchmark": "Assess how the changing value of currency affects trade of goods and services between nations.",
+      "topics": ["Currency Value", "Trade", "Exchange Rates", "Global Economy"],
+      "dok": 3,
+      "item_specs": "Students assess the impact of currency fluctuations on international trade. Items may include scenarios about changing exchange rates.",
+      "essential_questions": [
+        "How do changes in currency value affect international trade?",
+        "What happens when one country's currency becomes stronger or weaker?"
+      ],
+      "learning_targets": [
+        "I can explain how a strong or weak currency affects imports and exports.",
+        "I can assess the impact of changing exchange rates on trade.",
+        "I can describe how currency value changes affect consumers."
+      ],
+      "vocabulary": ["appreciation", "depreciation", "strong currency", "weak currency", "exchange rate", "trade balance", "import", "export"],
+      "sample_assessment": "If the U.S. dollar becomes STRONGER compared to the euro, what is the MOST likely result? A) American goods become cheaper for Europeans B) European goods become cheaper for Americans C) International trade stops completely D) Both currencies lose value"
+    },
+    {
+      "code": "SS.7.E.3.3",
+      "benchmark": "Compare and contrast a single resource economy with a diversified economy.",
+      "topics": ["Economic Diversification", "Single Resource Economy", "Economic Development"],
+      "dok": 2,
+      "item_specs": "Students compare economies that depend on one resource versus those with varied industries. Items may include examples of resource-dependent countries.",
+      "essential_questions": [
+        "What are the risks of depending on a single resource?",
+        "Why is a diversified economy more stable?"
+      ],
+      "learning_targets": [
+        "I can define a single resource economy and a diversified economy.",
+        "I can explain the risks of depending on one resource.",
+        "I can compare the economic stability of diversified and single-resource economies."
+      ],
+      "vocabulary": ["single resource economy", "diversified economy", "natural resources", "economic dependence", "industry", "stability", "vulnerability"],
+      "sample_assessment": "A country that earns almost ALL of its income from oil exports is an example of: A) A diversified economy B) A single resource economy C) A mixed market economy D) A command economy"
+    },
+    {
+      "code": "SS.7.E.3.4",
+      "benchmark": "Compare and contrast the standard of living in various countries today to that of the United States using gross domestic product (GDP) per capita as an indicator.",
+      "topics": ["Standard of Living", "GDP", "GDP Per Capita", "International Comparison"],
+      "dok": 2,
+      "item_specs": "Students compare living standards using GDP per capita. Items may include data tables or charts comparing countries.",
+      "essential_questions": [
+        "How is GDP per capita used to measure standard of living?",
+        "Why do standards of living differ between countries?"
+      ],
+      "learning_targets": [
+        "I can define GDP and GDP per capita.",
+        "I can use GDP per capita to compare standards of living.",
+        "I can explain factors that contribute to different standards of living."
+      ],
+      "vocabulary": ["gross domestic product (GDP)", "GDP per capita", "standard of living", "developed country", "developing country", "economic indicator", "per capita"],
+      "sample_assessment": "Which measure is MOST useful for comparing the standard of living between two countries? A) Total GDP B) GDP per capita C) Population size D) Total land area"
     }
   ]
 }

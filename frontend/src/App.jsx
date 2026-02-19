@@ -1222,6 +1222,7 @@ function App() {
   const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
+  const skipAutoSaveRef = useRef(false); // Skip one auto-save cycle after loading from disk
   const [gradeAssignment, setGradeAssignment] = useState({
     title: "",
     customMarkers: [],
@@ -1773,6 +1774,11 @@ function App() {
     if (!settingsLoaded) return;
     if (!assignment.title) return; // Don't save assignments without a title
     if (isLoadingAssignment) return; // Don't save while loading an assignment
+    // Skip auto-save right after loading — data is already on disk
+    if (skipAutoSaveRef.current) {
+      skipAutoSaveRef.current = false;
+      return;
+    }
 
     const saveTimeout = setTimeout(async () => {
       // Double-check we're not in the middle of loading
@@ -1780,8 +1786,11 @@ function App() {
 
       try {
         let dataToSave = { ...assignment, importedDoc };
+        // Compare sanitized names to detect real renames (not just special-char differences)
+        // Backend sanitizes titles to filenames by keeping only [a-zA-Z0-9 \-_]
+        const sanitizeForFilename = (s) => s.replace(/[^a-zA-Z0-9 \-_]/g, '').trim();
         const isRename =
-          loadedAssignmentName && loadedAssignmentName !== assignment.title;
+          loadedAssignmentName && sanitizeForFilename(loadedAssignmentName) !== sanitizeForFilename(assignment.title);
 
         // If title changed from a previously loaded assignment, add old name to aliases
         if (isRename) {
@@ -1808,10 +1817,26 @@ function App() {
             }
           }
 
-          // Refresh saved assignments list
-          const list = await api.listAssignments();
-          if (list.assignments) setSavedAssignments(list.assignments);
-          if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
+          if (isRename) {
+            // Full list refresh on rename (list structure changed)
+            const list = await api.listAssignments();
+            if (list.assignments) setSavedAssignments(list.assignments);
+            if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
+          } else {
+            // Normal save — update this card's data locally without full refresh
+            const cardKey = sanitizeForFilename(assignment.title);
+            setSavedAssignmentData(prev => ({
+              ...prev,
+              [cardKey]: {
+                ...(prev[cardKey] || {}),
+                rubricType: assignment.rubricType || 'standard',
+                completionOnly: assignment.completionOnly || false,
+                countsTowardsGrade: assignment.countsTowardsGrade !== false,
+                title: assignment.title,
+                aliases: assignment.aliases || [],
+              }
+            }));
+          }
           // Update loaded assignment name to reflect current title
           setLoadedAssignmentName(assignment.title);
         } else if (saveResult.error) {
@@ -3535,6 +3560,7 @@ ${signature}`;
   const loadAssignment = async (name) => {
     try {
       setIsLoadingAssignment(true); // Prevent auto-save during load
+      skipAutoSaveRef.current = true; // Don't auto-save data we just loaded
       const data = await api.loadAssignment(name);
       if (data.assignment) {
         // Set importedDoc FIRST to prevent race condition
@@ -15646,12 +15672,13 @@ ${signature}`;
                                         ? "rgba(100,100,100,0.1)"
                                         : "var(--input-bg)",
                                   borderRadius: "10px",
-                                  border:
-                                    loadedAssignmentName === name
-                                      ? "2px solid rgba(99,102,241,0.5)"
-                                      : !countsTowardsGrade
-                                        ? "1px dashed rgba(100,100,100,0.4)"
-                                        : "1px solid var(--glass-border)",
+                                  border: !countsTowardsGrade
+                                    ? "1px dashed rgba(100,100,100,0.4)"
+                                    : "1px solid var(--glass-border)",
+                                  outline: loadedAssignmentName === name
+                                    ? "2px solid rgba(99,102,241,0.5)"
+                                    : "none",
+                                  outlineOffset: "-1px",
                                   cursor: "pointer",
                                   display: "flex",
                                   justifyContent: "space-between",
@@ -15661,6 +15688,7 @@ ${signature}`;
                                 onClick={() => loadAssignment(name)}
                                 onDoubleClick={async () => {
                                   setIsLoadingAssignment(true); // Prevent auto-save during load
+                                  skipAutoSaveRef.current = true; // Don't auto-save data we just loaded
                                   const data = await api.loadAssignment(name);
                                   if (data.assignment) {
                                     // Set importedDoc FIRST to prevent race condition
