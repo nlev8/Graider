@@ -447,6 +447,84 @@ def create_document_docx(filepath, title, content_blocks, style):
             except Exception:
                 doc.add_paragraph("[Shape image generation failed]")
 
+        elif block_type == "function_graph":
+            try:
+                from backend.services.visualization import create_function_graph, add_image_to_docx
+                img = create_function_graph(
+                    expressions=block.get("expressions", []),
+                    x_range=tuple(block.get("x_range", (-10, 10))),
+                    y_range=tuple(block["y_range"]) if block.get("y_range") else None,
+                    title=block.get("title"),
+                    show_grid=block.get("show_grid", True),
+                    labels=block.get("labels"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=5)
+            except Exception:
+                doc.add_paragraph("[Function graph image generation failed]")
+
+        elif block_type == "circle":
+            try:
+                from backend.services.visualization import create_circle, add_image_to_docx
+                img = create_circle(
+                    radius=block.get("radius", 5),
+                    center=tuple(block.get("center", (0, 0))),
+                    show_radius=block.get("show_radius", True),
+                    show_diameter=block.get("show_diameter", False),
+                    show_area=block.get("show_area", False),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=4)
+            except Exception:
+                doc.add_paragraph("[Circle image generation failed]")
+
+        elif block_type == "polygon":
+            try:
+                from backend.services.visualization import create_polygon, add_image_to_docx
+                img = create_polygon(
+                    sides=block.get("sides", 5),
+                    side_length=block.get("side_length", 4),
+                    show_labels=block.get("show_labels", True),
+                    show_dimensions=block.get("show_dimensions", True),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=4)
+            except Exception:
+                doc.add_paragraph("[Polygon image generation failed]")
+
+        elif block_type == "histogram":
+            try:
+                from backend.services.visualization import create_histogram, add_image_to_docx
+                img = create_histogram(
+                    data=block.get("data", []),
+                    bins=block.get("bins", 10),
+                    title=block.get("title"),
+                    x_label=block.get("x_label"),
+                    y_label=block.get("y_label", "Frequency"),
+                    show_values=block.get("show_values", True),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=5)
+            except Exception:
+                doc.add_paragraph("[Histogram image generation failed]")
+
+        elif block_type == "pie_chart":
+            try:
+                from backend.services.visualization import create_pie_chart, add_image_to_docx
+                img = create_pie_chart(
+                    categories=block.get("categories", []),
+                    values=block.get("values", []),
+                    title=block.get("title"),
+                    show_percentages=block.get("show_percentages", True),
+                    explode=block.get("explode"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=5)
+            except Exception:
+                doc.add_paragraph("[Pie chart image generation failed]")
+
     doc.save(filepath)
 
 

@@ -236,7 +236,7 @@ OPENAI_TTS_VOICES = ["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "
 # Token cost guardrails
 MAX_TOOL_RESPONSE_CHARS = 8000   # Truncate tool results larger than this
 COST_WARNING_THRESHOLD = 0.25    # Warn teacher when per-query cost exceeds this
-MAX_TOOL_ROUNDS = 3              # Max tool loop iterations (was 5)
+MAX_TOOL_ROUNDS = 5              # Max tool loop iterations — enough for multi-step reasoning
 PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 ACCOMMODATIONS_FILE = os.path.join(GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
 TEMPLATES_DIR = os.path.join(GRAIDER_DATA_DIR, "assessment_templates")
@@ -393,6 +393,42 @@ def _load_accommodation_summary():
         return {"total_students": total_students, "preset_counts": preset_counts}
     except Exception:
         return None
+
+
+def _load_resource_names():
+    """Load just filenames + descriptions of uploaded resources (no content).
+
+    Returns list of strings like "filename.docx — Pacing guide (curriculum)".
+    Full content is fetched on demand via read_resource tool.
+    """
+    if not os.path.isdir(DOCUMENTS_DIR):
+        return []
+    names = []
+    try:
+        for fname in sorted(os.listdir(DOCUMENTS_DIR)):
+            if fname.endswith('.meta.json'):
+                continue
+            fpath = os.path.join(DOCUMENTS_DIR, fname)
+            if not os.path.isfile(fpath):
+                continue
+            meta_path = fpath + ".meta.json"
+            meta = {}
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r', encoding='utf-8') as f:
+                        meta = json.load(f)
+                except Exception:
+                    pass
+            doc_type = meta.get("doc_type", "general")
+            description = meta.get("description", "")
+            entry = fname
+            if description:
+                entry += f" — {description}"
+            entry += f" ({doc_type})"
+            names.append(entry)
+    except Exception:
+        pass
+    return names
 
 
 # Cap total injected resource text at 80K chars (~20K tokens)
@@ -849,33 +885,27 @@ STUDENT INFO:
     except Exception:
         pass
 
-    # Inject full curriculum standards so the assistant always knows the scope
+    # Standards: only inject a compact index (codes + short benchmarks).
+    # Full details (vocabulary, topics, learning targets) fetched on demand via get_standards tool.
     all_standards = _load_standards()
     if all_standards:
-        std_lines = []
+        compact = []
         for s in all_standards:
             code = s.get("code", "")
             benchmark = s.get("benchmark", "")
             dok = s.get("dok", "")
-            topics = ", ".join(s.get("topics", []))
-            vocab = ", ".join(s.get("vocabulary", []))
-            line = f"- **{code}** (DOK {dok}): {benchmark}"
-            if topics:
-                line += f"  Topics: {topics}"
-            if vocab:
-                line += f"  Vocabulary: {vocab}"
-            std_lines.append(line)
-        prompt += "\n\n## CURRICULUM STANDARDS\n"
-        prompt += f"All {len(all_standards)} standards for {subject} ({state}, grade {grade_level}):\n"
-        prompt += "\n".join(std_lines)
-        prompt += "\n\nThese are the COMPLETE standards for this subject. Reference specific codes when creating aligned content. Use get_standards tool for additional details like learning targets and essential questions."
+            compact.append(f"{code} (DOK {dok}): {benchmark}")
+        prompt += f"\n\n## CURRICULUM STANDARDS INDEX ({len(all_standards)} standards)\n"
+        prompt += "Compact index — use get_standards tool with a topic keyword for full details (vocabulary, learning targets, essential questions).\n"
+        prompt += "\n".join(compact)
 
-    # Inject uploaded resource documents so the assistant has full context
-    resource_content = _load_resource_content()
-    if resource_content:
+    # Resources: only inject filenames and descriptions, NOT full content.
+    # Full text fetched on demand via read_resource tool.
+    resource_names = _load_resource_names()
+    if resource_names:
         prompt += "\n\n## UPLOADED REFERENCE DOCUMENTS\n"
-        prompt += "The teacher has uploaded the following reference materials. Use these to answer questions about pacing, curriculum sequence, calendar scheduling, and content planning.\n"
-        prompt += resource_content
+        prompt += "The teacher has uploaded these documents. Use read_resource tool to access full content when needed.\n"
+        prompt += "\n".join(f"- {r}" for r in resource_names)
 
     # Inject rubric settings (grading categories, weights, style)
     rubric_data = _load_rubric()
@@ -925,10 +955,10 @@ STUDENT INFO:
                     prompt += f"  {' | '.join(str(v) for v in row)}\n"
             prompt += f"\nWhen generating quizzes for {t['platform']}, output a CSV/table with these exact columns. For Correct Answer: use the option number (1-5) for Multiple Choice, comma-separated numbers for Checkbox, leave blank for Open-Ended/Poll/Draw/Fill-in-the-Blank.\n"
 
-    # Append platform documentation for how-to and feature questions
-    manual = _load_user_manual()
-    if manual:
-        prompt += "\n\n## PLATFORM DOCUMENTATION\n\nWhen users ask about Graider features, how-to questions, settings, troubleshooting, or any platform-related question, use the documentation below to provide accurate, specific answers. Reference exact menu paths and steps.\n\n" + manual
+    # Platform docs: do NOT inject the full user manual (~12K tokens).
+    # The assistant can answer most questions from its tool descriptions and context.
+    # Only inject a short note so it knows it can reference docs if asked.
+    prompt += "\n\nPLATFORM HELP: If asked how-to or troubleshooting questions about Graider, use read_resource with filename 'User_Manual.md' to look up the answer. Do NOT guess — check the docs."
 
     return prompt
 

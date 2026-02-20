@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import Icon from './Icon'
 import { getAuthHeaders } from '../services/api'
 import { useVoice } from '../hooks/useVoice'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 
 const API_BASE = ''
 
@@ -109,6 +111,41 @@ const ACCEPTED_FILE_TYPES = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.docx'
 function renderMarkdown(text) {
   if (!text) return ''
   let html = text
+
+  // Placeholder system: protect complex HTML (KaTeX, images) from later regex passes
+  var placeholders = []
+  function ph(content) {
+    var id = '\x00PH' + placeholders.length + '\x00'
+    placeholders.push(content)
+    return id
+  }
+
+  // Block math: $$...$$
+  html = html.replace(/\$\$([\s\S]+?)\$\$/g, function(m, latex) {
+    try {
+      return ph('<div style="margin:8px 0;text-align:center">' +
+        katex.renderToString(latex.trim(), { displayMode: true, throwOnError: false }) + '</div>')
+    } catch (e) {
+      return ph('<code style="color:#f87171">' + latex + '</code>')
+    }
+  })
+
+  // Inline math: $...$  (skip currency like $5.00)
+  html = html.replace(/\$([^\$\n]+?)\$/g, function(m, latex) {
+    if (/^\d/.test(latex.trim())) return m
+    try {
+      return ph(katex.renderToString(latex.trim(), { displayMode: false, throwOnError: false }))
+    } catch (e) {
+      return ph('<code style="color:#f87171">' + latex + '</code>')
+    }
+  })
+
+  // Markdown images: ![alt](url) — supports base64 data URIs and regular URLs
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(m, alt, url) {
+    return ph('<img src="' + url + '" alt="' + alt +
+      '" style="max-width:100%;border-radius:8px;margin:8px 0;display:block" />')
+  })
+
   // Markdown links [text](url) -> clickable links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, linkText, url) {
     // Download worksheet links get a special style
@@ -132,6 +169,11 @@ function renderMarkdown(text) {
   html = html.replace(/\n\n/g, '<br/><br/>')
   // Single newlines
   html = html.replace(/\n/g, '<br/>')
+
+  // Restore placeholders
+  for (var i = 0; i < placeholders.length; i++) {
+    html = html.split('\x00PH' + i + '\x00').join(placeholders[i])
+  }
   return html
 }
 

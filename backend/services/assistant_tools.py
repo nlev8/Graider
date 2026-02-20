@@ -579,11 +579,32 @@ TOOL_DEFINITIONS = [
                         "properties": {
                             "question": {"type": "string"},
                             "expected_answer": {"type": "string", "description": "Expected answer (for answer key)"},
-                            "points": {"type": "integer", "default": 10}
+                            "points": {"type": "integer", "default": 10},
+                            "visual": {
+                                "type": "object",
+                                "description": "Optional visual element embedded above the answer box. Supports: math (LaTeX expression), number_line, coordinate_plane, graph (bar/line/scatter), box_plot, shape (triangle/rectangle). Example: {\"type\":\"math\",\"latex\":\"\\\\frac{1}{2}+\\\\frac{1}{3}\"} or {\"type\":\"shape\",\"shape_type\":\"triangle\",\"base\":8,\"height\":6} or {\"type\":\"graph\",\"graph_type\":\"bar\",\"categories\":[\"A\",\"B\"],\"values\":[3,7],\"title\":\"Sales\"}",
+                                "properties": {
+                                    "type": {"type": "string", "enum": ["math", "number_line", "coordinate_plane", "graph", "box_plot", "shape"]},
+                                    "latex": {"type": "string", "description": "LaTeX expression (for math type)"},
+                                    "font_size": {"type": "integer", "description": "Font size for math rendering"},
+                                    "min": {"type": "number"}, "max": {"type": "number"},
+                                    "points": {"type": "array", "items": {"type": "number"}},
+                                    "labels": {"type": "object"}, "title": {"type": "string"},
+                                    "blank": {"type": "boolean", "description": "If true, hide data for student to fill in"},
+                                    "x_range": {"type": "array", "items": {"type": "number"}}, "y_range": {"type": "array", "items": {"type": "number"}},
+                                    "graph_type": {"type": "string", "enum": ["bar", "line", "scatter"]},
+                                    "categories": {"type": "array", "items": {"type": "string"}}, "values": {"type": "array", "items": {"type": "number"}},
+                                    "x_data": {"type": "array", "items": {"type": "number"}}, "y_data": {"type": "array", "items": {"type": "number"}},
+                                    "x_label": {"type": "string"}, "y_label": {"type": "string"},
+                                    "data": {"type": "array", "items": {"type": "number"}}, "shape_type": {"type": "string", "enum": ["triangle", "rectangle"]},
+                                    "base": {"type": "number"}, "height": {"type": "number"}, "width": {"type": "number"}
+                                },
+                                "required": ["type"]
+                            }
                         },
                         "required": ["question"]
                     },
-                    "description": "Questions with expected answers"
+                    "description": "Questions with expected answers. Each question can include an optional 'visual' object to embed a math expression, graph, shape, or other visual above the answer box."
                 },
                 "summary_prompt": {
                     "type": "string",
@@ -632,7 +653,7 @@ TOOL_DEFINITIONS = [
                             "font_size": {"type": "integer", "description": "Font size for math rendering (default 20)"},
                             "min": {"type": "number", "description": "Min value for number_line"},
                             "max": {"type": "number", "description": "Max value for number_line"},
-                            "points": {"description": "Points to plot. number_line: array of numbers. coordinate_plane: array of [x,y] pairs."},
+                            "points": {"type": "array", "items": {"type": "number"}, "description": "Points to plot. number_line: array of numbers. coordinate_plane: array of [x,y] pairs."},
                             "labels": {"type": "array", "items": {"type": "string"}, "description": "Labels for points or data sets"},
                             "title": {"type": "string", "description": "Title for visual blocks"},
                             "blank": {"type": "boolean", "description": "If true, create blank template for students to fill in"},
@@ -646,7 +667,7 @@ TOOL_DEFINITIONS = [
                             "x_label": {"type": "string", "description": "X-axis label for graphs"},
                             "y_label": {"type": "string", "description": "Y-axis label for graphs"},
                             "show_trend": {"type": "boolean", "description": "Show trend line on scatter plot"},
-                            "data": {"type": "array", "description": "box_plot: array of number arrays (one per data set)"},
+                            "data": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}, "description": "box_plot: array of number arrays (one per data set)"},
                             "shape_type": {"type": "string", "enum": ["triangle", "rectangle"], "description": "Shape type for type=shape"},
                             "base": {"type": "number", "description": "Triangle base length"},
                             "height": {"type": "number", "description": "Shape height (triangle or rectangle)"},
@@ -3172,7 +3193,13 @@ def read_resource_tool(filename):
     filepath = os.path.join(DOCUMENTS_DIR, safe_name)
 
     if not os.path.exists(filepath):
-        return {"error": f"Document not found: {safe_name}. Use list_resources to see available files."}
+        # Also check project root for built-in docs like User_Manual.md
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        alt_path = os.path.join(project_root, safe_name)
+        if os.path.exists(alt_path):
+            filepath = alt_path
+        else:
+            return {"error": f"Document not found: {safe_name}. Use list_resources to see available files."}
 
     ext = os.path.splitext(safe_name)[1].lower()
     pages = None

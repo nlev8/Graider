@@ -546,6 +546,370 @@ def create_rectangle(
 
 
 # =============================================================================
+# FUNCTION GRAPHS
+# =============================================================================
+
+def create_function_graph(
+    expressions: list,
+    x_range: tuple = (-10, 10),
+    y_range: tuple = None,
+    title: str = None,
+    show_grid: bool = True,
+    labels: list = None,
+    blank: bool = False
+) -> str:
+    """Plot mathematical functions on a coordinate plane.
+
+    Args:
+        expressions: List of expression strings, e.g. ["2*x + 1", "x**2"]
+        x_range: (min, max) for x-axis
+        y_range: (min, max) for y-axis, auto-calculated if None
+        title: Graph title
+        show_grid: Show grid lines
+        labels: Legend labels for each expression
+        blank: If True, draw empty axes for students to fill in
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    np = _get_np()
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    if not blank and expressions:
+        from sympy import sympify, lambdify, Symbol
+        x_sym = Symbol('x')
+        x_vals = np.linspace(x_range[0], x_range[1], 400)
+
+        colors = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c']
+        all_y = []
+
+        for idx, expr_str in enumerate(expressions):
+            # Clean expression: handle y= prefix, caret notation
+            clean = expr_str.strip()
+            if clean.lower().startswith('y'):
+                clean = clean.split('=', 1)[-1].strip()
+            clean = clean.replace('^', '**')
+
+            try:
+                sym_expr = sympify(clean)
+                f = lambdify(x_sym, sym_expr, modules=['numpy'])
+                y_vals = f(x_vals)
+
+                # Handle arrays from constant expressions
+                if not hasattr(y_vals, '__len__'):
+                    y_vals = np.full_like(x_vals, float(y_vals))
+
+                label = labels[idx] if labels and idx < len(labels) else f"y = {expr_str}"
+                color = colors[idx % len(colors)]
+                ax.plot(x_vals, y_vals, color=color, linewidth=2, label=label)
+                all_y.extend(y_vals[np.isfinite(y_vals)])
+            except Exception:
+                continue
+
+        if labels or len(expressions) > 1:
+            ax.legend(fontsize=10)
+
+        # Auto y-range if not specified
+        if y_range is None and all_y:
+            y_min = max(np.percentile(all_y, 2), -50)
+            y_max = min(np.percentile(all_y, 98), 50)
+            margin = (y_max - y_min) * 0.1 or 1
+            ax.set_ylim(y_min - margin, y_max + margin)
+        elif y_range:
+            ax.set_ylim(y_range)
+    else:
+        if y_range:
+            ax.set_ylim(y_range)
+        else:
+            ax.set_ylim(-10, 10)
+
+    ax.set_xlim(x_range)
+    ax.axhline(y=0, color='black', linewidth=0.8)
+    ax.axvline(x=0, color='black', linewidth=0.8)
+
+    if show_grid:
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    ax.set_xlabel('x', fontsize=12)
+    ax.set_ylabel('y', fontsize=12)
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+# =============================================================================
+# CIRCLES
+# =============================================================================
+
+def create_circle(
+    radius: float = 5,
+    center: tuple = (0, 0),
+    show_radius: bool = True,
+    show_diameter: bool = False,
+    show_area: bool = False,
+    title: str = None,
+    blank: bool = False
+) -> str:
+    """Create a circle diagram with optional radius/diameter/area labels.
+
+    Args:
+        radius: Circle radius
+        center: (x, y) center coordinates
+        show_radius: Draw and label radius line
+        show_diameter: Draw and label diameter line
+        show_area: Show area formula/value
+        title: Diagram title
+        blank: If True, draw unlabeled circle
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    np = _get_np()
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    circle_patch = plt.Circle(center, radius, fill=True,
+                              facecolor='#dbeafe', edgecolor='#2563eb', linewidth=2)
+    ax.add_patch(circle_patch)
+
+    # Center dot
+    ax.plot(center[0], center[1], 'ko', markersize=4)
+
+    if not blank:
+        if show_radius:
+            ax.plot([center[0], center[0] + radius], [center[1], center[1]],
+                    'r-', linewidth=1.5)
+            ax.text(center[0] + radius / 2, center[1] + radius * 0.08,
+                    f'r = {radius}', ha='center', fontsize=11, color='red')
+
+        if show_diameter:
+            ax.plot([center[0] - radius, center[0] + radius],
+                    [center[1], center[1]], 'g--', linewidth=1.5)
+            ax.text(center[0], center[1] - radius * 0.12,
+                    f'd = {radius * 2}', ha='center', fontsize=11, color='green')
+
+        if show_area:
+            import math
+            area = math.pi * radius ** 2
+            ax.text(center[0], center[1] - radius * 0.3,
+                    f'A = {area:.2f}', ha='center', fontsize=10, color='#6b7280')
+
+    margin = radius * 0.4
+    ax.set_xlim(center[0] - radius - margin, center[0] + radius + margin)
+    ax.set_ylim(center[1] - radius - margin, center[1] + radius + margin)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+# =============================================================================
+# REGULAR POLYGONS
+# =============================================================================
+
+def create_polygon(
+    sides: int = 5,
+    side_length: float = 4,
+    show_labels: bool = True,
+    show_dimensions: bool = True,
+    title: str = None,
+    blank: bool = False
+) -> str:
+    """Create a regular polygon diagram.
+
+    Args:
+        sides: Number of sides (3=triangle, 4=square, 5=pentagon, etc.)
+        side_length: Length of each side
+        show_labels: Label vertices A, B, C...
+        show_dimensions: Show side length labels
+        title: Diagram title
+        blank: If True, draw unlabeled polygon
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    np = _get_np()
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    # Compute vertices of regular polygon centered at origin
+    # Rotate so bottom edge is horizontal
+    offset_angle = -np.pi / 2 + np.pi / sides
+    angles = [offset_angle + 2 * np.pi * k / sides for k in range(sides)]
+    circumradius = side_length / (2 * np.sin(np.pi / sides))
+    vertices = [(circumradius * np.cos(a), circumradius * np.sin(a)) for a in angles]
+
+    polygon = plt.Polygon(vertices, fill=True, facecolor='#fef3c7',
+                          edgecolor='#d97706', linewidth=2)
+    ax.add_patch(polygon)
+
+    if not blank:
+        vertex_labels = [chr(65 + i) for i in range(sides)]  # A, B, C, ...
+        for i, (vx, vy) in enumerate(vertices):
+            if show_labels:
+                # Place label outside the polygon
+                dx = vx - 0
+                dy = vy - 0
+                dist = np.sqrt(dx**2 + dy**2) or 1
+                lx = vx + dx / dist * circumradius * 0.15
+                ly = vy + dy / dist * circumradius * 0.15
+                ax.text(lx, ly, vertex_labels[i], ha='center', va='center',
+                        fontsize=12, fontweight='bold')
+
+            if show_dimensions:
+                # Label the side between this vertex and the next
+                nx, ny = vertices[(i + 1) % sides]
+                mx, my = (vx + nx) / 2, (vy + ny) / 2
+                # Offset label outward
+                sx, sy = nx - vx, ny - vy
+                norm = np.sqrt(sx**2 + sy**2) or 1
+                ox, oy = -sy / norm * circumradius * 0.1, sx / norm * circumradius * 0.1
+                ax.text(mx + ox, my + oy, f'{side_length}', ha='center',
+                        va='center', fontsize=10, color='#92400e')
+
+    margin = circumradius * 0.3
+    ax.set_xlim(-circumradius - margin, circumradius + margin)
+    ax.set_ylim(-circumradius - margin, circumradius + margin)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+# =============================================================================
+# HISTOGRAMS
+# =============================================================================
+
+def create_histogram(
+    data: list,
+    bins: int = 10,
+    title: str = None,
+    x_label: str = None,
+    y_label: str = "Frequency",
+    show_values: bool = True,
+    blank: bool = False
+) -> str:
+    """Create a histogram for frequency distribution.
+
+    Args:
+        data: List of numeric values
+        bins: Number of bins
+        title: Chart title
+        x_label: X-axis label
+        y_label: Y-axis label
+        show_values: Show frequency count on top of each bar
+        blank: If True, draw empty axes
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    if not blank and data:
+        n, bin_edges, patches = ax.hist(data, bins=bins, color='steelblue',
+                                         edgecolor='black', alpha=0.8)
+        if show_values:
+            for count, patch in zip(n, patches):
+                if count > 0:
+                    ax.text(patch.get_x() + patch.get_width() / 2, count + 0.3,
+                            str(int(count)), ha='center', va='bottom', fontsize=9)
+    else:
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.text(5, 5, 'Draw your histogram here', ha='center', va='center',
+                fontsize=12, color='gray')
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight='bold')
+    if x_label:
+        ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+# =============================================================================
+# PIE CHARTS
+# =============================================================================
+
+def create_pie_chart(
+    categories: list,
+    values: list,
+    title: str = None,
+    show_percentages: bool = True,
+    explode: list = None,
+    blank: bool = False
+) -> str:
+    """Create a pie chart for part-of-whole visualization.
+
+    Args:
+        categories: List of category labels
+        values: List of numeric values
+        title: Chart title
+        show_percentages: Show percentage labels on slices
+        explode: List of float offsets for exploded slices (e.g. [0, 0.1, 0])
+        blank: If True, draw empty circle placeholder
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+
+    if not blank and categories and values:
+        autopct = '%1.1f%%' if show_percentages else None
+        colors = plt.cm.Set3([i / max(len(values), 1) for i in range(len(values))])
+        ax.pie(values, labels=categories, autopct=autopct, colors=colors,
+               explode=explode, startangle=90, textprops={'fontsize': 10})
+        ax.axis('equal')
+    else:
+        circle = plt.Circle((0.5, 0.5), 0.4, fill=False, edgecolor='gray',
+                             linewidth=2, linestyle='--')
+        ax.add_patch(circle)
+        ax.text(0.5, 0.5, 'Draw your pie chart here', ha='center', va='center',
+                fontsize=12, color='gray')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_aspect('equal')
+        ax.axis('off')
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+# =============================================================================
 # SAVE TO DOCX
 # =============================================================================
 

@@ -3,6 +3,7 @@ import InteractiveNumberLine from './InteractiveNumberLine';
 import InteractiveCoordinatePlane from './InteractiveCoordinatePlane';
 import InteractiveGeometry from './InteractiveGeometry';
 import InteractiveBoxPlot from './InteractiveBoxPlot';
+import InteractiveFunctionGraph from './InteractiveFunctionGraph';
 import MathInput from './MathInput';
 import DataTable from './DataTable';
 
@@ -400,6 +401,39 @@ function QuestionRenderer({
               data={question.chart_data}
               title={question.chart_data?.title || 'Data'}
             />
+            <textarea
+              style={styles.shortAnswer}
+              value={answer || ''}
+              onChange={(e) => onAnswer(e.target.value)}
+              placeholder="Type your answer here..."
+              disabled={readOnly}
+              rows={3}
+            />
+          </div>
+        );
+
+      case 'function_graph':
+        return (
+          <InteractiveFunctionGraph
+            xRange={question.x_range || [-10, 10]}
+            yRange={question.y_range || [-10, 10]}
+            expressions={answer || []}
+            onChange={onAnswer}
+            correctExpressions={showAnswer ? question.correct_expressions : null}
+            readOnly={readOnly}
+            maxExpressions={question.max_expressions || 3}
+          />
+        );
+
+      case 'circle':
+      case 'polygon':
+      case 'histogram':
+      case 'pie_chart':
+        return (
+          <div>
+            {question.image_url && (
+              <img src={question.image_url} alt={qType} style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '8px' }} />
+            )}
             <textarea
               style={styles.shortAnswer}
               value={answer || ''}

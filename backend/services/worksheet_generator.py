@@ -20,10 +20,180 @@ from docx.oxml import parse_xml
 from backend.services.document_generator import (
     _parse_markdown_runs, load_style, DEFAULT_STYLE, _apply_style_to_heading
 )
+from backend.services.visualization import add_image_to_docx
 
 
 WORKSHEETS_DIR = os.path.expanduser("~/Downloads/Graider/Worksheets")
 ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
+
+
+def _embed_visual(doc, visual):
+    """Embed a visual element (math, graph, shape, number_line, coordinate_plane) into the doc.
+
+    Args:
+        doc: python-docx Document object
+        visual: dict with 'type' and type-specific params. Supported types:
+            - math: {type, latex, font_size?}
+            - number_line: {type, min, max, points?, labels?, title?, blank?}
+            - coordinate_plane: {type, x_range?, y_range?, points?, labels?, title?, blank?}
+            - graph: {type, graph_type (bar/line/scatter), + data params}
+            - box_plot: {type, data, labels?, title?, blank?}
+            - shape: {type, shape_type (triangle/rectangle), + dimension params}
+    """
+    vtype = visual.get('type', '')
+    try:
+        if vtype == 'math':
+            from backend.services.visualization import render_latex
+            img_data = render_latex(
+                visual.get('latex', ''),
+                font_size=visual.get('font_size', 20)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4)
+        elif vtype == 'number_line':
+            from backend.services.visualization import create_number_line
+            img_data = create_number_line(
+                min_val=visual.get('min', 0), max_val=visual.get('max', 10),
+                points=visual.get('points', []), labels=visual.get('labels', {}),
+                title=visual.get('title', ''), blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=5)
+        elif vtype == 'coordinate_plane':
+            from backend.services.visualization import create_coordinate_plane
+            img_data = create_coordinate_plane(
+                x_range=visual.get('x_range', [-10, 10]),
+                y_range=visual.get('y_range', [-10, 10]),
+                points=visual.get('points', []),
+                labels=visual.get('labels', {}),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4.5)
+        elif vtype == 'graph':
+            gt = visual.get('graph_type', 'bar')
+            if gt == 'bar':
+                from backend.services.visualization import create_bar_chart
+                img_data = create_bar_chart(
+                    categories=visual.get('categories', []),
+                    values=visual.get('values', []),
+                    title=visual.get('title', ''),
+                    x_label=visual.get('x_label', ''),
+                    y_label=visual.get('y_label', ''),
+                    blank=visual.get('blank', False)
+                )
+            elif gt == 'line':
+                from backend.services.visualization import create_line_graph
+                img_data = create_line_graph(
+                    x_data=visual.get('x_data', []),
+                    y_data=visual.get('y_data', []),
+                    title=visual.get('title', ''),
+                    x_label=visual.get('x_label', ''),
+                    y_label=visual.get('y_label', ''),
+                    blank=visual.get('blank', False)
+                )
+            elif gt == 'scatter':
+                from backend.services.visualization import create_scatter_plot
+                img_data = create_scatter_plot(
+                    x_data=visual.get('x_data', []),
+                    y_data=visual.get('y_data', []),
+                    title=visual.get('title', ''),
+                    x_label=visual.get('x_label', ''),
+                    y_label=visual.get('y_label', ''),
+                    show_trend=visual.get('show_trend', False),
+                    blank=visual.get('blank', False)
+                )
+            else:
+                return
+            add_image_to_docx(doc, img_data, width_inches=4.5)
+        elif vtype == 'box_plot':
+            from backend.services.visualization import create_box_plot
+            img_data = create_box_plot(
+                data=visual.get('data', []),
+                labels=visual.get('labels', []),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4.5)
+        elif vtype == 'shape':
+            st = visual.get('shape_type', 'triangle')
+            if st == 'triangle':
+                from backend.services.visualization import create_triangle
+                img_data = create_triangle(
+                    base=visual.get('base', 6),
+                    height=visual.get('height', 4),
+                    title=visual.get('title', ''),
+                    blank=visual.get('blank', False)
+                )
+            elif st == 'rectangle':
+                from backend.services.visualization import create_rectangle
+                img_data = create_rectangle(
+                    width=visual.get('width', 8),
+                    height=visual.get('height', 5),
+                    title=visual.get('title', ''),
+                    blank=visual.get('blank', False)
+                )
+            else:
+                return
+            add_image_to_docx(doc, img_data, width_inches=3.5)
+        elif vtype == 'function_graph':
+            from backend.services.visualization import create_function_graph
+            img_data = create_function_graph(
+                expressions=visual.get('expressions', []),
+                x_range=tuple(visual.get('x_range', (-10, 10))),
+                y_range=tuple(visual['y_range']) if visual.get('y_range') else None,
+                title=visual.get('title', ''),
+                show_grid=visual.get('show_grid', True),
+                labels=visual.get('labels'),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=5)
+        elif vtype == 'circle':
+            from backend.services.visualization import create_circle
+            img_data = create_circle(
+                radius=visual.get('radius', 5),
+                center=tuple(visual.get('center', (0, 0))),
+                show_radius=visual.get('show_radius', True),
+                show_diameter=visual.get('show_diameter', False),
+                show_area=visual.get('show_area', False),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=3.5)
+        elif vtype == 'polygon':
+            from backend.services.visualization import create_polygon
+            img_data = create_polygon(
+                sides=visual.get('sides', 5),
+                side_length=visual.get('side_length', 4),
+                show_labels=visual.get('show_labels', True),
+                show_dimensions=visual.get('show_dimensions', True),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=3.5)
+        elif vtype == 'histogram':
+            from backend.services.visualization import create_histogram
+            img_data = create_histogram(
+                data=visual.get('data', []),
+                bins=visual.get('bins', 10),
+                title=visual.get('title', ''),
+                x_label=visual.get('x_label', ''),
+                y_label=visual.get('y_label', 'Frequency'),
+                show_values=visual.get('show_values', True),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4.5)
+        elif vtype == 'pie_chart':
+            from backend.services.visualization import create_pie_chart
+            img_data = create_pie_chart(
+                categories=visual.get('categories', []),
+                values=visual.get('values', []),
+                title=visual.get('title', ''),
+                show_percentages=visual.get('show_percentages', True),
+                explode=visual.get('explode'),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4)
+    except Exception:
+        doc.add_paragraph("[Visual failed to render]")
 
 
 def _add_graider_table(doc, header_text, graider_tag, points, style, height_twips,
@@ -95,11 +265,13 @@ def _add_graider_table(doc, header_text, graider_tag, points, style, height_twip
     )
     trPr.append(trHeight)
 
-    # Set font in response cell so student typing uses the right font
+    # Set font and add placeholder to guide students to type here
     rp = response_cell.paragraphs[0]
-    placeholder_run = rp.add_run("")
+    placeholder_run = rp.add_run("Type your answer here...")
     placeholder_run.font.name = body_font
     placeholder_run.font.size = Pt(body_size)
+    placeholder_run.font.color.rgb = RGBColor(180, 180, 180)
+    placeholder_run.font.italic = True
 
     # Add spacing after table
     spacer = doc.add_paragraph()
@@ -179,13 +351,17 @@ def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
                 pts, style, 1440, body_font, body_size  # 1 inch response height
             )
 
-    # Questions Section — structured tables
+    # Questions Section — structured tables (with optional visuals)
     if questions:
         qh = doc.add_heading('QUESTIONS', level=2)
         _apply_style_to_heading(qh, 2, style)
         for i, q in enumerate(questions, 1):
             pts = q.get('points', 10)
             question_text = q.get('question', '')
+            # Embed visual above the answer table if provided
+            visual = q.get('visual')
+            if visual and isinstance(visual, dict):
+                _embed_visual(doc, visual)
             header = str(i) + ") " + question_text
             _add_graider_table(
                 doc, header, "GRAIDER:QUESTION:" + str(i),

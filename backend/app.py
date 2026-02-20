@@ -1296,6 +1296,18 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Pass file_exclude_markers (excludeMarkers) to skip sections that shouldn't be graded
                 # Pass marker_config and effort_points for section-based point rubric
 
+                # GUARD: Skip grading if no assignment config exists
+                # Prevents reading passages, handouts, and other non-assignment docs from being graded
+                if not matched_config and not file_markers and not file_sections:
+                    doc_label = matched_title or filepath.name
+                    grading_state["log"].append(f"  ⏭️  SKIPPED: No assignment config — cannot grade without a configured assignment")
+                    return {
+                        "success": False,
+                        "error": f"No assignment config found for '{doc_label}'. Set up an assignment in the Builder tab before grading.",
+                        "filepath": filepath,
+                        "is_config_missing": True
+                    }
+
                 # Check if student is trusted (skip AI/plagiarism detection)
                 student_id = student_info.get('student_id', '')
                 # Debug: Show what we're checking
@@ -1464,7 +1476,10 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     # Handle failed grading
                     if not result.get("success"):
                         grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                        grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
+                        if result.get("is_config_missing"):
+                            grading_state["log"].append(f"  ⏭️  {result.get('error', 'No config')}")
+                        else:
+                            grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
 
                         # Stop on API errors
                         if result.get("is_api_error"):

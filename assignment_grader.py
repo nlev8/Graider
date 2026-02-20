@@ -976,7 +976,37 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
             content_end_pos = -1  # Where content actually starts (after all marker/prompt lines)
 
             # Strategy 1: Full exact match (ideal — whole multi-line marker found as-is)
-            pos = doc_lower.find(marker_lower)
+            # Prefer line-start matches to avoid substring hits (e.g., "NOTES" in "CORNELL NOTES")
+            # A "line-start" match means the marker is at position 0, or preceded by a newline
+            # (possibly with emoji/whitespace between the newline and the marker text).
+            pos = -1
+            search_start = 0
+            while True:
+                candidate = doc_lower.find(marker_lower, search_start)
+                if candidate == -1:
+                    break
+                # Check if this is a standalone section header (at line start)
+                is_line_start = (candidate == 0)
+                if not is_line_start and candidate > 0:
+                    # Look back from candidate to the previous newline — if only
+                    # whitespace/emoji/special chars between newline and marker, it's line-start
+                    lookback = doc_lower[max(0, candidate - 10):candidate]
+                    newline_pos = lookback.rfind('\n')
+                    if newline_pos != -1:
+                        between = lookback[newline_pos + 1:]
+                        # Only whitespace, emoji, or common prefix chars (star, bullet, dash)
+                        is_line_start = all(
+                            c in ' \t\u2b50\U0001f31f\U0001f4d3\U0001f4dd\U0001f331\U0001f4d6\U0001f4da\U0001f50d\u2022\u2013\u2014-*'
+                            or ord(c) > 0x2600  # emoji/symbol unicode ranges
+                            for c in between
+                        )
+                if is_line_start:
+                    pos = candidate
+                    break
+                # Otherwise keep searching for a line-start match
+                if pos == -1:
+                    pos = candidate  # fallback to first occurrence if no line-start match
+                search_start = candidate + 1
             if pos != -1:
                 match_type = 'exact'
                 content_end_pos = pos + len(marker_clean)
@@ -1595,21 +1625,19 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
 
     # Fill-in-the-blank pattern 3: Lines with blanks followed by text
     # e.g., "_____ led the expedition" where student wrote "Clark led the expedition"
-    # Look for lines that start with a word (potential answer) followed by context
+    # ONLY triggers when underscores are present — prevents false positives on reading passages
     for line in lines:
         line_stripped = line.strip()
-        # Skip if empty, a question, or already processed
         if not line_stripped or line_stripped.endswith('?'):
             continue
-        # Check if line has a short leading phrase that could be an answer
-        # Pattern: starts with 1-3 words, followed by more context
+        # Only match if the line actually contains fill-in-the-blank underscores
+        if '___' not in line_stripped:
+            continue
         leading_match = re.match(r'^([A-Z][a-z]+(?:\s+[A-Za-z]+){0,2})\s+(.{10,})$', line_stripped)
         if leading_match:
             potential_answer = leading_match.group(1)
             context = leading_match.group(2)
-            # If context mentions blanks or has fill-in structure, this might be an answer
-            if '___' in context or 'was' in context.lower()[:20] or 'the' in context.lower()[:10]:
-                # Skip if it's template text
+            if '___' in context:
                 if not any(kw in potential_answer.lower() for kw in ['name', 'date', 'period', 'class', 'write', 'answer']):
                     extracted.append({
                         "question": f"Fill-in: {context[:40]}...",
@@ -2762,6 +2790,7 @@ def read_docx_file_structured(filepath: str) -> dict:
         from docx import Document
         from docx.table import Table
         from docx.text.paragraph import Paragraph
+        from docx.shared import Pt
     except ImportError:
         return {"is_graider_table": False, "plain_text": None, "tables": []}
 
@@ -2800,6 +2829,50 @@ def read_docx_file_structured(filepath: str) -> dict:
                             if cell_text:
                                 response_parts.append(cell_text)
                         response = '\n'.join(response_parts)
+                        # Strip placeholder text from response cell
+                        response = response.replace("Type your answer here...", "").strip()
+
+                        # Fix: Detect student text typed in header cell (row 0)
+                        # Students sometimes type in the blue header cell instead of the white response cell
+                        response_cleaned = re.sub(r'[_\s]', '', response)
+                        if len(response_cleaned) < 2:
+                            header_cell_obj = rows[0].cells[0]
+                            header_paras = [p.text.strip() for p in header_cell_obj.paragraphs]
+
+                            # Case 1: Student pressed Enter in header cell — extra paragraphs
+                            if len(header_paras) > 1:
+                                extra_text = '\n'.join(p for p in header_paras[1:] if p)
+                                if extra_text and len(re.sub(r'[_\s]', '', extra_text)) >= 2:
+                                    response = extra_text
+                                    visible_header = tag_pattern.sub('', header_paras[0]).strip()
+
+                            # Case 2: Student typed on same line after (N pts) — no Enter
+                            if len(re.sub(r'[_\s]', '', response)) < 2:
+                                pts_match = re.search(r'\(\d+\s*pts?\)', header_cell_text)
+                                if pts_match:
+                                    after_pts = header_cell_text[pts_match.end():].strip()
+                                    if after_pts and len(re.sub(r'[_\s]', '', after_pts)) >= 2:
+                                        response = after_pts
+                                        visible_header = tag_pattern.sub('', header_cell_text[:pts_match.end()]).strip()
+
+                            # Case 3: SUMMARY (no pts marker) — check for non-bold student runs
+                            if len(re.sub(r'[_\s]', '', response)) < 2 and tag_type == "SUMMARY":
+                                student_text_parts = []
+                                for para in header_cell_obj.paragraphs:
+                                    for run in para.runs:
+                                        # Header runs are bold or tiny (1pt tag) or 9pt (pts)
+                                        is_tag_run = run.font.size is not None and run.font.size <= Pt(2)
+                                        is_pts_run = run.font.size is not None and run.font.size == Pt(9)
+                                        is_header_run = run.bold is True
+                                        if not is_tag_run and not is_pts_run and not is_header_run:
+                                            txt = run.text.strip()
+                                            if txt:
+                                                student_text_parts.append(txt)
+                                if student_text_parts:
+                                    candidate = ' '.join(student_text_parts).strip()
+                                    if len(re.sub(r'[_\s]', '', candidate)) >= 2:
+                                        response = candidate
+
                         tables_found.append({
                             "tag_type": tag_type,
                             "tag_id": tag_id,
@@ -2872,6 +2945,8 @@ def extract_from_tables(table_data, exclude_markers=None):
         tag_id = entry.get("tag_id", "")
         header = entry.get("header_text", "")
         response = entry.get("response", "")
+        # Strip placeholder text from response
+        response = response.replace("Type your answer here...", "").strip()
 
         # Check exclusion
         header_lower = header.lower()
@@ -2921,7 +2996,7 @@ def extract_from_tables(table_data, exclude_markers=None):
         "answered_questions": answered_q,
         "extraction_summary": summary,
         "excluded_sections": excluded_sections,
-        "missing_sections": blank_questions
+        "missing_sections": []  # Table format has no separate missing sections (avoids double-counting with blank_questions)
     }
 
 
@@ -2991,6 +3066,18 @@ def extract_from_graider_text(document_text, exclude_markers=None):
                 continue
             response_lines.append(ln)
         response = '\n'.join(response_lines).strip()
+        # Strip placeholder text from response cell
+        response = response.replace("Type your answer here...", "").strip()
+
+        # Fix: Student typed answer on same line as header (no newline separation)
+        # Common when student types in the header cell of a Graider table
+        if not response or len(re.sub(r'[_\s]', '', response)) < 2:
+            pts_match = re.search(r'\(\d+\s*pts?\)', header)
+            if pts_match:
+                after_pts = header[pts_match.end():].strip()
+                if after_pts and len(re.sub(r'[_\s]', '', after_pts)) >= 2:
+                    response = after_pts
+                    header = header[:pts_match.end()].strip()
 
         # Check exclusion
         header_lower = header.lower()
@@ -3038,7 +3125,7 @@ def extract_from_graider_text(document_text, exclude_markers=None):
         "answered_questions": answered_q,
         "extraction_summary": summary,
         "excluded_sections": excluded_sections,
-        "missing_sections": blank_questions
+        "missing_sections": []  # Text fallback has no separate missing sections (avoids double-counting with blank_questions)
     }
 
 
@@ -3940,6 +4027,23 @@ def _distribute_points(responses: list, marker_config: list, total_points: int) 
     return result
 
 
+MATH_SUBJECTS = {
+    'math', 'mathematics', 'algebra', 'pre-algebra', 'geometry',
+    'calculus', 'pre-calculus', 'trigonometry', 'statistics',
+    'ap calculus', 'ap statistics', 'integrated math',
+    'math 6', 'math 7', 'math 8',
+}
+
+
+def _is_math_subject(subject: str) -> bool:
+    """Check if the teacher-selected subject is a math subject.
+
+    STRICT: Only returns True when subject was explicitly set to a math
+    subject in Settings. Never guesses from question content or keywords.
+    """
+    return subject.strip().lower() in MATH_SUBJECTS
+
+
 def grade_per_question(question: str, student_answer: str, expected_answer: str,
                        points: int, grade_level: str, subject: str,
                        teacher_instructions: str, grading_style: str,
@@ -3992,6 +4096,14 @@ def grade_per_question(question: str, student_answer: str, expected_answer: str,
 - Grade based on: Does it capture the key ideas? Is it in their own words?
 - Look for evidence of understanding, not just copying
 - Evaluate completeness — did they address the main points?"""
+    elif response_type == 'math_equation' or _is_math_subject(subject):
+        type_instructions = """SECTION TYPE: MATH EQUATION / CALCULATION
+- Accept mathematically equivalent forms (e.g., x(x+2) = x^2+2x)
+- Accept equivalent fractions, decimals, and percentages (1/2 = 0.5 = 50%)
+- Award partial credit for correct method with arithmetic errors
+- If student shows work, evaluate the process even if final answer is wrong
+- Do NOT penalize notation differences (2x vs 2*x vs 2·x)
+- Evaluate mathematical correctness, not formatting"""
     elif section_type == 'written' and section_name:
         type_instructions = f"""SECTION TYPE: WRITTEN RESPONSE ({section_name})
 - Grade based on quality, completeness, and demonstrated understanding
@@ -4048,6 +4160,7 @@ RULES:
 - Do NOT penalize spelling if meaning is clear
 - Grade the CONTENT, not the writing style
 - If blank/empty, score is 0
+- If the student answer is template/instruction text (e.g., starts with "Summarize", "Define", "Explain", "Write in complete sentences", "Use evidence from the reading"), this is NOT a student response — it is leftover assignment directions. Score it 0.
 
 ---
 TEACHER'S GRADING INSTRUCTIONS — these are the HIGHEST PRIORITY and override the score anchors above.
@@ -4135,11 +4248,11 @@ Read these FIRST, then score accordingly:
         print(f"    ⚠️ Per-question grading error ({ai_provider}): {e}")
 
     return {
-        "grade": {"score": int(points * 0.7), "possible": points,
-                  "reasoning": f"Grading error - default score applied ({ai_provider})",
-                  "is_correct": True, "quality": "adequate"},
+        "grade": {"score": 0, "possible": points,
+                  "reasoning": f"Grading error - could not evaluate response ({ai_provider})",
+                  "is_correct": False, "quality": "insufficient"},
         "excellent": False,
-        "improvement_note": ""
+        "improvement_note": "This response could not be evaluated due to a grading error."
     }
 
 
@@ -4456,6 +4569,22 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 "excellent_answers": [], "needs_improvement": []
             }
 
+        # Force zero if 80%+ of questions are blank — prevents template text inflation
+        total_questions = extraction_result.get("total_questions", 0)
+        blank_questions_count = len(extraction_result.get("blank_questions", [])) + len(extraction_result.get("missing_sections", []))
+        if total_questions > 0 and blank_questions_count / total_questions >= 0.8:
+            print(f"  ⚠️  NEARLY BLANK: {blank_questions_count}/{total_questions} questions blank (≥80%)")
+            return {
+                "score": 0, "letter_grade": "INCOMPLETE",
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": f"Your assignment is nearly blank — {blank_questions_count} out of {total_questions} questions have no response. Please complete all sections and resubmit.",
+                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Nearly blank submission."},
+                "plagiarism_detection": {"flag": "none", "reason": "Nearly blank submission."},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "excellent_answers": [], "needs_improvement": []
+            }
+
     if not extraction_result or not extraction_result.get("extracted_responses"):
         # Fall back to single-pass for edge cases
         print(f"  ⚠️ Multi-pass: No extracted responses, falling back to single-pass")
@@ -4521,6 +4650,23 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
             # Strategy 3: Fall back to list index
             if not expected:
                 expected = expected_answers.get(i, "")
+
+            # SymPy pre-check: if math subject with expected answer, try exact match first
+            if _is_math_subject(subject) and expected and answer:
+                try:
+                    from backend.services.stem_grading import check_math_equivalence
+                    equiv = check_math_equivalence(answer, expected)
+                    if equiv.get('equivalent'):
+                        pts = meta['points']
+                        question_results[i] = {
+                            "grade": {"score": pts, "possible": pts,
+                                      "reasoning": f"Mathematically equivalent ({equiv['method']})",
+                                      "is_correct": True, "quality": "excellent"},
+                            "excellent": True, "improvement_note": ""
+                        }
+                        continue  # Skip LLM call — instant correct, zero cost
+                except Exception:
+                    pass  # SymPy failed — fall through to normal AI grading
 
             f = executor.submit(
                 grade_per_question,
@@ -4596,20 +4742,22 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     elif blank_count == 2:
         effort_earned = int(effort_points * 0.4)
     else:
-        effort_earned = int(effort_points * 0.2)
+        effort_earned = 0  # 3+ blanks = no effort credit
 
     raw_score = int(round((total_earned / max(total_possible, 1)) * (100 - effort_points) + effort_earned))
     raw_score = max(0, min(100, raw_score))
 
     # Completeness caps by grading style — each missing section drops max possible grade
     if grading_style == 'strict':
-        caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35}
+        caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35, 7: 25, 8: 15}
     elif grading_style == 'lenient':
-        caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49}
+        caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49, 7: 39, 8: 29}
     else:
-        caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39}
-    capped_count = min(blank_count, max(caps.keys()))
-    cap = caps.get(capped_count, caps[max(caps.keys())])
+        caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39, 7: 29, 8: 19}
+    if blank_count >= len(caps):
+        cap = 0  # More blanks than cap table entries → zero
+    else:
+        cap = caps.get(blank_count, 0)
     final_score = min(raw_score, cap)
     if blank_count > 0:
         print(f"  📉 Completeness: {blank_count} blank/missing → cap at {cap}")
@@ -5076,7 +5224,24 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
         # Method 2: Check for content after colons that isn't just blanks
         # e.g., "Nationalism: the belief that..." vs "Nationalism: ___"
         after_colons = re.findall(r':\s*([^_\n:]{10,})', content)
-        after_colons = [a.strip() for a in after_colons if a.strip() and not a.strip().startswith('_')]
+        # Filter out template instruction text that isn't student writing
+        _instruction_patterns = re.compile(
+            r'^(define|summarize|explain|describe|write|use|answer|identify|list|compare|analyze|discuss|'
+            r'read|complete|fill|circle|match|select|choose|highlight|underline|review|include)\b',
+            re.IGNORECASE
+        )
+        after_colons = [
+            a.strip() for a in after_colons
+            if a.strip()
+            and not a.strip().startswith('_')
+            and not _instruction_patterns.match(a.strip())
+            and not a.strip().endswith('?')
+            and 'complete sentences' not in a.lower()
+            and 'using evidence' not in a.lower()
+            and 'in your own words' not in a.lower()
+            and 'from the reading' not in a.lower()
+            and 'pp ' not in a.strip()[:5]  # page references like "pp 348-349"
+        ]
 
         # Method 3: Look for paragraph-length responses (likely written answers)
         paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
@@ -5651,6 +5816,7 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
   * 2 sections skipped/missing = maximum B (80-89)
   * 3 sections skipped/missing = maximum C (70-79)
   * 4+ sections skipped/missing = maximum D (60-69)
+  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
 - Students who attempt most sections with genuine effort should receive at minimum a C (70+).
 - An "A" grade (90+) is possible if ALL answered sections show genuine effort and understanding.""" if grading_style == 'lenient' else f"""- STRICT PENALTY SCALE (teacher selected strict grading):
   * 0 sections skipped/missing = eligible for A (90-100)
@@ -5658,6 +5824,7 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
   * 2 sections skipped/missing = maximum C (70-75) - dropped two letters
   * 3 sections skipped/missing = maximum D (60-65) - dropped three letters
   * 4+ sections skipped/missing = F (below 60) - shows no effort
+  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
 - Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum D (65)
 - An "A" grade (90+) is ONLY possible if ALL sections are completed with thorough, well-developed responses.""" if grading_style == 'strict' else """- STANDARD PENALTY SCALE:
   * 0 sections skipped/missing = eligible for A (90-100)
@@ -5665,6 +5832,7 @@ CRITICAL - COMPLETENESS REQUIREMENTS:
   * 2 sections skipped/missing = maximum C (70-79) - dropped two letters
   * 3 sections skipped/missing = maximum D (60-69) - dropped three letters
   * 4+ sections skipped/missing = F (below 60) - shows no effort on written work
+  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
 - Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum C (75)
 - An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses."""}
 - This applies to ALL assignments - skipping reflections, explanations, or analysis tasks is unacceptable

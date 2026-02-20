@@ -10,6 +10,112 @@ Features:
 """
 
 from math import radians, sin, cos, sqrt, atan2
+import re
+
+
+# =============================================================================
+# MATH INPUT NORMALIZATION
+# =============================================================================
+
+def _normalize_math_input(expr_str: str):
+    """Normalize student math notation into a SymPy expression.
+
+    Fallback chain:
+    1. Plain number: float("3.14")
+    2. Percentage: strip %, divide by 100
+    3. Fraction string: "1/2" → Rational(1, 2)
+    4. Student algebra notation: insert * between coefficient and variable
+    5. Caret exponents: x^2 → x**2
+    6. LaTeX: parse_latex() as last resort
+    7. Give up: return None
+    """
+    from sympy import sympify, Rational
+    from sympy.parsing.latex import parse_latex
+
+    s = expr_str.strip()
+    if not s:
+        return None
+
+    # 1. Plain number
+    try:
+        return sympify(float(s))
+    except (ValueError, TypeError):
+        pass
+
+    # 2. Percentage: "50%" → 0.5
+    if s.endswith('%'):
+        try:
+            return sympify(float(s[:-1].strip()) / 100)
+        except (ValueError, TypeError):
+            pass
+
+    # 3. Fraction string: "1/2", "-3/4"
+    frac_match = re.match(r'^(-?\d+)\s*/\s*(\d+)$', s)
+    if frac_match:
+        num, den = int(frac_match.group(1)), int(frac_match.group(2))
+        if den != 0:
+            return Rational(num, den)
+
+    # 4 & 5. Student algebra: insert * for implicit multiplication, convert ^ to **
+    algebraic = s.replace('^', '**')
+    # Insert * between: digit and letter, letter and digit (for cases like 2x, x2)
+    algebraic = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', algebraic)
+    algebraic = re.sub(r'([a-zA-Z])(\d)', r'\1*\2', algebraic)
+    # Insert * between closing paren and letter/digit, and vice versa
+    algebraic = re.sub(r'\)([a-zA-Z\d])', r')*\1', algebraic)
+    algebraic = re.sub(r'([a-zA-Z\d])\(', r'\1*(', algebraic)
+    try:
+        return sympify(algebraic)
+    except Exception:
+        pass
+
+    # 6. LaTeX fallback
+    try:
+        return parse_latex(s)
+    except Exception:
+        pass
+
+    # 7. Give up
+    return None
+
+
+def _compare_numeric_forms(student_str: str, correct_str: str, tolerance: float = 0.001) -> dict:
+    """Compare common equivalent numeric forms.
+
+    Handles: 0.5 vs 1/2 vs 50%, 3.14 vs 3.14159 within tolerance, -(-5) vs 5.
+    """
+    from sympy import N as sympy_N
+
+    student_expr = _normalize_math_input(student_str)
+    correct_expr = _normalize_math_input(correct_str)
+
+    if student_expr is None or correct_expr is None:
+        return {'equivalent': False, 'method': 'failed', 'error': 'Could not parse one or both expressions'}
+
+    # Try exact symbolic comparison
+    from sympy import simplify
+    try:
+        diff = simplify(student_expr - correct_expr)
+        if diff == 0:
+            return {'equivalent': True, 'method': 'symbolic'}
+    except Exception:
+        pass
+
+    # Try numerical comparison
+    try:
+        student_val = float(sympy_N(student_expr))
+        correct_val = float(sympy_N(correct_expr))
+        if abs(student_val - correct_val) < tolerance:
+            return {
+                'equivalent': True,
+                'method': 'numerical',
+                'student_value': student_val,
+                'correct_value': correct_val,
+            }
+    except (TypeError, ValueError):
+        pass
+
+    return {'equivalent': False, 'method': 'symbolic'}
 
 
 # =============================================================================
@@ -66,6 +172,11 @@ def check_math_equivalence(student_answer: str, correct_answer: str, tolerance: 
                 }
         except ValueError:
             pass  # Not simple numbers, try symbolic
+
+        # Try normalized student notation (handles 2x+3, x^2, 1/2, 50%)
+        norm_result = _compare_numeric_forms(student_clean, correct_clean, tolerance)
+        if norm_result.get('equivalent'):
+            return norm_result
 
         # Parse LaTeX to SymPy expressions
         student_expr = parse_latex(student_clean)

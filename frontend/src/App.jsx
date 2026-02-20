@@ -2595,7 +2595,7 @@ function App() {
       const mean = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : 0;
       const passing = scores.filter((s) => s >= 60).length;
       return {
-        name: name.length > 20 ? name.slice(0, 20) + "..." : name,
+        name: distributionView === "by_period" ? name.replace(/^Period\s*/i, "Pd. ") : name.length > 20 ? name.slice(0, 20) + "..." : name,
         A: scores.filter((s) => s >= 90).length,
         B: scores.filter((s) => s >= 80 && s < 90).length,
         C: scores.filter((s) => s >= 70 && s < 80).length,
@@ -6612,8 +6612,8 @@ ${signature}`;
             </div>
           </div>
 
-          <div style={{ padding: "30px", flex: 1, overflowY: "auto" }}>
-            <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
+          <div style={{ padding: activeTab === "results" ? "20px 15px" : "30px", flex: 1, overflowY: "auto" }}>
+            <div style={{ maxWidth: activeTab === "results" ? "none" : "1400px", margin: "0 auto" }}>
               {/* Grade Tab */}
               {activeTab === "grade" && (
                 <div data-tutorial="grade-card" className="fade-in">
@@ -8426,10 +8426,11 @@ ${signature}`;
                           </button>
                           <button
                             onClick={async () => {
-                              const hasAnyFilter = resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter;
+                              const hasAnyFilter = resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter || resultsSearch.trim();
 
                               // Collect filenames of currently visible results
                               const visibleFilenames = [];
+                              const searchLower = resultsSearch.trim().toLowerCase();
                               status.results.forEach((r, idx) => {
                                 if (resultsFilter === "handwritten" && !r.is_handwritten) return;
                                 if (resultsFilter === "typed" && r.is_handwritten) return;
@@ -8441,6 +8442,10 @@ ${signature}`;
                                 if (resultsFilter === "unapproved" && emailApprovals[idx] === "approved") return;
                                 if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
                                 if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter) return;
+                                if (searchLower && !(
+                                  (r.student_name || "").toLowerCase().includes(searchLower) ||
+                                  (r.assignment || "").toLowerCase().includes(searchLower)
+                                )) return;
                                 if (r.filename) visibleFilenames.push(r.filename);
                               });
 
@@ -8504,7 +8509,7 @@ ${signature}`;
                             style={{ background: "rgba(239,68,68,0.2)" }}
                           >
                             <Icon name="Trash2" size={18} />
-                            {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter) ? "Clear Filtered" : "Clear All"}
+                            {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter || resultsSearch.trim()) ? "Clear Filtered" : "Clear All"}
                           </button>
                           {/* Approval Gate Checkbox */}
                           {status.results.length > 0 && (
@@ -9546,7 +9551,7 @@ ${signature}`;
                                         whiteSpace: "nowrap",
                                       }}
                                     >
-                                      {r.graded_at || "-"}
+                                      {r.graded_at ? r.graded_at.replace(/^20(\d{2})/, "$1") : "-"}
                                     </td>
                                     <td style={{ textAlign: "center" }}>{r.score}</td>
                                     <td style={{ textAlign: "center" }}>
@@ -17348,10 +17353,6 @@ ${signature}`;
                                 <span>Pass rate: {filteredAnalytics.class_stats?.total_assignments > 0 ? Math.round(((filteredAnalytics.class_stats.grade_distribution?.A || 0) + (filteredAnalytics.class_stats.grade_distribution?.B || 0) + (filteredAnalytics.class_stats.grade_distribution?.C || 0) + (filteredAnalytics.class_stats.grade_distribution?.D || 0)) / filteredAnalytics.class_stats.total_assignments * 1000) / 10 : 0}%</span>
                               </div>
                             </>
-                          ) : distributionView === "by_assignment" && selectedAssignments.size === 0 ? (
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: "var(--text-secondary)", fontSize: "0.85rem", textAlign: "center", padding: "0 20px" }}>
-                              Select assignments above to compare
-                            </div>
                           ) : (
                             <>
                               <ResponsiveContainer width="100%" height={200}>
