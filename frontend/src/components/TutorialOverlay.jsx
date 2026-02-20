@@ -9,7 +9,7 @@ const TUTORIAL_STEPS = [
     icon: "Layout",
     title: "Your Workspace",
     description:
-      "Welcome to Graider! This sidebar is your main navigation. There are 8 tabs — Grade, Results, Grading Setup, Analytics, Planner, Resources, Assistant, and Settings — each handling a different part of your teaching workflow. We'll walk through every section so you know exactly what each one does and how to use it.",
+      "Welcome to Graider! This sidebar is your main navigation. There are 9 tabs — Grade, Results, Grading Setup, Analytics, Planner, Script Builder, Assistant, Settings, and Help — each handling a different part of your teaching workflow. We'll walk through every section so you know exactly what each one does and how to use it.",
   },
   {
     target: "grade-toolbar",
@@ -246,14 +246,30 @@ const TUTORIAL_STEPS = [
       "Switch between the four planner modes here. 'Lesson Planning' lets you select state standards and generate full lesson plans with objectives, activities, and assessments. 'Assessment Generator' creates standards-aligned quizzes and tests. 'Student Portal' manages published assessments that students can access online. 'Calendar' gives you a monthly drag-and-drop view to schedule and rearrange your lessons.",
   },
 
-  // ── Resources Tab ─────────────────────────────────────────────────
+  // ── Script Builder Tab ───────────────────────────────────────────
   {
-    target: "resources-upload",
-    tab: "resources",
-    icon: "FolderOpen",
-    title: "Resource Library",
+    target: "automation-card",
+    tab: "automations",
+    icon: "Cpu",
+    title: "Script Builder: Browser Automation",
     description:
-      "Upload supporting documents your AI assistant can reference: pacing guides, district rubrics, textbook chapters, curriculum maps, and answer keys. These files enhance both grading accuracy and lesson planning — the AI references them when generating feedback, creating lesson plans, and answering questions in the Assistant chat. Drag files or click to upload.",
+      "The Script Builder lets you create, save, and run Playwright browser automations — no coding required. Automate repetitive portal tasks like screenshotting textbook pages from NGL Sync, exporting gradebook data from Focus, or pulling attendance reports. Each automation is a sequence of steps (navigate, click, fill, screenshot, etc.) that runs in a real browser window.",
+  },
+  {
+    target: "automation-toolbar",
+    tab: "automations",
+    icon: "Plus",
+    title: "Create & Manage Automations",
+    description:
+      "Click 'New Automation' to build a workflow from scratch, or start from a pre-built template below. Your saved automations appear as cards — each shows the workflow name, description, and step count. Click a card to edit it, hit 'Run' to launch it, or delete workflows you no longer need. Automations are saved locally and persist between sessions.",
+  },
+  {
+    target: "automation-templates",
+    tab: "automations",
+    icon: "FileCode",
+    title: "Templates: Pre-Built Workflows",
+    description:
+      "Templates are starter workflows for common school portal tasks. Click a template to create a copy you can customize. Available templates include NGL Sync screenshots (captures consecutive textbook pages) and Focus Gradebook screenshots. Templates use your saved portal credentials from Settings > Tools, so make sure those are configured first.",
   },
 
   // ── Assistant Tab ─────────────────────────────────────────────────
@@ -320,6 +336,15 @@ const TUTORIAL_STEPS = [
     title: "Settings: Privacy & Data",
     description:
       "Control how your data is handled. Review what information is sent to AI providers during grading (student work text, but never names). See where local data is stored on your machine. Clear cached results, reset settings to defaults, or export all your configuration data. Student privacy is a top priority — all roster data and grades are stored locally, never in the cloud.",
+  },
+  {
+    target: "resources-upload",
+    tab: "settings",
+    settingsTab: "resources",
+    icon: "FolderOpen",
+    title: "Settings: Resources",
+    description:
+      "Upload supporting documents your AI assistant can reference: pacing guides, district rubrics, textbook chapters, curriculum maps, and answer keys. These files enhance both grading accuracy and lesson planning — the AI references them when generating feedback, creating lesson plans, and answering questions in the Assistant chat. Choose a document type, add a description, and click Upload.",
   },
 ];
 

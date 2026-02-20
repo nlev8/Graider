@@ -15,14 +15,15 @@
 12. [Student Portal](#student-portal)
 13. [Teacher Dashboard](#teacher-dashboard)
 14. [Resources Tab](#resources-tab)
-15. [Assistant Tab](#assistant-tab)
-16. [Settings](#settings)
-17. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-18. [Student Progress Tracking](#student-progress-tracking)
-19. [Troubleshooting](#troubleshooting)
-20. [Tips for Best Results](#tips-for-best-results)
-21. [Keyboard Shortcuts](#keyboard-shortcuts)
-22. [Support](#support)
+15. [Script Builder (Browser Automation)](#script-builder-browser-automation)
+16. [Assistant Tab](#assistant-tab)
+17. [Settings](#settings)
+18. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+19. [Student Progress Tracking](#student-progress-tracking)
+20. [Troubleshooting](#troubleshooting)
+21. [Tips for Best Results](#tips-for-best-results)
+22. [Keyboard Shortcuts](#keyboard-shortcuts)
+23. [Support](#support)
 
 ---
 
@@ -1036,7 +1037,7 @@ The more context you give the Assistant, the better it can generate lesson plans
 
 ### How Uploads Work
 
-1. Go to the **Resources** tab
+1. Go to **Settings > Resources**
 2. Click **Upload Document**
 3. Select your file and add a description (e.g., "Q3-Q4 Pacing Calendar")
 4. Choose a document type (curriculum, calendar, general)
@@ -1064,6 +1065,204 @@ Once uploaded, the Assistant **automatically reads all your documents** at the s
 - **Keep documents current** — if your department updates the pacing mid-year, upload the new version
 - **Add descriptions** — a clear description like "District US History Pacing Calendar 2025-2026" helps you manage multiple files
 - Documents are stored locally at `~/.graider_data/documents/` and never leave your machine
+
+---
+
+## Script Builder (Browser Automation)
+
+### Overview
+
+The Script Builder lets you create, save, and run Playwright browser automations directly from Graider — no coding required. Instead of writing one-off scripts for each school portal task, you build reusable workflows with a visual step editor. Each workflow is a sequence of actions (navigate, click, fill, screenshot, etc.) that Graider executes in a real browser window.
+
+### When to Use Script Builder
+
+| Task | What it automates |
+|------|-------------------|
+| **NGL Sync Screenshots** | Log in to VPortal → navigate to NGL textbook → screenshot consecutive pages |
+| **Focus Gradebook Export** | Log in → open gradebook → capture screenshots of each period |
+| **Attendance Reports** | Log in → navigate to attendance module → download CSV exports |
+| **Grade Upload** | Log in → navigate to Focus → fill in grades for each student |
+| **Any portal task** | Any sequence of browser actions you repeat regularly |
+
+### Getting Started
+
+1. Go to the **Script Builder** tab in the sidebar
+2. Click **New Automation** to create a workflow from scratch, or click a **Template** card to start from a pre-built workflow
+3. Give your automation a name and optional description
+4. Add steps using the dropdown at the bottom of the step list
+5. Configure each step's parameters (URL, selector, value, etc.)
+6. Click **Save**, then **Run** to execute
+
+### The Three Views
+
+**List View** — Your home screen in Script Builder. Shows:
+- **My Automations**: Saved workflows as cards with Run, Edit, and Delete buttons
+- **Templates**: Pre-built starter workflows (dashed border cards) you can copy and customize
+
+**Edit View** — The workflow builder. Split into two panels:
+- **Left panel (Steps)**: Ordered list of steps. Click a step to configure it. Drag to reorder using the up/down arrows. Add new steps from the dropdown at the bottom.
+- **Right panel (Config)**: Configure the selected step's parameters — selector, URL, value, timeout, etc.
+
+**Run View** — Live execution monitor. Shows:
+- Progress bar with step count (e.g., "Step 3 of 8")
+- Current step label
+- Scrolling NDJSON log with color-coded entries (blue = step start, green = done, red = error)
+- **Stop** button to kill the automation mid-run
+
+### Step Types
+
+Every workflow is built from these step types:
+
+| Step Type | Icon | What It Does | Key Parameters |
+|-----------|------|-------------|----------------|
+| **Login** | LogIn | Logs into your school portal (VPortal/ADFS) using saved credentials. Handles SAML redirect and waits for 2FA approval. | `portal_url` (default: VPortal) |
+| **Navigate** | Globe | Goes to a URL | `url` (required) |
+| **Click** | MousePointer2 | Clicks an element on the page | `selector` (required), `timeout` |
+| **Fill** | PenLine | Types text into an input field. Clears the field first by default. | `selector` (required), `value` (required) |
+| **Select** | ChevronDown | Chooses an option from a dropdown by its visible label | `selector` (required), `option` (required) |
+| **Wait** | Clock | Pauses execution. Can wait for a fixed time, wait for an element to appear, or wait for the page to finish loading. | `ms`, `selector`, `timeout` |
+| **Screenshot** | Camera | Captures the current page (full-page by default) and saves to disk | `filename`, `output_dir` |
+| **Extract Text** | FileSearch | Reads text content from an element and saves it to a variable for use in later steps | `selector` (required), `variable` |
+| **Download** | Download | Clicks a download link/button and saves the file | `selector` (required), `output_dir` |
+| **Keyboard** | Keyboard | Presses a key (Enter, Tab, Escape, etc.) or types text character by character | `key`, `text` |
+| **Loop** | Repeat | Repeats a set of sub-steps N times. Inside the loop, `{index}` gives the current iteration (1-based). | `count` (required), nested `steps` |
+| **If/Else** | GitBranch | Checks if an element is visible, then runs one set of steps if found or another if not | `condition_selector` (required), nested `steps_if_found` / `steps_if_not_found` |
+
+### Selectors
+
+Selectors tell the automation which element to interact with on the page. Graider supports all Playwright selector types:
+
+- **`#element-id`** — Select by HTML ID (most reliable)
+- **`text=Click Me`** — Select by visible text content
+- **`[aria-label="Search"]`** — Select by accessibility label
+- **`input[name="username"]`** — Select by element name attribute
+- **`button.btn-primary`** — Select by CSS class
+- **`.modal >> text=Submit`** — Chain selectors for nested elements
+
+**Tip:** If you don't know the selector for an element, use the **Element Picker**.
+
+### Element Picker
+
+The Element Picker opens a real browser window with a hover overlay. As you mouse over elements, they highlight in purple. Click an element to capture its selector.
+
+**How to use:**
+
+1. Open a workflow in the Edit view
+2. Click **Element Picker** in the top-right toolbar
+3. A browser window opens at your school portal URL
+4. Navigate to the page with the element you need
+5. Click the element — its selector appears in the **Picked Selectors** list below the step config
+6. Click a picked selector to apply it to the currently selected step's selector field
+7. Click **Stop Picker** when done
+
+The picker generates selectors using this priority: ID > aria-label > name > visible text > CSS class > tag name.
+
+### Variables
+
+Workflows support variable interpolation using `{variable_name}` syntax. Variables let you:
+
+- **Pass runtime values**: When running via API, pass `--var key=value` to inject values into step parameters
+- **Extract and reuse data**: The `Extract Text` step saves page text to a variable that later steps can reference
+- **Loop counters**: Inside a `Loop`, `{index}` gives the current iteration number (1, 2, 3, ...)
+
+**Example:** A screenshot step with filename `page_{index}.png` inside a loop produces `page_1.png`, `page_2.png`, etc.
+
+### Templates
+
+Graider ships with pre-built templates for common school portal tasks:
+
+**NGL Sync — Screenshot Textbook Pages**
+- Logs into VPortal
+- Navigates to NGL Sync textbook URL (you provide the `{ngl_url}`)
+- Loops: screenshots each page, clicks "Next", waits for render
+- Saves screenshots to `~/Downloads/Graider/Exports/ngl/`
+
+**Focus — Screenshot Gradebook**
+- Logs into VPortal
+- Navigates to Focus gradebook
+- Waits for student data to load
+- Takes a full-page screenshot
+
+To use a template: click the template card → it creates a copy you can rename and customize → adjust the step count, URLs, or selectors → Save → Run.
+
+### Portal Credentials
+
+Automations that include a **Login** step use your saved portal credentials from **Settings > Tools**. Make sure you've entered:
+- **Email**: Your school login email (e.g., `teacher@volusia.k12.fl.us`)
+- **Password**: Your portal password (stored locally, base64-encoded)
+
+The login step handles the full VPortal → ADFS → Microsoft SAML flow automatically. If your school requires 2FA (Microsoft Authenticator), the automation will pause for up to 2 minutes while you approve the push notification on your phone.
+
+### AI Assistant Integration
+
+You can also create automations through the AI Assistant. In the Assistant tab, try:
+
+- *"Create an automation that screenshots 10 pages from NGL Sync starting at [URL]"*
+- *"Make a workflow that logs into Focus and downloads the gradebook for period 3"*
+- *"What automations do I have saved?"*
+- *"Run my NGL screenshot automation"*
+
+The Assistant generates the workflow JSON and saves it — you can then edit or run it from the Script Builder tab.
+
+### Run Behavior
+
+- **Visible browser**: By default, automations run with a visible browser window so you can watch the progress and handle 2FA prompts
+- **One at a time**: Only one automation can run at a time. Starting a new run while one is active returns an error.
+- **Error screenshots**: If a step fails, the automation captures an error screenshot at `~/.graider_data/automation_error.png` before stopping
+- **Process cleanup**: When you close Graider, any running automation processes are automatically terminated
+- **Saved locally**: All workflow JSON files are stored at `~/.graider_data/automations/`
+
+### Workflow JSON Format
+
+For advanced users, each workflow is a JSON file you can edit directly. The structure:
+
+```json
+{
+  "id": "my-workflow",
+  "name": "My Workflow",
+  "description": "What it does",
+  "browser": {
+    "headless": false,
+    "persistent_context": false
+  },
+  "credentials": "portal",
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "login",
+      "label": "Log in to VPortal",
+      "params": {}
+    },
+    {
+      "id": "step-2",
+      "type": "navigate",
+      "label": "Open gradebook",
+      "params": { "url": "https://example.com/gradebook" }
+    },
+    {
+      "id": "step-3",
+      "type": "screenshot",
+      "label": "Capture page",
+      "params": { "filename": "gradebook.png" }
+    }
+  ]
+}
+```
+
+Workflow files are stored at `~/.graider_data/automations/`. You can copy, share, or version control these JSON files.
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| **"runner.js not found"** | Playwright runner script is missing. Re-install Graider or check that `backend/automation/runner.js` exists. |
+| **"picker.js not found"** | Element picker script is missing. Same fix as above. |
+| **Login step hangs** | Check your portal credentials in Settings > Tools. Make sure email and password are correct. |
+| **2FA timeout** | The login step waits up to 2 minutes for 2FA. Approve the Microsoft Authenticator prompt promptly. |
+| **"An automation is already running"** | Only one automation can run at a time. Stop the current one first or wait for it to finish. |
+| **Selector not found / click fails** | The page layout may have changed. Use the Element Picker to get an updated selector. Try `text=` selectors for more resilient matching. |
+| **Screenshots are blank or wrong** | Add a `Wait` step (2-3 seconds) before the screenshot to let the page fully render. |
+| **Browser closes immediately** | Check the run log for error messages. Common causes: invalid URL, missing credential file, or Playwright not installed. |
 
 ---
 

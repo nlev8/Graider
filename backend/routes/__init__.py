@@ -21,6 +21,7 @@ from .lesson_routes import lesson_bp
 from .assistant_routes import assistant_bp
 from .stripe_routes import stripe_bp
 from .auth_routes import auth_bp
+from .automation_routes import automation_bp
 
 
 def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None):
@@ -44,6 +45,7 @@ def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None)
     app.register_blueprint(assistant_bp)
     app.register_blueprint(stripe_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(automation_bp)
 
 
 __all__ = [
@@ -60,4 +62,5 @@ __all__ = [
     'assistant_bp',
     'stripe_bp',
     'auth_bp',
+    'automation_bp',
 ]

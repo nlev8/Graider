@@ -1,0 +1,20 @@
+{
+  "id": "ngl-screenshot",
+  "name": "NGL Sync \u2014 Screenshot Textbook Pages",
+  "description": "Opens NGL Sync and captures screenshots of consecutive textbook pages.",
+  "browser": { "headless": false, "persistent_context": false },
+  "credentials": "portal",
+  "steps": [
+    { "id": "s1", "type": "login", "label": "Log in to VPortal", "params": {} },
+    { "id": "s2", "type": "navigate", "label": "Open NGL Sync", "params": { "url": "{ngl_url}" } },
+    { "id": "s3", "type": "wait", "label": "Wait for page to load", "params": { "ms": 3000 } },
+    { "id": "s4", "type": "loop", "label": "Screenshot pages", "params": {
+      "count": 10,
+      "steps": [
+        { "id": "s4a", "type": "screenshot", "label": "Capture page", "params": { "filename": "page_{index}.png", "output_dir": "~/Downloads/Graider/Exports/ngl/" } },
+        { "id": "s4b", "type": "click", "label": "Next page", "params": { "selector": "text=Next" } },
+        { "id": "s4c", "type": "wait", "label": "Wait for render", "params": { "ms": 1500 } }
+      ]
+    }}
+  ]
+}

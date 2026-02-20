@@ -1,0 +1,13 @@
+{
+  "id": "focus-gradebook-screenshot",
+  "name": "Focus \u2014 Screenshot Gradebook",
+  "description": "Opens Focus gradebook and captures a screenshot of each period.",
+  "browser": { "headless": false, "persistent_context": false },
+  "credentials": "portal",
+  "steps": [
+    { "id": "s1", "type": "login", "label": "Log in to VPortal", "params": {} },
+    { "id": "s2", "type": "navigate", "label": "Open Focus Gradebook", "params": { "url": "https://volusia.focusschoolsoftware.com/focus/Modules.php?modname=Grades/Gradebook.php" } },
+    { "id": "s3", "type": "wait", "label": "Wait for gradebook", "params": { "selector": "span.student-name-link" } },
+    { "id": "s4", "type": "screenshot", "label": "Capture gradebook", "params": { "filename": "gradebook_{index}.png", "full_page": true } }
+  ]
+}

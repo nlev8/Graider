@@ -855,6 +855,61 @@ export async function createPortalSession() {
   return fetchApi('/api/stripe/create-portal-session', { method: 'POST' })
 }
 
+// ============ Automations ============
+
+export async function listAutomations() {
+  return fetchApi('/api/automations')
+}
+
+export async function getAutomation(id) {
+  return fetchApi('/api/automations/' + id)
+}
+
+export async function saveAutomation(workflow) {
+  return fetchApi('/api/automations', {
+    method: 'POST',
+    body: JSON.stringify(workflow),
+  })
+}
+
+export async function deleteAutomation(id) {
+  return fetchApi('/api/automations/' + id, { method: 'DELETE' })
+}
+
+export async function listAutomationTemplates() {
+  return fetchApi('/api/automations/templates')
+}
+
+export async function runAutomation(id, vars) {
+  return fetchApi('/api/automations/' + id + '/run', {
+    method: 'POST',
+    body: JSON.stringify({ vars: vars || {} }),
+  })
+}
+
+export async function getAutomationRunStatus() {
+  return fetchApi('/api/automations/run/status')
+}
+
+export async function stopAutomationRun() {
+  return fetchApi('/api/automations/run/stop', { method: 'POST' })
+}
+
+export async function startElementPicker(url) {
+  return fetchApi('/api/automations/picker/start', {
+    method: 'POST',
+    body: JSON.stringify({ url: url || 'https://vportal.volusia.k12.fl.us/' }),
+  })
+}
+
+export async function getPickerEvents() {
+  return fetchApi('/api/automations/picker/events')
+}
+
+export async function stopElementPicker() {
+  return fetchApi('/api/automations/picker/stop', { method: 'POST' })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -972,4 +1027,16 @@ export default {
   getSubscriptionStatus,
   createCheckoutSession,
   createPortalSession,
+  // Automations
+  listAutomations,
+  getAutomation,
+  saveAutomation,
+  deleteAutomation,
+  listAutomationTemplates,
+  runAutomation,
+  getAutomationRunStatus,
+  stopAutomationRun,
+  startElementPicker,
+  getPickerEvents,
+  stopElementPicker,
 }
