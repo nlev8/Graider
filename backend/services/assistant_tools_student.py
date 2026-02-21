@@ -270,7 +270,24 @@ def remove_student_from_roster(student_name):
             break
 
     if not matched_file:
-        return {"error": f"No student found matching '{student_name}' in any roster."}
+        # Provide diagnostic info: list available roster files and sample names
+        roster_info = []
+        for f in sorted(os.listdir(PERIODS_DIR)):
+            if not f.endswith('.csv'):
+                continue
+            filepath = os.path.join(PERIODS_DIR, f)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as fh:
+                    reader = csv.DictReader(fh)
+                    names = [row.get('Student', '').strip().strip('"') for row in reader]
+                    roster_info.append({"file": f, "count": len(names), "sample": names[:5]})
+            except Exception:
+                roster_info.append({"file": f, "error": "Could not read"})
+        return {
+            "error": f"No student found matching '{student_name}' in any roster.",
+            "rosters_searched": roster_info if roster_info else "No CSV files found in periods directory",
+            "hint": "The student may only exist in grading results, not in an uploaded roster. Check the name format in the roster files above."
+        }
 
     # Read the CSV, filter out the matched student, rewrite
     try:
