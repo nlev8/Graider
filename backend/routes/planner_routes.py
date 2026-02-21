@@ -3,11 +3,66 @@ Lesson Planner API routes for Graider.
 Handles standards retrieval and lesson plan generation/export.
 """
 import os
+import sys
 import json
 import time
 import subprocess
 from flask import Blueprint, request, jsonify
 from pathlib import Path
+
+# Import MODEL_PRICING for token cost tracking
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from assignment_grader import MODEL_PRICING
+
+
+def _extract_usage(completion, model="gpt-4o"):
+    """Extract token usage and cost from an OpenAI completion response."""
+    if not completion or not hasattr(completion, 'usage') or not completion.usage:
+        return None
+    inp = completion.usage.prompt_tokens or 0
+    out = completion.usage.completion_tokens or 0
+    pricing = MODEL_PRICING.get(model, {"input": 0, "output": 0})
+    cost = (inp * pricing["input"] + out * pricing["output"]) / 1_000_000
+    return {
+        "model": model, "input_tokens": inp, "output_tokens": out,
+        "total_tokens": inp + out, "cost": round(cost, 6),
+        "cost_display": f"${cost:.4f}"
+    }
+
+PLANNER_COSTS_FILE = os.path.join(os.path.expanduser("~/.graider_data"), "planner_costs.json")
+
+
+def _record_planner_cost(usage):
+    """Record planner API usage to persistent JSON file."""
+    if not usage or usage.get("total_tokens", 0) == 0:
+        return
+    today = time.strftime("%Y-%m-%d")
+    os.makedirs(os.path.dirname(PLANNER_COSTS_FILE), exist_ok=True)
+    try:
+        with open(PLANNER_COSTS_FILE, 'r') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {"total": {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}, "daily": {}}
+
+    # Update totals
+    data["total"]["input_tokens"] += usage.get("input_tokens", 0)
+    data["total"]["output_tokens"] += usage.get("output_tokens", 0)
+    data["total"]["total_cost"] += usage.get("cost", 0)
+    data["total"]["api_calls"] += 1
+    data["total"]["total_cost"] = round(data["total"]["total_cost"], 6)
+
+    # Update daily
+    if today not in data["daily"]:
+        data["daily"][today] = {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}
+    data["daily"][today]["input_tokens"] += usage.get("input_tokens", 0)
+    data["daily"][today]["output_tokens"] += usage.get("output_tokens", 0)
+    data["daily"][today]["total_cost"] += usage.get("cost", 0)
+    data["daily"][today]["api_calls"] += 1
+    data["daily"][today]["total_cost"] = round(data["daily"][today]["total_cost"], 6)
+
+    with open(PLANNER_COSTS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
 
 planner_bp = Blueprint('planner', __name__)
 
@@ -339,7 +394,9 @@ Make each idea distinct - vary the approaches (hands-on activities, discussions,
 
         content = completion.choices[0].message.content
         ideas = json.loads(content)
-        return jsonify(ideas)
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+        return jsonify({**ideas, "usage": usage})
 
     except Exception as e:
         error_msg = str(e)
@@ -468,20 +525,132 @@ Develop this specific concept into a complete, detailed lesson plan.
         else:
             title_instruction = "Title: Generate a descriptive, engaging title based on the standards and content below."
 
-        prompt = f"""
-You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
+        # Build content-type-specific prompt, JSON structure, and instructions
+        common_header = f"""You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
 {support_docs}
 {idea_guidance}
 {tools_instruction}
 {title_instruction}
-Duration: {config.get('duration', 1)} day(s)
-Class Period Length: {period_length} minutes
-
 Standards to Cover:
 {', '.join(selected_standards)}
 
 Additional Requirements:
 {config.get('requirements', 'None specified')}
+"""
+        teacher_notes_block = f"""
+TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+{config.get('globalAINotes', '')}
+""" if config.get('globalAINotes') else ''
+
+        if content_type == 'Assignment':
+            prompt = common_header + f"""
+Create a complete, ready-to-use assignment that directly assesses the standards listed above.
+The assignment should be appropriate for grade {config.get('grade', '7')} students.
+
+CRITICAL REQUIREMENTS:
+1. THE ASSIGNMENT MUST BE 100% SELF-CONTAINED — every resource referenced (tables, charts, reading passages, data) MUST be included in the JSON
+2. For Math: use REAL numbers and actual problems, not placeholders
+3. Include clear, specific answer keys for every question
+4. Include a variety of question types appropriate for the subject
+5. All questions must be answerable based on the standards content
+
+SUPPORTED QUESTION TYPES:
+- multiple_choice, fill_blank, short_answer, matching, essay, true_false
+- math_equation (student writes an expression/equation)
+- data_table (include column_headers, row_labels, expected_data)
+- coordinates (include lat/lng answer and tolerance_km)
+- bar_chart, box_plot, number_line, coordinate_plane, geometry/triangle/rectangle
+
+Return JSON with this structure:
+{{
+    "title": "Assignment title",
+    "overview": "2-3 sentence summary of what this assignment covers",
+    "instructions": "Clear student instructions",
+    "time_estimate": "Estimated completion time",
+    "total_points": 100,
+    "sections": [
+        {{
+            "name": "Section name (e.g., Part A: Vocabulary)",
+            "type": "multiple_choice|fill_blank|short_answer|matching|essay|true_false|math_equation|data_table",
+            "points": 20,
+            "questions": [
+                {{
+                    "number": 1,
+                    "question": "The question text",
+                    "question_type": "short_answer",
+                    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+                    "answer": "The correct answer",
+                    "points": 2
+                }}
+            ]
+        }}
+    ],
+    "answer_key": {{
+        "section_name": ["answer1", "answer2"]
+    }},
+    "rubric": {{
+        "criteria": [
+            {{"name": "Criterion", "points": 10, "description": "What earns full points"}}
+        ]
+    }}
+}}
+{teacher_notes_block}
+Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types."""
+
+        elif content_type == 'Project':
+            prompt = common_header + f"""
+Create a complete, ready-to-use project-based learning experience for grade {config.get('grade', '7')} students.
+Duration: {config.get('duration', 1)} day(s), Class Period: {period_length} minutes
+
+CRITICAL REQUIREMENTS:
+1. All phases must be CONCRETE and ACTIONABLE
+2. Include specific deliverables students must produce
+3. Include a detailed rubric with clear criteria
+4. Specify REAL materials and resources needed
+5. Be SPECIFIC about what students do at each phase
+
+Return JSON with this structure:
+{{
+    "title": "Project title",
+    "overview": "2-3 sentence summary",
+    "essential_questions": ["Question 1", "Question 2"],
+    "driving_question": "The central question students will investigate",
+    "total_points": 100,
+    "phases": [
+        {{
+            "phase": 1,
+            "name": "Phase name (e.g., Research & Planning)",
+            "duration": "2 days",
+            "description": "What students do in this phase",
+            "tasks": ["Specific task 1", "Specific task 2"],
+            "deliverable": "What students submit at end of this phase",
+            "teacher_checkpoints": ["What teacher checks"]
+        }}
+    ],
+    "milestones": [
+        {{"name": "Milestone name", "due": "Day X", "description": "What should be completed"}}
+    ],
+    "final_deliverable": {{
+        "format": "Poster/Presentation/Report/etc",
+        "requirements": ["Requirement 1", "Requirement 2"],
+        "presentation_time": "5-7 minutes"
+    }},
+    "rubric": {{
+        "criteria": [
+            {{"name": "Criterion", "points": 25, "description": "What earns full points", "levels": {{"excellent": "...", "proficient": "...", "developing": "...", "beginning": "..."}}}}
+        ]
+    }},
+    "materials": ["Material 1", "Material 2"],
+    "resources": ["Resource 1", "Resource 2"]
+}}
+{teacher_notes_block}
+Make the project SPECIFIC and DETAILED with real-world connections to the standards."""
+
+        else:
+            # Lesson Plan / Unit Plan — keep existing prompt
+            prompt = common_header + f"""
+Duration: {config.get('duration', 1)} day(s)
+Class Period Length: {period_length} minutes
 
 Create a COMPREHENSIVE, DETAILED plan that a teacher can use immediately without any additional preparation.
 
@@ -552,21 +721,33 @@ Return JSON with this structure:
     }},
     "resources": ["Resource 1", "Resource 2"]
 }}
-{f'''
-TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
-{config.get('globalAINotes', '')}
-''' if config.get('globalAINotes') else ''}
+{teacher_notes_block}
 Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         # If generating variations, create 3 different versions
         if generate_variations:
             variations = []
-            approaches = [
-                ("Activity-Based", "Focus on hands-on activities, station rotations, and interactive learning experiences."),
-                ("Discussion & Analysis", "Focus on Socratic questioning, primary source analysis, and class discussions."),
-                ("Project-Based", "Focus on student-created projects, research, and presentations.")
-            ]
 
+            if content_type == 'Assignment':
+                approaches = [
+                    ("Multiple Choice & Short Answer", "Focus on recall and comprehension with multiple choice, true/false, fill-in-the-blank, and short answer questions."),
+                    ("Application & Analysis", "Focus on applying concepts to new scenarios, data analysis, and problem-solving questions."),
+                    ("Extended Response & Essay", "Focus on open-ended questions, essay prompts, and critical thinking responses.")
+                ]
+            elif content_type == 'Project':
+                approaches = [
+                    ("Individual Research", "Student works independently on research, analysis, and presentation of findings."),
+                    ("Group Collaboration", "Students work in teams with defined roles and shared deliverables."),
+                    ("Creative Expression", "Students demonstrate learning through creative media — poster, video, infographic, etc.")
+                ]
+            else:
+                approaches = [
+                    ("Activity-Based", "Focus on hands-on activities, station rotations, and interactive learning experiences."),
+                    ("Discussion & Analysis", "Focus on Socratic questioning, primary source analysis, and class discussions."),
+                    ("Project-Based", "Focus on student-created projects, research, and presentations.")
+                ]
+
+            total_usage = {"model": "gpt-4o", "input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost": 0}
             for approach_name, approach_desc in approaches:
                 variation_prompt = prompt + f"\n\nIMPORTANT: Use a {approach_name} approach. {approach_desc}"
 
@@ -579,12 +760,20 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                     response_format={"type": "json_object"}
                 )
 
+                u = _extract_usage(completion, "gpt-4o")
+                if u:
+                    for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
+                        total_usage[k] += u[k]
+
                 content = completion.choices[0].message.content
                 plan = json.loads(content)
                 plan['approach'] = approach_name
                 variations.append(plan)
 
-            return jsonify({"variations": variations, "method": "AI"})
+            total_usage["cost"] = round(total_usage["cost"], 6)
+            total_usage["cost_display"] = f"${total_usage['cost']:.4f}"
+            _record_planner_cost(total_usage)
+            return jsonify({"variations": variations, "method": "AI", "usage": total_usage})
 
         # Single plan generation
         completion = client.chat.completions.create(
@@ -598,7 +787,9 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         content = completion.choices[0].message.content
         plan = json.loads(content)
-        return jsonify({"plan": plan, "method": "AI"})
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+        return jsonify({"plan": plan, "method": "AI", "usage": usage})
 
     except Exception as e:
         error_msg = str(e)
@@ -934,7 +1125,9 @@ Make the questions specific to the lesson content. Include a variety of question
 
         content = completion.choices[0].message.content
         assignment = json.loads(content)
-        return jsonify({"assignment": assignment, "method": "AI"})
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+        return jsonify({"assignment": assignment, "method": "AI", "usage": usage})
 
     except Exception as e:
         error_msg = str(e)
@@ -1875,7 +2068,9 @@ Generate a complete assessment in this JSON format:
         assessment['generated_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
         assessment['teacher'] = config.get('teacher_name', '')
 
-        return jsonify({"assessment": assessment, "method": "AI"})
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+        return jsonify({"assessment": assessment, "method": "AI", "usage": usage})
 
     except Exception as e:
         error_msg = str(e)
@@ -2611,6 +2806,7 @@ def grade_assessment_answers():
                 results["questions"].append(question_result)
 
         # AI grading for open-ended questions
+        grading_usage = {"model": "gpt-4o-mini", "input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost": 0}
         if ai_grading_needed:
             try:
                 from openai import OpenAI
@@ -2652,6 +2848,11 @@ Respond in JSON format:
                         max_tokens=300
                     )
 
+                    u = _extract_usage(response, "gpt-4o-mini")
+                    if u:
+                        for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
+                            grading_usage[k] += u[k]
+
                     ai_result = json.loads(response.choices[0].message.content)
                     q_result["points_earned"] = min(ai_result.get("points_earned", 0), points)
                     q_result["feedback"] = ai_result.get("feedback", "")
@@ -2678,10 +2879,23 @@ Respond in JSON format:
         total_questions = len(results["questions"])
         results["feedback_summary"] = f"You answered {correct_count} out of {total_questions} questions correctly, earning {results['score']}/{results['total_points']} points ({results['percentage']}%)."
 
-        return jsonify({"results": results})
+        grading_usage["cost"] = round(grading_usage["cost"], 6)
+        grading_usage["cost_display"] = f"${grading_usage['cost']:.4f}"
+        _record_planner_cost(grading_usage if grading_usage["total_tokens"] > 0 else None)
+        return jsonify({"results": results, "usage": grading_usage if grading_usage["total_tokens"] > 0 else None})
 
     except Exception as e:
         print(f"Grade assessment error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@planner_bp.route('/api/planner/costs', methods=['GET'])
+def get_planner_costs():
+    """Return planner API cost summary."""
+    try:
+        with open(PLANNER_COSTS_FILE, 'r') as f:
+            return jsonify(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return jsonify({"total": {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}, "daily": {}})

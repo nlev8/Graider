@@ -855,6 +855,16 @@ export async function createPortalSession() {
   return fetchApi('/api/stripe/create-portal-session', { method: 'POST' })
 }
 
+// ============ Cost Tracking ============
+
+export async function getPlannerCosts() {
+  return fetchApi('/api/planner/costs')
+}
+
+export async function getAssistantCosts() {
+  return fetchApi('/api/assistant/costs')
+}
+
 // ============ Automations ============
 
 export async function listAutomations() {
@@ -1027,6 +1037,9 @@ export default {
   getSubscriptionStatus,
   createCheckoutSession,
   createPortalSession,
+  // Cost Tracking
+  getPlannerCosts,
+  getAssistantCosts,
   // Automations
   listAutomations,
   getAutomation,

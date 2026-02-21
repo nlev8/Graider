@@ -243,7 +243,11 @@ grading_state = {
     "results": load_saved_results(),  # Load saved results on startup
     "complete": False,
     "error": None,
-    "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0}
+    "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
+    "cost_limit": 0,
+    "cost_warning_pct": 80,
+    "cost_limit_hit": False,
+    "cost_warning_sent": False,
 }
 
 
@@ -259,7 +263,11 @@ def reset_state(clear_results=False):
         "results": [] if clear_results else grading_state.get("results", []),
         "complete": False,
         "error": None,
-        "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0}
+        "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
+        "cost_limit": 0,
+        "cost_warning_pct": 80,
+        "cost_limit_hit": False,
+        "cost_warning_sent": False,
     })
 
 
@@ -1598,6 +1606,21 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
                         grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
 
+                    # Warn when approaching cost limit
+                    cost_limit = grading_state.get("cost_limit", 0)
+                    if cost_limit > 0 and not grading_state.get("cost_warning_sent"):
+                        warning_pct = grading_state.get("cost_warning_pct", 80) / 100
+                        if grading_state["session_cost"]["total_cost"] >= cost_limit * warning_pct:
+                            grading_state["cost_warning_sent"] = True
+                            grading_state["log"].append(f"  ⚠️ Approaching cost limit: ${grading_state['session_cost']['total_cost']:.4f} of ${cost_limit:.2f}")
+
+                    # Auto-stop if cost limit exceeded
+                    if cost_limit > 0 and grading_state["session_cost"]["total_cost"] >= cost_limit:
+                        grading_state["stop_requested"] = True
+                        grading_state["cost_limit_hit"] = True
+                        grading_state["log"].append("")
+                        grading_state["log"].append(f"Cost limit reached (${grading_state['session_cost']['total_cost']:.4f} >= ${cost_limit:.2f}). Auto-stopping...")
+
                 # Advance to next batch
                 file_index = batch_end
 
@@ -1749,6 +1772,8 @@ def start_grading():
 
     reset_state()
     grading_state["is_running"] = True
+    grading_state["cost_limit"] = float(data.get('cost_limit_per_session', 0))
+    grading_state["cost_warning_pct"] = float(data.get('cost_warning_pct', 80))
 
     # FERPA: Audit log grading session start
     file_count = len(selected_files) if selected_files else "all"

@@ -639,6 +639,118 @@ The class average for Period 3 is 82.3%. Here's the breakdown...
 
 ---
 
+# Script Builder
+
+## No-Code Browser Automation for School Portals
+
+Teachers repeat the same tedious portal tasks every week — logging into VPortal, navigating Focus SIS, screenshotting NGL textbook pages, uploading grades. The Script Builder lets them automate any browser workflow without writing a single line of code.
+
+---
+
+## Visual Workflow Editor
+
+Build automations by adding steps from a dropdown — no coding required:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ SCRIPT BUILDER                                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Automation: "NGL Textbook Screenshots"                     │
+│  Description: Screenshot 10 consecutive NGL pages           │
+│                                                             │
+│  Step 1: [Navigate]  → https://vportal.brevardschools.org   │
+│  Step 2: [Fill]      → #username → ${email}                 │
+│  Step 3: [Fill]      → #password → ${password}              │
+│  Step 4: [Click]     → text=Sign In                         │
+│  Step 5: [Wait]      → 3000ms (2FA approval)                │
+│  Step 6: [Navigate]  → NGL textbook URL                     │
+│  Step 7: [Loop 10x]                                         │
+│    Step 7a: [Screenshot] → page_{i}.png                     │
+│    Step 7b: [Click]      → text=Next                        │
+│  Step 8: [End Loop]                                         │
+│                                                             │
+│  [▶ Run]  [💾 Save]  [📋 Templates]                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Available Step Types
+
+| Step Type | What It Does | Example Use |
+|-----------|-------------|-------------|
+| **Navigate** | Go to a URL | Open VPortal login page |
+| **Click** | Click an element by selector | Click "Sign In" button |
+| **Fill** | Type text into an input field | Enter username/password |
+| **Wait** | Pause for a duration | Wait for 2FA approval |
+| **Screenshot** | Capture the current page | Save gradebook screenshot |
+| **Select** | Choose from a dropdown | Select class period |
+| **Loop** | Repeat steps N times | Screenshot 10 consecutive pages |
+| **Conditional** | If/else branching | Skip step if element not found |
+| **Extract** | Pull text from the page | Read student names from roster |
+| **Scroll** | Scroll the page | Reach elements below the fold |
+
+---
+
+## Pre-Built Templates
+
+Teachers don't start from scratch — one-click templates for common tasks:
+
+| Template | What It Automates |
+|----------|-------------------|
+| **NGL Sync Screenshots** | Log in to VPortal → navigate to NGL textbook → screenshot consecutive pages |
+| **Focus Gradebook Export** | Log in → open gradebook → capture screenshots of each period |
+| **Attendance Check** | Log in → navigate to attendance → screenshot daily report |
+| **Grade Upload** | Log in → navigate to Focus → fill in grades for each student |
+
+### Custom Workflows
+
+Teachers can build automations for any repetitive browser task — not just the templates. If it involves clicking, typing, and navigating in a browser, the Script Builder can automate it.
+
+---
+
+## AI-Powered Workflow Generation
+
+The AI Assistant can **create automations from natural language**:
+
+```
+Teacher: "Create an automation that logs into VPortal, goes to my
+         NGL textbook, and screenshots 10 pages"
+
+---
+
+Assistant: I'll create that workflow for you. Here are the steps I'm generating...
+         → [Saves 8-step automation to your Script Builder]
+```
+
+The assistant understands portal layouts, handles login flows, and generates the correct selectors — teachers just describe what they want in plain English.
+
+---
+
+## Element Picker
+
+Not sure what selector to use? The built-in **Element Picker** launches a browser overlay where you click any element on the page and Graider captures the selector automatically. No DevTools knowledge needed.
+
+---
+
+## Security & Credentials
+
+| Concern | How It's Handled |
+|---------|-----------------|
+| **Portal passwords** | Stored locally on the server, never sent to AI providers |
+| **Browser sessions** | Run in isolated Playwright contexts, auto-cleared |
+| **2FA support** | Pauses for Microsoft Authenticator approval (up to 2 minutes) |
+| **Audit trail** | Every automation run is logged with timestamp and status |
+
+---
+
+## Why This Matters
+
+Teachers spend **hours per week** on repetitive portal tasks — logging in, navigating menus, clicking through pages, exporting data. The Script Builder turns a 20-minute manual process into a one-click automation. Combined with the AI Assistant's natural language generation, teachers can create complex browser workflows without any technical knowledge.
+
+---
+
 # Product Roadmap
 
 ## Phased Development & Deployment Strategy
@@ -660,6 +772,7 @@ The class average for Period 3 is 82.3%. Here's the breakdown...
 | Auto-Grade Mode | ✅ Complete |
 | AI Assistant (Claude) | ✅ Complete |
 | Focus SIS Automation | ✅ Complete |
+| Script Builder | ✅ Complete |
 | Supabase Teacher Auth | ✅ Complete |
 
 **Deployment:** Hosted web app (Railway) — accessible from any browser
