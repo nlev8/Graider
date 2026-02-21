@@ -13,6 +13,8 @@ from backend.services.assistant_tools import (
     _fuzzy_name_match, _safe_int_score, ACCOMMODATIONS_DIR, PERIODS_DIR,
 )
 
+ROSTERS_DIR = os.path.expanduser("~/.graider_data/rosters")
+
 
 # ═══════════════════════════════════════════════════════
 # TOOL DEFINITIONS
@@ -220,73 +222,84 @@ def get_student_streak(student_name):
     }
 
 
+def _find_student_in_csv_dirs(student_name, dirs):
+    """Search for a student across CSV files in multiple directories.
+
+    Returns (matched_name, matched_file, matched_label) or (None, None, None).
+    """
+    for directory, label_prefix in dirs:
+        if not os.path.exists(directory):
+            continue
+        for f in sorted(os.listdir(directory)):
+            if not f.endswith('.csv'):
+                continue
+            filepath = os.path.join(directory, f)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as fh:
+                    reader = csv.DictReader(fh)
+                    for row in reader:
+                        raw_name = row.get('Student', '').strip().strip('"')
+                        if ';' in raw_name:
+                            parts = raw_name.split(';', 1)
+                            display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+                        elif ',' in raw_name:
+                            parts = raw_name.split(',', 1)
+                            display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+                        else:
+                            display_name = raw_name
+                        if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
+                            # Build label
+                            if label_prefix == "periods":
+                                meta_path = filepath.replace('.csv', '.meta.json')
+                                if os.path.exists(meta_path):
+                                    import json
+                                    with open(meta_path, 'r') as mf:
+                                        meta = json.load(mf)
+                                    label = meta.get('period_name', f.replace('.csv', ''))
+                                else:
+                                    label = f.replace('.csv', '').replace('_', ' ')
+                            else:
+                                label = f.replace('.csv', '').replace('_', ' ')
+                            return display_name, filepath, label
+            except Exception:
+                continue
+    return None, None, None
+
+
 def remove_student_from_roster(student_name):
     """Remove a student from the roster CSV files."""
     if not student_name:
         return {"error": "student_name is required."}
 
-    if not os.path.exists(PERIODS_DIR):
-        return {"error": "No roster data found. Upload class rosters first."}
+    # Search periods first, then rosters directory
+    search_dirs = [
+        (PERIODS_DIR, "periods"),
+        (ROSTERS_DIR, "rosters"),
+    ]
 
-    # Find the student across all period CSV files
-    matched_name = None
-    matched_file = None
-    matched_period = None
-
-    for f in sorted(os.listdir(PERIODS_DIR)):
-        if not f.endswith('.csv'):
-            continue
-        filepath = os.path.join(PERIODS_DIR, f)
-        try:
-            with open(filepath, 'r', encoding='utf-8') as fh:
-                reader = csv.DictReader(fh)
-                for row in reader:
-                    raw_name = row.get('Student', '').strip().strip('"')
-                    # Build display name same way _load_roster does
-                    if ';' in raw_name:
-                        parts = raw_name.split(';', 1)
-                        display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
-                    elif ',' in raw_name:
-                        parts = raw_name.split(',', 1)
-                        display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
-                    else:
-                        display_name = raw_name
-                    if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
-                        matched_name = display_name
-                        matched_file = filepath
-                        # Get period name from meta
-                        meta_path = filepath.replace('.csv', '.meta.json')
-                        if os.path.exists(meta_path):
-                            import json
-                            with open(meta_path, 'r') as mf:
-                                meta = json.load(mf)
-                            matched_period = meta.get('period_name', f.replace('.csv', ''))
-                        else:
-                            matched_period = f.replace('.csv', '').replace('_', ' ')
-                        break
-        except Exception:
-            continue
-        if matched_file:
-            break
+    matched_name, matched_file, matched_label = _find_student_in_csv_dirs(student_name, search_dirs)
 
     if not matched_file:
-        # Provide diagnostic info: list available roster files and sample names
+        # Provide diagnostic info
         roster_info = []
-        for f in sorted(os.listdir(PERIODS_DIR)):
-            if not f.endswith('.csv'):
+        for directory, prefix in search_dirs:
+            if not os.path.exists(directory):
                 continue
-            filepath = os.path.join(PERIODS_DIR, f)
-            try:
-                with open(filepath, 'r', encoding='utf-8') as fh:
-                    reader = csv.DictReader(fh)
-                    names = [row.get('Student', '').strip().strip('"') for row in reader]
-                    roster_info.append({"file": f, "count": len(names), "sample": names[:5]})
-            except Exception:
-                roster_info.append({"file": f, "error": "Could not read"})
+            for f in sorted(os.listdir(directory)):
+                if not f.endswith('.csv'):
+                    continue
+                filepath = os.path.join(directory, f)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as fh:
+                        reader = csv.DictReader(fh)
+                        names = [row.get('Student', '').strip().strip('"') for row in reader]
+                        roster_info.append({"file": f, "directory": prefix, "count": len(names), "sample": names[:5]})
+                except Exception:
+                    roster_info.append({"file": f, "directory": prefix, "error": "Could not read"})
         return {
             "error": f"No student found matching '{student_name}' in any roster.",
-            "rosters_searched": roster_info if roster_info else "No CSV files found in periods directory",
-            "hint": "The student may only exist in grading results, not in an uploaded roster. Check the name format in the roster files above."
+            "rosters_searched": roster_info if roster_info else "No CSV files found",
+            "hint": "Check the name format in the roster files above."
         }
 
     # Read the CSV, filter out the matched student, rewrite
@@ -322,9 +335,9 @@ def remove_student_from_roster(student_name):
 
         return {
             "removed": matched_name,
-            "period": matched_period,
+            "source": matched_label,
             "remaining_students": len(rows_to_keep),
-            "message": f"Removed {matched_name} from {matched_period} roster. {len(rows_to_keep)} students remaining."
+            "message": f"Removed {matched_name} from {matched_label} roster. {len(rows_to_keep)} students remaining."
         }
     except Exception as e:
         return {"error": f"Failed to update roster file: {str(e)}"}
