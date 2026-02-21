@@ -2,16 +2,16 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--input-bg);
 }
 
 .math-input-label {
   font-weight: 600;
   font-size: 14px;
-  color: #374151;
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
@@ -42,9 +42,9 @@
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  background: white;
+  background: var(--glass-bg);
   border-radius: 4px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--glass-border);
 }
 
 .symbol-row, .template-row {
@@ -56,14 +56,14 @@
 
 .row-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
   min-width: 70px;
 }
 
 .symbol-btn, .template-btn {
   padding: 4px 8px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: var(--input-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 4px;
   cursor: pointer;
   min-width: 32px;
@@ -71,20 +71,23 @@
   align-items: center;
   justify-content: center;
   transition: background 0.2s;
+  color: var(--text-primary);
 }
 
 .symbol-btn:hover, .template-btn:hover {
-  background: #e2e8f0;
+  background: var(--glass-border);
 }
 
 .latex-input {
   padding: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--glass-border);
   border-radius: 4px;
   font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
   font-size: 14px;
   resize: vertical;
   min-height: 60px;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 .latex-input:focus {
@@ -97,25 +100,26 @@
   align-items: flex-start;
   gap: 8px;
   padding: 12px;
-  background: white;
+  background: var(--glass-bg);
   border-radius: 4px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--glass-border);
   min-height: 40px;
 }
 
 .preview-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
   min-width: 60px;
 }
 
 .preview-content {
   flex: 1;
   font-size: 18px;
+  color: var(--text-primary);
 }
 
 .preview-placeholder {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-style: italic;
 }
 

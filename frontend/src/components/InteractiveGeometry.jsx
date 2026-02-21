@@ -41,7 +41,7 @@ export default function InteractiveGeometry({
           y1={svgHeight - padding + 15}
           x2={svgWidth - padding}
           y2={svgHeight - padding + 15}
-          stroke="#6b7280"
+          style={{ stroke: 'var(--text-muted)' }}
           strokeWidth={1}
         />
         <text
@@ -49,7 +49,7 @@ export default function InteractiveGeometry({
           y={svgHeight - padding + 30}
           textAnchor="middle"
           fontSize={14}
-          fill="#374151"
+          style={{ fill: 'var(--text-primary)' }}
           fontWeight="bold"
         >
           b = {base}
@@ -79,7 +79,7 @@ export default function InteractiveGeometry({
         <path
           d={`M ${svgWidth / 2} ${svgHeight - padding - 15} L ${svgWidth / 2 + 15} ${svgHeight - padding - 15} L ${svgWidth / 2 + 15} ${svgHeight - padding}`}
           fill="none"
-          stroke="#6b7280"
+          style={{ stroke: 'var(--text-muted)' }}
           strokeWidth={1}
         />
       </g>
@@ -107,7 +107,7 @@ export default function InteractiveGeometry({
           y={svgHeight - padding + 20}
           textAnchor="middle"
           fontSize={14}
-          fill="#374151"
+          style={{ fill: 'var(--text-primary)' }}
           fontWeight="bold"
         >
           w = {width || base}
@@ -118,7 +118,7 @@ export default function InteractiveGeometry({
           x={svgWidth - padding + 15}
           y={padding + h / 2}
           fontSize={14}
-          fill="#374151"
+          style={{ fill: 'var(--text-primary)' }}
           fontWeight="bold"
         >
           h = {height}
@@ -158,7 +158,7 @@ export default function InteractiveGeometry({
   return (
     <div style={styles.container}>
       <svg width={svgWidth} height={svgHeight}>
-        <rect x={0} y={0} width={svgWidth} height={svgHeight} fill="#fafafa" rx={8} />
+        <rect x={0} y={0} width={svgWidth} height={svgHeight} style={{ fill: 'var(--input-bg)' }} rx={8} />
         {type === 'triangle' && renderTriangle()}
         {type === 'rectangle' && renderRectangle()}
       </svg>
@@ -216,8 +216,8 @@ const styles = {
   },
   formula: {
     fontSize: '0.95rem',
-    color: '#4b5563',
-    background: '#f3f4f6',
+    color: 'var(--text-secondary)',
+    background: 'var(--input-bg)',
     padding: '10px 15px',
     borderRadius: '6px',
     fontFamily: 'monospace',
@@ -230,17 +230,19 @@ const styles = {
     display: 'block',
     fontSize: '0.9rem',
     fontWeight: '500',
-    color: '#4b5563',
+    color: 'var(--text-secondary)',
     marginBottom: '5px',
   },
   workArea: {
     width: '100%',
     padding: '10px',
-    border: '1px solid #d1d5db',
+    border: '1px solid var(--glass-border)',
     borderRadius: '6px',
     fontSize: '1rem',
     fontFamily: 'monospace',
     resize: 'vertical',
+    background: 'var(--input-bg)',
+    color: 'var(--text-primary)',
   },
   answerSection: {
     width: '100%',
@@ -254,7 +256,7 @@ const styles = {
   areaLabel: {
     fontSize: '1rem',
     fontWeight: '600',
-    color: '#374151',
+    color: 'var(--text-primary)',
   },
   answerInput: {
     width: '100px',
@@ -264,16 +266,19 @@ const styles = {
     fontSize: '1.1rem',
     fontWeight: '600',
     textAlign: 'center',
+    background: 'var(--input-bg)',
+    color: 'var(--text-primary)',
   },
   unit: {
     fontSize: '0.9rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
   },
   correct: {
     padding: '10px 15px',
-    background: '#dcfce7',
+    background: 'rgba(16, 185, 129, 0.1)',
     borderRadius: '6px',
-    color: '#166534',
+    color: '#10b981',
     fontSize: '0.9rem',
+    border: '1px solid rgba(16, 185, 129, 0.2)',
   },
 };

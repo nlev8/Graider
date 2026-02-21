@@ -221,6 +221,12 @@ def grade_question(question, student_answer, q_type):
         elif q_type == 'data_table':
             return grade_data_table(question, answer_value)
 
+        elif q_type == 'bar_chart':
+            return grade_bar_chart(question, answer_value)
+
+        elif q_type == 'function_graph':
+            return grade_function_graph(question, answer_value)
+
         elif q_type in ['multiple_choice', 'true_false']:
             correct = str(answer_value).strip().lower() == str(correct_answer).strip().lower()
             return {'correct': correct, 'feedback': 'Correct!' if correct else f'Incorrect. The answer was: {correct_answer}'}
@@ -443,6 +449,114 @@ def grade_data_table(question, answer):
             }
     except Exception as e:
         return {'correct': False, 'feedback': f'Error: {str(e)}'}
+
+
+def grade_bar_chart(question, answer):
+    """Grade bar chart interpretation questions (text-based answer)."""
+    correct = str(question.get('answer', '')).strip().lower()
+    student = str(answer).strip().lower() if answer else ''
+
+    if not student:
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    # Exact match
+    if student == correct:
+        return {'correct': True, 'feedback': 'Correct!'}
+
+    # Keyword overlap — bar chart answers are interpretation/analysis text
+    correct_words = set(correct.split())
+    student_words = set(student.split())
+    overlap = len(correct_words & student_words)
+
+    if correct_words and overlap >= len(correct_words) * 0.7:
+        return {'correct': True, 'partial_credit': 0.8, 'feedback': 'Mostly correct'}
+
+    return {'correct': False, 'feedback': f'Incorrect. Expected: {question.get("answer", "")}'}
+
+
+def grade_function_graph(question, answer):
+    """Grade function graph by comparing student expressions to expected expressions."""
+    expected = question.get('correct_expressions', [])
+    if not expected:
+        expected_str = question.get('answer', '')
+        expected = [expected_str] if expected_str else []
+
+    if not answer or not expected:
+        return {'correct': False, 'feedback': 'No expressions provided'}
+
+    student_exprs = answer if isinstance(answer, list) else [answer]
+
+    try:
+        from sympy import sympify, simplify, Symbol
+        x = Symbol('x')
+
+        def normalize_expr(expr_str):
+            """Normalize a math expression string for comparison."""
+            s = str(expr_str).strip().lower()
+            s = s.replace('^', '**')
+            s = s.replace(' ', '')
+            # Remove leading 'y=' or 'f(x)='
+            for prefix in ['y=', 'f(x)=']:
+                if s.startswith(prefix):
+                    s = s[len(prefix):]
+            return s
+
+        matched = 0
+        for exp_expr in expected:
+            exp_norm = normalize_expr(exp_expr)
+            try:
+                exp_sym = sympify(exp_norm)
+            except Exception:
+                continue
+
+            for stu_expr in student_exprs:
+                stu_norm = normalize_expr(stu_expr)
+                try:
+                    stu_sym = sympify(stu_norm)
+                    if simplify(exp_sym - stu_sym) == 0:
+                        matched += 1
+                        break
+                except Exception:
+                    # Fall back to string comparison
+                    if exp_norm == stu_norm:
+                        matched += 1
+                        break
+
+        if matched == len(expected) and len(student_exprs) == len(expected):
+            return {'correct': True, 'feedback': 'All functions correctly graphed!'}
+        elif matched > 0:
+            return {
+                'correct': False,
+                'partial_credit': matched / len(expected),
+                'feedback': f'{matched}/{len(expected)} functions correct'
+            }
+        else:
+            return {'correct': False, 'feedback': f'Incorrect. Expected: {", ".join(expected)}'}
+
+    except ImportError:
+        # SymPy not available — fall back to normalized string comparison
+        def normalize_expr(expr_str):
+            s = str(expr_str).strip().lower().replace('^', '**').replace(' ', '')
+            for prefix in ['y=', 'f(x)=']:
+                if s.startswith(prefix):
+                    s = s[len(prefix):]
+            return s
+
+        expected_norm = [normalize_expr(e) for e in expected]
+        student_norm = [normalize_expr(s) for s in student_exprs]
+
+        matched = sum(1 for e in expected_norm if e in student_norm)
+
+        if matched == len(expected) and len(student_norm) == len(expected):
+            return {'correct': True, 'feedback': 'All functions correctly graphed!'}
+        elif matched > 0:
+            return {
+                'correct': False,
+                'partial_credit': matched / len(expected),
+                'feedback': f'{matched}/{len(expected)} functions correct'
+            }
+        else:
+            return {'correct': False, 'feedback': f'Incorrect. Expected: {", ".join(expected)}'}
 
 
 def grade_short_answer(question, answer):

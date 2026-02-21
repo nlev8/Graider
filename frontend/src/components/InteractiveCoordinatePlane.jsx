@@ -130,7 +130,7 @@ export default function InteractiveCoordinatePlane({
         onMouseLeave={handleMouseLeave}
       >
         {/* Background */}
-        <rect x={padding} y={padding} width={gridSize} height={gridSize} fill="#fafafa" />
+        <rect x={padding} y={padding} width={gridSize} height={gridSize} style={{ fill: 'var(--input-bg)' }} />
 
         {/* Grid lines */}
         {gridLines.map((line, idx) => (
@@ -140,7 +140,7 @@ export default function InteractiveCoordinatePlane({
             y1={line.type === 'h' ? valToY(line.val) : padding}
             x2={line.type === 'v' ? valToX(line.val) : padding + gridSize}
             y2={line.type === 'h' ? valToY(line.val) : padding + gridSize}
-            stroke={line.val === 0 ? '#374151' : '#e5e7eb'}
+            style={{ stroke: line.val === 0 ? 'var(--text-primary)' : 'var(--glass-border)' }}
             strokeWidth={line.val === 0 ? 2 : 1}
           />
         ))}
@@ -156,7 +156,7 @@ export default function InteractiveCoordinatePlane({
               y={valToY(0) + 15}
               textAnchor="middle"
               fontSize={10}
-              fill="#6b7280"
+              style={{ fill: 'var(--text-muted)' }}
             >
               {val}
             </text>
@@ -172,7 +172,7 @@ export default function InteractiveCoordinatePlane({
               y={valToY(val) + 4}
               textAnchor="middle"
               fontSize={10}
-              fill="#6b7280"
+              style={{ fill: 'var(--text-muted)' }}
             >
               {val}
             </text>
@@ -180,19 +180,19 @@ export default function InteractiveCoordinatePlane({
         })}
 
         {/* Origin */}
-        <text x={valToX(0) - 10} y={valToY(0) + 15} fontSize={10} fill="#6b7280">0</text>
+        <text x={valToX(0) - 10} y={valToY(0) + 15} fontSize={10} style={{ fill: 'var(--text-muted)' }}>0</text>
 
         {/* Axis labels */}
-        <text x={size - 15} y={valToY(0) + 4} fontSize={12} fill="#374151" fontWeight="bold">x</text>
-        <text x={valToX(0) + 8} y={20} fontSize={12} fill="#374151" fontWeight="bold">y</text>
+        <text x={size - 15} y={valToY(0) + 4} fontSize={12} style={{ fill: 'var(--text-primary)' }} fontWeight="bold">x</text>
+        <text x={valToX(0) + 8} y={20} fontSize={12} style={{ fill: 'var(--text-primary)' }} fontWeight="bold">y</text>
 
         {/* Quadrant labels */}
         {showQuadrants && (
           <>
-            <text x={valToX(xRange[1] * 0.6)} y={valToY(yRange[1] * 0.6)} fontSize={20} fill="#e5e7eb" fontWeight="bold">I</text>
-            <text x={valToX(xRange[0] * 0.6)} y={valToY(yRange[1] * 0.6)} fontSize={20} fill="#e5e7eb" fontWeight="bold">II</text>
-            <text x={valToX(xRange[0] * 0.6)} y={valToY(yRange[0] * 0.6)} fontSize={20} fill="#e5e7eb" fontWeight="bold">III</text>
-            <text x={valToX(xRange[1] * 0.6)} y={valToY(yRange[0] * 0.6)} fontSize={20} fill="#e5e7eb" fontWeight="bold">IV</text>
+            <text x={valToX(xRange[1] * 0.6)} y={valToY(yRange[1] * 0.6)} fontSize={20} style={{ fill: 'var(--glass-border)' }} fontWeight="bold">I</text>
+            <text x={valToX(xRange[0] * 0.6)} y={valToY(yRange[1] * 0.6)} fontSize={20} style={{ fill: 'var(--glass-border)' }} fontWeight="bold">II</text>
+            <text x={valToX(xRange[0] * 0.6)} y={valToY(yRange[0] * 0.6)} fontSize={20} style={{ fill: 'var(--glass-border)' }} fontWeight="bold">III</text>
+            <text x={valToX(xRange[1] * 0.6)} y={valToY(yRange[0] * 0.6)} fontSize={20} style={{ fill: 'var(--glass-border)' }} fontWeight="bold">IV</text>
           </>
         )}
 
@@ -238,7 +238,7 @@ export default function InteractiveCoordinatePlane({
                 x={valToX(pt[0]) + 12}
                 y={valToY(pt[1]) - 8}
                 fontSize={12}
-                fill="#1f2937"
+                style={{ fill: 'var(--text-primary)' }}
                 fontWeight="bold"
               >
                 {label}({pt[0]}, {pt[1]})
@@ -253,7 +253,7 @@ export default function InteractiveCoordinatePlane({
             x={size - padding}
             y={padding - 10}
             fontSize={11}
-            fill="#6b7280"
+            style={{ fill: 'var(--text-muted)' }}
             textAnchor="end"
           >
             ({cursorPos.x}, {cursorPos.y})
@@ -290,13 +290,13 @@ const styles = {
   },
   hint: {
     fontSize: '0.85rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
     margin: 0,
   },
   pointsList: {
     fontSize: '0.9rem',
-    color: '#374151',
-    background: '#f3f4f6',
+    color: 'var(--text-primary)',
+    background: 'var(--input-bg)',
     padding: '8px 12px',
     borderRadius: '6px',
     display: 'flex',

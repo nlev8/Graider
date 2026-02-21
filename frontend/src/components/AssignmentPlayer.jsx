@@ -213,21 +213,21 @@ function BarChartDisplay({ data, title }) {
   return (
     <div style={{ marginBottom: '15px' }}>
       <svg width={chartWidth} height={chartHeight + padding.top + padding.bottom}>
-        <rect x={0} y={0} width={chartWidth} height={chartHeight + padding.top + padding.bottom} fill="#fafafa" rx={8} />
+        <rect x={0} y={0} width={chartWidth} height={chartHeight + padding.top + padding.bottom} style={{ fill: 'var(--input-bg)' }} rx={8} />
         {title && (
-          <text x={chartWidth / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="600" fill="#374151">{title}</text>
+          <text x={chartWidth / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="600" style={{ fill: 'var(--text-primary)' }}>{title}</text>
         )}
         {y_label && (
-          <text x={15} y={chartHeight / 2 + padding.top} textAnchor="middle" fontSize={11} fill="#6b7280" transform={`rotate(-90, 15, ${chartHeight / 2 + padding.top})`}>{y_label}</text>
+          <text x={15} y={chartHeight / 2 + padding.top} textAnchor="middle" fontSize={11} style={{ fill: 'var(--text-muted)' }} transform={`rotate(-90, 15, ${chartHeight / 2 + padding.top})`}>{y_label}</text>
         )}
-        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={chartHeight + padding.top} stroke="#d1d5db" strokeWidth={1} />
-        <line x1={padding.left} y1={chartHeight + padding.top} x2={chartWidth - padding.right} y2={chartHeight + padding.top} stroke="#d1d5db" strokeWidth={1} />
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={chartHeight + padding.top} style={{ stroke: 'var(--glass-border)' }} strokeWidth={1} />
+        <line x1={padding.left} y1={chartHeight + padding.top} x2={chartWidth - padding.right} y2={chartHeight + padding.top} style={{ stroke: 'var(--glass-border)' }} strokeWidth={1} />
         {[0, 0.25, 0.5, 0.75, 1].map((tick, i) => {
           const y = padding.top + chartHeight * (1 - tick);
           return (
             <g key={i}>
-              <line x1={padding.left - 5} y1={y} x2={padding.left} y2={y} stroke="#9ca3af" />
-              <text x={padding.left - 10} y={y + 4} textAnchor="end" fontSize={10} fill="#6b7280">{Math.round(maxVal * tick)}</text>
+              <line x1={padding.left - 5} y1={y} x2={padding.left} y2={y} style={{ stroke: 'var(--text-muted)' }} />
+              <text x={padding.left - 10} y={y + 4} textAnchor="end" fontSize={10} style={{ fill: 'var(--text-muted)' }}>{Math.round(maxVal * tick)}</text>
             </g>
           );
         })}
@@ -239,8 +239,8 @@ function BarChartDisplay({ data, title }) {
           return (
             <g key={idx}>
               <rect x={x} y={y} width={barWidth} height={barHeight} fill={colors[idx % colors.length]} rx={3} />
-              <text x={x + barWidth / 2} y={y - 5} textAnchor="middle" fontSize={10} fill="#374151" fontWeight="500">{val}</text>
-              <text x={x + barWidth / 2} y={chartHeight + padding.top + 15} textAnchor="middle" fontSize={10} fill="#374151">{labels[idx]}</text>
+              <text x={x + barWidth / 2} y={y - 5} textAnchor="middle" fontSize={10} style={{ fill: 'var(--text-primary)' }} fontWeight="500">{val}</text>
+              <text x={x + barWidth / 2} y={chartHeight + padding.top + 15} textAnchor="middle" fontSize={10} style={{ fill: 'var(--text-primary)' }}>{labels[idx]}</text>
             </g>
           );
         })}
@@ -335,12 +335,17 @@ function QuestionRenderer({
             <div style={styles.finalAnswer}>
               <label style={styles.finalLabel}>Final Answer:</label>
               <MathInput
-                value={answer?.final || ''}
+                value={showAnswer ? (question.answer || '') : (answer?.final || '')}
                 onChange={(val) => onAnswer({ ...answer, final: val, work: answer?.work || '' })}
-                disabled={readOnly}
+                disabled={readOnly || showAnswer}
                 placeholder="Enter your answer"
               />
             </div>
+            {showAnswer && question.answer && (
+              <div style={{ marginTop: '8px', padding: '8px 12px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.9rem', color: '#10b981' }}>
+                <strong>Correct Answer:</strong> {question.answer}
+              </div>
+            )}
           </div>
         );
 
@@ -350,7 +355,7 @@ function QuestionRenderer({
             headers={question.headers || ['Column 1', 'Column 2', 'Column 3']}
             data={answer || question.initial_data || []}
             onChange={onAnswer}
-            readOnly={readOnly}
+            editable={!readOnly}
           />
         );
 
@@ -541,17 +546,17 @@ const styles = {
     alignItems: 'flex-start',
     marginBottom: '20px',
     paddingBottom: '15px',
-    borderBottom: '2px solid #e5e7eb',
+    borderBottom: '2px solid var(--glass-border)',
   },
   title: {
     fontSize: '1.8rem',
     fontWeight: '700',
     margin: '0 0 5px 0',
-    color: '#1f2937',
+    color: 'var(--text-primary)',
   },
   studentName: {
     fontSize: '0.95rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
     margin: 0,
   },
   headerRight: {
@@ -568,7 +573,7 @@ const styles = {
   progressBar: {
     width: '150px',
     height: '8px',
-    background: '#e5e7eb',
+    background: 'var(--glass-border)',
     borderRadius: '4px',
     overflow: 'hidden',
   },
@@ -579,25 +584,26 @@ const styles = {
   },
   progressText: {
     fontSize: '0.8rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
   },
   closeButton: {
     width: '36px',
     height: '36px',
     border: 'none',
-    background: '#f3f4f6',
+    background: 'var(--input-bg)',
     borderRadius: '8px',
     fontSize: '1.5rem',
     cursor: 'pointer',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
   },
   instructions: {
     padding: '15px',
-    background: '#f0f9ff',
+    background: 'rgba(99, 102, 241, 0.1)',
     borderRadius: '8px',
     marginBottom: '20px',
-    color: '#0369a1',
+    color: 'var(--text-secondary)',
     fontSize: '0.95rem',
+    border: '1px solid rgba(99, 102, 241, 0.2)',
   },
   tabs: {
     display: 'flex',
@@ -607,13 +613,13 @@ const styles = {
   },
   tab: {
     padding: '10px 16px',
-    border: '1px solid #e5e7eb',
-    background: '#fff',
+    border: '1px solid var(--glass-border)',
+    background: 'var(--glass-bg)',
     borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '0.9rem',
     fontWeight: '500',
-    color: '#4b5563',
+    color: 'var(--text-secondary)',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -629,32 +635,32 @@ const styles = {
     opacity: 0.8,
   },
   section: {
-    background: '#fff',
+    background: 'var(--glass-bg)',
     borderRadius: '12px',
     padding: '20px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    border: '1px solid var(--glass-border)',
     marginBottom: '20px',
   },
   sectionTitle: {
     fontSize: '1.2rem',
     fontWeight: '600',
     marginBottom: '20px',
-    color: '#1f2937',
+    color: 'var(--text-primary)',
   },
   question: {
     padding: '20px',
-    background: '#f9fafb',
+    background: 'var(--input-bg)',
     borderRadius: '10px',
     marginBottom: '15px',
-    border: '1px solid #e5e7eb',
+    border: '1px solid var(--glass-border)',
   },
   questionCorrect: {
-    background: '#f0fdf4',
-    borderColor: '#86efac',
+    background: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   questionIncorrect: {
-    background: '#fef2f2',
-    borderColor: '#fca5a5',
+    background: 'rgba(239, 68, 68, 0.1)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
   },
   questionHeader: {
     display: 'flex',
@@ -669,8 +675,8 @@ const styles = {
   },
   questionPoints: {
     fontSize: '0.8rem',
-    color: '#6b7280',
-    background: '#e5e7eb',
+    color: 'var(--text-muted)',
+    background: 'var(--glass-border)',
     padding: '2px 8px',
     borderRadius: '10px',
   },
@@ -686,7 +692,7 @@ const styles = {
   },
   questionText: {
     fontSize: '1rem',
-    color: '#374151',
+    color: 'var(--text-primary)',
     marginBottom: '15px',
     lineHeight: '1.5',
   },
@@ -696,11 +702,13 @@ const styles = {
   shortAnswer: {
     width: '100%',
     padding: '12px',
-    border: '1px solid #d1d5db',
+    border: '1px solid var(--glass-border)',
     borderRadius: '8px',
     fontSize: '1rem',
     resize: 'vertical',
     fontFamily: 'inherit',
+    background: 'var(--input-bg)',
+    color: 'var(--text-primary)',
   },
   mathContainer: {
     display: 'flex',
@@ -715,17 +723,19 @@ const styles = {
   workLabel: {
     fontSize: '0.9rem',
     fontWeight: '500',
-    color: '#4b5563',
+    color: 'var(--text-secondary)',
   },
   workTextarea: {
     width: '100%',
     minHeight: '100px',
     padding: '12px',
-    border: '1px solid #d1d5db',
+    border: '1px solid var(--glass-border)',
     borderRadius: '8px',
     fontSize: '1rem',
     resize: 'vertical',
     fontFamily: 'inherit',
+    background: 'var(--input-bg)',
+    color: 'var(--text-primary)',
   },
   finalAnswer: {
     display: 'flex',
@@ -735,7 +745,7 @@ const styles = {
   finalLabel: {
     fontSize: '0.9rem',
     fontWeight: '600',
-    color: '#4b5563',
+    color: 'var(--text-secondary)',
   },
   mcContainer: {
     display: 'flex',
@@ -747,9 +757,9 @@ const styles = {
     alignItems: 'center',
     gap: '10px',
     padding: '12px',
-    background: '#fff',
+    background: 'var(--glass-bg)',
     borderRadius: '8px',
-    border: '1px solid #e5e7eb',
+    border: '1px solid var(--glass-border)',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
@@ -760,7 +770,7 @@ const styles = {
   },
   mcText: {
     fontSize: '1rem',
-    color: '#374151',
+    color: 'var(--text-primary)',
   },
   barChartContainer: {
     display: 'flex',
@@ -780,25 +790,29 @@ const styles = {
   coordField: {
     width: '120px',
     padding: '10px',
-    border: '1px solid #d1d5db',
+    border: '1px solid var(--glass-border)',
     borderRadius: '6px',
     fontSize: '1rem',
+    background: 'var(--input-bg)',
+    color: 'var(--text-primary)',
   },
   correctAnswer: {
     marginTop: '15px',
     padding: '12px',
-    background: '#ecfdf5',
+    background: 'rgba(16, 185, 129, 0.1)',
     borderRadius: '6px',
-    color: '#065f46',
+    color: '#10b981',
     fontSize: '0.9rem',
+    border: '1px solid rgba(16, 185, 129, 0.2)',
   },
   feedback: {
     marginTop: '10px',
     padding: '12px',
-    background: '#fef3c7',
+    background: 'rgba(245, 158, 11, 0.1)',
     borderRadius: '6px',
-    color: '#92400e',
+    color: '#f59e0b',
     fontSize: '0.9rem',
+    border: '1px solid rgba(245, 158, 11, 0.2)',
   },
   footer: {
     display: 'flex',
@@ -806,7 +820,7 @@ const styles = {
     alignItems: 'center',
     marginTop: '20px',
     paddingTop: '20px',
-    borderTop: '1px solid #e5e7eb',
+    borderTop: '1px solid var(--glass-border)',
   },
   navButtons: {
     display: 'flex',
@@ -814,12 +828,13 @@ const styles = {
   },
   navButton: {
     padding: '10px 20px',
-    border: '1px solid #d1d5db',
-    background: '#fff',
+    border: '1px solid var(--glass-border)',
+    background: 'var(--glass-bg)',
     borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '0.95rem',
     fontWeight: '500',
+    color: 'var(--text-primary)',
   },
   submitButton: {
     padding: '12px 30px',
@@ -839,7 +854,7 @@ const styles = {
   },
   scoreLabel: {
     fontSize: '1rem',
-    color: '#4b5563',
+    color: 'var(--text-secondary)',
   },
   score: {
     fontSize: '1.3rem',
@@ -849,6 +864,6 @@ const styles = {
   emptyState: {
     textAlign: 'center',
     padding: '60px 20px',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
   },
 };

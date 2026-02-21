@@ -106,18 +106,18 @@ export default function InteractiveNumberLine({
           y1={lineY}
           x2={width - padding + 10}
           y2={lineY}
-          stroke="#374151"
+          style={{ stroke: 'var(--text-primary)' }}
           strokeWidth={2}
         />
 
         {/* Arrows */}
         <polygon
           points={`${width - padding + 15},${lineY} ${width - padding + 5},${lineY - 5} ${width - padding + 5},${lineY + 5}`}
-          fill="#374151"
+          style={{ fill: 'var(--text-primary)' }}
         />
         <polygon
           points={`${padding - 15},${lineY} ${padding - 5},${lineY - 5} ${padding - 5},${lineY + 5}`}
-          fill="#374151"
+          style={{ fill: 'var(--text-primary)' }}
         />
 
         {/* Tick marks and labels */}
@@ -128,7 +128,7 @@ export default function InteractiveNumberLine({
               y1={lineY - 8}
               x2={valToX(val)}
               y2={lineY + 8}
-              stroke="#374151"
+              style={{ stroke: 'var(--text-primary)' }}
               strokeWidth={val === 0 ? 2 : 1}
             />
             <text
@@ -136,7 +136,7 @@ export default function InteractiveNumberLine({
               y={lineY + 25}
               textAnchor="middle"
               fontSize={12}
-              fill="#4b5563"
+              style={{ fill: 'var(--text-secondary)' }}
             >
               {val}
             </text>
@@ -192,7 +192,7 @@ export default function InteractiveNumberLine({
                 y={lineY - 18}
                 textAnchor="middle"
                 fontSize={11}
-                fill="#1f2937"
+                style={{ fill: 'var(--text-primary)' }}
                 fontWeight="bold"
               >
                 {labels[idx] || val}
@@ -226,13 +226,13 @@ const styles = {
   },
   hint: {
     fontSize: '0.85rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
     margin: 0,
   },
   pointsList: {
     fontSize: '0.9rem',
-    color: '#374151',
-    background: '#f3f4f6',
+    color: 'var(--text-primary)',
+    background: 'var(--input-bg)',
     padding: '8px 12px',
     borderRadius: '6px',
   },

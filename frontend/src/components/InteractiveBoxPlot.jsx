@@ -69,7 +69,7 @@ export default function InteractiveBoxPlot({
     <div style={styles.container}>
       {/* Box Plot SVG */}
       <svg width={svgWidth} height={svgHeight}>
-        <rect x={0} y={0} width={svgWidth} height={svgHeight} fill="#fafafa" rx={8} />
+        <rect x={0} y={0} width={svgWidth} height={svgHeight} style={{ fill: 'var(--input-bg)' }} rx={8} />
 
         {/* Scale line and ticks */}
         <line
@@ -77,7 +77,7 @@ export default function InteractiveBoxPlot({
           y1={svgHeight - 30}
           x2={svgWidth - padding}
           y2={svgHeight - 30}
-          stroke="#374151"
+          style={{ stroke: 'var(--text-primary)' }}
           strokeWidth={1}
         />
         {Array.from({ length: 11 }, (_, i) => {
@@ -89,7 +89,7 @@ export default function InteractiveBoxPlot({
                 y1={svgHeight - 35}
                 x2={valToX(val)}
                 y2={svgHeight - 25}
-                stroke="#374151"
+                style={{ stroke: 'var(--text-primary)' }}
                 strokeWidth={1}
               />
               <text
@@ -97,7 +97,7 @@ export default function InteractiveBoxPlot({
                 y={svgHeight - 10}
                 textAnchor="middle"
                 fontSize={10}
-                fill="#6b7280"
+                style={{ fill: 'var(--text-muted)' }}
               >
                 {Math.round(val)}
               </text>
@@ -116,7 +116,7 @@ export default function InteractiveBoxPlot({
                 x={10}
                 y={y + boxHeight / 2 + 4}
                 fontSize={11}
-                fill="#374151"
+                style={{ fill: 'var(--text-primary)' }}
                 fontWeight="500"
               >
                 {labels[idx] || `Set ${idx + 1}`}
@@ -128,7 +128,7 @@ export default function InteractiveBoxPlot({
                 y1={y + boxHeight / 2}
                 x2={valToX(s.q1)}
                 y2={y + boxHeight / 2}
-                stroke="#374151"
+                style={{ stroke: 'var(--text-primary)' }}
                 strokeWidth={2}
               />
               <line
@@ -136,7 +136,7 @@ export default function InteractiveBoxPlot({
                 y1={y + boxHeight / 2}
                 x2={valToX(s.max)}
                 y2={y + boxHeight / 2}
-                stroke="#374151"
+                style={{ stroke: 'var(--text-primary)' }}
                 strokeWidth={2}
               />
 
@@ -146,7 +146,7 @@ export default function InteractiveBoxPlot({
                 y1={y + 5}
                 x2={valToX(s.min)}
                 y2={y + boxHeight - 5}
-                stroke="#374151"
+                style={{ stroke: 'var(--text-primary)' }}
                 strokeWidth={2}
               />
               <line
@@ -154,7 +154,7 @@ export default function InteractiveBoxPlot({
                 y1={y + 5}
                 x2={valToX(s.max)}
                 y2={y + boxHeight - 5}
-                stroke="#374151"
+                style={{ stroke: 'var(--text-primary)' }}
                 strokeWidth={2}
               />
 
@@ -226,8 +226,8 @@ export default function InteractiveBoxPlot({
                 disabled={readOnly}
                 style={{
                   ...styles.answerInput,
-                  borderColor: isCorrect === true ? '#22c55e' : isCorrect === false ? '#ef4444' : '#d1d5db',
-                  background: isCorrect === true ? '#f0fdf4' : isCorrect === false ? '#fef2f2' : '#fff',
+                  borderColor: isCorrect === true ? '#22c55e' : isCorrect === false ? '#ef4444' : 'var(--glass-border)',
+                  background: isCorrect === true ? 'rgba(16, 185, 129, 0.1)' : isCorrect === false ? 'rgba(239, 68, 68, 0.1)' : 'var(--input-bg)',
                 }}
               />
               {correctAnswers && (
@@ -270,7 +270,7 @@ const styles = {
   },
   answerLabel: {
     fontSize: '0.85rem',
-    color: '#374151',
+    color: 'var(--text-primary)',
     minWidth: '130px',
     borderLeft: '3px solid',
     paddingLeft: '8px',
@@ -278,10 +278,11 @@ const styles = {
   answerInput: {
     width: '70px',
     padding: '8px',
-    border: '1px solid #d1d5db',
+    border: '1px solid var(--glass-border)',
     borderRadius: '6px',
     fontSize: '1rem',
     textAlign: 'center',
+    color: 'var(--text-primary)',
   },
   correctValue: {
     fontSize: '0.85rem',
@@ -290,7 +291,7 @@ const styles = {
   },
   hint: {
     fontSize: '0.85rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
     margin: 0,
   },
 };

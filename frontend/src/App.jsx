@@ -3871,7 +3871,7 @@ ${signature}`;
       else if (data.variations) {
         setLessonVariations(data.variations);
         addToast(
-          `Generated ${data.variations.length} lesson plan variations!`,
+          `Generated ${data.variations.length} ${(unitConfig.type || 'lesson plan').toLowerCase()} variations!`,
           "success",
         );
       } else {
@@ -19881,7 +19881,7 @@ ${signature}`;
                                     color: "var(--accent-primary)",
                                   }}
                                 />
-                                Lesson Plan Variations
+                                {(unitConfig.type || "Lesson Plan") + " Variations"}
                               </h2>
                               <p
                                 style={{
@@ -19890,7 +19890,7 @@ ${signature}`;
                                 }}
                               >
                                 Compare {lessonVariations.length} different
-                                approaches to teaching this content
+                                approaches for this {(unitConfig.type || "lesson plan").toLowerCase()}
                               </p>
                             </div>
                             <button
@@ -19978,11 +19978,11 @@ ${signature}`;
                                     className="btn btn-primary"
                                     style={{ flexShrink: 0 }}
                                   >
-                                    <Icon name="Check" size={16} /> Use This
-                                    Plan
+                                    <Icon name="Check" size={16} /> {"Use This " + (unitConfig.type || "Plan")}
                                   </button>
                                 </div>
-                                {variation.essential_questions && (
+                                {/* Content preview - varies by type */}
+                                {variation.sections ? (
                                   <div style={{ marginTop: "10px" }}>
                                     <strong
                                       style={{
@@ -19990,7 +19990,7 @@ ${signature}`;
                                         color: "var(--text-primary)",
                                       }}
                                     >
-                                      Essential Questions:
+                                      Sections:
                                     </strong>
                                     <ul
                                       style={{
@@ -19999,36 +19999,110 @@ ${signature}`;
                                         color: "var(--text-secondary)",
                                       }}
                                     >
-                                      {variation.essential_questions
-                                        .slice(0, 2)
-                                        .map((q, i) => (
-                                          <li key={i}>{q}</li>
-                                        ))}
+                                      {variation.sections.map((s, si) => (
+                                        <li key={si}>
+                                          {s.name} ({s.points || 0} pts, {(s.questions || []).length} questions)
+                                        </li>
+                                      ))}
                                     </ul>
+                                    {variation.total_points && (
+                                      <p
+                                        style={{
+                                          fontSize: "0.8rem",
+                                          color: "var(--text-muted)",
+                                          marginTop: "5px",
+                                        }}
+                                      >
+                                        Total: {variation.total_points} points
+                                      </p>
+                                    )}
                                   </div>
-                                )}
-                                {variation.days && (
-                                  <div
-                                    style={{
-                                      marginTop: "10px",
-                                      fontSize: "0.85rem",
-                                      color: "var(--text-muted)",
-                                    }}
-                                  >
-                                    <Icon
-                                      name="Calendar"
-                                      size={14}
+                                ) : variation.phases ? (
+                                  <div style={{ marginTop: "10px" }}>
+                                    <strong
                                       style={{
-                                        marginRight: "6px",
-                                        verticalAlign: "middle",
+                                        fontSize: "0.85rem",
+                                        color: "var(--text-primary)",
                                       }}
-                                    />
-                                    {variation.days.length} day
-                                    {variation.days.length !== 1
-                                      ? "s"
-                                      : ""}{" "}
-                                    planned
+                                    >
+                                      Phases:
+                                    </strong>
+                                    <ul
+                                      style={{
+                                        margin: "5px 0 0 20px",
+                                        fontSize: "0.85rem",
+                                        color: "var(--text-secondary)",
+                                      }}
+                                    >
+                                      {variation.phases.map((p, pi) => (
+                                        <li key={pi}>
+                                          {p.name} ({p.duration})
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    {variation.total_points && (
+                                      <p
+                                        style={{
+                                          fontSize: "0.8rem",
+                                          color: "var(--text-muted)",
+                                          marginTop: "5px",
+                                        }}
+                                      >
+                                        Total: {variation.total_points} points
+                                      </p>
+                                    )}
                                   </div>
+                                ) : (
+                                  <>
+                                    {variation.essential_questions && (
+                                      <div style={{ marginTop: "10px" }}>
+                                        <strong
+                                          style={{
+                                            fontSize: "0.85rem",
+                                            color: "var(--text-primary)",
+                                          }}
+                                        >
+                                          Essential Questions:
+                                        </strong>
+                                        <ul
+                                          style={{
+                                            margin: "5px 0 0 20px",
+                                            fontSize: "0.85rem",
+                                            color: "var(--text-secondary)",
+                                          }}
+                                        >
+                                          {variation.essential_questions
+                                            .slice(0, 2)
+                                            .map((q, i) => (
+                                              <li key={i}>{q}</li>
+                                            ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                    {variation.days && (
+                                      <div
+                                        style={{
+                                          marginTop: "10px",
+                                          fontSize: "0.85rem",
+                                          color: "var(--text-muted)",
+                                        }}
+                                      >
+                                        <Icon
+                                          name="Calendar"
+                                          size={14}
+                                          style={{
+                                            marginRight: "6px",
+                                            verticalAlign: "middle",
+                                          }}
+                                        />
+                                        {variation.days.length} day
+                                        {variation.days.length !== 1
+                                          ? "s"
+                                          : ""}{" "}
+                                        planned
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             ))}
@@ -20080,12 +20154,107 @@ ${signature}`;
                                 flexWrap: "wrap",
                               }}
                             >
-                              <button
-                                onClick={exportLessonPlanHandler}
-                                className="btn btn-secondary"
-                              >
-                                <Icon name="Download" size={16} /> Export
-                              </button>
+                              {lessonPlan.sections ? (
+                                /* Assignment-type content: Export PDF, Answer Key, Interactive Preview, Set Up Grading */
+                                <>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", false);
+                                        if (result.error) {
+                                          addToast("Error: " + result.error, "error");
+                                        } else {
+                                          addToast("Student worksheet exported as PDF!", "success");
+                                        }
+                                      } catch (e) {
+                                        addToast("Export failed: " + e.message, "error");
+                                      }
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export student version as PDF"
+                                  >
+                                    <Icon name="Download" size={16} /> Export PDF
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", true);
+                                        if (result.error) {
+                                          addToast("Error: " + result.error, "error");
+                                        } else {
+                                          addToast("Answer key exported as PDF!", "success");
+                                        }
+                                      } catch (e) {
+                                        addToast("Export failed: " + e.message, "error");
+                                      }
+                                    }}
+                                    className="btn btn-secondary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export teacher version with answers as PDF"
+                                  >
+                                    <Icon name="Key" size={16} /> Answer Key
+                                  </button>
+                                  <button
+                                    onClick={() => setShowInteractivePreview(true)}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px", background: "linear-gradient(135deg, #10b981, #059669)" }}
+                                    title="Preview assignment as students will see it"
+                                  >
+                                    <Icon name="Play" size={16} /> Interactive Preview
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      let gradingNotes = "ANSWER KEY for " + lessonPlan.title + "\n\n";
+                                      (lessonPlan.sections || []).forEach((section) => {
+                                        gradingNotes += "--- " + section.name + " (" + section.points + " pts) ---\n";
+                                        (section.questions || []).forEach((q) => {
+                                          gradingNotes += "Q" + q.number + ": " + q.answer + " (" + q.points + " pts)\n";
+                                        });
+                                        gradingNotes += "\n";
+                                      });
+                                      if (lessonPlan.rubric?.criteria) {
+                                        gradingNotes += "--- Rubric ---\n";
+                                        lessonPlan.rubric.criteria.forEach((c) => {
+                                          gradingNotes += c.name + " (" + c.points + " pts): " + c.description + "\n";
+                                        });
+                                      }
+                                      const markers = (lessonPlan.sections || []).map((section) => ({
+                                        start: section.name + ":",
+                                        points: section.points || 10,
+                                        type: "written",
+                                      }));
+                                      setAssignment({
+                                        ...assignment,
+                                        title: lessonPlan.title || "",
+                                        totalPoints: lessonPlan.total_points || 100,
+                                        customMarkers: markers,
+                                        gradingNotes: gradingNotes.trim(),
+                                        useSectionPoints: true,
+                                        sectionTemplate: "Custom",
+                                      });
+                                      setLoadedAssignmentName("");
+                                      setActiveTab("builder");
+                                      addToast("Assignment loaded into Grading Setup with answer key and section markers", "success");
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                                    title="Set up grading configuration for this assignment"
+                                  >
+                                    <Icon name="Settings" size={16} /> Set Up Grading
+                                  </button>
+                                </>
+                              ) : (
+                                /* Lesson plan / project: standard Export + Save */
+                                <>
+                                  <button
+                                    onClick={exportLessonPlanHandler}
+                                    className="btn btn-secondary"
+                                  >
+                                    <Icon name="Download" size={16} /> Export
+                                  </button>
+                                </>
+                              )}
                               <button
                                 onClick={() => setShowSaveLesson(true)}
                                 className="btn btn-secondary"
@@ -20093,6 +20262,8 @@ ${signature}`;
                               >
                                 <Icon name="FolderPlus" size={16} /> Save to Unit
                               </button>
+                              {/* Hide Create Assignment when already viewing an assignment or project */}
+                              {!lessonPlan.sections && !lessonPlan.phases && (
                               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                 <select
                                   value={assignmentType}
@@ -20134,6 +20305,7 @@ ${signature}`;
                                   )}
                                 </button>
                               </div>
+                              )}
                               <div style={{ flex: 1 }} />
                               <button
                                 onClick={() => {
@@ -20149,158 +20321,303 @@ ${signature}`;
                             </div>
                           </div>
 
-                          {/* Days */}
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "30px",
-                            }}
-                          >
-                            {(lessonPlan.days || []).map((day, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  background: "var(--input-bg)",
-                                  borderRadius: "16px",
-                                  padding: "25px",
-                                }}
-                              >
+                          {/* Content display - varies by type */}
+                          {lessonPlan.sections ? (
+                            /* Assignment display - use AssignmentPlayer for full visual rendering */
+                            <AssignmentPlayer
+                              assignment={lessonPlan}
+                              readOnly={true}
+                              showAnswers={true}
+                            />
+                          ) : lessonPlan.phases ? (
+                            /* Project display - phases with tasks */
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "20px",
+                              }}
+                            >
+                              {lessonPlan.driving_question && (
                                 <div
                                   style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "15px",
-                                    marginBottom: "20px",
-                                    paddingBottom: "15px",
-                                    borderBottom:
-                                      "1px solid var(--glass-border)",
+                                    background: "rgba(99,102,241,0.1)",
+                                    borderRadius: "12px",
+                                    padding: "15px",
+                                    border: "1px solid rgba(99,102,241,0.2)",
+                                  }}
+                                >
+                                  <strong style={{ color: "#818cf8" }}>Driving Question:</strong>{" "}
+                                  <span style={{ fontSize: "0.95rem" }}>{lessonPlan.driving_question}</span>
+                                </div>
+                              )}
+                              {lessonPlan.total_points && (
+                                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                                  Total: {lessonPlan.total_points} points
+                                </p>
+                              )}
+                              {(lessonPlan.phases || []).map((phase, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    background: "var(--input-bg)",
+                                    borderRadius: "16px",
+                                    padding: "25px",
                                   }}
                                 >
                                   <div
                                     style={{
-                                      width: "50px",
-                                      height: "50px",
-                                      borderRadius: "12px",
-                                      background:
-                                        "linear-gradient(135deg, #6366f1, #8b5cf6)",
                                       display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      fontWeight: 700,
-                                      fontSize: "1.2rem",
+                                      alignItems: "flex-start",
+                                      gap: "15px",
+                                      marginBottom: "15px",
+                                      paddingBottom: "10px",
+                                      borderBottom: "1px solid var(--glass-border)",
                                     }}
                                   >
-                                    {day.day}
+                                    <div
+                                      style={{
+                                        width: "40px",
+                                        height: "40px",
+                                        borderRadius: "10px",
+                                        background: "linear-gradient(135deg, #10b981, #06b6d4)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontWeight: 700,
+                                        fontSize: "1rem",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      {phase.phase || i + 1}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <h3 style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: "4px" }}>
+                                        {phase.name}
+                                      </h3>
+                                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                        {phase.duration}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div style={{ flex: 1 }}>
-                                    <h3
-                                      style={{
-                                        fontSize: "1.3rem",
-                                        fontWeight: 600,
-                                        marginBottom: "8px",
-                                      }}
-                                    >
-                                      {day.topic}
-                                    </h3>
-                                    <p
-                                      style={{
-                                        fontSize: "0.9rem",
-                                        color: "var(--text-primary)",
-                                      }}
-                                    >
-                                      <strong style={{ color: "#10b981" }}>
-                                        Objective:
-                                      </strong>{" "}
-                                      {day.objective}
+                                  <p style={{ fontSize: "0.9rem", marginBottom: "10px", lineHeight: 1.5 }}>
+                                    {phase.description}
+                                  </p>
+                                  {phase.tasks && (
+                                    <ul style={{ margin: "0 0 10px 20px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+                                      {phase.tasks.map((t, ti) => (
+                                        <li key={ti} style={{ marginBottom: "4px" }}>{t}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {phase.deliverable && (
+                                    <p style={{ fontSize: "0.85rem", color: "#10b981" }}>
+                                      <strong>Deliverable:</strong> {phase.deliverable}
                                     </p>
-                                  </div>
+                                  )}
                                 </div>
-
-                                {day.bell_ringer && (
+                              ))}
+                              {lessonPlan.final_deliverable && (
+                                <div
+                                  style={{
+                                    background: "rgba(16,185,129,0.1)",
+                                    borderRadius: "16px",
+                                    padding: "20px",
+                                    border: "1px solid rgba(16,185,129,0.2)",
+                                  }}
+                                >
+                                  <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "10px", color: "#10b981" }}>
+                                    <Icon name="Award" size={16} style={{ marginRight: "8px", verticalAlign: "middle" }} />
+                                    Final Deliverable
+                                  </h3>
+                                  <p style={{ fontSize: "0.9rem", marginBottom: "8px" }}>
+                                    <strong>Format:</strong> {lessonPlan.final_deliverable.format}
+                                  </p>
+                                  {lessonPlan.final_deliverable.requirements && (
+                                    <ul style={{ margin: "0 0 0 20px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+                                      {lessonPlan.final_deliverable.requirements.map((r, ri) => (
+                                        <li key={ri}>{r}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                              {lessonPlan.rubric && lessonPlan.rubric.criteria && (
+                                <div
+                                  style={{
+                                    background: "var(--input-bg)",
+                                    borderRadius: "16px",
+                                    padding: "20px",
+                                  }}
+                                >
+                                  <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "10px" }}>
+                                    <Icon name="ClipboardList" size={16} style={{ marginRight: "8px", verticalAlign: "middle" }} />
+                                    Rubric
+                                  </h3>
+                                  {lessonPlan.rubric.criteria.map((c, ci) => (
+                                    <div key={ci} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: ci < lessonPlan.rubric.criteria.length - 1 ? "1px solid var(--glass-border)" : "none" }}>
+                                      <strong style={{ fontSize: "0.9rem" }}>{c.name}</strong>
+                                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginLeft: "8px" }}>({c.points} pts)</span>
+                                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "4px" }}>{c.description}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Lesson Plan / Unit Plan display - days */
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "30px",
+                              }}
+                            >
+                              {(lessonPlan.days || []).map((day, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    background: "var(--input-bg)",
+                                    borderRadius: "16px",
+                                    padding: "25px",
+                                  }}
+                                >
                                   <div
                                     style={{
-                                      marginBottom: "15px",
-                                      padding: "15px",
-                                      background: "rgba(165,180,252,0.1)",
-                                      borderRadius: "10px",
-                                      border: "1px solid rgba(165,180,252,0.2)",
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      gap: "15px",
+                                      marginBottom: "20px",
+                                      paddingBottom: "15px",
+                                      borderBottom:
+                                        "1px solid var(--glass-border)",
                                     }}
                                   >
-                                    <h4
+                                    <div
                                       style={{
-                                        fontSize: "0.9rem",
-                                        color: "#a5b4fc",
-                                        marginBottom: "8px",
+                                        width: "50px",
+                                        height: "50px",
+                                        borderRadius: "12px",
+                                        background:
+                                          "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontWeight: 700,
+                                        fontSize: "1.2rem",
                                       }}
                                     >
-                                      <Icon name="Zap" size={14} /> Bell Ringer
-                                    </h4>
-                                    <p style={{ fontSize: "0.9rem" }}>
-                                      {typeof day.bell_ringer === "object"
-                                        ? day.bell_ringer.prompt
-                                        : day.bell_ringer}
-                                    </p>
+                                      {day.day}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <h3
+                                        style={{
+                                          fontSize: "1.3rem",
+                                          fontWeight: 600,
+                                          marginBottom: "8px",
+                                        }}
+                                      >
+                                        {day.topic}
+                                      </h3>
+                                      <p
+                                        style={{
+                                          fontSize: "0.9rem",
+                                          color: "var(--text-primary)",
+                                        }}
+                                      >
+                                        <strong style={{ color: "#10b981" }}>
+                                          Objective:
+                                        </strong>{" "}
+                                        {day.objective}
+                                      </p>
+                                    </div>
                                   </div>
-                                )}
 
-                                {day.activity && (
-                                  <div
-                                    style={{
-                                      marginBottom: "15px",
-                                      padding: "15px",
-                                      background: "rgba(74,222,128,0.1)",
-                                      borderRadius: "10px",
-                                      border: "1px solid rgba(74,222,128,0.2)",
-                                    }}
-                                  >
-                                    <h4
+                                  {day.bell_ringer && (
+                                    <div
                                       style={{
-                                        fontSize: "0.9rem",
-                                        color: "#4ade80",
-                                        marginBottom: "8px",
+                                        marginBottom: "15px",
+                                        padding: "15px",
+                                        background: "rgba(165,180,252,0.1)",
+                                        borderRadius: "10px",
+                                        border: "1px solid rgba(165,180,252,0.2)",
                                       }}
                                     >
-                                      <Icon name="Activity" size={14} /> Main
-                                      Activity
-                                    </h4>
-                                    <p style={{ fontSize: "0.9rem" }}>
-                                      {typeof day.activity === "object"
-                                        ? day.activity.description
-                                        : day.activity}
-                                    </p>
-                                  </div>
-                                )}
+                                      <h4
+                                        style={{
+                                          fontSize: "0.9rem",
+                                          color: "#a5b4fc",
+                                          marginBottom: "8px",
+                                        }}
+                                      >
+                                        <Icon name="Zap" size={14} /> Bell Ringer
+                                      </h4>
+                                      <p style={{ fontSize: "0.9rem" }}>
+                                        {typeof day.bell_ringer === "object"
+                                          ? day.bell_ringer.prompt
+                                          : day.bell_ringer}
+                                      </p>
+                                    </div>
+                                  )}
 
-                                {day.assessment && (
-                                  <div
-                                    style={{
-                                      padding: "15px",
-                                      background: "rgba(248,113,113,0.1)",
-                                      borderRadius: "10px",
-                                      border: "1px solid rgba(248,113,113,0.2)",
-                                    }}
-                                  >
-                                    <h4
+                                  {day.activity && (
+                                    <div
                                       style={{
-                                        fontSize: "0.9rem",
-                                        color: "#f87171",
-                                        marginBottom: "8px",
+                                        marginBottom: "15px",
+                                        padding: "15px",
+                                        background: "rgba(74,222,128,0.1)",
+                                        borderRadius: "10px",
+                                        border: "1px solid rgba(74,222,128,0.2)",
                                       }}
                                     >
-                                      <Icon name="CheckCircle" size={14} />{" "}
-                                      Assessment
-                                    </h4>
-                                    <p style={{ fontSize: "0.9rem" }}>
-                                      {typeof day.assessment === "object"
-                                        ? day.assessment.description
-                                        : day.assessment}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                                      <h4
+                                        style={{
+                                          fontSize: "0.9rem",
+                                          color: "#4ade80",
+                                          marginBottom: "8px",
+                                        }}
+                                      >
+                                        <Icon name="Activity" size={14} /> Main
+                                        Activity
+                                      </h4>
+                                      <p style={{ fontSize: "0.9rem" }}>
+                                        {typeof day.activity === "object"
+                                          ? day.activity.description
+                                          : day.activity}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {day.assessment && (
+                                    <div
+                                      style={{
+                                        padding: "15px",
+                                        background: "rgba(248,113,113,0.1)",
+                                        borderRadius: "10px",
+                                        border: "1px solid rgba(248,113,113,0.2)",
+                                      }}
+                                    >
+                                      <h4
+                                        style={{
+                                          fontSize: "0.9rem",
+                                          color: "#f87171",
+                                          marginBottom: "8px",
+                                        }}
+                                      >
+                                        <Icon name="CheckCircle" size={14} />{" "}
+                                        Assessment
+                                      </h4>
+                                      <p style={{ fontSize: "0.9rem" }}>
+                                        {typeof day.assessment === "object"
+                                          ? day.assessment.description
+                                          : day.assessment}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                           {/* Generated Assignment Section */}
                           {generatedAssignment && (
@@ -24022,7 +24339,7 @@ ${signature}`;
       </div>
 
       {/* Interactive Assignment Player Modal */}
-      {showInteractivePreview && generatedAssignment && (
+      {showInteractivePreview && (generatedAssignment || (lessonPlan && lessonPlan.sections)) && (
         <div
           style={{
             position: "fixed",
@@ -24051,11 +24368,12 @@ ${signature}`;
             }}
           >
             <AssignmentPlayer
-              assignment={generatedAssignment}
+              assignment={generatedAssignment || lessonPlan}
               onSubmit={async (answers) => {
                 try {
+                  const assignmentData = generatedAssignment || lessonPlan;
                   const published =
-                    await api.publishAssignment(generatedAssignment);
+                    await api.publishAssignment(assignmentData);
                   const result = await api.submitAssignment(
                     published.assignment_id,
                     answers,
