@@ -161,6 +161,35 @@ function handleLogin(event) {
         });
 }
 
+function handleGoogleAuth() {
+    supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: 'https://app.graider.live' }
+    }).then(function(result) {
+        if (result.error) {
+            showFormError(result.error.message);
+        }
+    }).catch(function() {
+        showFormError('Google sign-in failed. Please try again.');
+    });
+}
+
+function handleMicrosoftAuth() {
+    supabaseClient.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+            redirectTo: 'https://app.graider.live',
+            scopes: 'email profile openid',
+        }
+    }).then(function(result) {
+        if (result.error) {
+            showFormError(result.error.message);
+        }
+    }).catch(function() {
+        showFormError('Microsoft sign-in failed. Please try again.');
+    });
+}
+
 function handleSignup(event) {
     event.preventDefault();
     var firstName = document.getElementById('signup-first').value;
