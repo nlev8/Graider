@@ -19568,7 +19568,7 @@ ${signature}`;
                             )}
                             {brainstormLoading
                               ? "Brainstorming..."
-                              : "Brainstorm Ideas"}
+                              : "Brainstorm " + unitConfig.type + " Ideas"}
                           </button>
 
                           {/* Generate Plan Button */}
@@ -19598,10 +19598,10 @@ ${signature}`;
                               <Icon name="Sparkles" size={18} />
                             )}
                             {plannerLoading
-                              ? "Generating..."
+                              ? "Creating..."
                               : selectedIdea
-                                ? "Generate from Idea"
-                                : "Generate Plan"}
+                                ? "Create from Idea"
+                                : "Create"}
                           </button>
 
                           {/* Generate Variations Button */}
@@ -19622,7 +19622,7 @@ ${signature}`;
                             }}
                           >
                             <Icon name="Layers" size={16} />
-                            Generate 3 Variations
+                            {"Generate 3 " + unitConfig.type + " Variations"}
                           </button>
                         </div>
                       </div>
@@ -19661,7 +19661,7 @@ ${signature}`;
                                   size={24}
                                   style={{ color: "#f59e0b" }}
                                 />{" "}
-                                Lesson Plan Ideas
+                                {unitConfig.type + " Ideas"}
                               </h3>
                               <button
                                 onClick={() => setBrainstormIdeas([])}
