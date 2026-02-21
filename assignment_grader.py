@@ -2995,18 +2995,27 @@ def extract_from_tables(table_data, exclude_markers=None):
                     print(f"    🔧 Recovered same-line answer from header for {tag_type}:{tag_id}")
 
             # Summary fallback: no (N pts) marker — check if prompt is followed by student text
-            # Look for sentence-ending punctuation followed by student text
+            # Find where the prompt ends and the student answer begins.
+            # Strategy: find ALL sentence boundaries and pick the split where
+            # the text before contains prompt keywords and text after is long enough.
             if len(re.sub(r'[_\s]', '', response)) < 2 and tag_type == "SUMMARY":
-                # Try splitting after the prompt (usually ends with a period or question mark)
-                # Match the last sentence-ending punctuation that's part of the prompt
-                prompt_end = re.search(r'[.?!]\s{2,}', header)
-                if prompt_end:
-                    after_prompt = header[prompt_end.end():].strip()
-                    if after_prompt and len(re.sub(r'[_\s]', '', after_prompt)) >= 10:
-                        response = after_prompt
-                        header = header[:prompt_end.start() + 1].strip()
-                        question = "Summary"
-                        print(f"    🔧 Recovered same-line answer from summary header")
+                prompt_keywords = {'write', 'explain', 'summarize', 'describe', 'sentence', 'summary', 'paragraph'}
+                best_split = None
+                for m in re.finditer(r'[.?!]\s+', header):
+                    before = header[:m.start() + 1].lower()
+                    after = header[m.end():].strip()
+                    after_clean = re.sub(r'[_\s]', '', after)
+                    # The text before the split should contain prompt language
+                    has_prompt_word = any(kw in before for kw in prompt_keywords)
+                    # The text after should be substantial (student wrote something real)
+                    if has_prompt_word and len(after_clean) >= 20:
+                        best_split = m
+                        break  # Take the first valid split after prompt keywords
+                if best_split:
+                    response = header[best_split.end():].strip()
+                    header = header[:best_split.start() + 1].strip()
+                    question = "Summary"
+                    print(f"    🔧 Recovered same-line answer from summary header")
 
         # After recovery attempts, final blank check
         response_cleaned = re.sub(r'[_\s]', '', response)
@@ -3144,13 +3153,20 @@ def extract_from_graider_text(document_text, exclude_markers=None):
 
             # Summary fallback: no (N pts) marker — check if prompt is followed by student text
             if (not response or len(re.sub(r'[_\s]', '', response)) < 2) and tag_type == "SUMMARY":
-                prompt_end = re.search(r'[.?!]\s{2,}', header)
-                if prompt_end:
-                    after_prompt = header[prompt_end.end():].strip()
-                    if after_prompt and len(re.sub(r'[_\s]', '', after_prompt)) >= 10:
-                        response = after_prompt
-                        header = header[:prompt_end.start() + 1].strip()
-                        print(f"    🔧 Text fallback: recovered same-line answer for SUMMARY")
+                prompt_keywords = {'write', 'explain', 'summarize', 'describe', 'sentence', 'summary', 'paragraph'}
+                best_split = None
+                for m in re.finditer(r'[.?!]\s+', header):
+                    before = header[:m.start() + 1].lower()
+                    after = header[m.end():].strip()
+                    after_clean = re.sub(r'[_\s]', '', after)
+                    has_prompt_word = any(kw in before for kw in prompt_keywords)
+                    if has_prompt_word and len(after_clean) >= 20:
+                        best_split = m
+                        break
+                if best_split:
+                    response = header[best_split.end():].strip()
+                    header = header[:best_split.start() + 1].strip()
+                    print(f"    🔧 Text fallback: recovered same-line answer for SUMMARY")
 
         # Check exclusion
         header_lower = header.lower()
