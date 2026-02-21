@@ -222,11 +222,25 @@ def get_student_streak(student_name):
     }
 
 
-def _find_student_in_csv_dirs(student_name, dirs):
+def _parse_csv_name(raw_name):
+    """Parse 'Last; First' or 'Last, First' into display name."""
+    raw_name = raw_name.strip().strip('"')
+    if ';' in raw_name:
+        parts = raw_name.split(';', 1)
+        return (parts[1].strip() + ' ' + parts[0].strip()).strip()
+    elif ',' in raw_name:
+        parts = raw_name.split(',', 1)
+        return (parts[1].strip() + ' ' + parts[0].strip()).strip()
+    return raw_name
+
+
+def _find_all_student_files(student_name, dirs):
     """Search for a student across CSV files in multiple directories.
 
-    Returns (matched_name, matched_file, matched_label) or (None, None, None).
+    Returns list of (matched_name, filepath, label) for ALL files containing the student.
     """
+    matches = []
+    seen_files = set()
     for directory, label_prefix in dirs:
         if not os.path.exists(directory):
             continue
@@ -234,21 +248,15 @@ def _find_student_in_csv_dirs(student_name, dirs):
             if not f.endswith('.csv'):
                 continue
             filepath = os.path.join(directory, f)
+            if filepath in seen_files:
+                continue
             try:
                 with open(filepath, 'r', encoding='utf-8') as fh:
                     reader = csv.DictReader(fh)
                     for row in reader:
                         raw_name = row.get('Student', '').strip().strip('"')
-                        if ';' in raw_name:
-                            parts = raw_name.split(';', 1)
-                            display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
-                        elif ',' in raw_name:
-                            parts = raw_name.split(',', 1)
-                            display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
-                        else:
-                            display_name = raw_name
+                        display_name = _parse_csv_name(raw_name)
                         if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
-                            # Build label
                             if label_prefix == "periods":
                                 meta_path = filepath.replace('.csv', '.meta.json')
                                 if os.path.exists(meta_path):
@@ -260,26 +268,53 @@ def _find_student_in_csv_dirs(student_name, dirs):
                                     label = f.replace('.csv', '').replace('_', ' ')
                             else:
                                 label = f.replace('.csv', '').replace('_', ' ')
-                            return display_name, filepath, label
+                            matches.append((display_name, filepath, label))
+                            seen_files.add(filepath)
+                            break  # found in this file, move to next
             except Exception:
                 continue
-    return None, None, None
+    return matches
+
+
+def _remove_student_from_csv(student_name, filepath):
+    """Remove a student from a single CSV file. Returns (removed_count, remaining_count)."""
+    with open(filepath, 'r', encoding='utf-8') as fh:
+        content = fh.read()
+    reader = csv.DictReader(io.StringIO(content))
+    fieldnames = reader.fieldnames
+    rows_to_keep = []
+    removed_count = 0
+    for row in reader:
+        raw_name = row.get('Student', '').strip().strip('"')
+        display_name = _parse_csv_name(raw_name)
+        if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
+            removed_count += 1
+            continue
+        rows_to_keep.append(row)
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows_to_keep)
+    with open(filepath, 'w', encoding='utf-8', newline='') as fh:
+        fh.write(output.getvalue())
+
+    return removed_count, len(rows_to_keep)
 
 
 def remove_student_from_roster(student_name):
-    """Remove a student from the roster CSV files."""
+    """Remove a student from ALL roster CSV files where they appear."""
     if not student_name:
         return {"error": "student_name is required."}
 
-    # Search periods first, then rosters directory
     search_dirs = [
         (PERIODS_DIR, "periods"),
         (ROSTERS_DIR, "rosters"),
     ]
 
-    matched_name, matched_file, matched_label = _find_student_in_csv_dirs(student_name, search_dirs)
+    matches = _find_all_student_files(student_name, search_dirs)
 
-    if not matched_file:
+    if not matches:
         # Provide diagnostic info
         roster_info = []
         for directory, prefix in search_dirs:
@@ -302,45 +337,28 @@ def remove_student_from_roster(student_name):
             "hint": "Check the name format in the roster files above."
         }
 
-    # Read the CSV, filter out the matched student, rewrite
-    try:
-        with open(matched_file, 'r', encoding='utf-8') as fh:
-            content = fh.read()
-        reader = csv.DictReader(io.StringIO(content))
-        fieldnames = reader.fieldnames
-        rows_to_keep = []
-        removed_count = 0
-        for row in reader:
-            raw_name = row.get('Student', '').strip().strip('"')
-            if ';' in raw_name:
-                parts = raw_name.split(';', 1)
-                display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
-            elif ',' in raw_name:
-                parts = raw_name.split(',', 1)
-                display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
-            else:
-                display_name = raw_name
-            if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
-                removed_count += 1
-                continue
-            rows_to_keep.append(row)
+    # Remove from ALL matched files
+    matched_name = matches[0][0]
+    results = []
+    errors = []
+    for _name, filepath, label in matches:
+        try:
+            removed, remaining = _remove_student_from_csv(student_name, filepath)
+            results.append({"source": label, "removed": removed, "remaining": remaining})
+        except Exception as e:
+            errors.append({"source": label, "error": str(e)})
 
-        # Write back
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows_to_keep)
-        with open(matched_file, 'w', encoding='utf-8', newline='') as fh:
-            fh.write(output.getvalue())
+    sources = [r["source"] for r in results]
+    msg = f"Removed {matched_name} from {len(results)} file(s): {', '.join(sources)}."
+    if errors:
+        msg += f" Failed on {len(errors)} file(s)."
 
-        return {
-            "removed": matched_name,
-            "source": matched_label,
-            "remaining_students": len(rows_to_keep),
-            "message": f"Removed {matched_name} from {matched_label} roster. {len(rows_to_keep)} students remaining."
-        }
-    except Exception as e:
-        return {"error": f"Failed to update roster file: {str(e)}"}
+    return {
+        "removed": matched_name,
+        "files_updated": results,
+        "errors": errors if errors else None,
+        "message": msg,
+    }
 
 
 # ═══════════════════════════════════════════════════════
