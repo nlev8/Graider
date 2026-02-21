@@ -1,0 +1,41 @@
+# Graider - AI-Powered Grading Assistant for K-12 Teachers
+# https://graider.live
+
+User-agent: *
+Allow: /
+
+# AI Crawlers - Welcome
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# LLM-readable content
+# See https://graider.live/llms.txt for structured AI-readable content
+
+Sitemap: https://graider.live/sitemap.xml
