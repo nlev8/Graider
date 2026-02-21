@@ -2830,7 +2830,7 @@ def read_docx_file_structured(filepath: str) -> dict:
                                 response_parts.append(cell_text)
                         response = '\n'.join(response_parts)
                         # Strip placeholder text from response cell
-                        response = response.replace("Type your answer here...", "").strip()
+                        response = response.replace("Type your answer here...", "").replace("Your Answer:", "").strip()
 
                         # Fix: Detect student text typed in header cell (row 0)
                         # Students sometimes type in the blue header cell instead of the white response cell
@@ -2873,12 +2873,24 @@ def read_docx_file_structured(filepath: str) -> dict:
                                     if len(re.sub(r'[_\s]', '', candidate)) >= 2:
                                         response = candidate
 
-                        tables_found.append({
-                            "tag_type": tag_type,
-                            "tag_id": tag_id,
-                            "header_text": visible_header,
-                            "response": response
-                        })
+                        # Deduplicate: skip if we already have this tag (duplicate tables in doc)
+                        existing = next(
+                            (t for t in tables_found
+                             if t["tag_type"] == tag_type and t["tag_id"] == tag_id),
+                            None
+                        )
+                        if existing:
+                            # Keep the version with the longer response (more likely to be correct)
+                            if len(response) > len(existing.get("response", "")):
+                                existing["response"] = response
+                                existing["header_text"] = visible_header
+                        else:
+                            tables_found.append({
+                                "tag_type": tag_type,
+                                "tag_id": tag_id,
+                                "header_text": visible_header,
+                                "response": response
+                            })
                         # Also add to plain text for content reference
                         full_text.append(visible_header)
                         if response:
@@ -2946,7 +2958,7 @@ def extract_from_tables(table_data, exclude_markers=None):
         header = entry.get("header_text", "")
         response = entry.get("response", "")
         # Strip placeholder text from response
-        response = response.replace("Type your answer here...", "").strip()
+        response = response.replace("Type your answer here...", "").replace("Your Answer:", "").strip()
 
         # Check exclusion
         header_lower = header.lower()
@@ -2968,7 +2980,48 @@ def extract_from_tables(table_data, exclude_markers=None):
         # Check if blank
         response_cleaned = re.sub(r'[_\s]', '', response)
         if len(response_cleaned) < 2:
-            blank_questions.append(question)
+            # Backup: Student may have typed answer in the header cell after (N pts)
+            # read_docx_file_structured has Cases 1-3 for this, but they can fail
+            # when Word/Google Docs alters the cell structure
+            pts_match = re.search(r'\(\d+\s*pts?\)', header)
+            if pts_match:
+                after_pts = header[pts_match.end():].strip()
+                if after_pts and len(re.sub(r'[_\s]', '', after_pts)) >= 2:
+                    response = after_pts
+                    header = header[:pts_match.end()].strip()
+                    # Rebuild question label with trimmed header
+                    if tag_type == "QUESTION":
+                        question = header
+                    print(f"    🔧 Recovered same-line answer from header for {tag_type}:{tag_id}")
+
+            # Summary fallback: no (N pts) marker — check if prompt is followed by student text
+            # Look for sentence-ending punctuation followed by student text
+            if len(re.sub(r'[_\s]', '', response)) < 2 and tag_type == "SUMMARY":
+                # Try splitting after the prompt (usually ends with a period or question mark)
+                # Match the last sentence-ending punctuation that's part of the prompt
+                prompt_end = re.search(r'[.?!]\s{2,}', header)
+                if prompt_end:
+                    after_prompt = header[prompt_end.end():].strip()
+                    if after_prompt and len(re.sub(r'[_\s]', '', after_prompt)) >= 10:
+                        response = after_prompt
+                        header = header[:prompt_end.start() + 1].strip()
+                        question = "Summary"
+                        print(f"    🔧 Recovered same-line answer from summary header")
+
+        # After recovery attempts, final blank check
+        response_cleaned = re.sub(r'[_\s]', '', response)
+        if len(response_cleaned) < 2:
+            # Deduplicate: don't add if this question is already in blank_questions
+            if question not in blank_questions:
+                blank_questions.append(question)
+            continue
+
+        # Deduplicate: don't add if we already have an extracted response for this tag
+        already_extracted = any(
+            e.get("tag_id") == tag_id and e.get("section") == tag_type
+            for e in extracted
+        )
+        if already_extracted:
             continue
 
         extracted.append({
@@ -2978,6 +3031,15 @@ def extract_from_tables(table_data, exclude_markers=None):
             "section": tag_type,
             "tag_id": tag_id
         })
+
+    # Remove from blank_questions any items that were successfully extracted
+    extracted_tags = {(e.get("section"), e.get("tag_id")) for e in extracted}
+    # Also build a set of extracted question labels for cross-reference
+    extracted_questions = {e.get("question", "").lower().strip() for e in extracted}
+    blank_questions = [
+        bq for bq in blank_questions
+        if bq.lower().strip() not in extracted_questions
+    ]
 
     total_q = len(extracted) + len(blank_questions)
     answered_q = len(extracted)
@@ -3067,7 +3129,7 @@ def extract_from_graider_text(document_text, exclude_markers=None):
             response_lines.append(ln)
         response = '\n'.join(response_lines).strip()
         # Strip placeholder text from response cell
-        response = response.replace("Type your answer here...", "").strip()
+        response = response.replace("Type your answer here...", "").replace("Your Answer:", "").strip()
 
         # Fix: Student typed answer on same line as header (no newline separation)
         # Common when student types in the header cell of a Graider table
@@ -3078,6 +3140,17 @@ def extract_from_graider_text(document_text, exclude_markers=None):
                 if after_pts and len(re.sub(r'[_\s]', '', after_pts)) >= 2:
                     response = after_pts
                     header = header[:pts_match.end()].strip()
+                    print(f"    🔧 Text fallback: recovered same-line answer for {tag_type}:{tag_id}")
+
+            # Summary fallback: no (N pts) marker — check if prompt is followed by student text
+            if (not response or len(re.sub(r'[_\s]', '', response)) < 2) and tag_type == "SUMMARY":
+                prompt_end = re.search(r'[.?!]\s{2,}', header)
+                if prompt_end:
+                    after_prompt = header[prompt_end.end():].strip()
+                    if after_prompt and len(re.sub(r'[_\s]', '', after_prompt)) >= 10:
+                        response = after_prompt
+                        header = header[:prompt_end.start() + 1].strip()
+                        print(f"    🔧 Text fallback: recovered same-line answer for SUMMARY")
 
         # Check exclusion
         header_lower = header.lower()
@@ -3099,7 +3172,17 @@ def extract_from_graider_text(document_text, exclude_markers=None):
         # Check if blank
         response_cleaned = re.sub(r'[_\s]', '', response)
         if len(response_cleaned) < 2:
-            blank_questions.append(question)
+            # Deduplicate
+            if question not in blank_questions:
+                blank_questions.append(question)
+            continue
+
+        # Deduplicate: skip if already extracted for this tag
+        already_extracted = any(
+            e.get("tag_id") == tag_id and e.get("section") == tag_type
+            for e in extracted
+        )
+        if already_extracted:
             continue
 
         extracted.append({
@@ -3109,6 +3192,13 @@ def extract_from_graider_text(document_text, exclude_markers=None):
             "section": tag_type,
             "tag_id": tag_id
         })
+
+    # Cross-reference: remove blank entries that were successfully extracted
+    extracted_questions = {e.get("question", "").lower().strip() for e in extracted}
+    blank_questions = [
+        bq for bq in blank_questions
+        if bq.lower().strip() not in extracted_questions
+    ]
 
     total_q = len(extracted) + len(blank_questions)
     answered_q = len(extracted)
@@ -3899,7 +3989,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
 
     if is_blank:
         # Blank submission — zero score, clear feedback, no AI/plagiarism flags
-        grading_result["feedback"] = "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher."
+        grading_result["feedback"] = "You submitted a blank assignment with no responses. Please complete all sections and resubmit."
         grading_result["score"] = 0
         grading_result["letter_grade"] = "INCOMPLETE"
         grading_result["ai_detection"] = {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."}
@@ -4561,7 +4651,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
             return {
                 "score": 0, "letter_grade": "INCOMPLETE",
                 "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
-                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
+                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
                 "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
                 "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
                 "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
@@ -5314,7 +5404,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
                     "critical_thinking": 0,
                     "communication": 0
                 },
-                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
+                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
                 "student_responses": [],
                 "unanswered_questions": unanswered_questions[:10],
                 "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
@@ -5443,7 +5533,7 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
                             "critical_thinking": 0,
                             "communication": 0
                         },
-                        "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit. If you need help understanding the assignment, ask your teacher.",
+                        "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
                         "student_responses": [],
                         "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
                         "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
