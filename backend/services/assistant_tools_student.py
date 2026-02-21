@@ -4,9 +4,13 @@ Student Info Tools
 Tools for retrieving individual student accommodation details and performance streaks.
 Zero AI API calls — all data from local files.
 """
+import csv
+import io
+import os
+
 from backend.services.assistant_tools import (
     _load_master_csv, _load_accommodations, _load_roster,
-    _fuzzy_name_match, _safe_int_score, ACCOMMODATIONS_DIR,
+    _fuzzy_name_match, _safe_int_score, ACCOMMODATIONS_DIR, PERIODS_DIR,
 )
 
 
@@ -38,6 +42,20 @@ STUDENT_TOOL_DEFINITIONS = [
                 "student_name": {
                     "type": "string",
                     "description": "Student name (fuzzy match)"
+                }
+            },
+            "required": ["student_name"]
+        }
+    },
+    {
+        "name": "remove_student_from_roster",
+        "description": "Remove a student from the class roster. Finds the student by name (fuzzy match) across all period CSV files and removes their row. Use when a teacher says a student has transferred, withdrawn, or needs to be removed from the roster.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "student_name": {
+                    "type": "string",
+                    "description": "Student name to remove (fuzzy match)"
                 }
             },
             "required": ["student_name"]
@@ -202,6 +220,99 @@ def get_student_streak(student_name):
     }
 
 
+def remove_student_from_roster(student_name):
+    """Remove a student from the roster CSV files."""
+    if not student_name:
+        return {"error": "student_name is required."}
+
+    if not os.path.exists(PERIODS_DIR):
+        return {"error": "No roster data found. Upload class rosters first."}
+
+    # Find the student across all period CSV files
+    matched_name = None
+    matched_file = None
+    matched_period = None
+
+    for f in sorted(os.listdir(PERIODS_DIR)):
+        if not f.endswith('.csv'):
+            continue
+        filepath = os.path.join(PERIODS_DIR, f)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    raw_name = row.get('Student', '').strip().strip('"')
+                    # Build display name same way _load_roster does
+                    if ';' in raw_name:
+                        parts = raw_name.split(';', 1)
+                        display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+                    elif ',' in raw_name:
+                        parts = raw_name.split(',', 1)
+                        display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+                    else:
+                        display_name = raw_name
+                    if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
+                        matched_name = display_name
+                        matched_file = filepath
+                        # Get period name from meta
+                        meta_path = filepath.replace('.csv', '.meta.json')
+                        if os.path.exists(meta_path):
+                            import json
+                            with open(meta_path, 'r') as mf:
+                                meta = json.load(mf)
+                            matched_period = meta.get('period_name', f.replace('.csv', ''))
+                        else:
+                            matched_period = f.replace('.csv', '').replace('_', ' ')
+                        break
+        except Exception:
+            continue
+        if matched_file:
+            break
+
+    if not matched_file:
+        return {"error": f"No student found matching '{student_name}' in any roster."}
+
+    # Read the CSV, filter out the matched student, rewrite
+    try:
+        with open(matched_file, 'r', encoding='utf-8') as fh:
+            content = fh.read()
+        reader = csv.DictReader(io.StringIO(content))
+        fieldnames = reader.fieldnames
+        rows_to_keep = []
+        removed_count = 0
+        for row in reader:
+            raw_name = row.get('Student', '').strip().strip('"')
+            if ';' in raw_name:
+                parts = raw_name.split(';', 1)
+                display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+            elif ',' in raw_name:
+                parts = raw_name.split(',', 1)
+                display_name = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+            else:
+                display_name = raw_name
+            if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
+                removed_count += 1
+                continue
+            rows_to_keep.append(row)
+
+        # Write back
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows_to_keep)
+        with open(matched_file, 'w', encoding='utf-8', newline='') as fh:
+            fh.write(output.getvalue())
+
+        return {
+            "removed": matched_name,
+            "period": matched_period,
+            "remaining_students": len(rows_to_keep),
+            "message": f"Removed {matched_name} from {matched_period} roster. {len(rows_to_keep)} students remaining."
+        }
+    except Exception as e:
+        return {"error": f"Failed to update roster file: {str(e)}"}
+
+
 # ═══════════════════════════════════════════════════════
 # HANDLER MAP
 # ═══════════════════════════════════════════════════════
@@ -209,4 +320,5 @@ def get_student_streak(student_name):
 STUDENT_TOOL_HANDLERS = {
     "get_student_accommodations": get_student_accommodations,
     "get_student_streak": get_student_streak,
+    "remove_student_from_roster": remove_student_from_roster,
 }

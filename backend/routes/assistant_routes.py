@@ -838,7 +838,8 @@ COMMUNICATION & REPORTING:
 
 STUDENT INFO:
 - get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
-- get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators."""
+- get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators.
+- remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:
