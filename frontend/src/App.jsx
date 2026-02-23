@@ -1306,6 +1306,12 @@ function App() {
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [assignmentType, setAssignmentType] = useState("worksheet");
+  const [assignmentSectionsOpen, setAssignmentSectionsOpen] = useState(false);
+  const [assignmentSectionCategories, setAssignmentSectionCategories] = useState({
+    multiple_choice: true, short_answer: true, math_computation: false,
+    geometry_visual: false, graphing: false, data_analysis: false,
+    extended_writing: true, vocabulary: false, true_false: false,
+  });
   const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
   const [previewResults, setPreviewResults] = useState(null);
 
@@ -1336,12 +1342,28 @@ function App() {
     targetPeriod: "", // For differentiation based on Global AI Instructions
     totalQuestions: 20,
     totalPoints: 30,
+    // Section categories — controls which "Parts" the AI generates
+    // FL FAST-aligned defaults: MC, short answer, math computation, geometry, graphing, data analysis ON
+    // Vocabulary and extended writing OFF by default
+    sectionCategories: {
+      multiple_choice: true,      // Part: Multiple Choice
+      short_answer: true,         // Part: Short Answer / Gridded Response
+      math_computation: true,     // Part: Math Computation (equations, solve for x)
+      geometry_visual: true,      // Part: Geometry & Measurement (interactive shapes, protractor, transformations)
+      graphing: true,             // Part: Graphing & Coordinate Plane (number lines, function graphs)
+      data_analysis: true,        // Part: Data Analysis (tables, box plots, dot plots, stem-and-leaf)
+      extended_writing: false,    // Part: Extended Writing / Essay
+      vocabulary: false,          // Part: Vocabulary / Matching
+      true_false: false,          // Part: True/False
+    },
     questionTypes: {
       multiple_choice: 10,
       short_answer: 4,
-      extended_response: 2,
-      true_false: 2,
-      matching: 2,
+      extended_response: 0,
+      true_false: 0,
+      matching: 0,
+      math_equation: 3,
+      data_table: 3,
     },
     pointsPerType: {
       multiple_choice: 1,
@@ -1349,6 +1371,8 @@ function App() {
       true_false: 1,
       matching: 1,
       extended_response: 4,
+      math_equation: 2,
+      data_table: 3,
     },
     dokDistribution: {
       "1": 4,
@@ -1359,23 +1383,135 @@ function App() {
     includeAnswerKey: true,
     includeStandardsReference: true,
   });
+  const [sectionsDropdownOpen, setSectionsDropdownOpen] = useState(false);
 
-  // Helper function to distribute questions across types
-  const distributeQuestions = (total) => {
-    // Standard distribution: 50% MC, 15% SA, 10% ER, 15% TF, 10% Matching
-    const mc = Math.round(total * 0.50);
-    const sa = Math.round(total * 0.15);
-    const er = Math.round(total * 0.10);
-    const tf = Math.round(total * 0.15);
-    const matching = total - mc - sa - er - tf; // remainder
+  // Helper function to distribute questions across types based on enabled section categories
+  const distributeQuestions = (total, categories = null) => {
+    const cats = categories || assessmentConfig.sectionCategories || {};
+    // Map section categories → question types with weights
+    // FL FAST alignment: heavy MC + short answer + STEM visuals
+    const typeWeights = {};
+    if (cats.multiple_choice) typeWeights.multiple_choice = 40;
+    if (cats.short_answer) typeWeights.short_answer = 15;
+    if (cats.math_computation) typeWeights.math_equation = 15;
+    if (cats.geometry_visual || cats.graphing || cats.data_analysis) typeWeights.data_table = 15;
+    if (cats.extended_writing) typeWeights.extended_response = 10;
+    if (cats.true_false) typeWeights.true_false = 10;
+    if (cats.vocabulary) typeWeights.matching = 10;
+
+    // If nothing enabled, default to MC
+    if (Object.keys(typeWeights).length === 0) typeWeights.multiple_choice = 100;
+
+    const totalWeight = Object.values(typeWeights).reduce((a, b) => a + b, 0);
+    const result = {};
+    let assigned = 0;
+    const entries = Object.entries(typeWeights);
+    entries.forEach(([type, weight], i) => {
+      if (i === entries.length - 1) {
+        result[type] = Math.max(1, total - assigned); // remainder
+      } else {
+        const count = Math.max(1, Math.round(total * weight / totalWeight));
+        result[type] = count;
+        assigned += count;
+      }
+    });
+
+    // Ensure all types exist in result
+    const allTypes = ['multiple_choice', 'short_answer', 'extended_response', 'true_false', 'matching', 'math_equation', 'data_table'];
+    allTypes.forEach(t => { if (!(t in result)) result[t] = 0; });
+    return result;
+  };
+
+  // Get subject-appropriate section category defaults
+  const getSubjectSectionDefaults = (subject) => {
+    const s = (subject || '').toLowerCase();
+    const isMath = s.includes('math') || s.includes('algebra') || s.includes('geometry') || s.includes('calculus') || s.includes('statistics');
+    const isScience = s.includes('science') || s.includes('biology') || s.includes('chemistry') || s.includes('physics') || s.includes('earth');
+    const isELA = s.includes('ela') || s.includes('english') || s.includes('reading') || s.includes('writing') || s.includes('language arts') || s.includes('literature');
+    const isSocialStudies = s.includes('history') || s.includes('social') || s.includes('civics') || s.includes('economics') || s.includes('geography') || s.includes('government');
+
+    if (isMath) {
+      return {
+        multiple_choice: true,
+        short_answer: true,
+        math_computation: true,
+        geometry_visual: true,
+        graphing: true,
+        data_analysis: true,
+        extended_writing: false,
+        vocabulary: false,
+        true_false: false,
+      };
+    }
+    if (isScience) {
+      return {
+        multiple_choice: true,
+        short_answer: true,
+        math_computation: false,
+        geometry_visual: false,
+        graphing: true,
+        data_analysis: true,
+        extended_writing: false,
+        vocabulary: true,
+        true_false: false,
+      };
+    }
+    if (isELA) {
+      return {
+        multiple_choice: true,
+        short_answer: true,
+        math_computation: false,
+        geometry_visual: false,
+        graphing: false,
+        data_analysis: false,
+        extended_writing: true,
+        vocabulary: true,
+        true_false: false,
+      };
+    }
+    if (isSocialStudies) {
+      return {
+        multiple_choice: true,
+        short_answer: true,
+        math_computation: false,
+        geometry_visual: false,
+        graphing: false,
+        data_analysis: false,
+        extended_writing: true,
+        vocabulary: true,
+        true_false: true,
+      };
+    }
+    // Default — generic
     return {
-      multiple_choice: Math.max(0, mc),
-      short_answer: Math.max(0, sa),
-      extended_response: Math.max(0, er),
-      true_false: Math.max(0, tf),
-      matching: Math.max(0, matching),
+      multiple_choice: true,
+      short_answer: true,
+      math_computation: false,
+      geometry_visual: false,
+      graphing: false,
+      data_analysis: false,
+      extended_writing: true,
+      vocabulary: false,
+      true_false: false,
     };
   };
+
+  // Update section categories when subject changes (both assessment and assignment)
+  useEffect(() => {
+    if (config.subject) {
+      const newCats = getSubjectSectionDefaults(config.subject);
+      const total = assessmentConfig.totalQuestions || 20;
+      const newTypes = distributeQuestions(total, newCats);
+      const newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
+      setAssessmentConfig(prev => ({
+        ...prev,
+        sectionCategories: newCats,
+        questionTypes: newTypes,
+        pointsPerType: newPointsPerType,
+      }));
+      setAssignmentSectionCategories(newCats);
+    }
+  }, [config.subject]);
 
   // Helper function to distribute DOK levels
   const distributeDOK = (total) => {
@@ -3881,6 +4017,7 @@ ${signature}`;
           ...unitConfig,
           title: autoTitle, // Empty string tells backend to auto-generate title
           standardCodes: standardCodes, // Pass for title generation if needed
+          sectionCategories: unitConfig.type === "Assignment" ? assignmentSectionCategories : undefined,
         },
         selectedIdea: selectedIdea,
         generateVariations: generateVariations,
@@ -4292,6 +4429,7 @@ ${signature}`;
           grade: config.grade_level,
           subject: config.subject,
           availableTools: config.availableTools || [],
+          sectionCategories: assignmentSectionCategories,
         },
         assignmentType,
       );
@@ -16668,9 +16806,14 @@ ${signature}`;
                                     style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", fontSize: "12px", background: "var(--input-bg)", color: "var(--text-primary)" }}
                                   >
                                     <option value="written">Written</option>
+                                    <option value="short_answer">Short Answer</option>
+                                    <option value="multiple_choice">Multiple Choice</option>
                                     <option value="fill-blank">Fill-blank</option>
                                     <option value="vocabulary">Vocabulary</option>
                                     <option value="matching">Matching</option>
+                                    <option value="true_false">True/False</option>
+                                    <option value="math_equation">Math Equation</option>
+                                    <option value="data_table">Data Table</option>
                                   </select>
                                   <button
                                     onClick={() => removeMarker(marker, i)}
@@ -19711,6 +19854,90 @@ ${signature}`;
                               style={{ minHeight: "80px" }}
                             />
                           </div>
+                          {/* Assignment Sections Dropdown - visible when content type is Assignment */}
+                          {unitConfig.type === "Assignment" && (
+                            <div style={{
+                              border: "1px solid var(--glass-border)",
+                              borderRadius: "10px",
+                              overflow: "hidden",
+                            }}>
+                              <button
+                                type="button"
+                                onClick={() => setAssignmentSectionsOpen(!assignmentSectionsOpen)}
+                                style={{
+                                  width: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  background: "var(--glass-bg)",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  padding: "10px 14px",
+                                  color: "inherit",
+                                }}
+                              >
+                                <span style={{ fontSize: "0.9rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <Icon name="LayoutGrid" size={16} /> Sections
+                                  <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "var(--text-muted)" }}>
+                                    ({Object.values(assignmentSectionCategories).filter(Boolean).length} active)
+                                  </span>
+                                </span>
+                                <Icon name={assignmentSectionsOpen ? "ChevronUp" : "ChevronDown"} size={16} />
+                              </button>
+                              {assignmentSectionsOpen && (
+                                <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid var(--glass-border)" }}>
+                                  {[
+                                    { key: "multiple_choice", label: "Multiple Choice", icon: "CheckCircle", group: "core" },
+                                    { key: "short_answer", label: "Short Answer", icon: "AlignLeft", group: "core" },
+                                    { key: "math_computation", label: "Math Computation", icon: "Calculator", group: "stem" },
+                                    { key: "geometry_visual", label: "Geometry & Measurement", icon: "Triangle", group: "stem" },
+                                    { key: "graphing", label: "Graphing", icon: "LineChart", group: "stem" },
+                                    { key: "data_analysis", label: "Data Analysis", icon: "BarChart3", group: "stem" },
+                                    { key: "extended_writing", label: "Extended Writing", icon: "FileText", group: "optional" },
+                                    { key: "vocabulary", label: "Vocabulary", icon: "BookOpen", group: "optional" },
+                                    { key: "true_false", label: "True / False", icon: "ToggleLeft", group: "optional" },
+                                  ].map((cat, idx, arr) => {
+                                    const prevGroup = idx > 0 ? arr[idx - 1].group : null;
+                                    const showDivider = cat.group !== prevGroup;
+                                    const groupLabels = { core: "Core", stem: "STEM", optional: "Optional" };
+                                    const groupColors = { core: "#22c55e", stem: "#6366f1", optional: "var(--text-muted)" };
+                                    return (
+                                      <div key={cat.key}>
+                                        {showDivider && (
+                                          <div style={{
+                                            fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase",
+                                            letterSpacing: "0.05em", color: groupColors[cat.group],
+                                            marginTop: idx > 0 ? "4px" : 0, marginBottom: "2px",
+                                          }}>
+                                            {groupLabels[cat.group]}
+                                          </div>
+                                        )}
+                                        <label style={{
+                                          display: "flex", alignItems: "center", gap: "8px",
+                                          padding: "5px 8px", borderRadius: "6px", cursor: "pointer",
+                                          fontSize: "0.82rem",
+                                          background: assignmentSectionCategories[cat.key] ? "rgba(99,102,241,0.1)" : "transparent",
+                                        }}>
+                                          <input
+                                            type="checkbox"
+                                            checked={!!assignmentSectionCategories[cat.key]}
+                                            onChange={(e) => setAssignmentSectionCategories({
+                                              ...assignmentSectionCategories,
+                                              [cat.key]: e.target.checked,
+                                            })}
+                                            style={{ accentColor: "#6366f1" }}
+                                          />
+                                          <Icon name={cat.icon} size={14} />
+                                          {cat.label}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Brainstorm Button */}
                           <button
                             onClick={brainstormIdeasHandler}
@@ -21483,6 +21710,137 @@ ${signature}`;
                           </div>
                         </div>
 
+                        {/* Section Categories Dropdown */}
+                        <div className="glass-card" style={{ padding: "20px" }}>
+                          <button
+                            type="button"
+                            onClick={() => setSectionsDropdownOpen(!sectionsDropdownOpen)}
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                              color: "inherit",
+                            }}
+                          >
+                            <h3
+                              style={{
+                                fontSize: "1rem",
+                                fontWeight: 700,
+                                margin: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                              }}
+                            >
+                              <Icon name="LayoutGrid" size={18} /> Assessment Sections
+                              <span style={{
+                                fontSize: "0.75rem",
+                                fontWeight: 400,
+                                color: "var(--text-muted)",
+                                marginLeft: "4px",
+                              }}>
+                                ({Object.values(assessmentConfig.sectionCategories || {}).filter(Boolean).length} active)
+                              </span>
+                            </h3>
+                            <Icon name={sectionsDropdownOpen ? "ChevronUp" : "ChevronDown"} size={18} />
+                          </button>
+
+                          {sectionsDropdownOpen && (
+                            <div style={{ marginTop: "15px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "4px" }}>
+                                Select which sections to include. FL FAST-aligned defaults are pre-selected.
+                              </p>
+
+                              {[
+                                { key: "multiple_choice", label: "Multiple Choice", desc: "Standard MC questions", icon: "CheckCircle", group: "core" },
+                                { key: "short_answer", label: "Short Answer / Gridded Response", desc: "Text & numeric input", icon: "AlignLeft", group: "core" },
+                                { key: "math_computation", label: "Math Computation", desc: "Equations, solve for x, expressions", icon: "Calculator", group: "stem" },
+                                { key: "geometry_visual", label: "Geometry & Measurement", desc: "Interactive shapes, protractor, transformations", icon: "Triangle", group: "stem" },
+                                { key: "graphing", label: "Graphing & Coordinate Plane", desc: "Number lines, function graphs, plotting", icon: "LineChart", group: "stem" },
+                                { key: "data_analysis", label: "Data Analysis", desc: "Data tables, box plots, dot plots, stem-and-leaf", icon: "BarChart3", group: "stem" },
+                                { key: "extended_writing", label: "Extended Writing / Essay", desc: "Paragraph responses with analysis", icon: "FileText", group: "optional" },
+                                { key: "vocabulary", label: "Vocabulary / Matching", desc: "Term-definition matching", icon: "BookOpen", group: "optional" },
+                                { key: "true_false", label: "True / False", desc: "Statement evaluation", icon: "ToggleLeft", group: "optional" },
+                              ].map((cat, idx, arr) => {
+                                const prevGroup = idx > 0 ? arr[idx - 1].group : null;
+                                const showDivider = cat.group !== prevGroup;
+                                const groupLabels = { core: "FL FAST Core", stem: "STEM Visuals", optional: "Optional" };
+                                return (
+                                  <div key={cat.key}>
+                                    {showDivider && (
+                                      <div style={{
+                                        fontSize: "0.7rem",
+                                        fontWeight: 700,
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.05em",
+                                        color: cat.group === "stem" ? "#6366f1" : cat.group === "optional" ? "var(--text-muted)" : "#22c55e",
+                                        marginTop: idx > 0 ? "8px" : 0,
+                                        marginBottom: "4px",
+                                      }}>
+                                        {groupLabels[cat.group]}
+                                      </div>
+                                    )}
+                                    <label
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "10px",
+                                        padding: "8px 10px",
+                                        borderRadius: "8px",
+                                        cursor: "pointer",
+                                        background: assessmentConfig.sectionCategories?.[cat.key]
+                                          ? "rgba(99, 102, 241, 0.1)"
+                                          : "transparent",
+                                        border: "1px solid " + (assessmentConfig.sectionCategories?.[cat.key]
+                                          ? "rgba(99, 102, 241, 0.3)"
+                                          : "rgba(255,255,255,0.05)"),
+                                        transition: "all 0.2s",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={!!assessmentConfig.sectionCategories?.[cat.key]}
+                                        onChange={(e) => {
+                                          const newCats = {
+                                            ...assessmentConfig.sectionCategories,
+                                            [cat.key]: e.target.checked,
+                                          };
+                                          // Redistribute questions based on new categories
+                                          const newTypes = distributeQuestions(
+                                            assessmentConfig.totalQuestions || 20,
+                                            newCats
+                                          );
+                                          const newPointsPerType = distributePoints(
+                                            assessmentConfig.totalPoints || 30,
+                                            newTypes
+                                          );
+                                          setAssessmentConfig({
+                                            ...assessmentConfig,
+                                            sectionCategories: newCats,
+                                            questionTypes: newTypes,
+                                            pointsPerType: newPointsPerType,
+                                          });
+                                        }}
+                                        style={{ accentColor: "#6366f1" }}
+                                      />
+                                      <Icon name={cat.icon} size={16} />
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: "0.9rem", fontWeight: 500 }}>{cat.label}</div>
+                                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{cat.desc}</div>
+                                      </div>
+                                    </label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Question Types */}
                         <div className="glass-card" style={{ padding: "20px" }}>
                           <h3
@@ -21525,6 +21883,8 @@ ${signature}`;
                               { key: "extended_response", label: "Extended Response", defaultPts: 4 },
                               { key: "true_false", label: "True/False", defaultPts: 1 },
                               { key: "matching", label: "Matching", defaultPts: 1 },
+                              { key: "math_equation", label: "Math Equation (STEM)", defaultPts: 2 },
+                              { key: "data_table", label: "Data Table (STEM)", defaultPts: 3 },
                             ].map((qType) => (
                               <div
                                 key={qType.key}

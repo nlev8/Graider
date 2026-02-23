@@ -5,9 +5,11 @@ export default function DataTable({
   initialColumns = 3,
   initialRows = 4,
   headers = [],
+  rowLabels,
   data = [],
   units = [],
   editable = true,
+  lockStructure = false,
   onChange,
   label
 }) {
@@ -81,11 +83,16 @@ export default function DataTable({
     }
   };
 
+  const hasRowLabels = Array.isArray(rowLabels) && rowLabels.length > 0;
+  // Structure is locked in assignment context — students can only fill in cells
+  const structureLocked = lockStructure || hasRowLabels;
+  const canEditStructure = editable && !structureLocked;
+
   return (
     <div className="data-table-container">
       {label && <label className="data-table-label">{label}</label>}
 
-      {editable && (
+      {canEditStructure && (
         <div className="table-controls">
           <button type="button" onClick={addRow}>+ Add Row</button>
           <button type="button" onClick={addColumn}>+ Add Column</button>
@@ -96,9 +103,10 @@ export default function DataTable({
         <table className="data-table">
           <thead>
             <tr className="header-row">
+              {hasRowLabels && <th className="row-label-header"></th>}
               {tableHeaders.map((header, colIdx) => (
                 <th key={colIdx}>
-                  {editable ? (
+                  {canEditStructure ? (
                     <input
                       type="text"
                       value={header}
@@ -109,7 +117,7 @@ export default function DataTable({
                   ) : (
                     header
                   )}
-                  {editable && tableHeaders.length > 1 && (
+                  {canEditStructure && tableHeaders.length > 1 && (
                     <button
                       type="button"
                       className="remove-col-btn"
@@ -121,30 +129,37 @@ export default function DataTable({
                   )}
                 </th>
               ))}
-              {editable && <th className="action-col"></th>}
+              {canEditStructure && <th className="action-col"></th>}
             </tr>
-            <tr className="units-row">
-              {columnUnits.map((unit, colIdx) => (
-                <th key={colIdx}>
-                  {editable ? (
-                    <input
-                      type="text"
-                      value={unit}
-                      onChange={(e) => updateUnit(colIdx, e.target.value)}
-                      placeholder="units (e.g., mL, °C)"
-                      className="unit-input"
-                    />
-                  ) : (
-                    unit && `(${unit})`
-                  )}
-                </th>
-              ))}
-              {editable && <th></th>}
-            </tr>
+            {!structureLocked && columnUnits.some(u => u) && (
+              <tr className="units-row">
+                {columnUnits.map((unit, colIdx) => (
+                  <th key={colIdx}>
+                    {canEditStructure ? (
+                      <input
+                        type="text"
+                        value={unit}
+                        onChange={(e) => updateUnit(colIdx, e.target.value)}
+                        placeholder="units (e.g., mL, °C)"
+                        className="unit-input"
+                      />
+                    ) : (
+                      unit && `(${unit})`
+                    )}
+                  </th>
+                ))}
+                {canEditStructure && <th></th>}
+              </tr>
+            )}
           </thead>
           <tbody>
             {tableData.map((row, rowIdx) => (
               <tr key={rowIdx}>
+                {hasRowLabels && (
+                  <td className="row-label-cell">
+                    {rowLabels[rowIdx] || ''}
+                  </td>
+                )}
                 {row.map((cell, colIdx) => (
                   <td key={colIdx}>
                     {editable ? (
@@ -160,7 +175,7 @@ export default function DataTable({
                     )}
                   </td>
                 ))}
-                {editable && (
+                {canEditStructure && (
                   <td className="action-col">
                     {tableData.length > 1 && (
                       <button

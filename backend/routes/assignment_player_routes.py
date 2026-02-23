@@ -1,17 +1,80 @@
 """
 Assignment Player API routes for Graider.
 Handles interactive assignment serving and auto-grading.
+
+Grading approach:
+- Programmatic types (geometry, data tables, coordinate planes, etc.) are graded
+  with mathematical precision — no AI, 100% consistent.
+- Text-based types (short_answer, essay, extended_response) use the multipass
+  AI grading pipeline with full 18-factor context for nuanced evaluation.
+- Image uploads: Mathpix OCR for STEM subjects (handwritten math → LaTeX),
+  GPT-4o Vision for ELA/Social Studies (handwritten text → text).
 """
 import os
+import sys
 import json
 import time
 from flask import Blueprint, request, jsonify
 from pathlib import Path
 
+# Import multipass grading for text-based question types
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+try:
+    from assignment_grader import grade_per_question as ai_grade_per_question
+    AI_GRADING_AVAILABLE = True
+except ImportError:
+    AI_GRADING_AVAILABLE = False
+
+# Import Mathpix OCR for handwritten math recognition
+try:
+    from backend.services.mathpix_ocr import extract_answer_from_image, is_available as mathpix_available
+    MATHPIX_AVAILABLE = mathpix_available()
+except ImportError:
+    MATHPIX_AVAILABLE = False
+    def extract_answer_from_image(*args, **kwargs):
+        return {'extracted_text': '', 'latex': '', 'confidence': 0, 'error': 'Mathpix not available'}
+
+# Subjects where Mathpix OCR is useful (handwritten math/science notation)
+MATHPIX_SUBJECTS = {'math', 'algebra', 'geometry', 'calculus', 'statistics',
+                    'science', 'biology', 'chemistry', 'physics', 'earth science',
+                    'trigonometry', 'precalculus', 'ap calculus', 'ap statistics',
+                    'ap physics', 'ap chemistry', 'ap biology'}
+
 assignment_player_bp = Blueprint('assignment_player', __name__)
 
 # Store active assignments (in production, use database)
 ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_data/active_assignments")
+SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
+
+
+def _load_teacher_context():
+    """Load teacher settings for AI grading context (rubric, global notes, style)."""
+    context = {
+        'global_ai_notes': '',
+        'rubric_prompt': '',
+        'grading_style': 'standard',
+    }
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                settings = json.load(f)
+            context['global_ai_notes'] = settings.get('globalAINotes', settings.get('aiNotes', ''))
+            # Build rubric prompt from settings
+            rubric = settings.get('rubric', {})
+            if rubric and rubric.get('categories'):
+                parts = []
+                for cat in rubric['categories']:
+                    name = cat.get('name', '')
+                    weight = cat.get('weight', 0)
+                    desc = cat.get('description', '')
+                    if name:
+                        parts.append(f"- {name} ({weight}%): {desc}")
+                if parts:
+                    context['rubric_prompt'] = "CUSTOM RUBRIC:\n" + '\n'.join(parts)
+            context['grading_style'] = settings.get('gradingStyle', 'standard')
+    except Exception:
+        pass
+    return context
 
 
 @assignment_player_bp.route('/api/assignment/<assignment_id>', methods=['GET'])
@@ -156,14 +219,179 @@ def strip_answers(assignment):
     return stripped
 
 
+def _should_use_mathpix(subject):
+    """Check if Mathpix OCR should be used for this subject."""
+    if not MATHPIX_AVAILABLE:
+        return False
+    return subject.lower().strip() in MATHPIX_SUBJECTS
+
+
+def _process_image_answer(answer, question, subject, q_type, ai_model='gpt-4o'):
+    """
+    Process an answer that contains an uploaded image.
+
+    For STEM subjects: uses Mathpix to convert handwritten math → LaTeX.
+    For ELA/Social Studies: uses GPT-4o Vision to read handwritten text.
+
+    Returns the answer with 'extracted_text' added (the OCR'd content).
+    """
+    image_data = None
+    text_answer = ''
+
+    if isinstance(answer, dict):
+        image_data = answer.get('image')
+        # Also grab any typed text the student provided alongside the image
+        val = answer.get('value', answer)
+        if isinstance(val, dict):
+            text_answer = val.get('text', val.get('final', val.get('work', '')))
+            image_data = image_data or val.get('image')
+        elif isinstance(val, str):
+            text_answer = val
+
+    if not image_data:
+        return answer, None  # No image to process
+
+    question_text = question.get('question', '')
+    ocr_result = None
+
+    if _should_use_mathpix(subject):
+        # STEM: Mathpix OCR (handwritten math → LaTeX)
+        ocr_result = extract_answer_from_image(
+            image_data,
+            question_text=question_text,
+            question_type=q_type,
+        )
+        if ocr_result.get('error'):
+            print(f"Mathpix OCR failed, falling back to GPT-4o Vision: {ocr_result['error']}")
+            ocr_result = _vision_ocr_fallback(image_data, question_text, subject)
+    else:
+        # Non-STEM: GPT-4o Vision (handwritten text → text)
+        ocr_result = _vision_ocr_fallback(image_data, question_text, subject)
+
+    if ocr_result and ocr_result.get('extracted_text'):
+        # Combine typed text with OCR'd text
+        extracted = ocr_result['extracted_text']
+        if text_answer:
+            combined = f"{text_answer}\n\n[From uploaded image]: {extracted}"
+        else:
+            combined = extracted
+
+        # Return the combined answer for grading
+        if isinstance(answer, dict):
+            enhanced = {**answer, 'ocr_text': extracted, 'ocr_confidence': ocr_result.get('confidence', 0)}
+            enhanced['value'] = combined
+            if 'latex' in ocr_result and ocr_result['latex']:
+                enhanced['ocr_latex'] = ocr_result['latex']
+            return enhanced, ocr_result
+        else:
+            return combined, ocr_result
+
+    return answer, ocr_result
+
+
+def _vision_ocr_fallback(image_data, question_text, subject):
+    """
+    Use GPT-4o Vision to read handwritten text from an image.
+    Fallback for non-STEM subjects or when Mathpix fails.
+    """
+    try:
+        from openai import OpenAI
+        from dotenv import load_dotenv
+
+        app_dir = Path(__file__).parent.parent.parent
+        load_dotenv(app_dir / '.env', override=True)
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return {'extracted_text': '', 'confidence': 0, 'error': 'No OpenAI API key'}
+
+        client = OpenAI(api_key=api_key)
+
+        # Ensure proper data URI format
+        if not image_data.startswith('data:'):
+            image_data = f"data:image/png;base64,{image_data}"
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an OCR assistant. Read the handwritten student work in the image and transcribe it exactly as written. For math expressions, use LaTeX notation. For regular text, transcribe plainly. Only output the transcribed content, nothing else."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Read and transcribe the student's handwritten answer to this question: {question_text}"},
+                        {"type": "image_url", "image_url": {"url": image_data, "detail": "high"}},
+                    ]
+                }
+            ],
+            max_tokens=1000,
+            temperature=0,
+        )
+
+        text = response.choices[0].message.content.strip()
+        return {
+            'extracted_text': text,
+            'latex': '',
+            'confidence': 0.8,  # GPT-4o Vision doesn't return confidence scores
+            'ocr_source': 'gpt4o_vision',
+            'error': None,
+        }
+
+    except Exception as e:
+        print(f"GPT-4o Vision OCR failed: {e}")
+        return {
+            'extracted_text': '',
+            'latex': '',
+            'confidence': 0,
+            'ocr_source': 'gpt4o_vision',
+            'error': str(e),
+        }
+
+
 def grade_assignment(assignment, student_answers):
-    """Grade all student answers against the assignment."""
+    """Grade all student answers against the assignment.
+
+    Uses three strategies:
+    - Programmatic grading for math/visual types (100% consistent, no AI)
+    - AI multipass grading for text-based types (short_answer, essay, extended_response)
+      with full teacher context (rubric, grading style, grade level, subject)
+    - Image OCR: Mathpix for STEM (handwritten math → LaTeX), GPT-4o Vision for
+      ELA/Social Studies (handwritten text → text), then graded through the pipeline
+    """
     total_points = 0
     earned_points = 0
     question_results = {}
 
+    # Types that need AI grading (text-based, subjective)
+    AI_GRADED_TYPES = {'short_answer', 'essay', 'extended_response', 'bar_chart'}
+
+    # Load teacher context once for the whole assignment
+    grade_level = str(assignment.get('grade_level', assignment.get('grade', '7')))
+    subject = assignment.get('subject', 'General')
+    teacher_ctx = _load_teacher_context()
+    grading_style = assignment.get('grading_style', teacher_ctx.get('grading_style', 'standard'))
+
+    # Build full teacher instructions (mirrors app.py file_ai_notes assembly)
+    teacher_instructions = teacher_ctx.get('global_ai_notes', '')
+    grading_notes = assignment.get('grading_notes', '')
+    if grading_notes:
+        teacher_instructions += f"\n\nASSIGNMENT GRADING NOTES:\n{grading_notes}"
+    rubric_prompt = teacher_ctx.get('rubric_prompt', '')
+    if rubric_prompt:
+        teacher_instructions += f"\n\n{rubric_prompt}"
+
+    # Determine AI model from env
+    ai_model = os.getenv('GRADING_MODEL', 'gpt-4o-mini')
+    ai_provider = 'openai'
+    if 'claude' in ai_model:
+        ai_provider = 'anthropic'
+    elif 'gemini' in ai_model:
+        ai_provider = 'google'
+
     for sIdx, section in enumerate(assignment.get('sections', [])):
         section_type = section.get('type', 'short_answer')
+        section_name = section.get('name', '')
 
         for qIdx, question in enumerate(section.get('questions', [])):
             key = f"{sIdx}-{qIdx}"
@@ -172,11 +400,52 @@ def grade_assignment(assignment, student_answers):
             q_points = question.get('points', 10)
             total_points += q_points
 
-            result = grade_question(question, student_answer, q_type)
+            # --- Image OCR preprocessing ---
+            # If the student uploaded an image, run OCR before grading
+            ocr_result = None
+            has_image = (isinstance(student_answer, dict) and
+                        (student_answer.get('image') or
+                         (isinstance(student_answer.get('value'), dict) and
+                          student_answer['value'].get('image'))))
+
+            if has_image:
+                student_answer, ocr_result = _process_image_answer(
+                    student_answer, question, subject, q_type, ai_model
+                )
+
+            # --- Route to appropriate grader ---
+            if q_type in AI_GRADED_TYPES and AI_GRADING_AVAILABLE:
+                result = _grade_with_ai(
+                    question, student_answer, q_type, q_points,
+                    grade_level, subject, teacher_instructions,
+                    grading_style, section_name, ai_model, ai_provider,
+                    ocr_result=ocr_result,
+                )
+            else:
+                # For programmatic types with image uploads (e.g., math_equation with photo),
+                # try to use the OCR'd text as the answer
+                if ocr_result and ocr_result.get('extracted_text') and q_type == 'math_equation':
+                    # Create a synthetic answer from OCR for math grading
+                    ocr_text = ocr_result['extracted_text']
+                    latex = ocr_result.get('latex', ocr_result.get('ocr_latex', ''))
+                    student_answer = {
+                        'final': latex or ocr_text,
+                        'work': ocr_text,
+                    }
+                result = grade_question(question, student_answer, q_type)
+
+            # Attach OCR metadata to result
+            if ocr_result:
+                result['ocr_used'] = True
+                result['ocr_source'] = ocr_result.get('ocr_source', 'mathpix')
+                result['ocr_confidence'] = ocr_result.get('confidence', 0)
+                result['ocr_text'] = ocr_result.get('extracted_text', '')
+
             result['points_possible'] = q_points
-            result['points_earned'] = q_points if result['correct'] else (
-                q_points * result.get('partial_credit', 0)
-            )
+            if 'points_earned' not in result:
+                result['points_earned'] = q_points if result['correct'] else (
+                    q_points * result.get('partial_credit', 0)
+                )
             earned_points += result['points_earned']
 
             question_results[key] = result
@@ -190,6 +459,92 @@ def grade_assignment(assignment, student_answers):
         'questions': question_results,
         'grade': get_letter_grade(percent)
     }
+
+
+def _grade_with_ai(question, student_answer, q_type, q_points,
+                   grade_level, subject, teacher_instructions,
+                   grading_style, section_name, ai_model, ai_provider,
+                   ocr_result=None):
+    """Grade a text-based question using the multipass AI pipeline.
+
+    This gives portal submissions the same quality grading as marked Word docs,
+    with full 18-factor context integration. When an image was uploaded, the
+    OCR-extracted text is included for richer grading context.
+    """
+    # Extract answer text
+    if isinstance(student_answer, dict):
+        answer_text = student_answer.get('value', student_answer.get('answer', ''))
+        if isinstance(answer_text, dict):
+            answer_text = str(answer_text)
+    else:
+        answer_text = str(student_answer) if student_answer else ''
+
+    # If OCR was performed, enrich the answer text
+    if ocr_result and ocr_result.get('extracted_text'):
+        ocr_text = ocr_result['extracted_text']
+        ocr_latex = ocr_result.get('latex', '')
+        ocr_source = ocr_result.get('ocr_source', 'mathpix')
+        confidence = ocr_result.get('confidence', 0)
+
+        # Add OCR context to the answer for the AI grader
+        if not answer_text or not answer_text.strip():
+            answer_text = ocr_text
+        elif ocr_text not in answer_text:
+            answer_text += f"\n\n[Handwritten work transcribed via {ocr_source} (confidence: {confidence:.0%})]: {ocr_text}"
+        if ocr_latex:
+            answer_text += f"\n[LaTeX]: {ocr_latex}"
+
+    if not answer_text or not answer_text.strip():
+        return {'correct': False, 'feedback': 'No answer provided', 'partial_credit': 0}
+
+    expected_answer = str(question.get('answer', ''))
+    question_text = question.get('question', '')
+
+    # Map question type to response_type for grade_per_question
+    response_type = 'marker_response'
+    if q_type == 'essay' or q_type == 'extended_response':
+        response_type = 'marker_response'
+    elif q_type == 'short_answer':
+        response_type = 'numbered_question'
+
+    try:
+        ai_result = ai_grade_per_question(
+            question=question_text,
+            student_answer=answer_text,
+            expected_answer=expected_answer,
+            points=q_points,
+            grade_level=grade_level,
+            subject=subject,
+            teacher_instructions=teacher_instructions,
+            grading_style=grading_style,
+            ai_model=ai_model,
+            ai_provider=ai_provider,
+            response_type=response_type,
+            section_name=section_name,
+            section_type='written',
+        )
+
+        # Convert AI result format to portal result format
+        grade = ai_result.get('grade', {})
+        score = grade.get('score', 0)
+        possible = grade.get('possible', q_points)
+        reasoning = grade.get('reasoning', '')
+        quality = grade.get('quality', 'developing')
+        is_correct = grade.get('is_correct', score >= possible * 0.7)
+
+        return {
+            'correct': is_correct,
+            'feedback': reasoning,
+            'partial_credit': score / possible if possible > 0 else 0,
+            'points_earned': score,
+            'quality': quality,
+            'improvement_note': ai_result.get('improvement_note', ''),
+        }
+
+    except Exception as e:
+        # Fallback to basic grading if AI fails
+        print(f"AI grading failed, falling back to basic: {e}")
+        return grade_short_answer(question, answer_text)
 
 
 def grade_question(question, student_answer, q_type):
@@ -637,7 +992,12 @@ def grade_data_table(question, answer):
     expected = question.get('expected_data', [])
     tolerance = question.get('tolerance', 0.05)
 
-    if not answer or not expected:
+    # DataTable onChange sends {headers, units, data} — extract the data array
+    student_data = answer
+    if isinstance(answer, dict):
+        student_data = answer.get('data', [])
+
+    if not student_data or not expected:
         return {'correct': False, 'feedback': 'No data provided'}
 
     try:
@@ -645,19 +1005,22 @@ def grade_data_table(question, answer):
         total_cells = 0
 
         for i, row in enumerate(expected):
-            if i >= len(answer):
+            if i >= len(student_data):
                 continue
             for j, exp_val in enumerate(row):
                 total_cells += 1
-                if j >= len(answer[i]):
+                if j >= len(student_data[i]):
                     continue
                 try:
-                    student_val = float(answer[i][j])
+                    student_val = float(student_data[i][j])
                     expected_val = float(exp_val)
-                    if abs(student_val - expected_val) <= abs(expected_val * tolerance):
+                    if expected_val == 0:
+                        if abs(student_val) <= tolerance:
+                            correct_cells += 1
+                    elif abs(student_val - expected_val) <= abs(expected_val * tolerance):
                         correct_cells += 1
-                except:
-                    if str(answer[i][j]).strip() == str(exp_val).strip():
+                except (ValueError, TypeError):
+                    if str(student_data[i][j]).strip().lower() == str(exp_val).strip().lower():
                         correct_cells += 1
 
         if correct_cells == total_cells:
