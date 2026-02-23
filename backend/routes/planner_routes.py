@@ -500,18 +500,6 @@ def _auto_correct_geometry_types(assignment):
                 if not current_mode or (current_mode == 'area' and detected_mode != 'area'):
                     q['mode'] = detected_mode
 
-            # ── Downgrade angle-finding triangles to math_equation ──
-            # The SVG triangle has fixed vertex positions and can't render
-            # accurate angle proportions — showing a 45-45-90 shape when the
-            # question says 35-55-90 is misleading.  Keep the angle data for
-            # the answer key but remove the visual.
-            final_qt = q.get('question_type', '')
-            final_mode = q.get('mode', '')
-            if final_qt in ('triangle', 'geometry') and final_mode == 'angles':
-                q['question_type'] = 'math_equation'
-                for field in ('base', 'height', 'width', 'sides', 'side_length'):
-                    q.pop(field, None)
-
     return assignment
 
 

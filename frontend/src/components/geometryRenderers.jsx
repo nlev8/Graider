@@ -138,20 +138,73 @@ export function renderTriangle(props, W, H, pad) {
     const a1 = angle1;
     const a2 = angle2;
     const mi = missingAngle || 3;
-    const vals = [a1, a2, mi === 3 ? '?' : (180 - (a1 || 0) - (a2 || 0))];
+
+    // Compute all three actual angle values (we always know them all)
+    const numA = a1 || 60;   // top vertex
+    const numB = a2 || 60;   // bottom-left vertex
+    const numC = 180 - numA - numB; // bottom-right vertex
+
+    // Labels: show '?' for the missing one
+    const vals = [numA, numB, numC];
     if (mi === 1) vals[0] = '?';
-    if (mi === 2) vals[1] = '?';
+    else if (mi === 2) vals[1] = '?';
+    else vals[2] = '?';
+
+    // Compute top vertex position from actual angles using law of sines.
+    // B = bottom-left (bx, by), C = bottom-right (cx, cy), A = top.
+    // From B, line to A makes angle numB with the horizontal base.
+    // t = baseLen * sin(numC) / sin(numA)
+    // ax = bx + t * cos(numB), ay = by - t * sin(numB)
+    const baseLen = cx - bx;
+    const radA = numA * Math.PI / 180;
+    const radB = numB * Math.PI / 180;
+    const radC = numC * Math.PI / 180;
+    const sinA = Math.sin(radA);
+    const t = sinA > 0.01 ? baseLen * Math.sin(radC) / sinA : baseLen * 0.8;
+    let topX = bx + t * Math.cos(radB);
+    let topY = by - t * Math.sin(radB);
+
+    // Clamp within SVG bounds
+    topX = Math.max(pad + 5, Math.min(W - pad - 5, topX));
+    topY = Math.max(pad + 5, Math.min(by - 25, topY));
+
+    const triPts = topX + ',' + topY + ' ' + bx + ',' + by + ' ' + cx + ',' + cy;
+
+    // Compute arc sweep angles for each vertex based on the triangle geometry.
+    // Bottom-left (B): base goes right (0°), side BA goes toward topX,topY
+    const angleBtoA = Math.atan2(by - topY, topX - bx) * 180 / Math.PI;
+    const arcB1 = -5;  // just below horizontal
+    const arcB2 = angleBtoA + 5;
+
+    // Bottom-right (C): base goes left (180°), side CA goes toward topX,topY
+    const angleCtoA = Math.atan2(by - topY, topX - cx) * 180 / Math.PI;
+    const arcC1 = angleCtoA - 5;
+    const arcC2 = 185;
+
+    // Top (A): sides go down to B and C
+    const angleAtoB = Math.atan2(by - topY, bx - topX) * 180 / Math.PI;
+    const angleAtoC = Math.atan2(by - topY, cx - topX) * 180 / Math.PI;
+    const arcA1 = Math.min(angleAtoB, angleAtoC) - 5;
+    const arcA2 = Math.max(angleAtoB, angleAtoC) + 5;
+
+    // Right angle mark helper
+    const has90 = numA === 90 ? 'A' : numB === 90 ? 'B' : numC === 90 ? 'C' : null;
+
     return (
       <g>
-        <polygon points={pts} fill="#e0e7ff" stroke="#6366f1" strokeWidth={2} />
-        {/* arcs at vertices */}
-        {angleArc(ax, ay, 250, 290, 18, '#ef4444')}
-        {dimensionLabel(ax, ay + 30, typeof vals[0] === 'number' ? vals[0] + '\u00B0' : vals[0], { color: '#ef4444', size: 12 })}
-
-        {angleArc(bx, by, 340, 30, 18, '#22c55e')}
+        <polygon points={triPts} fill="#e0e7ff" stroke="#6366f1" strokeWidth={2} />
+        {/* Right angle mark if any angle is 90° */}
+        {has90 === 'B' && rightAngleMark(bx, by, 12, 'bl')}
+        {has90 === 'C' && rightAngleMark(cx, cy, 12, 'br')}
+        {/* Top vertex (A) */}
+        {has90 !== 'A' && angleArc(topX, topY, arcA1, arcA2, 18, '#ef4444')}
+        {has90 === 'A' && <rect x={topX - 6} y={topY} width={8} height={8} fill="none" stroke="var(--text-muted)" strokeWidth={1} />}
+        {dimensionLabel(topX, topY - 12, typeof vals[0] === 'number' ? vals[0] + '\u00B0' : vals[0], { color: '#ef4444', size: 12 })}
+        {/* Bottom-left (B) */}
+        {has90 !== 'B' && angleArc(bx, by, arcB1, arcB2, 18, '#22c55e')}
         {dimensionLabel(bx + 30, by - 14, typeof vals[1] === 'number' ? vals[1] + '\u00B0' : vals[1], { color: '#22c55e', size: 12 })}
-
-        {angleArc(cx, cy, 150, 200, 18, '#6366f1')}
+        {/* Bottom-right (C) */}
+        {has90 !== 'C' && angleArc(cx, cy, arcC1, arcC2, 18, '#6366f1')}
         {dimensionLabel(cx - 32, cy - 14, typeof vals[2] === 'number' ? vals[2] + '\u00B0' : vals[2], { color: '#6366f1', size: 12 })}
       </g>
     );
