@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import time
+import math
 import subprocess
 from flask import Blueprint, request, jsonify
 from pathlib import Path
@@ -696,9 +697,90 @@ def _extract_dimensions_from_text(question):
                         pass
                     break
 
+    # ── Pythagorean-specific extraction ──────────────────────────────────
+    # When mode is pythagorean, extract side_a, side_b, side_c from text
+    mode = question.get('mode', '')
+    qt = question.get('question_type', '')
+    if mode == 'pythagorean' or qt == 'pythagorean':
+        _extract_pythagorean_sides(question, text, _UNIT)
+
+
+def _extract_pythagorean_sides(question, text, _UNIT):
+    """Extract side_a, side_b, side_c and missing_side from pythagorean question text."""
+    import re
+
+    # Extract hypotenuse
+    hyp = None
+    hyp_patterns = [
+        r'hypotenuse\s*(?:is|=|:| of)\s*([\d.]+)' + _UNIT,
+        r'hypotenuse\s+([\d.]+)' + _UNIT,
+        r'c\s*=\s*([\d.]+)' + _UNIT,
+    ]
+    for p in hyp_patterns:
+        m = re.search(p, text, re.IGNORECASE)
+        if m:
+            hyp = float(m.group(1))
+            break
+    # Also check JSON fields the AI might have used
+    if not hyp:
+        hyp = question.get('hypotenuse') or question.get('side_c')
+
+    # Extract legs — look for "one side is X", "legs of X and Y", "sides X and Y"
+    legs = []
+    # "legs of 5 and 12" or "sides of 5 and 12"
+    dual = re.search(r'(?:legs?|sides?)\s+(?:of|are|measuring)\s+([\d.]+)\s*(?:and|,)\s*([\d.]+)', text, re.IGNORECASE)
+    if dual:
+        legs = [float(dual.group(1)), float(dual.group(2))]
+    else:
+        # "one side is 5" / "a side of 5" / "one leg is 5"
+        side_matches = re.findall(r'(?:one\s+)?(?:side|leg)\s+(?:is|of|=|:| measures?)\s*([\d.]+)', text, re.IGNORECASE)
+        for sm in side_matches:
+            v = float(sm)
+            if v not in legs:
+                legs.append(v)
+
+    # Also check JSON fields
+    if question.get('side_a') and question['side_a'] not in legs:
+        legs.append(float(question['side_a']))
+    if question.get('side_b') and question['side_b'] not in legs:
+        legs.append(float(question['side_b']))
+
+    # Assign: side_a (bottom), side_b (vertical), side_c (hypotenuse)
+    if hyp and len(legs) >= 1:
+        question.setdefault('side_a', legs[0])
+        question.setdefault('side_c', hyp)
+        if len(legs) >= 2:
+            question.setdefault('side_b', legs[1])
+        # Derive missing side
+        a = question.get('side_a')
+        c = question.get('side_c')
+        b = question.get('side_b')
+        if a and c and not b:
+            question['side_b'] = round(math.sqrt(c ** 2 - a ** 2) * 100) / 100
+            question.setdefault('missing_side', 'b')
+        elif b and c and not a:
+            question['side_a'] = round(math.sqrt(c ** 2 - b ** 2) * 100) / 100
+            question.setdefault('missing_side', 'a')
+        elif a and b and not c:
+            question['side_c'] = round(math.sqrt(a ** 2 + b ** 2) * 100) / 100
+            question.setdefault('missing_side', 'c')
+    elif hyp and len(legs) == 0:
+        # Only hypotenuse given — mark c, missing_side stays as is
+        question.setdefault('side_c', hyp)
+        question.setdefault('missing_side', 'c')
+    elif len(legs) >= 2 and not hyp:
+        question.setdefault('side_a', legs[0])
+        question.setdefault('side_b', legs[1])
+        question.setdefault('side_c', round(math.sqrt(legs[0] ** 2 + legs[1] ** 2) * 100) / 100)
+        question.setdefault('missing_side', 'c')
+
+    # Ensure mode is set
+    question.setdefault('mode', 'pythagorean')
+
 
 _GEOMETRY_DEFAULTS = {
     'triangle':          {'base': 6, 'height': 4, 'mode': 'area'},
+    'pythagorean':       {'side_a': 3, 'side_b': 4, 'side_c': 5, 'missing_side': 'c', 'mode': 'pythagorean'},
     'geometry':          {'base': 6, 'height': 4, 'mode': 'area'},
     'rectangle':         {'base': 6, 'height': 4, 'mode': 'area'},
     'circle':            {'radius': 5, 'mode': 'area'},
@@ -1637,7 +1719,9 @@ SUPPORTED QUESTION TYPES:
 - protractor (include given_angle or target_angle, mode: measure/draw)
 
 GEOMETRY QUESTION TYPES (use for math/geometry standards):
-- TRIANGLE: {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
+- TRIANGLE (area): {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
+- TRIANGLE (pythagorean): {{"question_type": "triangle", "mode": "pythagorean", "side_a": 5, "side_b": 12, "side_c": 13, "missing_side": "c", "answer": "13"}}
+  CRITICAL: For pythagorean questions, ALWAYS include "side_a", "side_b", "side_c" with the actual numbers. Set "missing_side" to whichever side the student must find. The visual renders these values — omitting them shows wrong numbers.
 - RECTANGLE: {{"question_type": "rectangle", "base": 8, "height": 5, "mode": "area", "answer": "40"}}
 - REGULAR_POLYGON: {{"question_type": "regular_polygon", "sides": 7, "side_length": 4, "mode": "area", "answer": "58.14"}}
   Use for pentagon (5), hexagon (6), heptagon (7), octagon (8), etc. Set "mode": "decompose" to show triangle decomposition.
@@ -1698,7 +1782,10 @@ VISUAL/GRAPHICAL QUESTION TYPES — the system renders these PROGRAMMATICALLY as
 - box_plot: {{"question_type": "box_plot", "data": [[45, 52, 58, 65, 70, 78, 85, 92]], "labels": ["Scores"]}}
 - dot_plot: {{"question_type": "dot_plot", "min_val": 0, "max_val": 10, "step": 1, "correct_dots": {{"3": 2, "5": 4}}}}
 - stem_and_leaf: {{"question_type": "stem_and_leaf", "data": [23, 25, 31, 34], "stems": [2, 3], "correct_leaves": {{"2": [3, 5], "3": [1, 4]}}}}
-- triangle/rectangle/regular_polygon: {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area"}}
+- triangle (area): {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area"}}
+- triangle (pythagorean): {{"question_type": "triangle", "mode": "pythagorean", "side_a": 5, "side_b": 12, "side_c": 13, "missing_side": "c", "answer": "13"}}
+  CRITICAL: For pythagorean questions, ALWAYS include "side_a", "side_b", "side_c" with the actual numbers from your question. Set "missing_side" to "a", "b", or "c". The visual renders from these fields — if you omit them, the triangle shows wrong numbers.
+- rectangle/regular_polygon: {{"question_type": "rectangle", "base": 8, "height": 5, "mode": "area"}}
 - transformations: {{"question_type": "transformations", "original_vertices": [[1,1],[4,1],[4,3]], "transformation_type": "translation", "transform_params": {{"dx": 3, "dy": 2}}, "correct_vertices": [[4,3],[7,3],[7,5]]}}
 - fraction_model: {{"question_type": "fraction_model", "model_type": "area", "denominator": 8, "correct_numerator": 3}}
 - unit_circle: {{"question_type": "unit_circle", "hidden_angles": [30, 45, 60], "hidden_values": ["sin", "cos"], "correct_values": {{...}}}}
@@ -1709,7 +1796,9 @@ CRITICAL VISUAL RULES:
 2. NEVER say "View the graph" or "See the diagram" — the system RENDERS the visual from the data fields you provide
 3. EVERY visual question MUST include "question_type" and ALL required data fields for that type
 
-Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types. For STEM subjects, use interactive visual components wherever appropriate."""
+Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types. For STEM subjects, use interactive visual components wherever appropriate.
+
+REMINDER: You MUST generate approximately {total_q} questions total. Count your questions before returning — if you have fewer than {total_q}, add more questions to reach the target."""
 
         elif content_type == 'Project':
             prompt = common_header + f"""
@@ -2209,7 +2298,9 @@ VISUAL/GRAPHICAL QUESTION TYPES (include actual data for rendering — the syste
 8. GEOMETRY (type: "triangle", "rectangle", or "regular_polygon"):
    - Student calculates area of shapes with given dimensions
    - Include "base", "height", and "question_type" (triangle or rectangle)
-   - Example: {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
+   - Example (area): {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
+   - Example (pythagorean): {{"question_type": "triangle", "mode": "pythagorean", "side_a": 5, "side_b": 12, "side_c": 13, "missing_side": "c", "answer": "13"}}
+     CRITICAL: For pythagorean questions, ALWAYS include "side_a", "side_b", "side_c" with the actual numbers. Set "missing_side" to whichever side the student must find. The visual renders these values — omitting them shows wrong numbers.
    - REGULAR_POLYGON: {{"question_type": "regular_polygon", "sides": 7, "side_length": 4, "mode": "area", "answer": "58.14"}}
      Use for pentagon (5), hexagon (6), heptagon (7), octagon (8), etc. Set "mode": "decompose" to show triangle decomposition.
      NEVER use "heptagon", "pentagon", "hexagon", "octagon" etc. as question_type — always use "regular_polygon" with the "sides" field.
@@ -2340,7 +2431,9 @@ SUBJECT-SPECIFIC GUIDANCE:
 TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
 {config.get('globalAINotes', '')}
 ''' if config.get('globalAINotes') else ''}
-Make the questions specific to the lesson content. Include a variety of question types appropriate for the assignment type."""
+Make the questions specific to the lesson content. Include a variety of question types appropriate for the assignment type.
+
+REMINDER: You MUST generate approximately {config.get('totalQuestions', 10)} questions total. Count your questions before returning — if you have fewer than {config.get('totalQuestions', 10)}, add more questions to reach the target."""
 
         completion = client.chat.completions.create(
             model="gpt-4o",

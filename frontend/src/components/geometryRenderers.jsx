@@ -76,10 +76,10 @@ export function renderTriangle(props, W, H, pad) {
   const pts = `${ax},${ay} ${bx},${by} ${cx},${cy}`;
 
   if (mode === 'pythagorean') {
-    // Self-sufficient: compute the third side from whichever two are given
-    let a = sideA || base || 3;
-    let b = sideB || height || 4;
-    let c = sideC;
+    // Use sideA/sideB/sideC directly — do NOT fall back to base/height defaults
+    let a = sideA || null;
+    let b = sideB || null;
+    let c = sideC || null;
     const missing = missingSide || 'c';
 
     // Derive the missing value so labels always show numbers
@@ -87,9 +87,9 @@ export function renderTriangle(props, W, H, pad) {
     if (!b && a && c) b = Math.round(Math.sqrt(c * c - a * a) * 100) / 100;
     if (!a && b && c) a = Math.round(Math.sqrt(c * c - b * b) * 100) / 100;
 
-    const aLabel = missing === 'a' ? 'a = ?' : 'a = ' + a;
-    const bLabel = missing === 'b' ? 'b = ?' : 'b = ' + b;
-    const cLabel = missing === 'c' ? 'c = ?' : 'c = ' + c;
+    const aLabel = missing === 'a' ? 'a = ?' : a != null ? 'a = ' + a : 'a';
+    const bLabel = missing === 'b' ? 'b = ?' : b != null ? 'b = ' + b : 'b';
+    const cLabel = missing === 'c' ? 'c = ?' : c != null ? 'c = ' + c : 'c';
 
     // ? box position for whichever side is missing
     const qBoxPos = missing === 'a'
