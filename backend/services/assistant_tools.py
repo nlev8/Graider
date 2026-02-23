@@ -92,7 +92,9 @@ def _normalize_assignment_name(name):
     n = re.sub(r'\s*\(\d+\)\s*$', '', n)       # Remove trailing (1), (2)
     n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)  # Remove .docx
     n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)    # Remove .pdf
-    return n.strip()
+    n = re.sub(r'[._\-]', ' ', n)              # Replace . _ - with space
+    n = re.sub(r'\s+', ' ', n)                 # Collapse whitespace
+    return n.strip().lower()
 
 
 def _get_period_assignments(rows):

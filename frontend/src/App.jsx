@@ -18949,6 +18949,7 @@ ${signature}`;
                                 (f.name || f)
                                   .toLowerCase()
                                   .replace(/[_\-\.]/g, " ")
+                                  .replace(/\s+/g, " ")
                                   .trim(),
                               ),
                             );
@@ -18980,7 +18981,7 @@ ${signature}`;
                                 const hasAssignment = namesToCheck.some(
                                   (aName) =>
                                     fLower.includes(
-                                      aName.replace(/[_\-]/g, " "),
+                                      aName.replace(/[_\-\.]/g, " ").replace(/\s+/g, " ").trim(),
                                     ),
                                 );
                                 return hasStudentName && hasAssignment;
@@ -20743,6 +20744,35 @@ ${signature}`;
                             </div>
                           </div>
 
+                          {/* Standards aligned to this content */}
+                          {selectedStandards.length > 0 && lessonPlan.sections && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "12px" }}>
+                              {selectedStandards.map((code) => {
+                                const std = standards.find((s) => s.code === code);
+                                return (
+                                  <span
+                                    key={code}
+                                    title={std?.benchmark || code}
+                                    style={{
+                                      padding: "3px 8px",
+                                      background: "rgba(139,92,246,0.15)",
+                                      color: "#a78bfa",
+                                      borderRadius: "8px",
+                                      fontSize: "0.75rem",
+                                      fontWeight: 500,
+                                      maxWidth: "280px",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {code}{std?.benchmark ? ": " + std.benchmark : ""}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
                           {/* Content display - varies by type */}
                           {lessonPlan.sections ? (
                             /* Assignment display - interactive AssignmentPlayer */
@@ -21142,6 +21172,33 @@ ${signature}`;
                                       </span>
                                     )}
                                   </div>
+                                  {selectedStandards.length > 0 && (
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                                      {selectedStandards.map((code) => {
+                                        const std = standards.find((s) => s.code === code);
+                                        return (
+                                          <span
+                                            key={code}
+                                            title={std?.benchmark || code}
+                                            style={{
+                                              padding: "3px 8px",
+                                              background: "rgba(139,92,246,0.15)",
+                                              color: "#a78bfa",
+                                              borderRadius: "8px",
+                                              fontSize: "0.75rem",
+                                              fontWeight: 500,
+                                              maxWidth: "280px",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
+                                            {code}{std?.benchmark ? ": " + std.benchmark : ""}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                   <button
