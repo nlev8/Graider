@@ -10,6 +10,18 @@
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
 }
 
+.vk-container.vk-inline {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  border-top: none;
+  border-radius: 12px;
+  margin-top: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
 .vk-header {
   display: flex;
   justify-content: space-between;

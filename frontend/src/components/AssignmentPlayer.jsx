@@ -234,6 +234,11 @@ export default function AssignmentPlayer({
               showAnswer={showAnswers}
               result={results?.questions?.[`${currentSection}-${qIdx}`]}
               onInputFocus={handleInputFocus}
+              focusedInputKey={focusedInput?.key}
+              onKeyboardInsert={handleKeyboardInsert}
+              onKeyboardBackspace={handleKeyboardBackspace}
+              onKeyboardClose={() => setFocusedInput(null)}
+              keyboardMode={focusedInput?.mode}
             />
           ))}
         </div>
@@ -279,14 +284,7 @@ export default function AssignmentPlayer({
         )}
       </div>
 
-      {focusedInput && !readOnly && (
-        <VirtualMathKeyboard
-          mode={focusedInput.mode}
-          onInsert={handleKeyboardInsert}
-          onBackspace={handleKeyboardBackspace}
-          onClose={() => setFocusedInput(null)}
-        />
-      )}
+      {/* Keyboard is now rendered inline below each focused question */}
     </div>
   );
 }
@@ -463,11 +461,19 @@ function QuestionRenderer({
   readOnly,
   showAnswer,
   result,
-  onInputFocus
+  onInputFocus,
+  focusedInputKey,
+  onKeyboardInsert,
+  onKeyboardBackspace,
+  onKeyboardClose,
+  keyboardMode
 }) {
   const qType = question.question_type || question.visual_type || 'short_answer';
   const qNum = question.number || questionIndex + 1;
   const inputKey = `${sectionIndex}-${questionIndex}`;
+
+  // Show keyboard inline when any input in THIS question is focused
+  const isKeyboardVisible = !readOnly && focusedInputKey && focusedInputKey.startsWith(inputKey);
 
   const renderInput = () => {
     switch (qType) {
@@ -949,6 +955,17 @@ function QuestionRenderer({
 
       {result?.feedback && (
         <div style={styles.feedback}>{result.feedback}</div>
+      )}
+
+      {/* Inline virtual keyboard — appears below the focused question */}
+      {isKeyboardVisible && (
+        <VirtualMathKeyboard
+          mode={keyboardMode}
+          onInsert={onKeyboardInsert}
+          onBackspace={onKeyboardBackspace}
+          onClose={onKeyboardClose}
+          inline={true}
+        />
       )}
     </div>
   );

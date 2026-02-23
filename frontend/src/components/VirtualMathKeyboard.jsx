@@ -185,7 +185,7 @@ const PANELS = {
   ],
 };
 
-export default function VirtualMathKeyboard({ mode = 'unicode', onInsert, onBackspace, onClose }) {
+export default function VirtualMathKeyboard({ mode = 'unicode', onInsert, onBackspace, onClose, inline = false }) {
   const [tab, setTab] = useState('num');
 
   const handleKey = (key, e) => {
@@ -287,7 +287,7 @@ export default function VirtualMathKeyboard({ mode = 'unicode', onInsert, onBack
   const rows = PANELS[tab] || [];
 
   return (
-    <div className="vk-container">
+    <div className={'vk-container' + (inline ? ' vk-inline' : '')}>
       <div className="vk-header">
         <div className="vk-tabs">
           {TABS.map((t) => (
