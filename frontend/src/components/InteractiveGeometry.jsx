@@ -1,15 +1,29 @@
 import { useState } from 'react';
+import {
+  renderTriangle, renderRectangle, renderCircle,
+  renderTrapezoid, renderParallelogram,
+  renderRectangularPrism, renderCylinder,
+  renderRegularPolygon, renderSimilarity
+} from './geometryRenderers';
+import { getFormula, getAnswerLabel, getSvgDimensions } from './geometryConfig';
 
 /**
- * InteractiveGeometry - Display geometric shapes and calculate area/perimeter
+ * InteractiveGeometry - Display geometric shapes and calculate area/perimeter/volume/etc.
+ * Supports all shape types and modes defined in geometryConfig.js.
  */
 export default function InteractiveGeometry({
   type = 'triangle',
   base = 6,
   height = 4,
-  width = 6,  // For rectangles
-  sides,       // For regular_polygon
-  sideLength,  // For regular_polygon
+  width = 6,
+  radius,
+  topBase,
+  sides,
+  sideLength,
+  sideA, sideB, sideC,
+  angle1, angle2, missingAngle,
+  theta, trigFunc, missingSide,
+  scale,
   mode = 'area',
   answer = '',
   onChange,
@@ -19,172 +33,67 @@ export default function InteractiveGeometry({
 }) {
   const [showWork, setShowWork] = useState('');
 
-  const svgWidth = 300;
-  const svgHeight = 200;
+  const dims = getSvgDimensions(mode);
+  const svgWidth = dims.width;
+  const svgHeight = dims.height;
   const padding = 30;
 
-  const renderTriangle = () => {
-    const points = [
-      [padding, svgHeight - padding],
-      [svgWidth - padding, svgHeight - padding],
-      [(svgWidth) / 2, padding + 20]
-    ];
-
-    return (
-      <g>
-        <polygon
-          points={points.map(p => p.join(',')).join(' ')}
-          fill="#bfdbfe"
-          stroke="#3b82f6"
-          strokeWidth={2}
-        />
-        {/* Base label */}
-        <line
-          x1={padding}
-          y1={svgHeight - padding + 15}
-          x2={svgWidth - padding}
-          y2={svgHeight - padding + 15}
-          style={{ stroke: 'var(--text-muted)' }}
-          strokeWidth={1}
-        />
-        <text
-          x={svgWidth / 2}
-          y={svgHeight - padding + 30}
-          textAnchor="middle"
-          fontSize={14}
-          style={{ fill: 'var(--text-primary)' }}
-          fontWeight="bold"
-        >
-          b = {base}
-        </text>
-
-        {/* Height line (dashed) */}
-        <line
-          x1={svgWidth / 2}
-          y1={svgHeight - padding}
-          x2={svgWidth / 2}
-          y2={padding + 20}
-          stroke="#ef4444"
-          strokeWidth={2}
-          strokeDasharray="5,3"
-        />
-        <text
-          x={svgWidth / 2 + 15}
-          y={svgHeight / 2}
-          fontSize={14}
-          fill="#ef4444"
-          fontWeight="bold"
-        >
-          h = {height}
-        </text>
-
-        {/* Right angle marker */}
-        <path
-          d={`M ${svgWidth / 2} ${svgHeight - padding - 15} L ${svgWidth / 2 + 15} ${svgHeight - padding - 15} L ${svgWidth / 2 + 15} ${svgHeight - padding}`}
-          fill="none"
-          style={{ stroke: 'var(--text-muted)' }}
-          strokeWidth={1}
-        />
-      </g>
-    );
+  // Build props object to pass to renderers
+  const shapeProps = {
+    base, height, width, radius, topBase,
+    sides, sideLength, sideA, sideB, sideC,
+    angle1, angle2, missingAngle,
+    theta, trigFunc, missingSide, scale, mode
   };
 
-  const renderRectangle = () => {
-    const w = svgWidth - 2 * padding;
-    const h = svgHeight - 2 * padding - 20;
-
-    return (
-      <g>
-        <rect
-          x={padding}
-          y={padding}
-          width={w}
-          height={h}
-          fill="#bbf7d0"
-          stroke="#22c55e"
-          strokeWidth={2}
-        />
-        {/* Width label */}
-        <text
-          x={svgWidth / 2}
-          y={svgHeight - padding + 20}
-          textAnchor="middle"
-          fontSize={14}
-          style={{ fill: 'var(--text-primary)' }}
-          fontWeight="bold"
-        >
-          w = {width || base}
-        </text>
-
-        {/* Height label */}
-        <text
-          x={svgWidth - padding + 15}
-          y={padding + h / 2}
-          fontSize={14}
-          style={{ fill: 'var(--text-primary)' }}
-          fontWeight="bold"
-        >
-          h = {height}
-        </text>
-      </g>
-    );
+  const RENDERERS = {
+    triangle: renderTriangle,
+    rectangle: renderRectangle,
+    circle: renderCircle,
+    trapezoid: renderTrapezoid,
+    parallelogram: renderParallelogram,
+    rectangular_prism: renderRectangularPrism,
+    cylinder: renderCylinder,
+    regular_polygon: renderRegularPolygon,
+    similarity: renderSimilarity,
   };
 
-  const renderRegularPolygon = () => {
-    const n = Math.max(3, Math.min(12, sides || 6));
-    const sl = sideLength || 4;
-    const cx = svgWidth / 2;
-    const cy = svgHeight / 2;
-    const R = Math.min(svgWidth, svgHeight) / 2 - padding - 10;
+  // Some modes imply a shape (pythagorean/trig/angles → triangle, similarity → similarity)
+  const effectiveType = (mode === 'pythagorean' || mode === 'trig' || mode === 'angles')
+    ? 'triangle'
+    : mode === 'similarity'
+      ? 'similarity'
+      : type;
 
-    const vertices = [];
-    for (let i = 0; i < n; i++) {
-      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-      vertices.push([cx + R * Math.cos(angle), cy + R * Math.sin(angle)]);
-    }
-    const pts = vertices.map(([x, y]) => `${x},${y}`).join(' ');
-    const midX = (vertices[0][0] + vertices[1][0]) / 2;
-    const midY = (vertices[0][1] + vertices[1][1]) / 2;
-    const showDecompose = mode === 'decompose';
+  const renderer = RENDERERS[effectiveType];
+  const formula = getFormula(mode, effectiveType, trigFunc);
+  const { label: answerLabel, unit: answerUnit } = getAnswerLabel(mode, effectiveType);
 
-    return (
-      <g>
-        <polygon points={pts} fill="#dbeafe" stroke="#3b82f6" strokeWidth={2} />
-        {showDecompose && vertices.map(([vx, vy], i) => (
-          <line key={i} x1={cx} y1={cy} x2={vx} y2={vy}
-            stroke="#6366f1" strokeWidth={1.5} strokeDasharray="4,3" />
-        ))}
-        {showDecompose && <circle cx={cx} cy={cy} r={3} fill="#6366f1" />}
-        {!showDecompose && (
-          <line x1={cx} y1={cy} x2={midX} y2={midY}
-            stroke="#ef4444" strokeWidth={2} strokeDasharray="5,3" />
-        )}
-        <text x={midX} y={midY + 18} textAnchor="middle" fontSize={14}
-          fontWeight="bold" style={{ fill: '#3b82f6' }}>
-          s = {sl}
-        </text>
-        <text x={cx} y={cy + (showDecompose ? 0 : -8)} textAnchor="middle"
-          fontSize={12} style={{ fill: showDecompose ? '#6366f1' : 'var(--text-muted)' }}>
-          {showDecompose ? n + ' triangles' : 'n = ' + n}
-        </text>
-      </g>
-    );
-  };
-
-  const getFormula = () => {
-    switch (type) {
-      case 'triangle':
-        return 'A = ½ × base × height = ½ × b × h';
-      case 'rectangle':
-        return 'A = width × height = w × h';
-      case 'regular_polygon':
-        return mode === 'decompose'
-          ? 'A = n × (½ × s × a)'
-          : mode === 'perimeter'
-            ? 'P = n × s'
-            : 'A = ½ × n × s × a';
+  const getPlaceholderHint = () => {
+    switch (mode) {
+      case 'area':
+        if (effectiveType === 'triangle') return 'Calculate: ' + String.fromCharCode(189) + ' ' + String.fromCharCode(215) + ' ' + base + ' ' + String.fromCharCode(215) + ' ' + height + ' = ...';
+        if (effectiveType === 'rectangle') return 'Calculate: ' + (width || base) + ' ' + String.fromCharCode(215) + ' ' + height + ' = ...';
+        if (effectiveType === 'circle') return 'Calculate: ' + String.fromCharCode(960) + ' ' + String.fromCharCode(215) + ' ' + (radius || 5) + String.fromCharCode(178) + ' = ...';
+        if (effectiveType === 'trapezoid') return 'Calculate: ' + String.fromCharCode(189) + '(' + (topBase || 4) + ' + ' + base + ') ' + String.fromCharCode(215) + ' ' + height + ' = ...';
+        if (effectiveType === 'parallelogram') return 'Calculate: ' + base + ' ' + String.fromCharCode(215) + ' ' + height + ' = ...';
+        return 'Show your calculation steps...';
+      case 'perimeter':
+        return 'Add all sides together...';
+      case 'pythagorean':
+        return 'Use a' + String.fromCharCode(178) + ' + b' + String.fromCharCode(178) + ' = c' + String.fromCharCode(178) + '...';
+      case 'volume':
+        return 'Calculate the volume...';
+      case 'surface_area':
+        return 'Calculate the surface area...';
+      case 'angles':
+        return 'Angles in a triangle sum to 180' + String.fromCharCode(176) + '...';
+      case 'trig':
+        return 'Use ' + (trigFunc || 'sin') + '(' + String.fromCharCode(952) + ') = ...';
+      case 'similarity':
+        return 'Use the scale factor to find the missing side...';
       default:
-        return '';
+        return 'Show your work...';
     }
   };
 
@@ -208,15 +117,14 @@ export default function InteractiveGeometry({
   return (
     <div style={styles.container}>
       <svg width={svgWidth} height={svgHeight}>
-        <rect x={0} y={0} width={svgWidth} height={svgHeight} style={{ fill: 'var(--input-bg)' }} rx={8} />
-        {type === 'triangle' && renderTriangle()}
-        {type === 'rectangle' && renderRectangle()}
-        {type === 'regular_polygon' && renderRegularPolygon()}
+        <rect x={0} y={0} width={svgWidth} height={svgHeight}
+          style={{ fill: 'var(--input-bg)' }} rx={8} />
+        {renderer && renderer(shapeProps, svgWidth, svgHeight, padding)}
       </svg>
 
-      {showFormula && (
+      {showFormula && formula && (
         <div style={styles.formula}>
-          <strong>Formula:</strong> {getFormula()}
+          <strong>Formula:</strong> {formula}
         </div>
       )}
 
@@ -226,7 +134,7 @@ export default function InteractiveGeometry({
           style={styles.workArea}
           value={showWork}
           onChange={(e) => handleWorkChange(e.target.value)}
-          placeholder={`Calculate: ½ × ${base} × ${height} = ...`}
+          placeholder={getPlaceholderHint()}
           disabled={readOnly}
           rows={3}
         />
@@ -235,7 +143,7 @@ export default function InteractiveGeometry({
       <div style={styles.answerSection}>
         <label style={styles.label}>Final Answer:</label>
         <div style={styles.answerRow}>
-          <span style={styles.areaLabel}>Area =</span>
+          <span style={styles.areaLabel}>{answerLabel}</span>
           <input
             type="text"
             style={styles.answerInput}
@@ -244,7 +152,7 @@ export default function InteractiveGeometry({
             placeholder="?"
             disabled={readOnly}
           />
-          <span style={styles.unit}>square units</span>
+          <span style={styles.unit}>{answerUnit}</span>
         </div>
       </div>
 

@@ -4,8 +4,18 @@ import InteractiveCoordinatePlane from './InteractiveCoordinatePlane';
 import InteractiveGeometry from './InteractiveGeometry';
 import InteractiveBoxPlot from './InteractiveBoxPlot';
 import InteractiveFunctionGraph from './InteractiveFunctionGraph';
+import InteractiveDotPlot from './InteractiveDotPlot';
+import InteractiveStemAndLeaf from './InteractiveStemAndLeaf';
+import InteractiveUnitCircle from './InteractiveUnitCircle';
+import InteractiveTransformations from './InteractiveTransformations';
+import InteractiveFractionModel from './InteractiveFractionModel';
+import InteractiveProbabilityTree from './InteractiveProbabilityTree';
+import InteractiveTapeDiagram from './InteractiveTapeDiagram';
+import InteractiveVennDiagram from './InteractiveVennDiagram';
+import InteractiveProtractor from './InteractiveProtractor';
 import MathInput from './MathInput';
 import DataTable from './DataTable';
+import VirtualMathKeyboard from './VirtualMathKeyboard';
 
 /**
  * AssignmentPlayer - Interactive assignment component for students
@@ -24,6 +34,7 @@ export default function AssignmentPlayer({
   const [currentSection, setCurrentSection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [internalResults, setInternalResults] = useState(null);
+  const [focusedInput, setFocusedInput] = useState(null);
 
   // Use external results if provided, otherwise use internal
   const results = externalResults || internalResults;
@@ -51,6 +62,81 @@ export default function AssignmentPlayer({
       ...prev,
       [key]: { ...prev[key], value }
     }));
+  };
+
+  const handleInputFocus = (el, key, mode) => {
+    setFocusedInput({ ref: el, key, mode });
+  };
+
+  const handleKeyboardInsert = (text) => {
+    if (!focusedInput) return;
+    const el = focusedInput.ref;
+    const start = el?.selectionStart ?? (el?.value?.length || 0);
+    const end = el?.selectionEnd ?? start;
+    const parts = focusedInput.key.split('-');
+    const sIdx = parseInt(parts[0]);
+    const qIdx = parseInt(parts[1]);
+    const subField = parts[2];
+    const answerKey = `${sIdx}-${qIdx}`;
+    const currentAnswer = answers[answerKey]?.value;
+
+    if (subField === 'math' || subField === 'work') {
+      const field = subField === 'math' ? 'final' : 'work';
+      const otherField = subField === 'math' ? 'work' : 'final';
+      const current = currentAnswer?.[field] || '';
+      const newVal = current.slice(0, start) + text + current.slice(end);
+      updateAnswer(sIdx, qIdx, { ...currentAnswer, [field]: newVal, [otherField]: currentAnswer?.[otherField] || '' });
+    } else {
+      const current = (typeof currentAnswer === 'string') ? currentAnswer : '';
+      const newVal = current.slice(0, start) + text + current.slice(end);
+      updateAnswer(sIdx, qIdx, newVal);
+    }
+
+    requestAnimationFrame(() => {
+      if (el) {
+        const newPos = start + text.length;
+        el.selectionStart = newPos;
+        el.selectionEnd = newPos;
+        el.focus();
+      }
+    });
+  };
+
+  const handleKeyboardBackspace = () => {
+    if (!focusedInput) return;
+    const el = focusedInput.ref;
+    const start = el?.selectionStart ?? 0;
+    const end = el?.selectionEnd ?? start;
+    if (start === 0 && end === 0) return;
+
+    const parts = focusedInput.key.split('-');
+    const sIdx = parseInt(parts[0]);
+    const qIdx = parseInt(parts[1]);
+    const subField = parts[2];
+    const answerKey = `${sIdx}-${qIdx}`;
+    const currentAnswer = answers[answerKey]?.value;
+
+    const deleteStart = start === end ? start - 1 : start;
+
+    if (subField === 'math' || subField === 'work') {
+      const field = subField === 'math' ? 'final' : 'work';
+      const otherField = subField === 'math' ? 'work' : 'final';
+      const current = currentAnswer?.[field] || '';
+      const newVal = current.slice(0, deleteStart) + current.slice(end);
+      updateAnswer(sIdx, qIdx, { ...currentAnswer, [field]: newVal, [otherField]: currentAnswer?.[otherField] || '' });
+    } else {
+      const current = (typeof currentAnswer === 'string') ? currentAnswer : '';
+      const newVal = current.slice(0, deleteStart) + current.slice(end);
+      updateAnswer(sIdx, qIdx, newVal);
+    }
+
+    requestAnimationFrame(() => {
+      if (el) {
+        el.selectionStart = deleteStart;
+        el.selectionEnd = deleteStart;
+        el.focus();
+      }
+    });
   };
 
   const handleSubmit = async () => {
@@ -147,6 +233,7 @@ export default function AssignmentPlayer({
               readOnly={readOnly}
               showAnswer={showAnswers}
               result={results?.questions?.[`${currentSection}-${qIdx}`]}
+              onInputFocus={handleInputFocus}
             />
           ))}
         </div>
@@ -191,6 +278,15 @@ export default function AssignmentPlayer({
           </div>
         )}
       </div>
+
+      {focusedInput && !readOnly && (
+        <VirtualMathKeyboard
+          mode={focusedInput.mode}
+          onInsert={handleKeyboardInsert}
+          onBackspace={handleKeyboardBackspace}
+          onClose={() => setFocusedInput(null)}
+        />
+      )}
     </div>
   );
 }
@@ -260,10 +356,12 @@ function QuestionRenderer({
   onAnswer,
   readOnly,
   showAnswer,
-  result
+  result,
+  onInputFocus
 }) {
   const qType = question.question_type || question.visual_type || 'short_answer';
   const qNum = question.number || questionIndex + 1;
+  const inputKey = `${sectionIndex}-${questionIndex}`;
 
   const renderInput = () => {
     switch (qType) {
@@ -296,14 +394,36 @@ function QuestionRenderer({
       case 'triangle':
       case 'rectangle':
       case 'regular_polygon':
+      case 'circle':
+      case 'trapezoid':
+      case 'parallelogram':
+      case 'rectangular_prism':
+      case 'cylinder':
+      case 'similarity':
+      case 'pythagorean':
+      case 'angles':
+      case 'trig':
         return (
           <InteractiveGeometry
             type={qType === 'geometry' ? 'triangle' : qType}
             base={question.base || 6}
             height={question.height || 4}
+            width={question.width}
+            radius={question.radius}
+            topBase={question.top_base}
             mode={question.mode || 'area'}
             sides={question.sides}
             sideLength={question.side_length}
+            sideA={question.side_a}
+            sideB={question.side_b}
+            sideC={question.side_c}
+            angle1={question.angle1}
+            angle2={question.angle2}
+            missingAngle={question.missing_angle}
+            theta={question.theta}
+            trigFunc={question.trig_func}
+            missingSide={question.missing_side}
+            scale={question.scale}
             answer={answer || ''}
             onChange={onAnswer}
             correctAnswer={showAnswer ? question.answer : null}
@@ -332,6 +452,7 @@ function QuestionRenderer({
                 style={styles.workTextarea}
                 value={answer?.work || ''}
                 onChange={(e) => onAnswer({ ...answer, work: e.target.value, final: answer?.final || '' })}
+                onFocus={(e) => onInputFocus?.(e.target, inputKey + '-work', 'unicode')}
                 placeholder="Show your steps here..."
                 disabled={readOnly}
               />
@@ -343,6 +464,7 @@ function QuestionRenderer({
                 onChange={(val) => onAnswer({ ...answer, final: val, work: answer?.work || '' })}
                 disabled={readOnly || showAnswer}
                 placeholder="Enter your answer"
+                onInputFocus={(ref) => onInputFocus?.(ref, inputKey + '-math', 'latex')}
               />
             </div>
             {showAnswer && question.answer && (
@@ -414,6 +536,7 @@ function QuestionRenderer({
               style={styles.shortAnswer}
               value={answer || ''}
               onChange={(e) => onAnswer(e.target.value)}
+              onFocus={(e) => onInputFocus?.(e.target, inputKey, 'unicode')}
               placeholder="Type your answer here..."
               disabled={readOnly}
               rows={3}
@@ -434,9 +557,136 @@ function QuestionRenderer({
           />
         );
 
-      case 'circle':
+      case 'dot_plot':
+        return (
+          <InteractiveDotPlot
+            categories={question.categories || []}
+            minVal={question.min_val ?? 0}
+            maxVal={question.max_val ?? 10}
+            step={question.step ?? 1}
+            dots={answer || {}}
+            onChange={onAnswer}
+            correctDots={showAnswer ? question.correct_dots : null}
+            readOnly={readOnly}
+            title={question.chart_title || ''}
+          />
+        );
+
+      case 'stem_and_leaf':
+        return (
+          <InteractiveStemAndLeaf
+            data={question.data || []}
+            stems={question.stems || []}
+            leaves={answer || {}}
+            onChange={onAnswer}
+            correctLeaves={showAnswer ? question.correct_leaves : null}
+            readOnly={readOnly}
+            title={question.chart_title || ''}
+          />
+        );
+
+      case 'unit_circle':
+        return (
+          <InteractiveUnitCircle
+            hiddenAngles={question.hidden_angles || []}
+            hiddenValues={question.hidden_values || []}
+            answers={answer || {}}
+            onChange={onAnswer}
+            correctAnswers={showAnswer ? question.correct_values : null}
+            readOnly={readOnly}
+            showRadians={question.show_radians !== false}
+            showCoordinates={question.show_coordinates !== false}
+          />
+        );
+
+      case 'transformations':
+        return (
+          <InteractiveTransformations
+            originalVertices={question.original_vertices || [[1,1],[4,1],[4,3]]}
+            transformationType={question.transformation_type || 'translation'}
+            transformParams={question.transform_params || {}}
+            userVertices={answer?.vertices || []}
+            answer={answer?.answer || ''}
+            onChange={onAnswer}
+            correctVertices={showAnswer ? question.correct_vertices : null}
+            correctAnswer={showAnswer ? question.answer : null}
+            readOnly={readOnly}
+            gridRange={question.grid_range || [-8, 8]}
+            mode={question.mode || 'plot'}
+          />
+        );
+
+      case 'fraction_model':
+        return (
+          <InteractiveFractionModel
+            modelType={question.model_type || 'area'}
+            denominator={question.denominator || 4}
+            correctNumerator={showAnswer ? question.correct_numerator : null}
+            shaded={answer?.shaded || []}
+            answer={answer?.answer || ''}
+            onChange={onAnswer}
+            correctAnswer={showAnswer ? question.answer : null}
+            readOnly={readOnly}
+            showFractionInput={question.show_fraction_input !== false}
+            compareFractions={question.compare_fractions || null}
+          />
+        );
+
+      case 'probability_tree':
+        return (
+          <InteractiveProbabilityTree
+            tree={question.tree || null}
+            answers={answer || {}}
+            onChange={onAnswer}
+            correctAnswers={showAnswer ? question.correct_values : null}
+            readOnly={readOnly}
+          />
+        );
+
+      case 'tape_diagram':
+        return (
+          <InteractiveTapeDiagram
+            tapes={question.tapes || []}
+            answers={answer || {}}
+            onChange={onAnswer}
+            correctAnswers={showAnswer ? question.correct_values : null}
+            readOnly={readOnly}
+            title={question.chart_title || ''}
+          />
+        );
+
+      case 'venn_diagram':
+        return (
+          <InteractiveVennDiagram
+            sets={question.sets || 2}
+            labels={question.set_labels || ['Set A', 'Set B']}
+            regions={question.regions || {}}
+            answers={answer || {}}
+            onChange={onAnswer}
+            correctAnswers={showAnswer ? question.correct_values : null}
+            readOnly={readOnly}
+            title={question.chart_title || ''}
+            mode={question.mode || 'count'}
+          />
+        );
+
+      case 'protractor':
+      case 'angle_protractor':
+        return (
+          <InteractiveProtractor
+            givenAngle={question.given_angle}
+            targetAngle={question.target_angle}
+            mode={question.mode || 'measure'}
+            answer={typeof answer === 'object' ? answer?.answer || '' : answer || ''}
+            userAngle={typeof answer === 'object' ? answer?.userAngle || 0 : 0}
+            onChange={onAnswer}
+            correctAnswer={showAnswer ? question.answer : null}
+            readOnly={readOnly}
+            showClassification={question.show_classification !== false}
+          />
+        );
+
       case 'polygon':
-      case 'histogram':
       case 'pie_chart':
         return (
           <div>
@@ -447,6 +697,7 @@ function QuestionRenderer({
               style={styles.shortAnswer}
               value={answer || ''}
               onChange={(e) => onAnswer(e.target.value)}
+              onFocus={(e) => onInputFocus?.(e.target, inputKey, 'unicode')}
               placeholder="Type your answer here..."
               disabled={readOnly}
               rows={3}
@@ -491,6 +742,7 @@ function QuestionRenderer({
             style={styles.shortAnswer}
             value={answer || ''}
             onChange={(e) => onAnswer(e.target.value)}
+            onFocus={(e) => onInputFocus?.(e.target, inputKey, 'unicode')}
             placeholder="Type your answer here..."
             disabled={readOnly}
             rows={3}

@@ -525,6 +525,60 @@ def create_document_docx(filepath, title, content_blocks, style):
             except Exception:
                 doc.add_paragraph("[Pie chart image generation failed]")
 
+        elif block_type == "dot_plot":
+            try:
+                from backend.services.visualization import create_dot_plot, add_image_to_docx
+                img = create_dot_plot(
+                    categories=block.get("categories"),
+                    dots=block.get("dots"),
+                    min_val=block.get("min_val", 0),
+                    max_val=block.get("max_val", 10),
+                    step=block.get("step", 1),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=5)
+            except Exception:
+                doc.add_paragraph("[Dot plot image generation failed]")
+
+        elif block_type == "stem_and_leaf":
+            try:
+                from backend.services.visualization import create_stem_and_leaf, add_image_to_docx
+                img = create_stem_and_leaf(
+                    data=block.get("data", []),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=4)
+            except Exception:
+                doc.add_paragraph("[Stem-and-leaf plot generation failed]")
+
+        elif block_type == "venn_diagram":
+            try:
+                from backend.services.visualization import create_venn_diagram, add_image_to_docx
+                img = create_venn_diagram(
+                    sets=block.get("sets", 2),
+                    labels=block.get("labels"),
+                    regions=block.get("regions"),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+                add_image_to_docx(doc, img, width_inches=4.5)
+            except Exception:
+                doc.add_paragraph("[Venn diagram generation failed]")
+
+        elif block_type in ("protractor", "angle_protractor"):
+            try:
+                from backend.services.visualization import create_protractor, add_image_to_docx
+                img = create_protractor(
+                    given_angle=block.get("given_angle", 45),
+                    show_answer=not block.get("blank", False),
+                    title=block.get("title"),
+                )
+                add_image_to_docx(doc, img, width_inches=3.5)
+            except Exception:
+                doc.add_paragraph("[Protractor image generation failed]")
+
     doc.save(filepath)
 
 

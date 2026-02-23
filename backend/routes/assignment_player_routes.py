@@ -145,7 +145,10 @@ def strip_answers(assignment):
             # Copy question without answer fields
             stripped_q = {k: v for k, v in q.items()
                          if k not in ['answer', 'expected_data', 'points_to_plot',
-                                      'expected_values', 'correct_answer']}
+                                      'expected_values', 'correct_answer',
+                                      'correct_expressions', 'correct_dots',
+                                      'correct_leaves', 'correct_values',
+                                      'correct_vertices', 'correct_numerator']}
             stripped_section['questions'].append(stripped_q)
 
         stripped['sections'].append(stripped_section)
@@ -206,7 +209,10 @@ def grade_question(question, student_answer, q_type):
         elif q_type == 'coordinate_plane':
             return grade_coordinate_plane(question, answer_value)
 
-        elif q_type in ['geometry', 'triangle', 'rectangle']:
+        elif q_type in ['geometry', 'triangle', 'rectangle', 'circle',
+                       'trapezoid', 'parallelogram', 'regular_polygon',
+                       'rectangular_prism', 'cylinder', 'similarity',
+                       'pythagorean', 'angles', 'trig']:
             return grade_geometry(question, answer_value)
 
         elif q_type == 'box_plot':
@@ -226,6 +232,33 @@ def grade_question(question, student_answer, q_type):
 
         elif q_type == 'function_graph':
             return grade_function_graph(question, answer_value)
+
+        elif q_type == 'dot_plot':
+            return grade_dot_plot(question, answer_value)
+
+        elif q_type == 'stem_and_leaf':
+            return grade_stem_and_leaf(question, answer_value)
+
+        elif q_type == 'unit_circle':
+            return grade_unit_circle(question, answer_value)
+
+        elif q_type == 'transformations':
+            return grade_transformations(question, answer_value)
+
+        elif q_type == 'fraction_model':
+            return grade_fraction_model(question, answer_value)
+
+        elif q_type == 'probability_tree':
+            return grade_probability_tree(question, answer_value)
+
+        elif q_type == 'tape_diagram':
+            return grade_tape_diagram(question, answer_value)
+
+        elif q_type == 'venn_diagram':
+            return grade_venn_diagram(question, answer_value)
+
+        elif q_type in ['protractor', 'angle_protractor']:
+            return grade_protractor(question, answer_value)
 
         elif q_type in ['multiple_choice', 'true_false']:
             correct = str(answer_value).strip().lower() == str(correct_answer).strip().lower()
@@ -287,29 +320,217 @@ def grade_coordinate_plane(question, answer):
 
 
 def grade_geometry(question, answer):
-    """Grade geometry/area questions."""
+    """Grade geometry questions for all shape types and modes.
+
+    Supported shapes: triangle, rectangle, circle, trapezoid, parallelogram,
+                      regular_polygon, rectangular_prism, cylinder
+    Supported modes:  area, perimeter, pythagorean, volume, surface_area,
+                      angles, similarity, trig, decompose
+    """
+    import math
+
+    q_type = question.get('question_type', 'triangle')
+    mode = question.get('mode', 'area')
     base = question.get('base', 6)
     height = question.get('height', 4)
-    q_type = question.get('question_type', 'triangle')
+    width = question.get('width', base)
+    radius = question.get('radius', 5)
+    top_base = question.get('top_base', 4)
+    sides = question.get('sides', 6)
+    side_length = question.get('side_length', 4)
+    side_a = question.get('side_a')
+    side_b = question.get('side_b')
+    side_c = question.get('side_c')
+    angle1 = question.get('angle1')
+    angle2 = question.get('angle2')
+    missing_angle = question.get('missing_angle', 3)
+    theta = question.get('theta', 30)
+    trig_func = question.get('trig_func', 'sin')
+    missing_side = question.get('missing_side', 'c')
+    scale = question.get('scale', 2)
 
-    if q_type == 'triangle':
-        expected = (base * height) / 2
-    else:  # rectangle
-        expected = base * height
-
-    # Get the numeric answer
+    # Get the numeric answer from student
     if isinstance(answer, dict):
         answer_val = answer.get('value', '')
     else:
         answer_val = answer
 
-    try:
-        student_val = float(str(answer_val).replace(' ', ''))
-        if abs(student_val - expected) < 0.01:
-            return {'correct': True, 'feedback': f'Correct! Area = {expected} square units'}
+    if not answer_val and answer_val != 0:
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    expected = None
+    label = 'Answer'
+
+    # --- Compute expected answer for each shape + mode ---
+
+    # TRIANGLE
+    if q_type in ('triangle', 'geometry'):
+        if mode == 'area':
+            expected = (base * height) / 2
+            label = 'Area'
+        elif mode == 'perimeter':
+            a = side_a or 5
+            b = side_b or 4
+            c = side_c or 3
+            expected = a + b + c
+            label = 'Perimeter'
+        elif mode == 'pythagorean':
+            a = side_a or base or 3
+            b = side_b or height or 4
+            c = side_c
+            if missing_side == 'c':
+                expected = round(math.sqrt(a * a + b * b), 2)
+            elif missing_side == 'b':
+                c = c or math.sqrt(a * a + (b or 4) ** 2)
+                expected = round(math.sqrt(c * c - a * a), 2)
+            elif missing_side == 'a':
+                c = c or math.sqrt((a or 3) ** 2 + b * b)
+                expected = round(math.sqrt(c * c - b * b), 2)
+            label = 'Missing side'
+        elif mode == 'angles':
+            a1 = angle1 or 60
+            a2 = angle2 or 60
+            if missing_angle == 1:
+                expected = 180 - a2 - (question.get('angle3') or (180 - a1 - a2))
+            elif missing_angle == 2:
+                expected = 180 - a1 - (question.get('angle3') or (180 - a1 - a2))
+            else:
+                expected = 180 - a1 - a2
+            expected = round(expected, 2)
+            label = 'Missing angle'
+        elif mode == 'trig':
+            th_rad = math.radians(theta)
+            # Given the triangle: opp = left side, adj = bottom, hyp = slanted
+            a = side_a or base or 3
+            b = side_b or height or 4
+            c = side_c or round(math.sqrt(a * a + b * b), 2)
+            if trig_func == 'sin':
+                expected = round(b / c if c else math.sin(th_rad) * c, 2)
+                if question.get('solve_for') == 'hyp':
+                    expected = round(b / math.sin(th_rad), 2)
+                elif question.get('solve_for') == 'opp':
+                    expected = round(c * math.sin(th_rad), 2)
+                else:
+                    expected = round(math.sin(th_rad), 4)
+            elif trig_func == 'cos':
+                if question.get('solve_for') == 'hyp':
+                    expected = round(a / math.cos(th_rad), 2)
+                elif question.get('solve_for') == 'adj':
+                    expected = round(c * math.cos(th_rad), 2)
+                else:
+                    expected = round(math.cos(th_rad), 4)
+            elif trig_func == 'tan':
+                if question.get('solve_for') == 'opp':
+                    expected = round(a * math.tan(th_rad), 2)
+                elif question.get('solve_for') == 'adj':
+                    expected = round(b / math.tan(th_rad), 2)
+                else:
+                    expected = round(math.tan(th_rad), 4)
+            label = 'Missing value'
+        elif mode == 'similarity':
+            expected = round(side_b * scale, 2) if side_b else round(base * scale, 2)
+            label = 'Missing side'
+
+    # RECTANGLE
+    elif q_type == 'rectangle':
+        w = width or base
+        if mode == 'area':
+            expected = w * height
+            label = 'Area'
+        elif mode == 'perimeter':
+            expected = 2 * w + 2 * height
+            label = 'Perimeter'
+
+    # CIRCLE
+    elif q_type == 'circle':
+        r = radius or 5
+        if mode == 'area':
+            expected = round(math.pi * r * r, 2)
+            label = 'Area'
+        elif mode in ('perimeter', 'circumference'):
+            expected = round(2 * math.pi * r, 2)
+            label = 'Circumference'
+
+    # TRAPEZOID
+    elif q_type == 'trapezoid':
+        if mode == 'area':
+            expected = round(0.5 * (top_base + base) * height, 2)
+            label = 'Area'
+
+    # PARALLELOGRAM
+    elif q_type == 'parallelogram':
+        if mode == 'area':
+            expected = round(base * height, 2)
+            label = 'Area'
+
+    # REGULAR POLYGON
+    elif q_type == 'regular_polygon':
+        n = sides
+        s = side_length
+        if mode == 'perimeter':
+            expected = round(n * s, 2)
+            label = 'Perimeter'
+        elif mode in ('area', 'decompose'):
+            # apothem = s / (2 * tan(pi/n))
+            apothem = s / (2 * math.tan(math.pi / n))
+            expected = round(0.5 * n * s * apothem, 2)
+            label = 'Area'
+
+    # RECTANGULAR PRISM
+    elif q_type == 'rectangular_prism':
+        l = base
+        w = width or base
+        h = height
+        if mode == 'volume':
+            expected = round(l * w * h, 2)
+            label = 'Volume'
+        elif mode == 'surface_area':
+            expected = round(2 * (l * w + l * h + w * h), 2)
+            label = 'Surface Area'
+
+    # CYLINDER
+    elif q_type == 'cylinder':
+        r = radius or 3
+        h = height or 7
+        if mode == 'volume':
+            expected = round(math.pi * r * r * h, 2)
+            label = 'Volume'
+        elif mode == 'surface_area':
+            expected = round(2 * math.pi * r * r + 2 * math.pi * r * h, 2)
+            label = 'Surface Area'
+
+    # If question has an explicit answer field, prefer it
+    if expected is None:
+        explicit = question.get('answer')
+        if explicit is not None:
+            try:
+                expected = float(explicit)
+            except (ValueError, TypeError):
+                return {'correct': False, 'feedback': f'Expected answer: {explicit}'}
         else:
-            return {'correct': False, 'feedback': f'Incorrect. Area = {expected} square units'}
-    except:
+            return {'correct': False, 'feedback': 'Could not determine expected answer for this question type'}
+
+    # Compare student answer to expected
+    tolerance = 0.1 if mode in ('trig',) else 0.01
+    # Allow pi-based answers: if expected involves pi, use wider tolerance
+    if expected > 10:
+        tolerance = max(tolerance, expected * 0.005)  # 0.5% for larger numbers
+
+    try:
+        student_val = float(str(answer_val).replace(' ', '').replace(',', ''))
+        diff = abs(student_val - expected)
+        if diff < tolerance:
+            return {'correct': True, 'feedback': f'Correct! {label} = {expected}'}
+        elif diff < expected * 0.1 if expected != 0 else diff < 1:
+            # Within 10% — partial credit
+            return {
+                'correct': False,
+                'partial_credit': 0.5,
+                'feedback': f'Close but not exact. {label} = {expected}'
+            }
+        else:
+            return {'correct': False, 'feedback': f'Incorrect. {label} = {expected}'}
+    except (ValueError, TypeError):
         return {'correct': False, 'feedback': f'Could not parse answer. Expected: {expected}'}
 
 
@@ -557,6 +778,411 @@ def grade_function_graph(question, answer):
             }
         else:
             return {'correct': False, 'feedback': f'Incorrect. Expected: {", ".join(expected)}'}
+
+
+def grade_dot_plot(question, answer):
+    """Grade dot plot questions by comparing frequency counts."""
+    correct_dots = question.get('correct_dots', {})
+    if not correct_dots or not answer:
+        return {'correct': False, 'feedback': 'No data plotted'}
+
+    if not isinstance(answer, dict):
+        return {'correct': False, 'feedback': 'Invalid answer format'}
+
+    total_keys = set(list(correct_dots.keys()) + list(answer.keys()))
+    matches = 0
+    total = len(total_keys)
+
+    for key in total_keys:
+        expected = int(correct_dots.get(key, 0))
+        actual = int(answer.get(key, 0))
+        if expected == actual:
+            matches += 1
+
+    if total == 0:
+        return {'correct': False, 'feedback': 'No data to compare'}
+
+    ratio = matches / total
+    if ratio >= 1.0:
+        return {'correct': True, 'feedback': 'All frequencies are correct!'}
+    elif ratio >= 0.7:
+        return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matches}/{total} values correct'}
+    else:
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matches}/{total} values correct'}
+
+
+def grade_stem_and_leaf(question, answer):
+    """Grade stem-and-leaf plot by comparing sorted leaves per stem."""
+    data = question.get('data', [])
+    correct_leaves = question.get('correct_leaves', {})
+    if not answer:
+        return {'correct': False, 'feedback': 'No leaves entered'}
+
+    if not isinstance(answer, dict):
+        return {'correct': False, 'feedback': 'Invalid answer format'}
+
+    # Compute correct leaves from data if not provided
+    if not correct_leaves and data:
+        stems = sorted(set(v // 10 for v in data))
+        correct_leaves = {}
+        for stem in stems:
+            leaves = sorted(v % 10 for v in data if v // 10 == stem)
+            correct_leaves[str(stem)] = ' '.join(str(l) for l in leaves)
+
+    matches = 0
+    total = len(correct_leaves)
+
+    for stem, expected_str in correct_leaves.items():
+        user_str = answer.get(str(stem), '')
+        expected_sorted = sorted(int(x) for x in expected_str.strip().split() if x.isdigit())
+        user_sorted = sorted(int(x) for x in str(user_str).strip().split() if x.isdigit())
+        if expected_sorted == user_sorted:
+            matches += 1
+
+    if total == 0:
+        return {'correct': False, 'feedback': 'No stems to compare'}
+
+    ratio = matches / total
+    if ratio >= 1.0:
+        return {'correct': True, 'feedback': 'All stems are correct!'}
+    elif ratio >= 0.7:
+        return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matches}/{total} stems correct'}
+    else:
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matches}/{total} stems correct'}
+
+
+def grade_unit_circle(question, answer):
+    """Grade unit circle questions by checking filled-in values."""
+    correct_values = question.get('correct_values', {})
+    if not answer or not isinstance(answer, dict):
+        return {'correct': False, 'feedback': 'No values entered'}
+
+    if not correct_values:
+        # Build from hidden angles/values
+        hidden_angles = question.get('hidden_angles', [])
+        hidden_values = question.get('hidden_values', [])
+        # Without explicit correct_values, fall back to text comparison with answer field
+        answer_text = str(question.get('answer', '')).strip().lower()
+        if answer_text:
+            user_text = ' '.join(str(v) for v in answer.values()).strip().lower()
+            correct = answer_text == user_text
+            return {'correct': correct, 'feedback': 'Correct!' if correct else f'Expected: {answer_text}'}
+        return {'correct': False, 'feedback': 'Missing answer key'}
+
+    matches = 0
+    total = len(correct_values)
+
+    for key, expected in correct_values.items():
+        user_val = str(answer.get(key, '')).replace(' ', '').lower()
+        expected_val = str(expected).replace(' ', '').lower()
+        if user_val == expected_val:
+            matches += 1
+
+    if total == 0:
+        return {'correct': False, 'feedback': 'No values to check'}
+
+    ratio = matches / total
+    if ratio >= 1.0:
+        return {'correct': True, 'feedback': 'All values correct!'}
+    elif ratio >= 0.6:
+        return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matches}/{total} values correct'}
+    else:
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matches}/{total} values correct'}
+
+
+def grade_transformations(question, answer):
+    """Grade transformation questions by checking plotted vertices or identification."""
+    import math
+    mode = question.get('mode', 'plot')
+
+    if mode == 'identify':
+        correct = str(question.get('answer', '')).strip().lower()
+        student = str(answer.get('answer', '') if isinstance(answer, dict) else answer).strip().lower()
+        if not student:
+            return {'correct': False, 'feedback': 'No answer provided'}
+        # Check key words
+        if correct == student:
+            return {'correct': True, 'feedback': 'Correct!'}
+        # Partial: check if transformation type keyword matches
+        keywords = ['translation', 'reflection', 'rotation', 'dilation']
+        for kw in keywords:
+            if kw in correct and kw in student:
+                return {'correct': True, 'partial_credit': 0.7, 'feedback': f'Correct type, but be more specific. Expected: {correct}'}
+        return {'correct': False, 'feedback': f'Incorrect. Expected: {question.get("answer", "")}'}
+
+    # Plot mode: check vertices
+    correct_vertices = question.get('correct_vertices', [])
+    user_vertices = answer.get('vertices', []) if isinstance(answer, dict) else []
+
+    if not correct_vertices:
+        # Compute from transformation
+        original = question.get('original_vertices', [])
+        t_type = question.get('transformation_type', 'translation')
+        params = question.get('transform_params', {})
+        correct_vertices = []
+        for x, y in original:
+            if t_type == 'translation':
+                correct_vertices.append([x + params.get('dx', 0), y + params.get('dy', 0)])
+            elif t_type == 'reflection':
+                axis = params.get('axis', 'y-axis')
+                if axis == 'y-axis': correct_vertices.append([-x, y])
+                elif axis == 'x-axis': correct_vertices.append([x, -y])
+                elif axis == 'y=x': correct_vertices.append([y, x])
+                elif axis == 'y=-x': correct_vertices.append([-y, -x])
+            elif t_type == 'rotation':
+                deg = params.get('degrees', 90)
+                rad = math.radians(deg)
+                cx_r = params.get('centerX', 0)
+                cy_r = params.get('centerY', 0)
+                nx = round((x - cx_r) * math.cos(rad) - (y - cy_r) * math.sin(rad) + cx_r)
+                ny = round((x - cx_r) * math.sin(rad) + (y - cy_r) * math.cos(rad) + cy_r)
+                correct_vertices.append([nx, ny])
+            elif t_type == 'dilation':
+                scale = params.get('scale', 2)
+                cx_d = params.get('centerX', 0)
+                cy_d = params.get('centerY', 0)
+                correct_vertices.append([round(cx_d + scale * (x - cx_d)), round(cy_d + scale * (y - cy_d))])
+
+    if not user_vertices:
+        return {'correct': False, 'feedback': 'No vertices plotted'}
+
+    # Match vertices (order-independent)
+    matched = 0
+    used = set()
+    for cv in correct_vertices:
+        for i, uv in enumerate(user_vertices):
+            if i not in used and abs(cv[0] - uv[0]) <= 0.5 and abs(cv[1] - uv[1]) <= 0.5:
+                matched += 1
+                used.add(i)
+                break
+
+    total = len(correct_vertices)
+    if total == 0:
+        return {'correct': False, 'feedback': 'Missing correct vertices'}
+
+    ratio = matched / total
+    if ratio >= 1.0 and len(user_vertices) == total:
+        return {'correct': True, 'feedback': 'All transformed vertices are correct!'}
+    elif ratio >= 0.7:
+        return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matched}/{total} vertices correct'}
+    else:
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matched}/{total} vertices correct'}
+
+
+def grade_fraction_model(question, answer):
+    """Grade fraction model questions."""
+    if not answer:
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    correct_answer = str(question.get('answer', '')).strip()
+    student_answer = ''
+
+    if isinstance(answer, dict):
+        student_answer = str(answer.get('answer', '')).strip()
+        shaded = answer.get('shaded', [])
+        denom = question.get('denominator', 4)
+        correct_num = question.get('correct_numerator')
+
+        # Check shading if correct_numerator is provided
+        if correct_num is not None:
+            if len(shaded) == correct_num:
+                if student_answer and correct_answer:
+                    if normalize_fraction(student_answer) == normalize_fraction(correct_answer):
+                        return {'correct': True, 'feedback': 'Correct shading and fraction!'}
+                    else:
+                        return {'correct': True, 'partial_credit': 0.7, 'feedback': f'Correct shading but fraction should be {correct_answer}'}
+                return {'correct': True, 'feedback': 'Correct shading!'}
+            else:
+                return {'correct': False, 'feedback': f'Expected {correct_num} shaded parts out of {denom}'}
+    else:
+        student_answer = str(answer).strip()
+
+    if not student_answer:
+        return {'correct': False, 'feedback': 'No answer entered'}
+
+    if correct_answer and normalize_fraction(student_answer) == normalize_fraction(correct_answer):
+        return {'correct': True, 'feedback': 'Correct!'}
+
+    return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
+
+
+def normalize_fraction(s):
+    """Normalize fraction string for comparison."""
+    s = s.strip().lower()
+    # Try to evaluate as a number
+    try:
+        if '/' in s:
+            parts = s.split('/')
+            return round(float(parts[0]) / float(parts[1]), 6)
+        return round(float(s), 6)
+    except (ValueError, ZeroDivisionError):
+        return s
+
+
+def grade_probability_tree(question, answer):
+    """Grade probability tree questions."""
+    correct_values = question.get('correct_values', {})
+    if not answer or not isinstance(answer, dict):
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    # Check each hidden probability/answer
+    if correct_values:
+        matches = 0
+        total = len(correct_values)
+        for key, expected in correct_values.items():
+            user_val = str(answer.get(key, '')).strip()
+            expected_val = str(expected).strip()
+            if normalize_fraction(user_val) == normalize_fraction(expected_val):
+                matches += 1
+
+        if total == 0:
+            return {'correct': False, 'feedback': 'No values to check'}
+        ratio = matches / total
+        if ratio >= 1.0:
+            return {'correct': True, 'feedback': 'All probabilities correct!'}
+        elif ratio >= 0.6:
+            return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matches}/{total} values correct'}
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matches}/{total} values correct'}
+
+    # Fall back to final answer
+    correct_answer = str(question.get('answer', '')).strip()
+    student_answer = str(answer.get('final', '')).strip()
+    if correct_answer and normalize_fraction(student_answer) == normalize_fraction(correct_answer):
+        return {'correct': True, 'feedback': 'Correct!'}
+    return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
+
+
+def grade_tape_diagram(question, answer):
+    """Grade tape diagram questions."""
+    correct_values = question.get('correct_values', {})
+    if not answer or not isinstance(answer, dict):
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    if correct_values:
+        matches = 0
+        total = len(correct_values)
+        for key, expected in correct_values.items():
+            user_val = str(answer.get(key, '')).strip()
+            expected_val = str(expected).strip()
+            try:
+                if abs(float(user_val) - float(expected_val)) < 0.01:
+                    matches += 1
+            except ValueError:
+                if user_val.lower() == expected_val.lower():
+                    matches += 1
+
+        if total == 0:
+            return {'correct': False, 'feedback': 'No values to check'}
+        ratio = matches / total
+        if ratio >= 1.0:
+            return {'correct': True, 'feedback': 'All values correct!'}
+        elif ratio >= 0.6:
+            return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matches}/{total} values correct'}
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matches}/{total} values correct'}
+
+    # Fall back to final answer
+    correct_answer = str(question.get('answer', '')).strip()
+    student_answer = str(answer.get('final', '')).strip()
+    if correct_answer:
+        try:
+            if abs(float(student_answer) - float(correct_answer)) < 0.01:
+                return {'correct': True, 'feedback': 'Correct!'}
+        except ValueError:
+            if student_answer.lower() == correct_answer.lower():
+                return {'correct': True, 'feedback': 'Correct!'}
+    return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
+
+
+def grade_venn_diagram(question, answer):
+    """Grade Venn diagram questions."""
+    correct_values = question.get('correct_values', {})
+    if not answer or not isinstance(answer, dict):
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    if correct_values:
+        matches = 0
+        total = len(correct_values)
+        for key, expected in correct_values.items():
+            user_val = str(answer.get(key, '')).strip()
+            expected_val = str(expected).strip()
+            try:
+                if abs(float(user_val) - float(expected_val)) < 0.01:
+                    matches += 1
+            except ValueError:
+                if user_val.lower() == expected_val.lower():
+                    matches += 1
+
+        if total == 0:
+            return {'correct': False, 'feedback': 'No values to check'}
+        ratio = matches / total
+        if ratio >= 1.0:
+            return {'correct': True, 'feedback': 'All regions correct!'}
+        elif ratio >= 0.6:
+            return {'correct': True, 'partial_credit': ratio, 'feedback': f'{matches}/{total} regions correct'}
+        return {'correct': False, 'partial_credit': ratio, 'feedback': f'Only {matches}/{total} regions correct'}
+
+    # Fall back to final answer
+    correct_answer = str(question.get('answer', '')).strip()
+    student_answer = str(answer.get('final', '')).strip()
+    if correct_answer and student_answer.lower() == correct_answer.lower():
+        return {'correct': True, 'feedback': 'Correct!'}
+    return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
+
+
+def grade_protractor(question, answer):
+    """Grade protractor/angle questions."""
+    correct_answer = str(question.get('answer', '')).strip()
+    mode = question.get('mode', 'measure')
+
+    # Handle construct mode first (uses userAngle, not text answer)
+    if mode == 'construct':
+        target = question.get('target_angle', 0)
+        user_angle = 0
+        if isinstance(answer, dict):
+            user_angle = answer.get('userAngle', 0)
+        try:
+            user_angle = float(user_angle)
+            if abs(user_angle - target) <= 3:
+                return {'correct': True, 'feedback': 'Correct angle constructed!'}
+            elif abs(user_angle - target) <= 10:
+                return {'correct': True, 'partial_credit': 0.6, 'feedback': f'Close! Target was {target} degrees, you made {int(user_angle)} degrees'}
+            return {'correct': False, 'feedback': f'Incorrect. Target was {target} degrees'}
+        except (ValueError, TypeError):
+            return {'correct': False, 'feedback': 'Could not read your angle'}
+
+    student_answer = ''
+    if isinstance(answer, dict):
+        student_answer = str(answer.get('answer', '')).strip()
+    else:
+        student_answer = str(answer).strip() if answer else ''
+
+    if not student_answer:
+        return {'correct': False, 'feedback': 'No answer provided'}
+
+    if mode == 'measure':
+        # Numeric comparison with tolerance
+        try:
+            expected = float(correct_answer)
+            actual = float(student_answer)
+            if abs(expected - actual) <= 2:  # 2-degree tolerance
+                return {'correct': True, 'feedback': 'Correct!'}
+            elif abs(expected - actual) <= 5:
+                return {'correct': True, 'partial_credit': 0.7, 'feedback': f'Close! The exact answer is {correct_answer} degrees'}
+            return {'correct': False, 'feedback': f'Incorrect. The angle measures {correct_answer} degrees'}
+        except ValueError:
+            pass
+
+    if mode == 'classify':
+        expected = correct_answer.lower()
+        actual = student_answer.lower()
+        if expected == actual:
+            return {'correct': True, 'feedback': 'Correct!'}
+        return {'correct': False, 'feedback': f'Incorrect. This is a(n) {correct_answer} angle'}
+
+    # Generic fallback
+    if student_answer.lower() == correct_answer.lower():
+        return {'correct': True, 'feedback': 'Correct!'}
+    return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
 
 
 def grade_short_answer(question, answer):

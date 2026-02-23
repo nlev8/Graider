@@ -192,6 +192,44 @@ def _embed_visual(doc, visual):
                 blank=visual.get('blank', False)
             )
             add_image_to_docx(doc, img_data, width_inches=4)
+        elif vtype == 'dot_plot':
+            from backend.services.visualization import create_dot_plot
+            img_data = create_dot_plot(
+                categories=visual.get('categories'),
+                dots=visual.get('dots'),
+                min_val=visual.get('min_val', 0),
+                max_val=visual.get('max_val', 10),
+                step=visual.get('step', 1),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=5)
+        elif vtype == 'stem_and_leaf':
+            from backend.services.visualization import create_stem_and_leaf
+            img_data = create_stem_and_leaf(
+                data=visual.get('data', []),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4)
+        elif vtype == 'venn_diagram':
+            from backend.services.visualization import create_venn_diagram
+            img_data = create_venn_diagram(
+                sets=visual.get('sets', 2),
+                labels=visual.get('labels'),
+                regions=visual.get('regions'),
+                title=visual.get('title', ''),
+                blank=visual.get('blank', False)
+            )
+            add_image_to_docx(doc, img_data, width_inches=4.5)
+        elif vtype in ['protractor', 'angle_protractor']:
+            from backend.services.visualization import create_protractor
+            img_data = create_protractor(
+                given_angle=visual.get('given_angle', 45),
+                show_answer=not visual.get('blank', False),
+                title=visual.get('title', '')
+            )
+            add_image_to_docx(doc, img_data, width_inches=3.5)
     except Exception:
         doc.add_paragraph("[Visual failed to render]")
 

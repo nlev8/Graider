@@ -909,6 +909,226 @@ def create_pie_chart(
     return result
 
 
+def create_dot_plot(
+    categories: list = None,
+    dots: dict = None,
+    min_val: float = 0,
+    max_val: float = 10,
+    step: float = 1,
+    title: str = None,
+    blank: bool = False
+) -> str:
+    """Create a dot plot visualization.
+
+    Args:
+        categories: List of category labels (or auto-generate from range)
+        dots: Dict mapping category/value to count {str: int}
+        min_val/max_val/step: Numeric range if no categories
+        title: Chart title
+        blank: If True, show empty plot
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    items = categories if categories else [str(min_val + i * step) for i in range(int((max_val - min_val) / step) + 1)]
+
+    fig, ax = plt.subplots(figsize=(7, 3))
+    ax.axhline(y=0, color='black', linewidth=1.5)
+
+    for idx, item in enumerate(items):
+        ax.text(idx, -0.3, str(item), ha='center', fontsize=9)
+        ax.plot([idx, idx], [-0.05, 0.05], 'k-', linewidth=1)
+        if not blank and dots:
+            count = int(dots.get(str(item), 0))
+            for d in range(count):
+                ax.plot(idx, 0.3 + d * 0.35, 'o', color='#6366f1', markersize=8)
+
+    ax.set_xlim(-0.5, len(items) - 0.5)
+    max_count = max((int(v) for v in dots.values()), default=3) if dots else 3
+    ax.set_ylim(-0.7, 0.3 + max_count * 0.35 + 0.5)
+    ax.axis('off')
+
+    if title:
+        ax.set_title(title, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+def create_stem_and_leaf(
+    data: list = None,
+    title: str = None,
+    blank: bool = False
+) -> str:
+    """Create a stem-and-leaf plot visualization.
+
+    Args:
+        data: List of numeric values
+        title: Chart title
+        blank: If True, show stems without leaves
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    if data:
+        stems = sorted(set(v // 10 for v in data))
+        rows = []
+        for s in stems:
+            leaves = sorted(v % 10 for v in data if v // 10 == s)
+            if blank:
+                rows.append(f"  {s} |")
+            else:
+                rows.append(f"  {s} | {' '.join(str(l) for l in leaves)}")
+        text = "Stem | Leaf\n" + "-" * 20 + "\n" + "\n".join(rows)
+        ax.text(0.1, 0.5, text, transform=ax.transAxes, fontsize=12, fontfamily='monospace', va='center')
+    else:
+        ax.text(0.5, 0.5, 'Create your stem-and-leaf plot', ha='center', va='center',
+                fontsize=12, color='gray')
+
+    ax.axis('off')
+    if title:
+        ax.set_title(title, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+def create_venn_diagram(
+    sets: int = 2,
+    labels: list = None,
+    regions: dict = None,
+    title: str = None,
+    blank: bool = False
+) -> str:
+    """Create a Venn diagram visualization.
+
+    Args:
+        sets: Number of circles (2 or 3)
+        labels: List of set labels
+        regions: Dict mapping region keys to values
+        title: Chart title
+        blank: If True, show empty circles
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    from matplotlib.patches import Circle
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    labels = labels or (['Set A', 'Set B'] if sets == 2 else ['Set A', 'Set B', 'Set C'])
+
+    if sets >= 3:
+        circles = [
+            Circle((-0.5, 0.3), 1.2, alpha=0.15, color='#6366f1'),
+            Circle((0.5, 0.3), 1.2, alpha=0.15, color='#ec4899'),
+            Circle((0, -0.5), 1.2, alpha=0.15, color='#10b981'),
+        ]
+        label_pos = [(-1.2, 1.7), (1.2, 1.7), (0, -2)]
+    else:
+        circles = [
+            Circle((-0.5, 0), 1.2, alpha=0.15, color='#6366f1'),
+            Circle((0.5, 0), 1.2, alpha=0.15, color='#ec4899'),
+        ]
+        label_pos = [(-1.2, 1.5), (1.2, 1.5)]
+
+    for i, c in enumerate(circles):
+        ax.add_patch(c)
+        edge = Circle(c.center, c.radius, fill=False, edgecolor=c.get_facecolor(), linewidth=2)
+        ax.add_patch(edge)
+        if i < len(labels):
+            ax.text(label_pos[i][0], label_pos[i][1], labels[i], ha='center', fontsize=11, fontweight='bold')
+
+    if not blank and regions:
+        pos_map = {'only_a': (-1, 0), 'a_and_b': (0, 0), 'only_b': (1, 0)} if sets == 2 else \
+                  {'only_a': (-1, 0.4), 'only_b': (1, 0.4), 'only_c': (0, -1),
+                   'a_and_b': (0, 0.4), 'a_and_c': (-0.5, -0.3), 'b_and_c': (0.5, -0.3), 'all': (0, 0)}
+        for key, pos in pos_map.items():
+            val = regions.get(key, '')
+            if val:
+                ax.text(pos[0], pos[1], str(val), ha='center', fontsize=12, fontweight='bold')
+
+    ax.set_xlim(-2.5, 2.5)
+    ax.set_ylim(-2.5, 2.5)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    if title:
+        ax.set_title(title, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
+def create_protractor(
+    given_angle: float = 45,
+    show_answer: bool = True,
+    title: str = None
+) -> str:
+    """Create a protractor angle measurement visualization.
+
+    Args:
+        given_angle: The angle to display
+        show_answer: Whether to show the angle value
+        title: Chart title
+
+    Returns:
+        Base64 encoded PNG image
+    """
+    plt = _get_plt()
+    import math
+    from matplotlib.patches import Arc
+
+    fig, ax = plt.subplots(figsize=(5, 3.5))
+
+    arc = Arc((0, 0), 3, 3, angle=0, theta1=0, theta2=180, color='#6366f1', linewidth=2)
+    ax.add_patch(arc)
+
+    for d in range(0, 181, 10):
+        rad = math.radians(d)
+        r1, r2 = 1.4, 1.55
+        ax.plot([r1 * math.cos(rad), r2 * math.cos(rad)],
+                [r1 * math.sin(rad), r2 * math.sin(rad)], 'k-', linewidth=0.8)
+        if d % 30 == 0:
+            ax.text(1.2 * math.cos(rad), 1.2 * math.sin(rad), f'{d}\u00b0',
+                    ha='center', fontsize=7)
+
+    ax.plot([0, 1.6], [0, 0], 'k-', linewidth=2)
+    angle_rad = math.radians(given_angle)
+    ax.plot([0, 1.6 * math.cos(angle_rad)], [0, 1.6 * math.sin(angle_rad)],
+            '-', color='#ec4899', linewidth=2.5)
+
+    angle_arc = Arc((0, 0), 0.8, 0.8, angle=0, theta1=0, theta2=given_angle,
+                    color='#ec4899', linewidth=2)
+    ax.add_patch(angle_arc)
+
+    mid_rad = math.radians(given_angle / 2)
+    label = f'{given_angle}\u00b0' if show_answer else '?'
+    ax.text(0.5 * math.cos(mid_rad), 0.5 * math.sin(mid_rad), label,
+            ha='center', fontsize=12, color='#ec4899', fontweight='bold')
+
+    ax.set_xlim(-1.8, 1.8)
+    ax.set_ylim(-0.3, 1.8)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    if title:
+        ax.set_title(title, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    result = figure_to_base64(fig)
+    plt.close(fig)
+    return result
+
+
 # =============================================================================
 # SAVE TO DOCX
 # =============================================================================

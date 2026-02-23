@@ -1306,8 +1306,11 @@ function App() {
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [assignmentType, setAssignmentType] = useState("worksheet");
-  const [showInteractivePreview, setShowInteractivePreview] = useState(false);
-  const [interactiveResults, setInteractiveResults] = useState(null);
+  const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
+  const [previewResults, setPreviewResults] = useState(null);
+
+  // Reset preview results when assignment changes
+  useEffect(() => { setPreviewResults(null); }, [lessonPlan, generatedAssignment]);
 
   // Saved lessons for assessment generation
   const [savedLessons, setSavedLessons] = useState({ units: {}, lessons: [] });
@@ -20366,12 +20369,12 @@ ${signature}`;
                                     <Icon name="Key" size={16} /> Answer Key
                                   </button>
                                   <button
-                                    onClick={() => setShowInteractivePreview(true)}
-                                    className="btn btn-primary"
-                                    style={{ padding: "8px 14px", background: "linear-gradient(135deg, #10b981, #059669)" }}
-                                    title="Preview assignment as students will see it"
+                                    onClick={() => setPreviewShowAnswers(prev => !prev)}
+                                    className={previewShowAnswers ? "btn btn-primary" : "btn btn-secondary"}
+                                    style={{ padding: "8px 14px", ...(previewShowAnswers ? { background: "linear-gradient(135deg, #10b981, #059669)" } : {}) }}
+                                    title={previewShowAnswers ? "Hide answer key in preview" : "Show answer key in preview"}
                                   >
-                                    <Icon name="Play" size={16} /> Interactive Preview
+                                    <Icon name={previewShowAnswers ? "EyeOff" : "Eye"} size={16} /> {previewShowAnswers ? "Hide Answers" : "Show Answers"}
                                   </button>
                                   <button
                                     onClick={() => {
@@ -20493,11 +20496,19 @@ ${signature}`;
 
                           {/* Content display - varies by type */}
                           {lessonPlan.sections ? (
-                            /* Assignment display - use AssignmentPlayer for full visual rendering */
+                            /* Assignment display - interactive AssignmentPlayer */
                             <AssignmentPlayer
                               assignment={lessonPlan}
-                              readOnly={true}
-                              showAnswers={true}
+                              showAnswers={previewShowAnswers}
+                              results={previewResults}
+                              onSubmit={async (answers) => {
+                                try {
+                                  const published = await api.publishAssignment(lessonPlan);
+                                  const result = await api.submitAssignment(published.assignment_id, answers, "Teacher Preview");
+                                  setPreviewResults(result.results);
+                                  addToast("Assignment graded! Score: " + result.results.percent + "%", "success");
+                                } catch (err) { addToast("Error grading: " + err.message, "error"); }
+                              }}
                             />
                           ) : lessonPlan.phases ? (
                             /* Project display - phases with tasks */
@@ -20953,19 +20964,13 @@ ${signature}`;
                                     Answer Key
                                   </button>
                                   <button
-                                    onClick={() =>
-                                      setShowInteractivePreview(true)
-                                    }
-                                    className="btn btn-primary"
-                                    style={{
-                                      padding: "8px 14px",
-                                      background:
-                                        "linear-gradient(135deg, #10b981, #059669)",
-                                    }}
-                                    title="Preview assignment as students will see it"
+                                    onClick={() => setPreviewShowAnswers(prev => !prev)}
+                                    className={previewShowAnswers ? "btn btn-primary" : "btn btn-secondary"}
+                                    style={{ padding: "8px 14px", ...(previewShowAnswers ? { background: "linear-gradient(135deg, #10b981, #059669)" } : {}) }}
+                                    title={previewShowAnswers ? "Hide answer key in preview" : "Show answer key in preview"}
                                   >
-                                    <Icon name="Play" size={16} />
-                                    Interactive Preview
+                                    <Icon name={previewShowAnswers ? "EyeOff" : "Eye"} size={16} />
+                                    {previewShowAnswers ? " Hide Answers" : " Show Answers"}
                                   </button>
                                   <button
                                     onClick={() => {
@@ -21025,156 +21030,19 @@ ${signature}`;
                                 </div>
                               </div>
 
-                              {generatedAssignment.instructions && (
-                                <div
-                                  style={{
-                                    padding: "15px",
-                                    background: "var(--glass-bg)",
-                                    borderRadius: "10px",
-                                    marginBottom: "20px",
-                                  }}
-                                >
-                                  <h4
-                                    style={{
-                                      fontSize: "0.9rem",
-                                      fontWeight: 600,
-                                      marginBottom: "8px",
-                                    }}
-                                  >
-                                    <Icon
-                                      name="Info"
-                                      size={14}
-                                      style={{ marginRight: "6px" }}
-                                    />
-                                    Instructions
-                                  </h4>
-                                  <p
-                                    style={{
-                                      fontSize: "0.9rem",
-                                      color: "var(--text-secondary)",
-                                    }}
-                                  >
-                                    {generatedAssignment.instructions}
-                                  </p>
-                                </div>
-                              )}
-
-                              {/* Assignment Sections */}
-                              {generatedAssignment.sections?.map(
-                                (section, sIdx) => (
-                                  <div
-                                    key={sIdx}
-                                    style={{
-                                      marginBottom: "20px",
-                                      padding: "20px",
-                                      background: "var(--input-bg)",
-                                      borderRadius: "12px",
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        marginBottom: "15px",
-                                      }}
-                                    >
-                                      <h4
-                                        style={{
-                                          fontSize: "1rem",
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {section.name}
-                                      </h4>
-                                      <span
-                                        style={{
-                                          padding: "4px 8px",
-                                          background: "rgba(99,102,241,0.15)",
-                                          color: "var(--accent-light)",
-                                          borderRadius: "8px",
-                                          fontSize: "0.8rem",
-                                        }}
-                                      >
-                                        {section.points} pts
-                                      </span>
-                                    </div>
-
-                                    {section.questions?.map((q, qIdx) => (
-                                      <div
-                                        key={qIdx}
-                                        style={{
-                                          padding: "12px",
-                                          background: "var(--glass-bg)",
-                                          borderRadius: "8px",
-                                          marginBottom: "10px",
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            display: "flex",
-                                            gap: "10px",
-                                          }}
-                                        >
-                                          <span
-                                            style={{
-                                              minWidth: "24px",
-                                              height: "24px",
-                                              background:
-                                                "var(--accent-primary)",
-                                              borderRadius: "50%",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                              fontSize: "0.8rem",
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            {q.number}
-                                          </span>
-                                          <div style={{ flex: 1 }}>
-                                            <p style={{ marginBottom: "8px" }}>
-                                              {q.question}
-                                            </p>
-                                            {q.options && (
-                                              <div
-                                                style={{
-                                                  paddingLeft: "10px",
-                                                  fontSize: "0.9rem",
-                                                  color:
-                                                    "var(--text-secondary)",
-                                                }}
-                                              >
-                                                {q.options.map((opt, oIdx) => (
-                                                  <div key={oIdx}>{opt}</div>
-                                                ))}
-                                              </div>
-                                            )}
-                                            <div
-                                              style={{
-                                                marginTop: "8px",
-                                                fontSize: "0.8rem",
-                                                color: "#10b981",
-                                                fontStyle: "italic",
-                                              }}
-                                            >
-                                              Answer: {q.answer}
-                                            </div>
-                                          </div>
-                                          <span
-                                            style={{
-                                              fontSize: "0.8rem",
-                                              color: "var(--text-secondary)",
-                                            }}
-                                          >
-                                            {q.points} pts
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ),
-                              )}
+                              <AssignmentPlayer
+                                assignment={generatedAssignment}
+                                showAnswers={previewShowAnswers}
+                                results={previewResults}
+                                onSubmit={async (answers) => {
+                                  try {
+                                    const published = await api.publishAssignment(generatedAssignment);
+                                    const result = await api.submitAssignment(published.assignment_id, answers, "Teacher Preview");
+                                    setPreviewResults(result.results);
+                                    addToast("Assignment graded! Score: " + result.results.percent + "%", "success");
+                                  } catch (err) { addToast("Error grading: " + err.message, "error"); }
+                                }}
+                              />
 
                               {/* Rubric */}
                               {generatedAssignment.rubric?.criteria && (
@@ -24508,65 +24376,6 @@ ${signature}`;
         ))}
       </div>
 
-      {/* Interactive Assignment Player Modal */}
-      {showInteractivePreview && (generatedAssignment || (lessonPlan && lessonPlan.sections)) && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.7)",
-            zIndex: 10000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-        >
-          <div
-            style={{
-              background: "#1a1a2e",
-              borderRadius: "12px",
-              width: "100%",
-              maxWidth: "900px",
-              maxHeight: "90vh",
-              overflow: "auto",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-            }}
-          >
-            <AssignmentPlayer
-              assignment={generatedAssignment || lessonPlan}
-              onSubmit={async (answers) => {
-                try {
-                  const assignmentData = generatedAssignment || lessonPlan;
-                  const published =
-                    await api.publishAssignment(assignmentData);
-                  const result = await api.submitAssignment(
-                    published.assignment_id,
-                    answers,
-                    "Teacher Preview",
-                  );
-                  setInteractiveResults(result.results);
-                  addToast(
-                    "Assignment graded! Score: " + result.results.percent + "%",
-                    "success",
-                  );
-                } catch (err) {
-                  addToast("Error grading: " + err.message, "error");
-                }
-              }}
-              onClose={() => {
-                setShowInteractivePreview(false);
-                setInteractiveResults(null);
-              }}
-              results={interactiveResults}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Save Lesson Modal */}
       {showSaveLesson && lessonPlan && (
