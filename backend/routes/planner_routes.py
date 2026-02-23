@@ -113,6 +113,10 @@ def _build_section_categories_prompt(categories, subject=''):
             'name': 'True / False',
             'instruction': 'Generate true/false statement evaluation questions. Use type "true_false".',
         },
+        'florida_fast': {
+            'name': 'FL FAST Item Types',
+            'instruction': 'Generate Florida FAST-style items. Use "multiselect" (select all that apply with options array and correct indices array), "multi_part" (compound Part A/B with parts array where each part has its own question_type, options, answer, and points), "grid_match" (matrix matching with row_labels, column_labels, and correct 2D one-hot array), "inline_dropdown" (cloze with {0},{1} placeholders in question text and dropdowns array with options and correct index). These mirror the actual FAST test format.',
+        },
     }
 
     enabled = [k for k, v in categories.items() if v]
@@ -259,6 +263,245 @@ def _auto_upgrade_visual_types(assignment):
     return assignment
 
 
+# ── Shape keyword → question_type mapping ──────────────────────────────────
+_SHAPE_KEYWORDS = [
+    # Multi-word first (longest match wins)
+    ('rectangular prism', 'rectangular_prism'),
+    ('regular polygon', 'regular_polygon'),
+    ('right triangle', 'triangle'),
+    ('isosceles triangle', 'triangle'),
+    ('equilateral triangle', 'triangle'),
+    ('scalene triangle', 'triangle'),
+    ('right prism', 'rectangular_prism'),
+    ('triangular prism', 'rectangular_prism'),
+    ('square pyramid', 'pyramid'),
+    # Single-word
+    ('rhombus', 'parallelogram'),
+    ('parallelogram', 'parallelogram'),
+    ('rectangle', 'rectangle'),
+    ('trapezoid', 'trapezoid'),
+    ('triangle', 'triangle'),
+    ('cylinder', 'cylinder'),
+    ('circle', 'circle'),
+    ('sphere', 'sphere'),
+    ('pyramid', 'pyramid'),
+    ('cone', 'cone'),
+    ('cube', 'rectangular_prism'),
+    ('prism', 'rectangular_prism'),
+    ('square', 'rectangle'),
+    ('hexagon', 'regular_polygon'),
+    ('pentagon', 'regular_polygon'),
+    ('octagon', 'regular_polygon'),
+    ('heptagon', 'regular_polygon'),
+    ('decagon', 'regular_polygon'),
+    ('nonagon', 'regular_polygon'),
+]
+
+_POLYGON_SIDES = {
+    'pentagon': 5, 'hexagon': 6, 'heptagon': 7, 'octagon': 8,
+    'nonagon': 9, 'decagon': 10,
+}
+
+_MODE_KEYWORDS = [
+    ('surface area', 'surface_area'),
+    ('lateral area', 'lateral_area'),
+    ('pythagorean', 'pythagorean'),
+    ('missing side', 'pythagorean'),
+    ('hypotenuse', 'pythagorean'),
+    ('missing angle', 'angles'),
+    ('angle sum', 'angles'),
+    ('scale factor', 'similarity'),
+    ('similarity', 'similarity'),
+    ('similar triangles', 'similarity'),
+    ('decompose', 'decompose'),
+    ('midsegment', 'midsegment'),
+    ('circumference', 'perimeter'),
+    ('perimeter', 'perimeter'),
+    ('volume', 'volume'),
+    ('area', 'area'),
+]
+
+_ALL_GEOMETRY_TYPES = {
+    'triangle', 'rectangle', 'circle', 'trapezoid', 'parallelogram',
+    'regular_polygon', 'rectangular_prism', 'cylinder', 'cone',
+    'pyramid', 'sphere', 'geometry',
+    'pythagorean', 'angles', 'similarity', 'trig',
+}
+
+
+def _detect_primary_shape(text):
+    """Detect the primary geometry shape referenced in question text.
+
+    Returns (question_type, polygon_sides_or_None) or (None, None) if no shape found.
+    Uses subject-position heuristics: shapes appearing as 'the [SHAPE]', 'a [SHAPE]',
+    'following [SHAPE]' are prioritized. Falls back to first shape mention.
+    """
+    import re
+    text_lower = text.lower()
+
+    # Phase 1: Subject-position patterns — "of the parallelogram", "the following cylinder"
+    subject_patterns = [
+        r'(?:of|the|this|a|an|following|given)\s+',  # "of the [SHAPE]"
+        r'^.*?(?:find|calculate|compute|determine|what is)\b.*?',  # "Find the area of [SHAPE]"
+    ]
+
+    best_match = None
+    best_pos = len(text_lower)
+
+    for keyword, qtype in _SHAPE_KEYWORDS:
+        # Find all occurrences
+        for m in re.finditer(r'\b' + re.escape(keyword) + r's?\b', text_lower):
+            pos = m.start()
+            # Check if this occurrence is in a subject position
+            prefix = text_lower[:pos]
+            is_subject = False
+            for sp in subject_patterns:
+                if re.search(sp + r'$', prefix):
+                    is_subject = True
+                    break
+
+            # Subject-position shapes get priority (negative position)
+            effective_pos = -1000 + pos if is_subject else pos
+
+            if effective_pos < best_pos:
+                best_pos = effective_pos
+                best_match = (qtype, keyword)
+
+    if best_match:
+        qtype, keyword = best_match
+        sides = _POLYGON_SIDES.get(keyword)
+        return qtype, sides
+
+    return None, None
+
+
+def _detect_mode(text):
+    """Detect the calculation mode from question text."""
+    text_lower = text.lower()
+    for keyword, mode in _MODE_KEYWORDS:
+        if keyword in text_lower:
+            return mode
+    return None
+
+
+def _is_identification_question(text):
+    """Check if question text is asking to identify/classify a shape (not calculate)."""
+    import re
+    identification_patterns = [
+        r'\bidentify\b',
+        r'\bname\s+the\b',
+        r'\bwhat\s+type\b',
+        r'\bclassify\b',
+        r'\bwhich\s+type\b',
+        r'\bwhich\s+shape\b',
+        r'\bwhat\s+kind\b',
+    ]
+    return any(re.search(p, text, re.IGNORECASE) for p in identification_patterns)
+
+
+def _infer_shape_answer(text):
+    """Infer the shape name from property descriptions in the question text."""
+    import re
+    text_lower = text.lower()
+
+    has_equal_sides = bool(re.search(r'four\s+equal\s+sides|all\s+sides\s+equal', text_lower))
+    has_right_angles = bool(re.search(r'four\s+right\s+angles|all\s+angles\s+(?:are\s+)?90', text_lower))
+    has_perp_diag = bool(re.search(r'diagonals?\s+(?:are\s+)?perpendicular|right\s+angles?\s+diagonals?', text_lower))
+    has_one_parallel = bool(re.search(r'one\s+pair\s+of\s+parallel\s+sides|exactly\s+one\s+pair.*parallel', text_lower))
+    has_opp_equal = bool(re.search(r'opposite\s+sides\s+(?:are\s+)?(?:equal|parallel|congruent)', text_lower))
+
+    if has_equal_sides and has_perp_diag:
+        return 'rhombus'
+    if has_equal_sides and has_right_angles:
+        return 'square'
+    if has_right_angles:
+        return 'rectangle'
+    if has_one_parallel:
+        return 'trapezoid'
+    if has_opp_equal:
+        return 'parallelogram'
+
+    return None
+
+
+def _auto_correct_geometry_types(assignment):
+    """Programmatically detect and correct geometry question_type mismatches.
+
+    The AI sometimes generates the wrong geometry type — e.g., a question about
+    a parallelogram gets question_type='triangle'. This function:
+    0. Detects identification questions and downgrades them to short_answer
+    1. Scans question text for shape keywords to find the PRIMARY shape
+    2. Corrects question_type if it doesn't match the primary shape
+    3. Upgrades short_answer questions about geometry to the correct type
+    4. Detects and sets the correct mode (area, volume, perimeter, etc.)
+    5. Sets polygon sides for named polygons (hexagon=6, pentagon=5, etc.)
+    """
+    if not assignment or not isinstance(assignment, dict):
+        return assignment
+
+    for section in assignment.get('sections', []):
+        for q in section.get('questions', []):
+            qt = q.get('question_type', q.get('type', ''))
+            text = q.get('question', '')
+            if not text:
+                continue
+
+            detected_shape, polygon_sides = _detect_primary_shape(text)
+            detected_mode = _detect_mode(text)
+
+            # ── Step 0: Downgrade to short_answer if no computation mode ──
+            # Identification questions ("what type", "identify") or conceptual
+            # questions ("prove", "explain") with no detected mode → short_answer.
+            if qt in _ALL_GEOMETRY_TYPES:
+                if _is_identification_question(text):
+                    q['question_type'] = 'short_answer'
+                    inferred = _infer_shape_answer(text)
+                    if inferred:
+                        q.setdefault('answer', inferred)
+                    for field in ('base', 'height', 'width', 'radius', 'topBase',
+                                  'mode', 'sides', 'side_length', 'slant_height'):
+                        q.pop(field, None)
+                    continue
+                # No detected computation mode → not a visual geometry question
+                if not detected_mode and not q.get('mode'):
+                    q['question_type'] = 'short_answer'
+                    for field in ('base', 'height', 'width', 'radius', 'topBase',
+                                  'mode', 'sides', 'side_length', 'slant_height'):
+                        q.pop(field, None)
+                    continue
+
+            if not detected_shape:
+                continue
+
+            # ── Case 1: question_type is a DIFFERENT geometry type → correct it ──
+            if qt in _ALL_GEOMETRY_TYPES and qt != detected_shape:
+                # Don't override specialized modes that map to triangle
+                # (pythagorean, angles, trig, similarity are triangle-based)
+                triangle_modes = {'pythagorean', 'angles', 'trig', 'similarity'}
+                if qt in triangle_modes and detected_shape == 'triangle':
+                    continue  # e.g., pythagorean IS a triangle, don't downgrade
+                if detected_shape in triangle_modes:
+                    continue  # The detected "mode" is the type, not a shape mismatch
+                q['question_type'] = detected_shape
+
+            # ── Case 2: short_answer/math_equation about a geometry shape → upgrade ──
+            elif qt in ('short_answer', '', 'math_equation') and detected_mode:
+                q['question_type'] = detected_shape
+
+            # ── Set polygon sides for named polygons ──
+            if polygon_sides and q.get('question_type') == 'regular_polygon':
+                q.setdefault('sides', polygon_sides)
+
+            # ── Set mode from text if not already set or if it's just 'area' default ──
+            if detected_mode:
+                current_mode = q.get('mode', '')
+                # Override mode if it's missing or is generic 'area' but text says otherwise
+                if not current_mode or (current_mode == 'area' and detected_mode != 'area'):
+                    q['mode'] = detected_mode
+
+    return assignment
+
+
 def _looks_like_graphing_question(text):
     """Check if question text suggests it should be a graphing/function_graph question."""
     import re
@@ -371,20 +614,75 @@ def _extract_dimensions_from_text(question):
 
     Catches cases where the AI puts 'radius = 2 and height = 5' in the question text
     but omits the actual JSON fields, causing wrong defaults to be applied.
+    Handles patterns like: 'Base = 8 cm', 'radius of 5', 'height is 12 meters', 'r = 3'
     """
     import re
     text = question.get('question', '')
     if not text:
         return
 
+    # Unit suffix that may follow a number (optional capture, not part of value)
+    _UNIT = r'(?:\s*(?:cm|m|mm|in|ft|yd|units?|meters?|feet|inches|yards|kilometers?|km|miles?|mi)?)'
+
+    # Dual-base extraction: "bases measuring 10 cm and 14 cm" or "bases of 10 and 14"
+    dual = re.search(
+        r'bases\s+(?:measuring|of)\s+([\d.]+)' + _UNIT + r'\s+and\s+([\d.]+)',
+        text, re.IGNORECASE
+    )
+    if dual and 'base' not in question and 'topBase' not in question:
+        v1, v2 = float(dual.group(1)), float(dual.group(2))
+        question['base'] = max(v1, v2)
+        question['topBase'] = min(v1, v2)
+
     # Map of text patterns to JSON field names
+    # Each entry: field → list of regex patterns (first match wins)
+    # Patterns are ordered: explicit (= :) → verbal (of/is) → bare number (last resort)
     dimension_patterns = {
-        'radius': [r'radius\s*[=:]\s*([\d.]+)', r'r\s*=\s*([\d.]+)'],
-        'height': [r'height\s*[=:]\s*([\d.]+)', r'h\s*=\s*([\d.]+)'],
-        'base': [r'base\s*[=:]\s*([\d.]+)', r'b\s*=\s*([\d.]+)'],
-        'width': [r'width\s*[=:]\s*([\d.]+)', r'w\s*=\s*([\d.]+)'],
-        'side_length': [r'side\s*(?:length)?\s*[=:]\s*([\d.]+)', r'(?:each\s+)?side\s+(?:is|of|measures?)\s+([\d.]+)'],
-        'slant_height': [r'slant\s*height\s*[=:]\s*([\d.]+)', r'l\s*=\s*([\d.]+)'],
+        'radius': [
+            r'radius\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'radius\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'r\s*=\s*([\d.]+)' + _UNIT,
+            r'radius\s+([\d.]+)' + _UNIT,  # bare: "radius 5 cm"
+        ],
+        'height': [
+            r'height\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'height\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'h\s*=\s*([\d.]+)' + _UNIT,
+            r'height\s+([\d.]+)' + _UNIT,  # bare: "height 4"
+        ],
+        'base': [
+            r'(?<!top\s)base\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'(?<!top\s)base\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'b\s*=\s*([\d.]+)' + _UNIT,
+            r'length\s*[=:]\s*([\d.]+)' + _UNIT,  # "length" → base
+            r'length\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'length\s+([\d.]+)' + _UNIT,  # bare: "length 10 cm"
+            r'(?<!top\s)base\s+([\d.]+)' + _UNIT,  # bare: "base 8"
+        ],
+        'topBase': [
+            r'top\s*base\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'top\s*base\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'parallel\s+side[s]?\s*[=:]\s*([\d.]+)' + _UNIT,
+        ],
+        'width': [
+            r'width\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'width\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'w\s*=\s*([\d.]+)' + _UNIT,
+            r'width\s+([\d.]+)' + _UNIT,  # bare: "width 6 cm"
+        ],
+        'side_length': [
+            r'side\s*(?:length)?\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'(?:each\s+)?side\s+(?:is|of|measures?)\s+([\d.]+)' + _UNIT,
+        ],
+        'slant_height': [
+            r'slant\s*height\s*[=:]\s*([\d.]+)' + _UNIT,
+            r'slant\s+(?:of|is|measures?)\s+([\d.]+)' + _UNIT,
+            r'l\s*=\s*([\d.]+)' + _UNIT,
+        ],
+        'midsegment': [
+            r'midsegment\s*(?:measuring|of|is|=|:)\s*([\d.]+)' + _UNIT,
+            r'midsegment\s+([\d.]+)' + _UNIT,
+        ],
     }
 
     for field, patterns in dimension_patterns.items():
@@ -399,59 +697,35 @@ def _extract_dimensions_from_text(question):
                     break
 
 
+_GEOMETRY_DEFAULTS = {
+    'triangle':          {'base': 6, 'height': 4, 'mode': 'area'},
+    'geometry':          {'base': 6, 'height': 4, 'mode': 'area'},
+    'rectangle':         {'base': 6, 'height': 4, 'mode': 'area'},
+    'circle':            {'radius': 5, 'mode': 'area'},
+    'trapezoid':         {'topBase': 4, 'base': 8, 'height': 5, 'mode': 'area'},
+    'parallelogram':     {'base': 7, 'height': 4, 'mode': 'area'},
+    'regular_polygon':   {'sides': 6, 'side_length': 4, 'mode': 'area'},
+    'rectangular_prism': {'base': 5, 'width': 3, 'height': 4, 'mode': 'volume'},
+    'cylinder':          {'radius': 3, 'height': 7, 'mode': 'volume'},
+    'cone':              {'radius': 4, 'height': 6, 'slant_height': 7.21, 'mode': 'volume'},
+    'pyramid':           {'base': 6, 'height': 8, 'slant_height': 8.54, 'mode': 'volume'},
+    'sphere':            {'radius': 5, 'mode': 'volume'},
+}
+
+
 def _ensure_geometry_defaults(assignment):
     """Ensure geometry questions in an assignment have required default fields."""
     if not assignment or not isinstance(assignment, dict):
         return assignment
-    geometry_types = {
-        'regular_polygon', 'triangle', 'geometry', 'rectangle', 'circle',
-        'trapezoid', 'parallelogram', 'rectangular_prism', 'cylinder',
-        'cone', 'sphere', 'pyramid',
-    }
     for section in assignment.get('sections', []):
         for q in section.get('questions', []):
             qt = q.get('question_type', '')
-            if qt in geometry_types:
+            defaults = _GEOMETRY_DEFAULTS.get(qt)
+            if defaults:
                 # Extract dimensions from question text BEFORE applying defaults
                 _extract_dimensions_from_text(q)
-            if qt == 'regular_polygon':
-                q.setdefault('sides', 6)
-                q.setdefault('side_length', 4)
-                q.setdefault('mode', 'area')
-            elif qt in ('triangle', 'geometry'):
-                q.setdefault('base', 6)
-                q.setdefault('height', 4)
-                q.setdefault('mode', 'area')
-            elif qt == 'rectangle':
-                q.setdefault('base', 6)
-                q.setdefault('height', 4)
-                q.setdefault('mode', 'area')
-            elif qt == 'circle':
-                q.setdefault('radius', 5)
-            elif qt == 'trapezoid':
-                q.setdefault('topBase', 4)
-                q.setdefault('base', 8)
-                q.setdefault('height', 5)
-            elif qt == 'parallelogram':
-                q.setdefault('base', 7)
-                q.setdefault('height', 4)
-            elif qt == 'rectangular_prism':
-                q.setdefault('base', 5)
-                q.setdefault('width', 3)
-                q.setdefault('height', 4)
-            elif qt == 'cylinder':
-                q.setdefault('radius', 3)
-                q.setdefault('height', 7)
-            elif qt == 'cone':
-                q.setdefault('radius', 4)
-                q.setdefault('height', 6)
-                q.setdefault('slant_height', 7.21)
-            elif qt == 'pyramid':
-                q.setdefault('base', 6)
-                q.setdefault('height', 8)
-                q.setdefault('slant_height', 8.54)
-            elif qt == 'sphere':
-                q.setdefault('radius', 5)
+                for field, value in defaults.items():
+                    q.setdefault(field, value)
     return assignment
 
 
@@ -476,6 +750,163 @@ def _ensure_data_table_defaults(assignment):
     return assignment
 
 
+def _ensure_fast_defaults(assignment):
+    """Validate and normalize FAST item types (multiselect, multi_part, grid_match, inline_dropdown)."""
+    if not assignment or not isinstance(assignment, dict):
+        return assignment
+    import re
+    for section in assignment.get('sections', []):
+        for q in section.get('questions', []):
+            qt = q.get('question_type', q.get('type', ''))
+
+            if qt == 'multiselect':
+                # Ensure correct is a list of ints
+                correct = q.get('correct', [])
+                if isinstance(correct, list):
+                    q['correct'] = [int(c) for c in correct if isinstance(c, (int, float))]
+
+            elif qt == 'multi_part':
+                # Ensure each part has question_type
+                for part in q.get('parts', []):
+                    if 'question_type' not in part:
+                        part['question_type'] = 'multiple_choice'
+
+            elif qt == 'grid_match':
+                # Validate correct matrix dimensions match labels
+                rows = q.get('row_labels', [])
+                cols = q.get('column_labels', [])
+                correct = q.get('correct', [])
+                if len(correct) != len(rows):
+                    q['correct'] = correct[:len(rows)] + [[0] * len(cols)] * max(0, len(rows) - len(correct))
+                for i, row in enumerate(q.get('correct', [])):
+                    if len(row) != len(cols):
+                        q['correct'][i] = row[:len(cols)] + [0] * max(0, len(cols) - len(row))
+
+            elif qt == 'inline_dropdown':
+                # Validate dropdown count matches placeholders
+                text = q.get('question', '')
+                placeholders = re.findall(r'\{(\d+)\}', text)
+                dropdowns = q.get('dropdowns', [])
+                expected_count = len(placeholders)
+                if len(dropdowns) < expected_count:
+                    # Pad with empty dropdowns so rendering doesn't crash
+                    while len(dropdowns) < expected_count:
+                        dropdowns.append({'options': ['—'], 'correct': 0})
+                    q['dropdowns'] = dropdowns
+
+    return assignment
+
+
+def _compute_geometry_answer(qt, q):
+    """Compute answer for any (shape, mode) pair. Returns float or None."""
+    import math
+
+    mode = q.get('mode', 'area')
+    b    = q.get('base', 6)
+    h    = q.get('height', 4)
+    w    = q.get('width', b)
+    r    = q.get('radius', 5)
+    tb   = q.get('topBase', q.get('top_base', 4))
+    n    = q.get('sides', 6)
+    s    = q.get('side_length', 4)
+    sl   = q.get('slant_height', 0)
+
+    # ── AREA ──
+    if mode == 'area':
+        if qt in ('triangle', 'geometry'):  return b * h / 2
+        if qt == 'rectangle':               return w * h
+        if qt == 'circle':                  return math.pi * r**2
+        if qt == 'trapezoid':               return 0.5 * (b + tb) * h
+        if qt == 'parallelogram':           return b * h
+        if qt == 'regular_polygon':
+            apothem = s / (2 * math.tan(math.pi / n))
+            return 0.5 * n * s * apothem
+
+    # ── PERIMETER ──
+    if mode == 'perimeter':
+        if qt in ('triangle', 'geometry'):
+            return q.get('side_a', 5) + q.get('side_b', 4) + q.get('side_c', 3)
+        if qt == 'rectangle':               return 2 * w + 2 * h
+        if qt == 'circle':                  return 2 * math.pi * r
+        if qt == 'trapezoid':
+            offset = abs(b - tb) / 2
+            leg = math.sqrt(offset**2 + h**2) if h else offset
+            return b + tb + 2 * leg
+        if qt == 'parallelogram':
+            side = q.get('side_length', q.get('width', math.sqrt(h**2 + 4)))
+            return 2 * b + 2 * side
+        if qt == 'regular_polygon':         return n * s
+
+    # circumference is perimeter for circles
+    if mode == 'circumference' and qt == 'circle':
+        return 2 * math.pi * r
+
+    # ── VOLUME ──
+    if mode == 'volume':
+        if qt == 'rectangular_prism':       return b * w * h
+        if qt == 'cylinder':                return math.pi * r**2 * h
+        if qt == 'cone':                    return (1/3) * math.pi * r**2 * h
+        if qt == 'pyramid':                 return (1/3) * b**2 * h
+        if qt == 'sphere':                  return (4/3) * math.pi * r**3
+
+    # ── SURFACE AREA ──
+    if mode == 'surface_area':
+        if qt == 'rectangular_prism':       return 2 * (b*w + b*h + w*h)
+        if qt == 'cylinder':                return 2*math.pi*r**2 + 2*math.pi*r*h
+        if qt == 'cone':                    return math.pi*r**2 + math.pi*r*sl
+        if qt == 'pyramid':                 return b**2 + 2*b*sl
+        if qt == 'sphere':                  return 4 * math.pi * r**2
+
+    # ── LATERAL AREA ──
+    if mode == 'lateral_area':
+        if qt == 'cone':                    return math.pi * r * sl
+        if qt == 'pyramid':                 return 2 * b * sl
+
+    # ── MIDSEGMENT ──
+    if mode == 'midsegment':
+        if qt == 'trapezoid':               return (b + tb) / 2
+
+    # ── DECOMPOSE ──
+    if mode == 'decompose':
+        if qt == 'regular_polygon':
+            apothem = s / (2 * math.tan(math.pi / n))
+            return 0.5 * n * s * apothem
+
+    # ── TRIANGLE-SPECIFIC MODES ──
+    if qt in ('triangle', 'geometry'):
+        if mode == 'pythagorean':
+            a = q.get('side_a', b)
+            bv = q.get('side_b', h)
+            missing = q.get('missing_side', 'c')
+            if missing == 'c': return math.sqrt(a**2 + bv**2)
+            elif missing == 'a':
+                c = q.get('side_c', math.sqrt(a**2 + bv**2))
+                return math.sqrt(c**2 - bv**2)
+            elif missing == 'b':
+                c = q.get('side_c', math.sqrt(a**2 + bv**2))
+                return math.sqrt(c**2 - a**2)
+        if mode == 'angles':
+            a1, a2 = q.get('angle1', 60), q.get('angle2', 70)
+            missing = q.get('missing_angle', 3)
+            if missing == 3: return 180 - a1 - a2
+            elif missing == 2: return 180 - a1 - q.get('angle3', 50)
+            elif missing == 1: return 180 - a2 - q.get('angle3', 50)
+        if mode == 'trig':
+            theta_rad = math.radians(q.get('theta', 30))
+            func = q.get('trig_func', 'sin')
+            solve_for = q.get('solve_for', None)
+            hyp = q.get('side_c', q.get('hypotenuse', 10))
+            ratio = {'sin': math.sin, 'cos': math.cos, 'tan': math.tan}.get(func, math.sin)(theta_rad)
+            if not solve_for: return round(ratio, 4)
+            if solve_for in ('opp', 'opposite'): return hyp * math.sin(theta_rad)
+            if solve_for in ('adj', 'adjacent'): return hyp * math.cos(theta_rad)
+            if solve_for in ('hyp', 'hypotenuse'):
+                opp = q.get('side_a', q.get('opposite', 5))
+                return opp / math.sin(theta_rad)
+
+    return None  # Unsupported (shape, mode) pair
+
+
 def _hydrate_math_visuals(assignment):
     """Programmatically compute correct answers and visual data for math/visual questions.
 
@@ -492,154 +923,18 @@ def _hydrate_math_visuals(assignment):
         for q in section.get('questions', []):
             qt = q.get('question_type', q.get('type', ''))
 
-            # ── Geometry: compute answer from dimensions ──
-            if qt in ('triangle', 'geometry'):
-                mode = q.get('mode', 'area')
-                base = q.get('base', 6)
-                height = q.get('height', 4)
-                if mode == 'area':
-                    q['answer'] = str(round(base * height / 2, 2))
-                elif mode == 'perimeter':
-                    a = q.get('side_a', 5)
-                    b = q.get('side_b', 4)
-                    c = q.get('side_c', 3)
-                    q['answer'] = str(round(a + b + c, 2))
-                elif mode == 'pythagorean':
-                    a = q.get('side_a', base)
-                    b = q.get('side_b', height)
-                    missing = q.get('missing_side', 'c')
-                    if missing == 'c':
-                        q['answer'] = str(round(math.sqrt(a**2 + b**2), 2))
-                    elif missing == 'a':
-                        c = q.get('side_c', math.sqrt(a**2 + b**2))
-                        q['answer'] = str(round(math.sqrt(c**2 - b**2), 2))
-                    elif missing == 'b':
-                        c = q.get('side_c', math.sqrt(a**2 + b**2))
-                        q['answer'] = str(round(math.sqrt(c**2 - a**2), 2))
-                elif mode == 'angles':
-                    a1 = q.get('angle1', 60)
-                    a2 = q.get('angle2', 70)
-                    missing = q.get('missing_angle', 3)
-                    if missing == 3:
-                        q['answer'] = str(round(180 - a1 - a2, 2))
-                    elif missing == 2:
-                        a3 = q.get('angle3', 50)
-                        q['answer'] = str(round(180 - a1 - a3, 2))
-                    elif missing == 1:
-                        a3 = q.get('angle3', 50)
-                        q['answer'] = str(round(180 - a2 - a3, 2))
-                elif mode == 'trig':
-                    theta_deg = q.get('theta', 30)
-                    theta_rad = math.radians(theta_deg)
-                    func = q.get('trig_func', 'sin')
-                    solve_for = q.get('solve_for', None)
-                    hyp = q.get('side_c', q.get('hypotenuse', 10))
-                    if func == 'sin':
-                        ratio = math.sin(theta_rad)
-                    elif func == 'cos':
-                        ratio = math.cos(theta_rad)
-                    else:
-                        ratio = math.tan(theta_rad)
-                    if not solve_for:
-                        q['answer'] = str(round(ratio, 4))
-                    elif solve_for in ('opp', 'opposite'):
-                        q['answer'] = str(round(hyp * math.sin(theta_rad), 2))
-                    elif solve_for in ('adj', 'adjacent'):
-                        q['answer'] = str(round(hyp * math.cos(theta_rad), 2))
-                    elif solve_for in ('hyp', 'hypotenuse'):
-                        opp = q.get('side_a', q.get('opposite', 5))
-                        q['answer'] = str(round(opp / math.sin(theta_rad), 2))
-
-            elif qt == 'rectangle':
-                w = q.get('width', q.get('base', 6))
-                h = q.get('height', 4)
-                mode = q.get('mode', 'area')
-                if mode == 'area':
-                    q['answer'] = str(round(w * h, 2))
-                elif mode == 'perimeter':
-                    q['answer'] = str(round(2 * w + 2 * h, 2))
-
-            elif qt == 'circle':
-                r = q.get('radius', 5)
-                mode = q.get('mode', 'area')
-                if mode == 'area':
-                    q['answer'] = str(round(math.pi * r**2, 2))
-                elif mode in ('circumference', 'perimeter'):
-                    q['answer'] = str(round(2 * math.pi * r, 2))
-
-            elif qt == 'trapezoid':
-                b1 = q.get('base', 8)
-                b2 = q.get('topBase', q.get('top_base', 4))
-                h = q.get('height', 5)
-                q['answer'] = str(round(0.5 * (b1 + b2) * h, 2))
-
-            elif qt == 'parallelogram':
-                b = q.get('base', 7)
-                h = q.get('height', 4)
-                q['answer'] = str(round(b * h, 2))
-
-            elif qt == 'regular_polygon':
-                sides = q.get('sides', 6)
-                sl = q.get('side_length', 4)
-                mode = q.get('mode', 'area')
-                if mode == 'perimeter':
-                    q['answer'] = str(round(sides * sl, 2))
-                elif mode == 'area':
-                    apothem = sl / (2 * math.tan(math.pi / sides))
-                    q['answer'] = str(round(0.5 * sides * sl * apothem, 2))
-
-            elif qt == 'rectangular_prism':
-                l = q.get('base', 5)
-                w = q.get('width', 3)
-                h = q.get('height', 4)
-                mode = q.get('mode', 'volume')
-                if mode == 'volume':
-                    q['answer'] = str(round(l * w * h, 2))
-                elif mode == 'surface_area':
-                    q['answer'] = str(round(2 * (l*w + l*h + w*h), 2))
-
-            elif qt == 'cylinder':
-                r = q.get('radius', 3)
-                h = q.get('height', 7)
-                mode = q.get('mode', 'volume')
-                if mode == 'volume':
-                    q['answer'] = str(round(math.pi * r**2 * h, 2))
-                elif mode == 'surface_area':
-                    q['answer'] = str(round(2 * math.pi * r**2 + 2 * math.pi * r * h, 2))
-
-            elif qt == 'cone':
-                r = q.get('radius', 4)
-                h = q.get('height', 6)
-                sl = q.get('slant_height', math.sqrt(r**2 + h**2))
-                q['slant_height'] = round(sl, 2)
-                mode = q.get('mode', 'volume')
-                if mode == 'volume':
-                    q['answer'] = str(round((1/3) * math.pi * r**2 * h, 2))
-                elif mode == 'surface_area':
-                    q['answer'] = str(round(math.pi * r**2 + math.pi * r * sl, 2))
-                elif mode == 'lateral_area':
-                    q['answer'] = str(round(math.pi * r * sl, 2))
-
-            elif qt == 'pyramid':
-                b = q.get('base', 6)
-                h = q.get('height', 8)
-                sl = q.get('slant_height', math.sqrt(h**2 + (b/2)**2))
-                q['slant_height'] = round(sl, 2)
-                mode = q.get('mode', 'volume')
-                if mode == 'volume':
-                    q['answer'] = str(round((1/3) * b**2 * h, 2))
-                elif mode == 'surface_area':
-                    q['answer'] = str(round(b**2 + 2 * b * sl, 2))
-                elif mode == 'lateral_area':
-                    q['answer'] = str(round(2 * b * sl, 2))
-
-            elif qt == 'sphere':
-                r = q.get('radius', 5)
-                mode = q.get('mode', 'volume')
-                if mode == 'volume':
-                    q['answer'] = str(round((4/3) * math.pi * r**3, 2))
-                elif mode == 'surface_area':
-                    q['answer'] = str(round(4 * math.pi * r**2, 2))
+            # ── Geometry: compute answer from dimensions via formula registry ──
+            if qt in _ALL_GEOMETRY_TYPES:
+                # Compute derived slant heights for cones/pyramids
+                if qt == 'cone' and 'slant_height' not in q:
+                    q['slant_height'] = round(math.sqrt(q.get('radius', 4)**2 + q.get('height', 6)**2), 2)
+                if qt == 'pyramid' and 'slant_height' not in q:
+                    bv, hv = q.get('base', 6), q.get('height', 8)
+                    q['slant_height'] = round(math.sqrt(hv**2 + (bv/2)**2), 2)
+                # Compute answer from formula registry
+                result = _compute_geometry_answer(qt, q)
+                if result is not None:
+                    q['answer'] = str(round(result, 2))
 
             # ── Box Plot: compute 5-number summary from data ──
             elif qt == 'box_plot':
@@ -1305,9 +1600,17 @@ TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
             assignment_sections_block = '\n' + _build_section_categories_prompt(assignment_section_cats, config.get('subject', '')) + '\n'
 
         if content_type == 'Assignment':
+            total_q = config.get('totalQuestions', 10)
+            per_section = config.get('questionsPerSection', 0)
+            question_target = f"\nTARGET QUESTION COUNT: Generate approximately {total_q} questions total across all sections."
+            if per_section > 0:
+                question_target += f" Each section should have approximately {per_section} questions."
+            question_target += " This is a hard requirement — do NOT generate fewer questions than specified.\n"
+
             prompt = common_header + f"""
 Create a complete, ready-to-use assignment that directly assesses the standards listed above.
 The assignment should be appropriate for grade {config.get('grade', '7')} students.
+{question_target}
 {assignment_sections_block}
 CRITICAL REQUIREMENTS:
 1. THE ASSIGNMENT MUST BE 100% SELF-CONTAINED — every resource referenced (tables, charts, reading passages, data) MUST be included in the JSON
@@ -1579,8 +1882,10 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                 content = completion.choices[0].message.content
                 plan = json.loads(content)
                 _auto_upgrade_visual_types(plan)
+                _auto_correct_geometry_types(plan)
                 _ensure_geometry_defaults(plan)
                 _ensure_data_table_defaults(plan)
+                _ensure_fast_defaults(plan)
                 _hydrate_math_visuals(plan)
                 plan['approach'] = approach_name
                 variations.append(plan)
@@ -1603,8 +1908,10 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
         content = completion.choices[0].message.content
         plan = json.loads(content)
         _auto_upgrade_visual_types(plan)
+        _auto_correct_geometry_types(plan)
         _ensure_geometry_defaults(plan)
         _ensure_data_table_defaults(plan)
+        _ensure_fast_defaults(plan)
         _hydrate_math_visuals(plan)
         usage = _extract_usage(completion, "gpt-4o")
         _record_planner_cost(usage)
@@ -1808,6 +2115,7 @@ Vocabulary:
 
 ASSIGNMENT TYPE: {assignment_type.title()}
 {type_instruction}
+{f"TARGET QUESTION COUNT: Generate approximately {config.get('totalQuestions', 10)} questions total across all sections." + (f" Each section should have approximately {config.get('questionsPerSection')} questions." if config.get('questionsPerSection', 0) > 0 else "") + " This is a hard requirement — do NOT generate fewer questions than specified."}
 
 Create a complete, ready-to-use assignment that:
 1. Directly assesses the lesson objectives
@@ -2046,8 +2354,10 @@ Make the questions specific to the lesson content. Include a variety of question
         content = completion.choices[0].message.content
         assignment = json.loads(content)
         _auto_upgrade_visual_types(assignment)
+        _auto_correct_geometry_types(assignment)
         _ensure_geometry_defaults(assignment)
         _ensure_data_table_defaults(assignment)
+        _ensure_fast_defaults(assignment)
         _hydrate_math_visuals(assignment)
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
@@ -3415,6 +3725,74 @@ DATA TABLE (type: "data_table"):
     "expected_data": [["3"], ["5"], ["7"], ["9"], ["11"]],
     "points": 3
 }
+
+MULTISELECT (type: "multiselect"):
+{
+    "number": 16,
+    "question": "Select all expressions equivalent to 7 + 3 x 4 x 2",
+    "question_type": "multiselect",
+    "dok": 2,
+    "standard": "MA.5.AR.2.1",
+    "options": ["(7+3) x 4 x 2", "7 + (3x4) x 2", "7 + 3 x (4x2)", "7 + (3x4x2)", "(7+3) x (4x2)"],
+    "correct": [1, 2, 3],
+    "explanation": "Options B, C, and D are equivalent by the associative property of multiplication",
+    "points": 2
+}
+
+MULTI-PART (type: "multi_part"):
+{
+    "number": 17,
+    "question": "Jerry incorrectly subtracts 3.6 from 3.966 as shown.",
+    "question_type": "multi_part",
+    "dok": 2,
+    "standard": "MA.5.NSO.2.5",
+    "parts": [
+        {
+            "label": "Part A",
+            "question_type": "multiple_choice",
+            "question": "Which statement best describes Jerry's mistake?",
+            "options": ["A) Jerry should have regrouped", "B) Jerry subtracted in the wrong order", "C) Decimal is in the wrong place", "D) Place values not aligned"],
+            "answer": "D",
+            "points": 1
+        },
+        {
+            "label": "Part B",
+            "question_type": "multiple_choice",
+            "question": "What is the correct answer to Jerry's problem?",
+            "options": ["A) 0.034", "B) 0.366", "C) 0.606", "D) 9.06"],
+            "answer": "B",
+            "points": 1
+        }
+    ],
+    "points": 2
+}
+
+GRID MATCHING (type: "grid_match"):
+{
+    "number": 18,
+    "question": "Match each expression with the statement that describes it.",
+    "question_type": "grid_match",
+    "dok": 2,
+    "standard": "MA.5.AR.1.1",
+    "row_labels": ["3+7x4", "4+3x7", "(4+3)x7"],
+    "column_labels": ["Sum of 4 and 3, multiplied by 7", "Product of 3 and 7, added to 4", "Product of 4 and 7, added to 3"],
+    "correct": [[0,1,0],[0,0,1],[1,0,0]],
+    "points": 3
+}
+
+INLINE DROPDOWN (type: "inline_dropdown"):
+{
+    "number": 19,
+    "question": "The value of the expression is predicted to be {0} because 12 is being multiplied by a fraction {1}.",
+    "question_type": "inline_dropdown",
+    "dok": 2,
+    "standard": "MA.5.FR.2.1",
+    "dropdowns": [
+        { "options": ["equal to 12", "less than 12", "greater than 12"], "correct": 1 },
+        { "options": ["equal to 1", "less than 1", "greater than 1"], "correct": 1 }
+    ],
+    "points": 2
+}
 """
 
         prompt = f"""You are an expert assessment developer creating a standards-aligned {assessment_type} for grade {config.get('grade', '8')} {config.get('subject', 'students')}.
@@ -3510,8 +3888,10 @@ Generate a complete assessment in this JSON format:
         content = completion.choices[0].message.content
         assessment = json.loads(content)
         _auto_upgrade_visual_types(assessment)
+        _auto_correct_geometry_types(assessment)
         _ensure_geometry_defaults(assessment)
         _ensure_data_table_defaults(assessment)
+        _ensure_fast_defaults(assessment)
         _hydrate_math_visuals(assessment)
 
         # Add metadata for portal grading context

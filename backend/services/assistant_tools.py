@@ -2524,16 +2524,25 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display):
     if not folder or not os.path.isdir(folder):
         return {}
 
-    # Build reverse lookup: lowercase "first last" -> student_id
-    # from roster names (handles "First Middle Last" by using first+last)
+    # Build reverse lookup: lowercase (first, last) -> student_id
+    # Handles both "First Last" and "Last, First Middle" roster formats
     name_to_sid = {}
     for sid, full_name in roster_name_map.items():
-        # Clean punctuation and split
-        clean = re.sub(r'[,;.\'"]+', ' ', full_name).split()
-        if len(clean) >= 2:
-            # Store as "first last" (skip middle names)
-            key = (clean[0].lower(), clean[-1].lower())
-            name_to_sid[key] = sid
+        if ',' in full_name or ';' in full_name:
+            # "Last, First Middle" or "Last; First Middle" format
+            sep = ',' if ',' in full_name else ';'
+            parts = full_name.split(sep, 1)
+            last_part = parts[0].strip().lower()
+            after = parts[1].strip().split()
+            if after:
+                first_part = after[0].lower()
+                name_to_sid[(first_part, last_part)] = sid
+        else:
+            # "First Middle Last" format
+            clean = re.sub(r'[.\'"]+', ' ', full_name).split()
+            if len(clean) >= 2:
+                key = (clean[0].lower(), clean[-1].lower())
+                name_to_sid[key] = sid
 
     result = defaultdict(set)
     supported = {'.docx', '.pdf', '.txt', '.jpg', '.jpeg', '.png'}

@@ -1297,6 +1297,8 @@ function App() {
   const [standards, setStandards] = useState([]);
   const [selectedStandards, setSelectedStandards] = useState([]);
   const [expandedStandards, setExpandedStandards] = useState([]);
+  const standardsScrollRef = useRef(null);
+  const assessmentStandardsScrollRef = useRef(null);
   const [lessonPlan, setLessonPlan] = useState(null);
   const [lessonVariations, setLessonVariations] = useState([]);
   const [brainstormIdeas, setBrainstormIdeas] = useState([]);
@@ -1310,7 +1312,7 @@ function App() {
   const [assignmentSectionCategories, setAssignmentSectionCategories] = useState({
     multiple_choice: true, short_answer: true, math_computation: false,
     geometry_visual: false, graphing: false, data_analysis: false,
-    extended_writing: true, vocabulary: false, true_false: false,
+    extended_writing: true, vocabulary: false, true_false: false, florida_fast: false,
   });
   const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
   const [previewResults, setPreviewResults] = useState(null);
@@ -1333,6 +1335,8 @@ function App() {
     type: "Lesson Plan",
     format: "Word",
     requirements: "",
+    totalQuestions: 10,
+    questionsPerSection: 0,
   });
 
   // Assessment generator state
@@ -1355,6 +1359,7 @@ function App() {
       extended_writing: false,    // Part: Extended Writing / Essay
       vocabulary: false,          // Part: Vocabulary / Matching
       true_false: false,          // Part: True/False
+      florida_fast: false,        // Part: FL FAST Item Types (multiselect, multi-part, grid match, inline dropdown)
     },
     questionTypes: {
       multiple_choice: 10,
@@ -1373,6 +1378,10 @@ function App() {
       extended_response: 4,
       math_equation: 2,
       data_table: 3,
+      multiselect: 2,
+      multi_part: 2,
+      grid_match: 3,
+      inline_dropdown: 2,
     },
     dokDistribution: {
       "1": 4,
@@ -1398,6 +1407,7 @@ function App() {
     if (cats.extended_writing) typeWeights.extended_response = 10;
     if (cats.true_false) typeWeights.true_false = 10;
     if (cats.vocabulary) typeWeights.matching = 10;
+    if (cats.florida_fast) { typeWeights.multiselect = 10; typeWeights.multi_part = 8; typeWeights.grid_match = 6; typeWeights.inline_dropdown = 6; }
 
     // If nothing enabled, default to MC
     if (Object.keys(typeWeights).length === 0) typeWeights.multiple_choice = 100;
@@ -1417,7 +1427,7 @@ function App() {
     });
 
     // Ensure all types exist in result
-    const allTypes = ['multiple_choice', 'short_answer', 'extended_response', 'true_false', 'matching', 'math_equation', 'data_table'];
+    const allTypes = ['multiple_choice', 'short_answer', 'extended_response', 'true_false', 'matching', 'math_equation', 'data_table', 'multiselect', 'multi_part', 'grid_match', 'inline_dropdown'];
     allTypes.forEach(t => { if (!(t in result)) result[t] = 0; });
     return result;
   };
@@ -3929,6 +3939,29 @@ ${signature}`;
   };
 
   // Planner functions
+  const domainNameMap = {
+    NSO: "Number Sense & Ops", AR: "Algebraic Reasoning", GR: "Geometric Reasoning",
+    DP: "Data & Probability", F: "Functions", T: "Trigonometry",
+    LT: "Logic & Thinking", FL: "Financial Literacy",
+  };
+
+  const scrollToDomain = (ref, domain) => {
+    const container = ref.current;
+    if (!container) return;
+    const target = container.querySelector('[data-domain="' + domain + '"]');
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const getDomains = (stds) => {
+    const seen = [];
+    stds.forEach((s) => {
+      const parts = s.code.split(".");
+      const domain = parts.length >= 3 ? parts[2] : "";
+      if (domain && !seen.includes(domain)) seen.push(domain);
+    });
+    return seen;
+  };
+
   const toggleStandard = (code) => {
     setSelectedStandards((prev) =>
       prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
@@ -4430,6 +4463,8 @@ ${signature}`;
           subject: config.subject,
           availableTools: config.availableTools || [],
           sectionCategories: assignmentSectionCategories,
+          totalQuestions: unitConfig.totalQuestions,
+          questionsPerSection: unitConfig.questionsPerSection,
         },
         assignmentType,
       );
@@ -18948,7 +18983,7 @@ ${signature}`;
                               missingUploadedFiles.map((f) =>
                                 (f.name || f)
                                   .toLowerCase()
-                                  .replace(/[_\-\.]/g, " ")
+                                  .replace(/[_\-\.\u2013\u2014]/g, " ")
                                   .replace(/\s+/g, " ")
                                   .trim(),
                               ),
@@ -18970,19 +19005,30 @@ ${signature}`;
                                 ),
                               ];
 
+                              // Normalize student name: strip commas/punctuation, replace separators with spaces
+                              const sNorm = sName.replace(/[_\-\.,;]/g, " ").replace(/\s+/g, " ").trim();
+                              const nameParts = sNorm.split(" ");
+                              // Allow 1 missing part for middle names (require at least 2, or all-but-one for longer names)
+                              const nameThreshold = Math.max(2, nameParts.length - 1);
+
                               return [...uploadedNames].some((fileName) => {
                                 const fLower = fileName.toLowerCase();
-                                const nameParts = sName.split(" ");
+                                const nameMatchCount = nameParts.filter((part) =>
+                                  fLower.includes(part),
+                                ).length;
                                 const hasStudentName =
-                                  nameParts.every((part) =>
-                                    fLower.includes(part),
-                                  ) || fLower.includes(sName.replace(" ", ""));
-                                // Check if file matches any of the assignment names (current or aliases)
+                                  nameMatchCount >= nameThreshold ||
+                                  fLower.includes(sNorm.replace(/ /g, ""));
+                                // Check if file matches any assignment name (includes word-overlap for truncated filenames)
                                 const hasAssignment = namesToCheck.some(
-                                  (aName) =>
-                                    fLower.includes(
-                                      aName.replace(/[_\-\.]/g, " ").replace(/\s+/g, " ").trim(),
-                                    ),
+                                  (aName) => {
+                                    const normName = aName.replace(/[_\-\.\u2013\u2014]/g, " ").replace(/\s+/g, " ").trim();
+                                    if (fLower.includes(normName)) return true;
+                                    // Word-overlap fallback: handles truncated filenames and minor wording differences
+                                    const words = normName.split(" ").filter((w) => w.length > 1);
+                                    const matched = words.filter((w) => fLower.includes(w)).length;
+                                    return matched >= Math.max(3, Math.ceil(words.length * 0.6));
+                                  },
                                 );
                                 return hasStudentName && hasAssignment;
                               });
@@ -19134,7 +19180,7 @@ ${signature}`;
                                                 "rgba(251,191,36,0.15)",
                                               borderRadius: "6px",
                                               fontSize: "0.85rem",
-                                              color: "#111",
+                                              color: "#fbbf24",
                                             }}
                                           >
                                             {a}
@@ -19394,7 +19440,7 @@ ${signature}`;
                                                           "rgba(251,191,36,0.15)",
                                                         borderRadius: "4px",
                                                         fontSize: "0.75rem",
-                                                        color: "#111",
+                                                        color: "#fbbf24",
                                                       }}
                                                     >
                                                       {a}
@@ -19849,6 +19895,42 @@ ${signature}`;
                               />
                             </div>
                           </div>
+                          {unitConfig.type === "Assignment" && (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                              <div>
+                                <label className="label">Total Questions</label>
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={unitConfig.totalQuestions}
+                                  onChange={(e) =>
+                                    setUnitConfig({
+                                      ...unitConfig,
+                                      totalQuestions: parseInt(e.target.value) || 10,
+                                    })
+                                  }
+                                  min="5"
+                                  max="50"
+                                />
+                              </div>
+                              <div>
+                                <label className="label">Per Section (0 = auto)</label>
+                                <input
+                                  type="number"
+                                  className="input"
+                                  value={unitConfig.questionsPerSection}
+                                  onChange={(e) =>
+                                    setUnitConfig({
+                                      ...unitConfig,
+                                      questionsPerSection: parseInt(e.target.value) || 0,
+                                    })
+                                  }
+                                  min="0"
+                                  max="20"
+                                />
+                              </div>
+                            </div>
+                          )}
                           <div>
                             <label className="label">
                               Additional Requirements
@@ -19919,6 +20001,7 @@ ${signature}`;
                                     { key: "extended_writing", label: "Extended Writing", icon: "FileText", group: "optional" },
                                     { key: "vocabulary", label: "Vocabulary", icon: "BookOpen", group: "optional" },
                                     { key: "true_false", label: "True / False", icon: "ToggleLeft", group: "optional" },
+                                    { key: "florida_fast", label: "FL FAST Items", icon: "ListChecks", group: "optional" },
                                   ].map((cat, idx, arr) => {
                                     const prevGroup = idx > 0 ? arr[idx - 1].group : null;
                                     const showDivider = cat.group !== prevGroup;
@@ -20021,7 +20104,7 @@ ${signature}`;
                               <Icon name="Sparkles" size={18} />
                             )}
                             {plannerLoading
-                              ? "Creating..."
+                              ? (unitConfig.type === "Assignment" ? "Creating Assignment..." : "Creating...")
                               : selectedIdea
                                 ? "Create from Idea"
                                 : "Create"}
@@ -21525,10 +21608,33 @@ ${signature}`;
                             </span>
                           </div>
 
+                          {/* Domain jump bar */}
+                          {standards.length > 0 && getDomains(standards).length > 1 && (
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
+                              {getDomains(standards).map((domain) => {
+                                const count = selectedStandards.filter((c) => c.split(".")[2] === domain).length;
+                                return (
+                                  <button key={domain} onClick={() => scrollToDomain(standardsScrollRef, domain)}
+                                    style={{
+                                      padding: "4px 10px", fontSize: "0.75rem", fontWeight: 600,
+                                      borderRadius: "20px", border: "none", cursor: "pointer",
+                                      background: count > 0 ? "rgba(139, 92, 246, 0.2)" : "var(--glass-bg)",
+                                      color: count > 0 ? "#a78bfa" : "var(--text-secondary)",
+                                      transition: "all 0.2s",
+                                    }}
+                                  >
+                                    {domainNameMap[domain] || domain}{count > 0 ? " (" + count + ")" : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
                           <div
+                            ref={standardsScrollRef}
                             style={{ maxHeight: "500px", overflowY: "auto" }}
                           >
-                            {plannerLoading ? (
+                            {plannerLoading && standards.length === 0 ? (
                               <div
                                 style={{
                                   textAlign: "center",
@@ -21549,8 +21655,8 @@ ${signature}`;
                               </div>
                             ) : standards.length > 0 ? (
                               standards.map((std) => (
+                                <div key={std.code} data-domain={std.code.split(".")[2]}>
                                 <StandardCard
-                                  key={std.code}
                                   standard={std}
                                   isSelected={selectedStandards.includes(
                                     std.code,
@@ -21567,6 +21673,7 @@ ${signature}`;
                                     )
                                   }
                                 />
+                                </div>
                               ))
                             ) : (
                               <div
@@ -21845,6 +21952,7 @@ ${signature}`;
                                 { key: "extended_writing", label: "Extended Writing / Essay", desc: "Paragraph responses with analysis", icon: "FileText", group: "optional" },
                                 { key: "vocabulary", label: "Vocabulary / Matching", desc: "Term-definition matching", icon: "BookOpen", group: "optional" },
                                 { key: "true_false", label: "True / False", desc: "Statement evaluation", icon: "ToggleLeft", group: "optional" },
+                                { key: "florida_fast", label: "FL FAST Item Types", desc: "Multiselect, multi-part, grid match, inline dropdown", icon: "ListChecks", group: "optional" },
                               ].map((cat, idx, arr) => {
                                 const prevGroup = idx > 0 ? arr[idx - 1].group : null;
                                 const showDivider = cat.group !== prevGroup;
@@ -21964,6 +22072,10 @@ ${signature}`;
                               { key: "matching", label: "Matching", defaultPts: 1 },
                               { key: "math_equation", label: "Math Equation (STEM)", defaultPts: 2 },
                               { key: "data_table", label: "Data Table (STEM)", defaultPts: 3 },
+                              { key: "multiselect", label: "Multiselect (FAST)", defaultPts: 2 },
+                              { key: "multi_part", label: "Multi-Part (FAST)", defaultPts: 2 },
+                              { key: "grid_match", label: "Grid Match (FAST)", defaultPts: 3 },
+                              { key: "inline_dropdown", label: "Inline Dropdown (FAST)", defaultPts: 2 },
                             ].map((qType) => (
                               <div
                                 key={qType.key}
@@ -22432,7 +22544,30 @@ ${signature}`;
                               </button>
                             )}
                           </div>
+                          {/* Domain jump bar */}
+                          {standards.length > 0 && getDomains(standards).length > 1 && (
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
+                              {getDomains(standards).map((domain) => {
+                                const count = selectedStandards.filter((c) => c.split(".")[2] === domain).length;
+                                return (
+                                  <button key={domain} onClick={() => scrollToDomain(assessmentStandardsScrollRef, domain)}
+                                    style={{
+                                      padding: "4px 10px", fontSize: "0.75rem", fontWeight: 600,
+                                      borderRadius: "20px", border: "none", cursor: "pointer",
+                                      background: count > 0 ? "rgba(139, 92, 246, 0.2)" : "var(--glass-bg)",
+                                      color: count > 0 ? "#a78bfa" : "var(--text-secondary)",
+                                      transition: "all 0.2s",
+                                    }}
+                                  >
+                                    {domainNameMap[domain] || domain}{count > 0 ? " (" + count + ")" : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
                           <div
+                            ref={assessmentStandardsScrollRef}
                             style={{
                               maxHeight: "300px",
                               overflowY: "auto",
@@ -22450,6 +22585,7 @@ ${signature}`;
                               standards.map((std) => (
                                 <div
                                   key={std.code}
+                                  data-domain={std.code.split(".")[2]}
                                   onClick={() => toggleStandard(std.code)}
                                   style={{
                                     padding: "12px 15px",
