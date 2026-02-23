@@ -505,6 +505,9 @@ function QuestionRenderer({
       case 'parallelogram':
       case 'rectangular_prism':
       case 'cylinder':
+      case 'cone':
+      case 'pyramid':
+      case 'sphere':
       case 'similarity':
       case 'pythagorean':
       case 'angles':
@@ -529,6 +532,7 @@ function QuestionRenderer({
             theta={question.theta}
             trigFunc={question.trig_func}
             missingSide={question.missing_side}
+            slantHeight={question.slant_height}
             scale={question.scale}
             answer={answer || ''}
             onChange={onAnswer}
@@ -925,8 +929,15 @@ function QuestionRenderer({
         </div>
       )}
 
-      {/* Show correct answer */}
-      {showAnswer && question.answer && (
+      {/* Show correct answer — skip for types that render their own answer display */}
+      {showAnswer && question.answer && ![
+        'triangle', 'rectangle', 'regular_polygon', 'circle', 'trapezoid',
+        'parallelogram', 'rectangular_prism', 'cylinder', 'geometry',
+        'similarity', 'pythagorean', 'angles', 'trig',
+        'box_plot', 'function_graph', 'dot_plot', 'stem_and_leaf',
+        'unit_circle', 'transformations', 'fraction_model',
+        'probability_tree', 'tape_diagram', 'venn_diagram', 'protractor', 'angle_protractor'
+      ].includes(qType) && (
         <div style={styles.correctAnswer}>
           <strong>Correct Answer:</strong> {
             typeof question.answer === 'object'

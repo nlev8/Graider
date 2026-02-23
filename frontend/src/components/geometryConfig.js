@@ -5,7 +5,7 @@
 
 export const GEOMETRY_TYPES = new Set([
   'geometry', 'triangle', 'rectangle', 'circle', 'trapezoid', 'parallelogram',
-  'rectangular_prism', 'cylinder', 'regular_polygon',
+  'rectangular_prism', 'cylinder', 'cone', 'pyramid', 'sphere', 'regular_polygon',
   'pythagorean', 'angles', 'similarity', 'trig'
 ]);
 
@@ -30,10 +30,20 @@ const FORMULAS = {
   volume: {
     rectangular_prism: 'V = l \u00D7 w \u00D7 h',
     cylinder: 'V = \u03C0r\u00B2h',
+    cone: 'V = \u2153\u03C0r\u00B2h',
+    pyramid: 'V = \u2153b\u00B2h',
+    sphere: 'V = \u2154\u03C0r\u00B3',
   },
   surface_area: {
     rectangular_prism: 'SA = 2(lw + lh + wh)',
     cylinder: 'SA = 2\u03C0r\u00B2 + 2\u03C0rh',
+    cone: 'SA = \u03C0r\u00B2 + \u03C0rl',
+    pyramid: 'SA = b\u00B2 + 2bl',
+    sphere: 'SA = 4\u03C0r\u00B2',
+  },
+  lateral_area: {
+    cone: 'LA = \u03C0rl',
+    pyramid: 'LA = 2bl',
   },
   angles: {
     triangle: '\u2220\u2081 + \u2220\u2082 + \u2220\u2083 = 180\u00B0',
@@ -61,6 +71,7 @@ const LABELS = {
   pythagorean: { label: 'Missing side =', unit: 'units' },
   volume: { label: 'Volume =', unit: 'cubic units' },
   surface_area: { label: 'Surface Area =', unit: 'square units' },
+  lateral_area: { label: 'Lateral Area =', unit: 'square units' },
   angles: { label: 'Missing angle =', unit: 'degrees' },
   similarity: { label: 'Missing side =', unit: 'units' },
   trig: { label: 'Missing value =', unit: 'units' },

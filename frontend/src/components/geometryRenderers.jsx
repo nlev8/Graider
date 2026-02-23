@@ -451,3 +451,107 @@ export function renderSimilarity(props, W, H, pad) {
     </g>
   );
 }
+
+/* ── PYRAMID (square-based) ────────────────────────────────────────── */
+
+export function renderPyramid(props, W, H, pad) {
+  const { base = 6, height: h = 8, slant_height: sl } = props;
+  const cx = W / 2;
+  const apex = { x: cx, y: pad + 15 };
+  // Base quad (3D perspective)
+  const baseY = H - pad - 10;
+  const bw = 100; // base visual width
+  const bh = 30;  // perspective depth
+  const bl = { x: cx - bw / 2, y: baseY };
+  const br = { x: cx + bw / 2, y: baseY };
+  const fl = { x: cx - bw / 3, y: baseY + bh };
+  const fr = { x: cx + bw / 3, y: baseY + bh };
+
+  return (
+    <g>
+      {/* back edges (dashed) */}
+      <line x1={bl.x} y1={bl.y} x2={br.x} y2={br.y} stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5,3" />
+      <line x1={bl.x} y1={bl.y} x2={fl.x} y2={fl.y} stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5,3" />
+      {/* front edges */}
+      <line x1={br.x} y1={br.y} x2={fr.x} y2={fr.y} stroke="#22c55e" strokeWidth={2} />
+      <line x1={fl.x} y1={fl.y} x2={fr.x} y2={fr.y} stroke="#22c55e" strokeWidth={2} />
+      {/* edges to apex */}
+      <line x1={apex.x} y1={apex.y} x2={bl.x} y2={bl.y} stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5,3" />
+      <line x1={apex.x} y1={apex.y} x2={br.x} y2={br.y} stroke="#22c55e" strokeWidth={2} />
+      <line x1={apex.x} y1={apex.y} x2={fl.x} y2={fl.y} stroke="#22c55e" strokeWidth={2} />
+      <line x1={apex.x} y1={apex.y} x2={fr.x} y2={fr.y} stroke="#22c55e" strokeWidth={2} />
+      {/* front faces fill */}
+      <polygon points={`${apex.x},${apex.y} ${fr.x},${fr.y} ${br.x},${br.y}`} fill="#bbf7d0" opacity={0.4} />
+      <polygon points={`${apex.x},${apex.y} ${fl.x},${fl.y} ${fr.x},${fr.y}`} fill="#dcfce7" opacity={0.4} />
+      {/* height dashed line */}
+      {dashedLine(cx, apex.y, cx, (bl.y + fl.y) / 2, '#ef4444')}
+      {dimensionLabel(cx + 12, (apex.y + baseY) / 2, 'h = ' + h, { anchor: 'start', color: '#ef4444', size: 12 })}
+      {/* base label */}
+      {dimensionLabel((fl.x + fr.x) / 2, fl.y + 18, 'b = ' + base, { color: '#1d4ed8', size: 12 })}
+      {/* slant height label */}
+      {sl && dimensionLabel(cx + bw / 3 + 15, (apex.y + fr.y) / 2, 'l = ' + sl, { anchor: 'start', color: '#9333ea', size: 11 })}
+    </g>
+  );
+}
+
+/* ── CONE ──────────────────────────────────────────────────────────── */
+
+export function renderCone(props, W, H, pad) {
+  const { radius = 4, height: h = 6, slant_height: sl } = props;
+  const cx = W / 2;
+  const apexY = pad + 15;
+  const baseY = H - pad - 10;
+  const rx = 60;
+  const ry = 18;
+
+  return (
+    <g>
+      {/* back half of base ellipse */}
+      <ellipse cx={cx} cy={baseY} rx={rx} ry={ry}
+        fill="none" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5,3" />
+      {/* side lines */}
+      <line x1={cx} y1={apexY} x2={cx - rx} y2={baseY} stroke="#22c55e" strokeWidth={2} />
+      <line x1={cx} y1={apexY} x2={cx + rx} y2={baseY} stroke="#22c55e" strokeWidth={2} />
+      {/* front face fill */}
+      <polygon points={`${cx},${apexY} ${cx - rx},${baseY} ${cx + rx},${baseY}`}
+        fill="#bbf7d0" opacity={0.4} />
+      {/* front half of base ellipse */}
+      <ellipse cx={cx} cy={baseY} rx={rx} ry={ry}
+        fill="#86efac" stroke="#22c55e" strokeWidth={2} />
+      {/* apex dot */}
+      <circle cx={cx} cy={apexY} r={3} fill="#22c55e" />
+      {/* height dashed line */}
+      {dashedLine(cx, apexY, cx, baseY, '#ef4444')}
+      {dimensionLabel(cx + 12, (apexY + baseY) / 2, 'h = ' + h, { anchor: 'start', color: '#ef4444', size: 12 })}
+      {/* radius line */}
+      <line x1={cx} y1={baseY} x2={cx + rx} y2={baseY} stroke="#1d4ed8" strokeWidth={2} />
+      <circle cx={cx} cy={baseY} r={2.5} fill="#1d4ed8" />
+      {dimensionLabel(cx + rx / 2, baseY - 8, 'r = ' + radius, { color: '#1d4ed8', size: 12 })}
+      {/* slant height */}
+      {sl && dimensionLabel(cx + rx / 2 + 15, (apexY + baseY) / 2 - 10, 'l = ' + sl, { anchor: 'start', color: '#9333ea', size: 11 })}
+    </g>
+  );
+}
+
+/* ── SPHERE ────────────────────────────────────────────────────────── */
+
+export function renderSphere(props, W, H, pad) {
+  const { radius = 5 } = props;
+  const cx = W / 2;
+  const cy = H / 2;
+  const r = Math.min(W, H) / 2 - pad - 10;
+
+  return (
+    <g>
+      {/* main circle */}
+      <circle cx={cx} cy={cy} r={r} fill="#bbf7d0" stroke="#22c55e" strokeWidth={2} />
+      {/* equator ellipse */}
+      <ellipse cx={cx} cy={cy} rx={r} ry={r * 0.3}
+        fill="none" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5,3" />
+      {/* radius line */}
+      <line x1={cx} y1={cy} x2={cx + r} y2={cy} stroke="#ef4444" strokeWidth={2} />
+      <circle cx={cx} cy={cy} r={2.5} fill="#ef4444" />
+      {dimensionLabel(cx + r / 2, cy - 10, 'r = ' + radius, { color: '#ef4444', size: 12 })}
+    </g>
+  );
+}

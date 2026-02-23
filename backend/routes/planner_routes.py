@@ -307,13 +307,54 @@ def _extract_equations_from_text(text):
     return unique
 
 
+def _extract_dimensions_from_text(question):
+    """Extract numeric dimensions from question text when JSON fields are missing.
+
+    Catches cases where the AI puts 'radius = 2 and height = 5' in the question text
+    but omits the actual JSON fields, causing wrong defaults to be applied.
+    """
+    import re
+    text = question.get('question', '')
+    if not text:
+        return
+
+    # Map of text patterns to JSON field names
+    dimension_patterns = {
+        'radius': [r'radius\s*[=:]\s*([\d.]+)', r'r\s*=\s*([\d.]+)'],
+        'height': [r'height\s*[=:]\s*([\d.]+)', r'h\s*=\s*([\d.]+)'],
+        'base': [r'base\s*[=:]\s*([\d.]+)', r'b\s*=\s*([\d.]+)'],
+        'width': [r'width\s*[=:]\s*([\d.]+)', r'w\s*=\s*([\d.]+)'],
+        'side_length': [r'side\s*(?:length)?\s*[=:]\s*([\d.]+)', r'(?:each\s+)?side\s+(?:is|of|measures?)\s+([\d.]+)'],
+        'slant_height': [r'slant\s*height\s*[=:]\s*([\d.]+)', r'l\s*=\s*([\d.]+)'],
+    }
+
+    for field, patterns in dimension_patterns.items():
+        if field not in question:  # Only extract if not already in JSON
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    try:
+                        question[field] = float(match.group(1))
+                    except ValueError:
+                        pass
+                    break
+
+
 def _ensure_geometry_defaults(assignment):
     """Ensure geometry questions in an assignment have required default fields."""
     if not assignment or not isinstance(assignment, dict):
         return assignment
+    geometry_types = {
+        'regular_polygon', 'triangle', 'geometry', 'rectangle', 'circle',
+        'trapezoid', 'parallelogram', 'rectangular_prism', 'cylinder',
+        'cone', 'sphere', 'pyramid',
+    }
     for section in assignment.get('sections', []):
         for q in section.get('questions', []):
             qt = q.get('question_type', '')
+            if qt in geometry_types:
+                # Extract dimensions from question text BEFORE applying defaults
+                _extract_dimensions_from_text(q)
             if qt == 'regular_polygon':
                 q.setdefault('sides', 6)
                 q.setdefault('side_length', 4)
@@ -342,6 +383,16 @@ def _ensure_geometry_defaults(assignment):
             elif qt == 'cylinder':
                 q.setdefault('radius', 3)
                 q.setdefault('height', 7)
+            elif qt == 'cone':
+                q.setdefault('radius', 4)
+                q.setdefault('height', 6)
+                q.setdefault('slant_height', 7.21)
+            elif qt == 'pyramid':
+                q.setdefault('base', 6)
+                q.setdefault('height', 8)
+                q.setdefault('slant_height', 8.54)
+            elif qt == 'sphere':
+                q.setdefault('radius', 5)
     return assignment
 
 
@@ -496,6 +547,40 @@ def _hydrate_math_visuals(assignment):
                     q['answer'] = str(round(math.pi * r**2 * h, 2))
                 elif mode == 'surface_area':
                     q['answer'] = str(round(2 * math.pi * r**2 + 2 * math.pi * r * h, 2))
+
+            elif qt == 'cone':
+                r = q.get('radius', 4)
+                h = q.get('height', 6)
+                sl = q.get('slant_height', math.sqrt(r**2 + h**2))
+                q['slant_height'] = round(sl, 2)
+                mode = q.get('mode', 'volume')
+                if mode == 'volume':
+                    q['answer'] = str(round((1/3) * math.pi * r**2 * h, 2))
+                elif mode == 'surface_area':
+                    q['answer'] = str(round(math.pi * r**2 + math.pi * r * sl, 2))
+                elif mode == 'lateral_area':
+                    q['answer'] = str(round(math.pi * r * sl, 2))
+
+            elif qt == 'pyramid':
+                b = q.get('base', 6)
+                h = q.get('height', 8)
+                sl = q.get('slant_height', math.sqrt(h**2 + (b/2)**2))
+                q['slant_height'] = round(sl, 2)
+                mode = q.get('mode', 'volume')
+                if mode == 'volume':
+                    q['answer'] = str(round((1/3) * b**2 * h, 2))
+                elif mode == 'surface_area':
+                    q['answer'] = str(round(b**2 + 2 * b * sl, 2))
+                elif mode == 'lateral_area':
+                    q['answer'] = str(round(2 * b * sl, 2))
+
+            elif qt == 'sphere':
+                r = q.get('radius', 5)
+                mode = q.get('mode', 'volume')
+                if mode == 'volume':
+                    q['answer'] = str(round((4/3) * math.pi * r**3, 2))
+                elif mode == 'surface_area':
+                    q['answer'] = str(round(4 * math.pi * r**2, 2))
 
             # ── Box Plot: compute 5-number summary from data ──
             elif qt == 'box_plot':

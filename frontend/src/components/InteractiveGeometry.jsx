@@ -3,7 +3,8 @@ import {
   renderTriangle, renderRectangle, renderCircle,
   renderTrapezoid, renderParallelogram,
   renderRectangularPrism, renderCylinder,
-  renderRegularPolygon, renderSimilarity
+  renderRegularPolygon, renderSimilarity,
+  renderPyramid, renderCone, renderSphere
 } from './geometryRenderers';
 import { getFormula, getAnswerLabel, getSvgDimensions } from './geometryConfig';
 
@@ -23,6 +24,7 @@ export default function InteractiveGeometry({
   sideA, sideB, sideC,
   angle1, angle2, missingAngle,
   theta, trigFunc, missingSide,
+  slantHeight,
   scale,
   mode = 'area',
   answer = '',
@@ -43,7 +45,8 @@ export default function InteractiveGeometry({
     base, height, width, radius, topBase,
     sides, sideLength, sideA, sideB, sideC,
     angle1, angle2, missingAngle,
-    theta, trigFunc, missingSide, scale, mode
+    theta, trigFunc, missingSide, slantHeight, scale, mode,
+    slant_height: slantHeight
   };
 
   const RENDERERS = {
@@ -56,6 +59,9 @@ export default function InteractiveGeometry({
     cylinder: renderCylinder,
     regular_polygon: renderRegularPolygon,
     similarity: renderSimilarity,
+    pyramid: renderPyramid,
+    cone: renderCone,
+    sphere: renderSphere,
   };
 
   // Some modes imply a shape (pythagorean/trig/angles → triangle, similarity → similarity)
