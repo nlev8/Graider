@@ -307,6 +307,65 @@ def _extract_equations_from_text(text):
     return unique
 
 
+def _split_markdown_table(text):
+    """Detect markdown pipe tables in text and split into parts.
+
+    Returns { before, table: { headers, rows }, after } or None if no table found.
+    Handles both multi-line and single-line pipe table formats.
+    """
+    import re
+    if not text or '|' not in text:
+        return None
+
+    lines = text.split('\n') if '\n' in text else re.split(r'(?=\|[\s-]+\|)', text)
+
+    table_lines = []
+    before_lines = []
+    after_lines = []
+    in_table = False
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # Separator row (|---|---|)
+        is_sep = bool(re.match(r'^\|[\s\-:|]+\|$', stripped))
+        # Data row (| x | y |)
+        is_pipe = stripped.startswith('|') and stripped.endswith('|') and stripped.count('|') >= 3
+
+        if (is_pipe or is_sep) and not in_table:
+            in_table = True
+            before_lines = lines[:i]
+
+        if in_table:
+            if is_pipe or is_sep:
+                table_lines.append(stripped)
+            else:
+                after_lines = lines[i:]
+                break
+        if not in_table and i == len(lines) - 1:
+            return None  # No table found
+
+    if len(table_lines) < 2:
+        return None
+
+    def parse_row(line):
+        cells = line.split('|')
+        return [c.strip() for c in cells if c.strip() and not re.match(r'^[\s\-:]+$', c.strip())]
+
+    # Filter out separator rows
+    data_rows = [l for l in table_lines if not re.match(r'^\|[\s\-:|]+\|$', l)]
+    if len(data_rows) < 2:
+        return None
+
+    headers = parse_row(data_rows[0])
+    rows = [parse_row(r) for r in data_rows[1:]]
+
+    return {
+        'before': ' '.join(before_lines).strip(),
+        'table': {'headers': headers, 'rows': rows},
+        'after': ' '.join(after_lines).strip()
+    }
+
+
 def _extract_dimensions_from_text(question):
     """Extract numeric dimensions from question text when JSON fields are missing.
 
@@ -2355,13 +2414,43 @@ def export_generated_assignment():
                 q_type = q.get('question_type', section_type)
                 q_visual = q.get('visual_type', None)  # number_line, coordinate_plane, etc.
 
-                # Question text
+                # Question text — detect and render inline markdown tables
                 pts_text = f" ({q_points} pts)" if q_points else ""
-                story.append(Paragraph(
-                    f"<b>Question {q_number}:</b> {q_text}{pts_text}",
-                    normal_style
-                ))
-                story.append(Spacer(1, 0.05*inch))
+                table_parts = _split_markdown_table(q_text)
+                if table_parts:
+                    # Text before table
+                    before_text = table_parts['before'].strip()
+                    combined_before = f"<b>Question {q_number}:</b> {before_text}{pts_text}" if before_text else f"<b>Question {q_number}:</b>{pts_text}"
+                    story.append(Paragraph(combined_before, normal_style))
+                    story.append(Spacer(1, 0.05*inch))
+                    # Render the table
+                    md_table = table_parts['table']
+                    t_data = [md_table['headers']] + md_table['rows']
+                    col_count = len(md_table['headers'])
+                    col_w = min(1.2*inch, (6.5*inch) / max(col_count, 1))
+                    from reportlab.lib import colors as rl_colors
+                    tbl = Table(t_data, colWidths=[col_w]*col_count)
+                    tbl.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 9),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.Color(0.6, 0.6, 0.6)),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ]))
+                    story.append(tbl)
+                    # Text after table
+                    if table_parts.get('after', '').strip():
+                        story.append(Paragraph(table_parts['after'].strip(), normal_style))
+                    story.append(Spacer(1, 0.05*inch))
+                else:
+                    story.append(Paragraph(
+                        f"<b>Question {q_number}:</b> {q_text}{pts_text}",
+                        normal_style
+                    ))
+                    story.append(Spacer(1, 0.05*inch))
 
                 # Multiple choice options
                 if q_options:

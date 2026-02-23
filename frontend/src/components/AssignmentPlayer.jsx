@@ -473,7 +473,9 @@ function QuestionRenderer({
   const inputKey = `${sectionIndex}-${questionIndex}`;
 
   // Show keyboard inline when any input in THIS question is focused
-  const isKeyboardVisible = !readOnly && focusedInputKey && focusedInputKey.startsWith(inputKey);
+  // Exact match on "section-question" prefix (must match exactly or have '-' suffix for subfields)
+  const isKeyboardVisible = !readOnly && focusedInputKey &&
+    (focusedInputKey === inputKey || focusedInputKey.startsWith(inputKey + '-'));
 
   const renderInput = () => {
     switch (qType) {
