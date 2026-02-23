@@ -19793,7 +19793,18 @@ ${signature}`;
                                   title: e.target.value,
                                 })
                               }
-                              placeholder="e.g., Foundations of Government"
+                              placeholder={
+                                {
+                                  'Math': 'e.g., Solving Systems of Linear Equations',
+                                  'Science': 'e.g., Cell Structure and Function',
+                                  'English/ELA': 'e.g., Analyzing Argumentative Texts',
+                                  'US History': 'e.g., Causes of the American Revolution',
+                                  'World History': 'e.g., Rise and Fall of the Roman Empire',
+                                  'Social Studies': 'e.g., Rights and Responsibilities of Citizens',
+                                  'Civics': 'e.g., Foundations of American Government',
+                                  'Geography': 'e.g., Climate Zones and Human Adaptation',
+                                }[config.subject] || 'e.g., Lesson Title'
+                              }
                             />
                           </div>
                           <div
@@ -19850,7 +19861,18 @@ ${signature}`;
                                   requirements: e.target.value,
                                 })
                               }
-                              placeholder="e.g. Focus on primary sources..."
+                              placeholder={
+                                {
+                                  'Math': 'e.g., Include word problems with real-world scenarios, focus on showing work step-by-step',
+                                  'Science': 'e.g., Include a lab component with data collection, tie to real-world applications',
+                                  'English/ELA': 'e.g., Include text-dependent questions, require evidence-based responses with citations',
+                                  'US History': 'e.g., Use primary source documents, include analysis of cause and effect',
+                                  'World History': 'e.g., Compare perspectives from multiple civilizations, include map analysis',
+                                  'Social Studies': 'e.g., Connect to current events, include civic action component',
+                                  'Civics': 'e.g., Reference the U.S. Constitution, include a debate or discussion prompt',
+                                  'Geography': 'e.g., Include map skills practice, analyze human-environment interaction',
+                                }[config.subject] || 'e.g., Any special instructions for this lesson...'
+                              }
                               style={{ minHeight: "80px" }}
                             />
                           </div>
