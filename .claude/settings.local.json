@@ -42,7 +42,24 @@
       "WebFetch(domain:www.graider.app)",
       "WebFetch(domain:www.essaygrader.ai)",
       "WebFetch(domain:graded.pro)",
-      "WebFetch(domain:www.classpoint.io)"
+      "WebFetch(domain:www.classpoint.io)",
+      "WebFetch(domain:www.cpalms.org)",
+      "WebFetch(domain:help.cengage.com)",
+      "WebFetch(domain:cengageorg.my.site.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:ngl.cengage.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:support.vitalsource.com)",
+      "WebFetch(domain:openai.com)",
+      "WebFetch(domain:replicate.com)",
+      "WebFetch(domain:modal.com)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:www.together.ai)",
+      "WebFetch(domain:aclanthology.org)",
+      "WebFetch(domain:techxplore.com)",
+      "Bash(gh api:*)",
+      "Bash(pdftoppm -v)",
+      "Bash(pdftotext:*)"
     ]
   }
 }

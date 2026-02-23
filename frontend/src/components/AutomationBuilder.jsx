@@ -87,16 +87,19 @@ export default function AutomationBuilder({ addToast }) {
 
   async function loadTemplate(id) {
     try {
-      const tpl = await api.getAutomation(id);
+      const tpl = await api.getTemplate(id);
       setCurrent({ ...tpl, id: undefined, name: tpl.name + " (Copy)" });
       setSelectedStep(0);
       setView("edit");
     } catch (e) {
-      // Templates come from the templates endpoint, load via save+edit
+      // Fallback: use list data if direct load fails
       const tpl = templates.find(t => t.id === id);
       if (tpl) {
-        setCurrent({ name: tpl.name + " (Copy)", description: tpl.description, steps: [], browser: { headless: false } });
+        setCurrent({ name: tpl.name + " (Copy)", description: tpl.description || "", steps: [], browser: { headless: false } });
+        setSelectedStep(0);
         setView("edit");
+      } else {
+        addToast("Failed to load template", "error");
       }
     }
   }

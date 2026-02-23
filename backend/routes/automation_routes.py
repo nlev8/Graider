@@ -205,13 +205,42 @@ def list_templates():
     return jsonify({"templates": templates})
 
 
+@automation_bp.route('/api/automations/templates/<template_id>', methods=['GET'])
+def get_template(template_id):
+    """Load a specific template by ID."""
+    if not os.path.isdir(TEMPLATES_DIR):
+        return jsonify({"error": "Template not found"}), 404
+    for filename in os.listdir(TEMPLATES_DIR):
+        if not filename.endswith('.json'):
+            continue
+        filepath = os.path.join(TEMPLATES_DIR, filename)
+        try:
+            with open(filepath, 'r') as f:
+                wf = json.load(f)
+            if wf.get("id") == template_id:
+                return jsonify(wf)
+        except Exception:
+            pass
+    return jsonify({"error": "Template not found"}), 404
+
+
 @automation_bp.route('/api/automations/templates/<template_id>', methods=['DELETE'])
 def delete_template(template_id):
-    """Delete a template file."""
-    safe_id = re.sub(r'[^a-z0-9_-]', '', template_id)
-    filepath = os.path.join(TEMPLATES_DIR, safe_id + ".json")
-    if os.path.exists(filepath):
-        os.remove(filepath)
+    """Delete a template file by matching its JSON id field."""
+    if not os.path.isdir(TEMPLATES_DIR):
+        return jsonify({"status": "deleted"})
+    for filename in os.listdir(TEMPLATES_DIR):
+        if not filename.endswith('.json'):
+            continue
+        filepath = os.path.join(TEMPLATES_DIR, filename)
+        try:
+            with open(filepath, 'r') as f:
+                wf = json.load(f)
+            if wf.get("id") == template_id:
+                os.remove(filepath)
+                return jsonify({"status": "deleted"})
+        except Exception:
+            pass
     return jsonify({"status": "deleted"})
 
 

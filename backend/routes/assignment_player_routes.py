@@ -615,6 +615,46 @@ def grade_question(question, student_answer, q_type):
         elif q_type in ['protractor', 'angle_protractor']:
             return grade_protractor(question, answer_value)
 
+        elif q_type == 'multiselect':
+            correct_indices = set(question.get('correct', []))
+            student_indices = set(answer_value) if isinstance(answer_value, list) else set()
+            is_correct = correct_indices == student_indices
+            if not is_correct and correct_indices:
+                hits = len(correct_indices & student_indices)
+                false_pos = len(student_indices - correct_indices)
+                partial = max(0, hits - false_pos) / len(correct_indices)
+                return {'correct': False, 'partial_credit': partial, 'feedback': f'Partially correct. Expected {len(correct_indices)} selections.'}
+            return {'correct': is_correct, 'feedback': 'Correct!' if is_correct else 'Incorrect.'}
+
+        elif q_type == 'multi_part':
+            parts = question.get('parts', [])
+            part_results = []
+            total_earned = 0
+            for i, part in enumerate(parts):
+                part_answer = answer_value.get(str(i), '') if isinstance(answer_value, dict) else ''
+                part_result = grade_question(part, part_answer, part.get('question_type', 'multiple_choice'))
+                part_results.append(part_result)
+                part_pts = part.get('points', 1)
+                total_earned += part_pts if part_result.get('correct') else part_result.get('points_earned', 0)
+            all_correct = all(r.get('correct') for r in part_results)
+            return {'correct': all_correct, 'part_results': part_results, 'points_earned': total_earned, 'feedback': 'All parts correct!' if all_correct else 'Some parts incorrect.'}
+
+        elif q_type == 'grid_match':
+            correct_matrix = question.get('correct', [])
+            student_matrix = answer_value if isinstance(answer_value, list) else []
+            rows_correct = sum(1 for c, s in zip(correct_matrix, student_matrix) if c == s)
+            total_rows = len(correct_matrix)
+            all_correct = rows_correct == total_rows
+            return {'correct': all_correct, 'partial_credit': rows_correct / total_rows if total_rows else 0, 'feedback': f'{rows_correct}/{total_rows} rows correct.'}
+
+        elif q_type == 'inline_dropdown':
+            dropdowns = question.get('dropdowns', [])
+            student_selections = answer_value if isinstance(answer_value, list) else []
+            correct_count = sum(1 for d, s in zip(dropdowns, student_selections) if d.get('correct') == s)
+            total = len(dropdowns)
+            all_correct = correct_count == total
+            return {'correct': all_correct, 'partial_credit': correct_count / total if total else 0, 'feedback': f'{correct_count}/{total} selections correct.'}
+
         elif q_type in ['multiple_choice', 'true_false']:
             correct = str(answer_value).strip().lower() == str(correct_answer).strip().lower()
             return {'correct': correct, 'feedback': 'Correct!' if correct else f'Incorrect. The answer was: {correct_answer}'}

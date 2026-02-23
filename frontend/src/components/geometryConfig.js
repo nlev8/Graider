@@ -1,6 +1,6 @@
 /**
  * geometryConfig.js — Formula maps, label maps, dimension configs for InteractiveGeometry.
- * Supports 8 geometry modes: area, perimeter, pythagorean, volume, surface_area, angles, similarity, trig
+ * Supports 9 geometry modes: area, perimeter, pythagorean, volume, surface_area, angles, similarity, trig, midsegment
  */
 
 export const GEOMETRY_TYPES = new Set([
@@ -22,6 +22,8 @@ const FORMULAS = {
     triangle: 'P = a + b + c',
     rectangle: 'P = 2l + 2w',
     circle: 'C = 2\u03C0r',
+    trapezoid: 'P = a + b + leg\u2081 + leg\u2082',
+    parallelogram: 'P = 2b + 2s',
     regular_polygon: 'P = n \u00D7 s',
   },
   pythagorean: {
@@ -47,6 +49,9 @@ const FORMULAS = {
   },
   angles: {
     triangle: '\u2220\u2081 + \u2220\u2082 + \u2220\u2083 = 180\u00B0',
+  },
+  midsegment: {
+    trapezoid: 'M = \u00BD(a + b)',
   },
   decompose: {
     regular_polygon: 'A = n \u00D7 (\u00BD \u00D7 s \u00D7 a)',
@@ -75,6 +80,7 @@ const LABELS = {
   angles: { label: 'Missing angle =', unit: 'degrees' },
   similarity: { label: 'Missing side =', unit: 'units' },
   trig: { label: 'Missing value =', unit: 'units' },
+  midsegment: { label: 'Midsegment =', unit: 'units' },
   decompose: { label: 'Area =', unit: 'square units' },
 };
 

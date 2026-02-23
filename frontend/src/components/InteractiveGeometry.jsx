@@ -31,7 +31,8 @@ export default function InteractiveGeometry({
   onChange,
   correctAnswer = null,
   readOnly = false,
-  showFormula = true
+  showFormula = true,
+  onInputFocus
 }) {
   const [showWork, setShowWork] = useState('');
 
@@ -140,6 +141,7 @@ export default function InteractiveGeometry({
           style={styles.workArea}
           value={showWork}
           onChange={(e) => handleWorkChange(e.target.value)}
+          onFocus={(e) => onInputFocus?.(e.target, 'work', 'unicode')}
           placeholder={getPlaceholderHint()}
           disabled={readOnly}
           rows={3}
@@ -155,6 +157,7 @@ export default function InteractiveGeometry({
             style={styles.answerInput}
             value={displayAnswer}
             onChange={(e) => handleAnswerChange(e.target.value)}
+            onFocus={(e) => onInputFocus?.(e.target, 'answer', 'unicode')}
             placeholder="?"
             disabled={readOnly}
           />

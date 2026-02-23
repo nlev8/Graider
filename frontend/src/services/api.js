@@ -890,6 +890,10 @@ export async function deleteTemplate(id) {
   return fetchApi('/api/automations/templates/' + id, { method: 'DELETE' })
 }
 
+export async function getTemplate(id) {
+  return fetchApi('/api/automations/templates/' + id)
+}
+
 export async function listAutomationTemplates() {
   return fetchApi('/api/automations/templates')
 }
@@ -1050,6 +1054,7 @@ export default {
   saveAutomation,
   deleteAutomation,
   deleteTemplate,
+  getTemplate,
   listAutomationTemplates,
   runAutomation,
   getAutomationRunStatus,

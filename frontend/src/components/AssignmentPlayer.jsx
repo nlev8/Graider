@@ -16,6 +16,10 @@ import InteractiveProtractor from './InteractiveProtractor';
 import MathInput from './MathInput';
 import DataTable from './DataTable';
 import VirtualMathKeyboard from './VirtualMathKeyboard';
+import MultiselectQuestion from './MultiselectQuestion';
+import MultiPartQuestion from './MultiPartQuestion';
+import GridMatchQuestion from './GridMatchQuestion';
+import InlineDropdownQuestion from './InlineDropdownQuestion';
 
 /**
  * AssignmentPlayer - Interactive assignment component for students
@@ -86,6 +90,12 @@ export default function AssignmentPlayer({
       const current = currentAnswer?.[field] || '';
       const newVal = current.slice(0, start) + text + current.slice(end);
       updateAnswer(sIdx, qIdx, { ...currentAnswer, [field]: newVal, [otherField]: currentAnswer?.[otherField] || '' });
+    } else if (subField && subField.startsWith('expr')) {
+      const exprIdx = parseInt(subField.replace('expr', ''));
+      const exprs = Array.isArray(currentAnswer) ? [...currentAnswer] : [''];
+      const current = exprs[exprIdx] || '';
+      exprs[exprIdx] = current.slice(0, start) + text + current.slice(end);
+      updateAnswer(sIdx, qIdx, exprs);
     } else {
       const current = (typeof currentAnswer === 'string') ? currentAnswer : '';
       const newVal = current.slice(0, start) + text + current.slice(end);
@@ -124,6 +134,12 @@ export default function AssignmentPlayer({
       const current = currentAnswer?.[field] || '';
       const newVal = current.slice(0, deleteStart) + current.slice(end);
       updateAnswer(sIdx, qIdx, { ...currentAnswer, [field]: newVal, [otherField]: currentAnswer?.[otherField] || '' });
+    } else if (subField && subField.startsWith('expr')) {
+      const exprIdx = parseInt(subField.replace('expr', ''));
+      const exprs = Array.isArray(currentAnswer) ? [...currentAnswer] : [''];
+      const current = exprs[exprIdx] || '';
+      exprs[exprIdx] = current.slice(0, deleteStart) + current.slice(end);
+      updateAnswer(sIdx, qIdx, exprs);
     } else {
       const current = (typeof currentAnswer === 'string') ? currentAnswer : '';
       const newVal = current.slice(0, deleteStart) + current.slice(end);
@@ -546,6 +562,7 @@ function QuestionRenderer({
             onChange={onAnswer}
             correctAnswer={showAnswer ? question.answer : null}
             readOnly={readOnly}
+            onInputFocus={(ref, subfield, mode) => onInputFocus?.(ref, inputKey + '-' + subfield, mode)}
           />
         );
 
@@ -597,6 +614,39 @@ function QuestionRenderer({
             onChange={onAnswer}
             editable={!readOnly}
             lockStructure={true}
+          />
+        );
+
+      case 'multiselect':
+        return (
+          <MultiselectQuestion
+            question={question} answer={answer} onAnswer={onAnswer}
+            readOnly={readOnly} showAnswer={showAnswer}
+          />
+        );
+
+      case 'multi_part':
+        return (
+          <MultiPartQuestion
+            question={question} answer={answer} onAnswer={onAnswer}
+            readOnly={readOnly} showAnswer={showAnswer}
+            sectionIndex={sectionIndex} questionIndex={questionIndex}
+          />
+        );
+
+      case 'grid_match':
+        return (
+          <GridMatchQuestion
+            question={question} answer={answer} onAnswer={onAnswer}
+            readOnly={readOnly} showAnswer={showAnswer}
+          />
+        );
+
+      case 'inline_dropdown':
+        return (
+          <InlineDropdownQuestion
+            question={question} answer={answer} onAnswer={onAnswer}
+            readOnly={readOnly} showAnswer={showAnswer}
           />
         );
 
@@ -669,6 +719,7 @@ function QuestionRenderer({
             correctExpressions={showAnswer ? question.correct_expressions : null}
             readOnly={readOnly}
             maxExpressions={question.max_expressions || 3}
+            onInputFocus={(ref, exprIdx, mode) => onInputFocus?.(ref, inputKey + '-expr' + exprIdx, mode)}
           />
         );
 
@@ -944,7 +995,8 @@ function QuestionRenderer({
         'similarity', 'pythagorean', 'angles', 'trig',
         'box_plot', 'function_graph', 'dot_plot', 'stem_and_leaf',
         'unit_circle', 'transformations', 'fraction_model',
-        'probability_tree', 'tape_diagram', 'venn_diagram', 'protractor', 'angle_protractor'
+        'probability_tree', 'tape_diagram', 'venn_diagram', 'protractor', 'angle_protractor',
+        'multiselect', 'multi_part', 'grid_match', 'inline_dropdown'
       ].includes(qType) && (
         <div style={styles.correctAnswer}>
           <strong>Correct Answer:</strong> {

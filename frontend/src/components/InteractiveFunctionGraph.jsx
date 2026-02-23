@@ -11,7 +11,8 @@ export default function InteractiveFunctionGraph({
   onChange,
   correctExpressions = null,
   readOnly = false,
-  maxExpressions = 3
+  maxExpressions = 3,
+  onInputFocus,
 }) {
   const canvasRef = useRef(null);
   const [localExprs, setLocalExprs] = useState(
@@ -222,6 +223,7 @@ export default function InteractiveFunctionGraph({
                 type="text"
                 value={expr}
                 onChange={(e) => updateExpr(idx, e.target.value)}
+                onFocus={(e) => onInputFocus?.(e.target, idx, 'unicode')}
                 placeholder="e.g. 2x + 1, x^2, sin(x)"
                 style={styles.exprInput}
               />
