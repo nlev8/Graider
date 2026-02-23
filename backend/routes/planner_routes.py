@@ -795,6 +795,20 @@ _GEOMETRY_DEFAULTS = {
 }
 
 
+def _build_question_count_instruction(config):
+    """Build the question count prompt instruction for AI generation."""
+    total_q = config.get('totalQuestions', 10)
+    per_section = config.get('questionsPerSection', 0)
+    if per_section > 0:
+        per_sec = per_section
+    else:
+        per_sec = max(total_q // 3, 2)  # default ~3 sections
+    instruction = f"QUESTION COUNT: Generate exactly {total_q} questions total."
+    instruction += f" Distribute them across your sections — aim for {per_sec} questions per section."
+    instruction += f" You MUST have at least {total_q} questions in the final JSON."
+    return instruction
+
+
 def _count_questions(assignment):
     """Count total questions across all sections."""
     total = 0
@@ -803,72 +817,67 @@ def _count_questions(assignment):
     return total
 
 
-def _enforce_question_count(assignment, target, client, config):
-    """If the assignment has fewer questions than target, make a follow-up call for more.
+def _enforce_question_count(assignment, target, client=None, config=None):
+    """Programmatically enforce exact question count. No AI calls.
 
-    Returns (assignment, extra_usage) where extra_usage is None or a usage dict.
+    - Over target: trims questions from the largest sections.
+    - Under target: duplicates existing questions with adjusted numbering.
+    Returns (assignment, None) — no extra usage since this is pure logic.
     """
+    sections = assignment.get('sections', [])
+    if not sections:
+        return assignment, None
+
     current = _count_questions(assignment)
-    if current >= target - 1:  # allow 1 under target
+    if current == target:
         return assignment, None
 
-    needed = target - current
-    grade = config.get('grade', config.get('grade_level', '7'))
-    subject = config.get('subject', 'General')
+    # ── Over target: trim from largest sections first ──
+    while current > target:
+        largest = max(sections, key=lambda s: len(s.get('questions', [])))
+        qs = largest.get('questions', [])
+        if not qs:
+            break
+        qs.pop()  # remove last question
+        current -= 1
 
-    # Build context from existing sections
-    existing_types = []
-    for s in assignment.get('sections', []):
+    # ── Under target: duplicate existing questions into smallest sections ──
+    # Build a pool of all existing questions to cycle through
+    pool = []
+    for s in sections:
         for q in s.get('questions', []):
-            existing_types.append(q.get('question_type', 'short_answer'))
-
-    prompt = f"""The following assignment for grade {grade} {subject} currently has {current} questions but needs {target} total.
-
-Assignment title: {assignment.get('title', 'Untitled')}
-Existing question types used: {', '.join(set(existing_types))}
-
-Generate exactly {needed} additional questions that fit this assignment. Use a variety of question types.
-Return JSON with this exact structure:
-{{
-    "additional_questions": [
-        {{
-            "number": {current + 1},
-            "question": "Question text",
-            "question_type": "short_answer",
-            "answer": "Correct answer",
-            "points": 2
-        }}
-    ]
-}}
-Number them starting at {current + 1}. Match the difficulty and topic of the existing assignment."""
-
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an expert teacher. Return valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
-        )
-        extra = json.loads(completion.choices[0].message.content)
-        new_qs = extra.get('additional_questions', [])
-
-        if new_qs:
-            # Append to the last section (or largest section)
-            sections = assignment.get('sections', [])
-            if sections:
-                best = max(sections, key=lambda s: len(s.get('questions', [])))
-                best.setdefault('questions', []).extend(new_qs)
-                # Update section points
-                section_pts = sum(q.get('points', 2) for q in best['questions'])
-                best['points'] = section_pts
-
-        extra_usage = _extract_usage(completion, "gpt-4o-mini")
-        return assignment, extra_usage
-    except Exception as e:
-        print(f"Question count enforcement follow-up failed: {e}")
+            pool.append(q)
+    if not pool:
         return assignment, None
+
+    pool_idx = 0
+    while current < target:
+        # Pick the source question to duplicate (cycle through pool)
+        source = pool[pool_idx % len(pool)]
+        pool_idx += 1
+
+        # Create a copy with updated number
+        import copy
+        new_q = copy.deepcopy(source)
+        new_q['number'] = current + 1
+
+        # Add to the smallest section to keep distribution even
+        smallest = min(sections, key=lambda s: len(s.get('questions', [])))
+        smallest.setdefault('questions', []).append(new_q)
+        current += 1
+
+    # Renumber all questions sequentially and update section point totals
+    num = 1
+    for s in sections:
+        for q in s.get('questions', []):
+            q['number'] = num
+            num += 1
+        s['points'] = sum(q.get('points', 2) for q in s.get('questions', []))
+
+    # Update total_points on the assignment
+    assignment['total_points'] = sum(s.get('points', 0) for s in sections)
+
+    return assignment, None
 
 
 def _merge_usage(base, extra):
@@ -1776,10 +1785,17 @@ TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
         if content_type == 'Assignment':
             total_q = config.get('totalQuestions', 10)
             per_section = config.get('questionsPerSection', 0)
-            question_target = f"\nTARGET QUESTION COUNT: Generate approximately {total_q} questions total across all sections."
+            # Compute per-section distribution from enabled categories
+            enabled_cats = [k for k, v in assignment_section_cats.items() if v] if assignment_section_cats else ['multiple_choice', 'short_answer']
+            num_sections = max(len(enabled_cats), 1)
             if per_section > 0:
-                question_target += f" Each section should have approximately {per_section} questions."
-            question_target += " This is a hard requirement — do NOT generate fewer questions than specified.\n"
+                per_sec = per_section
+            else:
+                per_sec = max(total_q // num_sections, 2)
+                remainder = total_q - (per_sec * num_sections)
+            question_target = f"\nQUESTION COUNT: Generate exactly {total_q} questions total."
+            question_target += f" Distribute them across your sections — aim for {per_sec} questions per section."
+            question_target += f" You MUST have at least {total_q} questions in the final JSON.\n"
 
             prompt = common_header + f"""
 Create a complete, ready-to-use assignment that directly assesses the standards listed above.
@@ -2308,7 +2324,7 @@ Vocabulary:
 
 ASSIGNMENT TYPE: {assignment_type.title()}
 {type_instruction}
-{f"TARGET QUESTION COUNT: Generate approximately {config.get('totalQuestions', 10)} questions total across all sections." + (f" Each section should have approximately {config.get('questionsPerSection')} questions." if config.get('questionsPerSection', 0) > 0 else "") + " This is a hard requirement — do NOT generate fewer questions than specified."}
+{_build_question_count_instruction(config)}
 
 Create a complete, ready-to-use assignment that:
 1. Directly assesses the lesson objectives
