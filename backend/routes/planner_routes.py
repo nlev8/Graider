@@ -95,11 +95,11 @@ def _build_section_categories_prompt(categories, subject=''):
         },
         'graphing': {
             'name': 'Graphing & Coordinate Plane',
-            'instruction': 'Generate questions using interactive graphs. Supported visual types: coordinate_plane (with points/equation), number_line (with range/point/markers), function_graph (with equation/domain). Include the visual type and params in the question. Students interact with the graph — do NOT ask them to draw.',
+            'instruction': 'Generate questions using interactive graphs. Use question_type "function_graph" (with x_range, y_range, correct_expressions as equation strings) for graphing lines/functions/systems. Use "coordinate_plane" (with min_val, max_val, points_to_plot as [x,y] pairs) for plotting points. Use "number_line" (with min_val, max_val, points_to_plot) for number lines. ALWAYS set the correct question_type and include all data fields — the system renders graphs programmatically from these fields.',
         },
         'data_analysis': {
             'name': 'Data Analysis',
-            'instruction': 'Generate data analysis questions. Supported types: data_table (with column_headers, row_labels, expected_data), box_plot (with dataset), dot_plot (with dataset, categories), stem_and_leaf (with dataset). Include the data in the question fields.',
+            'instruction': 'Generate data analysis questions with interactive visuals. Use question_type "data_table" (with column_headers, row_labels, expected_data), "box_plot" (with data array, labels), "dot_plot" (with min_val/max_val/step, correct_dots), "stem_and_leaf" (with data, stems, correct_leaves), "bar_chart" (with chart_data). ALWAYS set the correct question_type and include all data fields.',
         },
         'extended_writing': {
             'name': 'Extended Writing / Essay',
@@ -131,6 +131,180 @@ def _build_section_categories_prompt(categories, subject=''):
     lines.append("Every question must directly relate to the standards and topic. Never generate filler questions from unrelated math domains.")
     lines.append("Organize the assignment into separate sections, each with its own 'name', 'instructions', and 'questions' array.")
     return '\n'.join(lines)
+
+
+def _auto_upgrade_visual_types(assignment):
+    """Programmatically detect questions that should be visual types but were generated as short_answer.
+
+    The AI sometimes generates questions like 'View the graph of y = 2x + 1...' as short_answer
+    instead of function_graph with the proper data fields. This function:
+    1. Detects equation patterns in question text and upgrades to function_graph
+    2. Detects coordinate/point plotting and upgrades to coordinate_plane
+    3. Ensures all visual types have their required data fields
+    4. Validates existing visual questions have complete data
+    """
+    import re
+
+    if not assignment or not isinstance(assignment, dict):
+        return assignment
+
+    for section in assignment.get('sections', []):
+        for q in section.get('questions', []):
+            qt = q.get('question_type', q.get('type', ''))
+            text = q.get('question', '').lower()
+
+            # ── Auto-upgrade: short_answer questions about graphing → function_graph ──
+            if qt in ('short_answer', '') and _looks_like_graphing_question(text):
+                equations = _extract_equations_from_text(q.get('question', ''))
+                if equations:
+                    q['question_type'] = 'function_graph'
+                    q.setdefault('x_range', [-10, 10])
+                    q.setdefault('y_range', [-10, 10])
+                    q['correct_expressions'] = equations
+                    q.setdefault('max_expressions', len(equations))
+                    # Clean the question text — remove "view the graph" phrasing
+                    cleaned = re.sub(
+                        r'(?i)(view|see|look at|observe|examine)\s+(the\s+)?(graph|diagram|plot|coordinate plane)\s*(below|above|shown|of)?\s*',
+                        '', q.get('question', '')
+                    ).strip()
+                    if cleaned:
+                        q['question'] = cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned.upper()
+
+            # ── Validate function_graph has required fields ──
+            if q.get('question_type') == 'function_graph':
+                q.setdefault('x_range', [-10, 10])
+                q.setdefault('y_range', [-10, 10])
+                # Try to extract expressions from question text if missing
+                if not q.get('correct_expressions'):
+                    equations = _extract_equations_from_text(q.get('question', ''))
+                    if equations:
+                        q['correct_expressions'] = equations
+                q.setdefault('max_expressions', max(len(q.get('correct_expressions', [])), 1))
+
+            # ── Validate coordinate_plane has required fields ──
+            if q.get('question_type') == 'coordinate_plane':
+                q.setdefault('min_val', -10)
+                q.setdefault('max_val', 10)
+                q.setdefault('points_to_plot', [])
+
+            # ── Validate number_line has required fields ──
+            if q.get('question_type') == 'number_line':
+                q.setdefault('min_val', -10)
+                q.setdefault('max_val', 10)
+                q.setdefault('points_to_plot', [])
+
+            # ── Validate box_plot has required fields ──
+            if q.get('question_type') == 'box_plot':
+                q.setdefault('data', [[]])
+                q.setdefault('labels', ['Data'])
+
+            # ── Validate bar_chart has required fields ──
+            if q.get('question_type') == 'bar_chart':
+                q.setdefault('chart_data', {'labels': [], 'values': [], 'title': ''})
+
+            # ── Validate dot_plot has required fields ──
+            if q.get('question_type') == 'dot_plot':
+                q.setdefault('min_val', 0)
+                q.setdefault('max_val', 10)
+                q.setdefault('step', 1)
+                q.setdefault('correct_dots', {})
+
+            # ── Validate stem_and_leaf has required fields ──
+            if q.get('question_type') == 'stem_and_leaf':
+                q.setdefault('data', [])
+                q.setdefault('stems', [])
+                q.setdefault('correct_leaves', {})
+
+            # ── Validate transformations has required fields ──
+            if q.get('question_type') == 'transformations':
+                q.setdefault('original_vertices', [[1, 1], [4, 1], [4, 3]])
+                q.setdefault('transformation_type', 'translation')
+                q.setdefault('transform_params', {})
+                q.setdefault('correct_vertices', [])
+                q.setdefault('grid_range', [-8, 8])
+                q.setdefault('mode', 'plot')
+
+            # ── Validate fraction_model has required fields ──
+            if q.get('question_type') == 'fraction_model':
+                q.setdefault('model_type', 'area')
+                q.setdefault('denominator', 4)
+
+            # ── Validate unit_circle has required fields ──
+            if q.get('question_type') == 'unit_circle':
+                q.setdefault('hidden_angles', [])
+                q.setdefault('hidden_values', [])
+                q.setdefault('correct_values', {})
+
+            # ── Validate protractor has required fields ──
+            if q.get('question_type') in ('protractor', 'angle_protractor'):
+                q.setdefault('mode', 'measure')
+
+            # ── Validate venn_diagram has required fields ──
+            if q.get('question_type') == 'venn_diagram':
+                q.setdefault('sets', 2)
+                q.setdefault('set_labels', ['Set A', 'Set B'])
+                q.setdefault('correct_values', {})
+                q.setdefault('mode', 'count')
+
+            # ── Validate tape_diagram has required fields ──
+            if q.get('question_type') == 'tape_diagram':
+                q.setdefault('tapes', [])
+                q.setdefault('correct_values', {})
+
+            # ── Validate probability_tree has required fields ──
+            if q.get('question_type') == 'probability_tree':
+                q.setdefault('tree', None)
+                q.setdefault('correct_values', {})
+
+    return assignment
+
+
+def _looks_like_graphing_question(text):
+    """Check if question text suggests it should be a graphing/function_graph question."""
+    import re
+    graphing_patterns = [
+        r'graph\s+(the\s+)?(line|equation|function|system)',
+        r'(view|see|look at)\s+(the\s+)?graph',
+        r'on\s+(the\s+)?(coordinate\s+plane|graph)',
+        r'(plot|sketch|draw)\s+(the\s+)?(graph|line|function)',
+        r'shown\s+on\s+the\s+(coordinate\s+plane|graph)',
+        r'system\s+of\s+(linear\s+)?equations',
+        r'(slope|y-intercept).*graph',
+    ]
+    return any(re.search(p, text) for p in graphing_patterns)
+
+
+def _extract_equations_from_text(text):
+    """Extract y = ... or f(x) = ... equations from question text."""
+    import re
+    equations = []
+    # Match patterns like: y = 2x + 1, y = -x + 3, f(x) = x^2 - 4
+    patterns = [
+        r'y\s*=\s*([^,.\n;]+?)(?=[,.\n;]|\s+and\s+|\s+shown|\s+on|\s+how|\s+determine|\s+what|\s+find|$)',
+        r'f\s*\(\s*x\s*\)\s*=\s*([^,.\n;]+?)(?=[,.\n;]|\s+and\s+|\s+shown|\s+on|\s+how|\s+determine|\s+what|\s+find|$)',
+    ]
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for m in matches:
+            expr = m.strip().rstrip('.')
+            if expr and len(expr) > 1:
+                # Normalize: ensure "y = " prefix
+                if not expr.lower().startswith('y') and not expr.lower().startswith('f'):
+                    expr = 'y = ' + expr
+                elif expr.lower().startswith('f'):
+                    expr = 'y = ' + re.sub(r'f\s*\(\s*x\s*\)\s*=\s*', '', expr, flags=re.IGNORECASE)
+                else:
+                    expr = 'y = ' + expr
+                equations.append(expr)
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for eq in equations:
+        norm = eq.replace(' ', '').lower()
+        if norm not in seen:
+            seen.add(norm)
+            unique.append(eq)
+    return unique
 
 
 def _ensure_geometry_defaults(assignment):
@@ -1004,6 +1178,16 @@ SUPPORTED QUESTION TYPES:
 - data_table (include column_headers, row_labels, expected_data)
 - coordinates (include lat/lng answer and tolerance_km)
 - bar_chart, box_plot, number_line, coordinate_plane, geometry/triangle/rectangle/regular_polygon
+- function_graph (student graphs functions on a coordinate plane — include x_range, y_range, correct_expressions)
+- dot_plot (include categories or min_val/max_val/step, correct_dots)
+- stem_and_leaf (include data array, stems, correct_leaves)
+- unit_circle (include hidden_angles, hidden_values, correct_values)
+- transformations (include original_vertices, transformation_type, transform_params, correct_vertices)
+- fraction_model (include model_type, denominator, correct_numerator)
+- probability_tree (include tree structure, correct_values)
+- tape_diagram (include tapes array, correct_values)
+- venn_diagram (include sets count, set_labels, correct_values)
+- protractor (include given_angle or target_angle, mode: measure/draw)
 
 GEOMETRY QUESTION TYPES (use for math/geometry standards):
 - TRIANGLE: {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
@@ -1046,7 +1230,39 @@ Return JSON with this structure:
     }}
 }}
 {teacher_notes_block}
-Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types."""
+
+STUDENT PORTAL CAPABILITIES — Questions are completed digitally. Students CAN:
+- Type text answers (short_answer, essay)
+- Select from multiple choice or true/false options
+- Type math expressions using a virtual keyboard (math_equation)
+- Fill in data table cells (data_table)
+- Plot points on number lines and coordinate planes by clicking
+- Interact with geometry visualizations (measure areas, perimeters, etc.)
+- Graph functions on an interactive coordinate plane (function_graph)
+- Drag box plot handles, fill in 5-number summaries
+- Use an interactive protractor to measure or construct angles
+- Fill in probability trees, Venn diagrams, tape diagrams, fraction models
+
+VISUAL/GRAPHICAL QUESTION TYPES — the system renders these PROGRAMMATICALLY as interactive components:
+- function_graph: {{"question_type": "function_graph", "x_range": [-10, 10], "y_range": [-10, 10], "correct_expressions": ["y = 2*x + 1"], "max_expressions": 2}}
+- coordinate_plane: {{"question_type": "coordinate_plane", "min_val": -5, "max_val": 5, "points_to_plot": [[2, 3], [-1, 4]]}}
+- number_line: {{"question_type": "number_line", "min_val": -10, "max_val": 10, "points_to_plot": [-3, 0, 5]}}
+- bar_chart: {{"question_type": "bar_chart", "chart_data": {{"labels": [...], "values": [...], "title": "..."}}}}
+- box_plot: {{"question_type": "box_plot", "data": [[45, 52, 58, 65, 70, 78, 85, 92]], "labels": ["Scores"]}}
+- dot_plot: {{"question_type": "dot_plot", "min_val": 0, "max_val": 10, "step": 1, "correct_dots": {{"3": 2, "5": 4}}}}
+- stem_and_leaf: {{"question_type": "stem_and_leaf", "data": [23, 25, 31, 34], "stems": [2, 3], "correct_leaves": {{"2": [3, 5], "3": [1, 4]}}}}
+- triangle/rectangle/regular_polygon: {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area"}}
+- transformations: {{"question_type": "transformations", "original_vertices": [[1,1],[4,1],[4,3]], "transformation_type": "translation", "transform_params": {{"dx": 3, "dy": 2}}, "correct_vertices": [[4,3],[7,3],[7,5]]}}
+- fraction_model: {{"question_type": "fraction_model", "model_type": "area", "denominator": 8, "correct_numerator": 3}}
+- unit_circle: {{"question_type": "unit_circle", "hidden_angles": [30, 45, 60], "hidden_values": ["sin", "cos"], "correct_values": {{...}}}}
+- probability_tree/tape_diagram/venn_diagram/protractor: see full docs in assignment-from-lesson endpoint
+
+CRITICAL VISUAL RULES:
+1. NEVER use "short_answer" for graphing, plotting, or shape questions — ALWAYS use the appropriate visual type above
+2. NEVER say "View the graph" or "See the diagram" — the system RENDERS the visual from the data fields you provide
+3. EVERY visual question MUST include "question_type" and ALL required data fields for that type
+
+Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types. For STEM subjects, use interactive visual components wherever appropriate."""
 
         elif content_type == 'Project':
             prompt = common_header + f"""
@@ -1218,6 +1434,7 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
                 content = completion.choices[0].message.content
                 plan = json.loads(content)
+                _auto_upgrade_visual_types(plan)
                 _ensure_geometry_defaults(plan)
                 _ensure_data_table_defaults(plan)
                 _hydrate_math_visuals(plan)
@@ -1241,6 +1458,7 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         content = completion.choices[0].message.content
         plan = json.loads(content)
+        _auto_upgrade_visual_types(plan)
         _ensure_geometry_defaults(plan)
         _ensure_data_table_defaults(plan)
         _hydrate_math_visuals(plan)
@@ -1477,7 +1695,6 @@ STUDENT PORTAL CAPABILITIES — Questions are completed digitally. Students CAN:
 
 Students CANNOT:
 - Draw, sketch, or create freehand diagrams directly in the portal
-- Create graphs from scratch (they can only plot points on provided grids)
 - Physically construct anything — no compass, ruler, or protractor drawing
 
 Students CAN upload images:
@@ -1515,57 +1732,113 @@ SPECIAL STEM QUESTION TYPES (use when appropriate):
    - Use for: geography, map skills, location identification
    - Include "answer" as {{"lat": 25.7617, "lng": -80.1918}} and "tolerance_km" (default 50)
 
-VISUAL/GRAPHICAL QUESTION TYPES (include actual data for rendering):
+VISUAL/GRAPHICAL QUESTION TYPES (include actual data for rendering — the system renders these PROGRAMMATICALLY):
 
 4. BAR CHART (type: "bar_chart"):
    - Display a bar graph and ask interpretation questions
    - MUST include "chart_data" with labels and values
-   - Example: {{"chart_data": {{"labels": ["Mon", "Tue", "Wed", "Thu", "Fri"], "values": [12, 19, 8, 15, 22], "title": "Daily Sales", "y_label": "Number Sold"}}}}
+   - Example: {{"question_type": "bar_chart", "chart_data": {{"labels": ["Mon", "Tue", "Wed", "Thu", "Fri"], "values": [12, 19, 8, 15, 22], "title": "Daily Sales", "y_label": "Number Sold"}}}}
 
 5. BOX PLOT (type: "box_plot"):
    - Student identifies min, Q1, median, Q3, max, range, IQR
    - MUST include "data" array with the dataset
-   - Example: {{"data": [[45, 52, 58, 60, 65, 70, 72, 78, 85, 92]], "labels": ["Class Scores"]}}
+   - Example: {{"question_type": "box_plot", "data": [[45, 52, 58, 60, 65, 70, 72, 78, 85, 92]], "labels": ["Class Scores"]}}
 
 6. NUMBER LINE (type: "number_line"):
    - Student plots points on a number line
    - Include "min_val", "max_val", and "points_to_plot"
-   - Example: {{"min_val": -10, "max_val": 10, "points_to_plot": [-3, 0, 5]}}
+   - Example: {{"question_type": "number_line", "min_val": -10, "max_val": 10, "points_to_plot": [-3, 0, 5]}}
 
 7. COORDINATE PLANE (type: "coordinate_plane"):
    - Student plots points on an x-y grid (4 quadrants)
    - Include "min_val", "max_val", and "points_to_plot" as [x, y] pairs
-   - Example: {{"min_val": -5, "max_val": 5, "points_to_plot": [[2, 3], [-1, 4], [0, -2]]}}
+   - Example: {{"question_type": "coordinate_plane", "min_val": -5, "max_val": 5, "points_to_plot": [[2, 3], [-1, 4], [0, -2]]}}
 
-8. GEOMETRY (type: "geometry", "triangle", "rectangle", or "regular_polygon"):
+8. GEOMETRY (type: "triangle", "rectangle", or "regular_polygon"):
    - Student calculates area of shapes with given dimensions
    - Include "base", "height", and "question_type" (triangle or rectangle)
-   - Example: {{"base": 6, "height": 4, "question_type": "triangle"}}
+   - Example: {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
    - REGULAR_POLYGON: {{"question_type": "regular_polygon", "sides": 7, "side_length": 4, "mode": "area", "answer": "58.14"}}
      Use for pentagon (5), hexagon (6), heptagon (7), octagon (8), etc. Set "mode": "decompose" to show triangle decomposition.
      NEVER use "heptagon", "pentagon", "hexagon", "octagon" etc. as question_type — always use "regular_polygon" with the "sides" field.
 
+9. FUNCTION GRAPH (type: "function_graph") — CRITICAL FOR ALGEBRA/GRAPHING:
+   - Student graphs functions on an interactive coordinate plane
+   - MUST include "x_range", "y_range" as [min, max], and "correct_expressions" as an array of equation strings
+   - Use for: graphing linear equations, systems of equations, quadratic/polynomial functions, slope/intercept
+   - Example: {{"question_type": "function_graph", "x_range": [-10, 10], "y_range": [-10, 10], "correct_expressions": ["y = 2*x + 1", "y = -x + 3"], "max_expressions": 2, "answer": "The lines intersect at (0.67, 2.33)"}}
+   - EVERY question about graphing lines, functions, or systems MUST use this type — NEVER use "short_answer" for graphing questions
+
+10. DOT PLOT (type: "dot_plot"):
+    - Student places dots on categories or a number line
+    - Include "categories" (string array) or "min_val"/"max_val"/"step" for numeric, and "correct_dots"
+    - Example: {{"question_type": "dot_plot", "min_val": 0, "max_val": 10, "step": 1, "correct_dots": {{"3": 2, "5": 4, "7": 1}}, "chart_title": "Quiz Scores"}}
+
+11. STEM AND LEAF (type: "stem_and_leaf"):
+    - Student organizes data into stems and leaves
+    - Include "data" (number array), "stems" (array of stem values), "correct_leaves"
+    - Example: {{"question_type": "stem_and_leaf", "data": [23, 25, 31, 34, 37, 42, 45], "stems": [2, 3, 4], "correct_leaves": {{"2": [3, 5], "3": [1, 4, 7], "4": [2, 5]}}, "chart_title": "Test Scores"}}
+
+12. UNIT CIRCLE (type: "unit_circle"):
+    - Student fills in missing angles or trig values on the unit circle
+    - Include "hidden_angles" (angles to blank out), "hidden_values" (which values to hide), "correct_values"
+    - Example: {{"question_type": "unit_circle", "hidden_angles": [30, 45, 60], "hidden_values": ["sin", "cos"], "correct_values": {{"30": {{"sin": "1/2", "cos": "√3/2"}}}}, "show_radians": true}}
+
+13. TRANSFORMATIONS (type: "transformations"):
+    - Student applies geometric transformations (translation, reflection, rotation, dilation)
+    - Include "original_vertices", "transformation_type", "transform_params", "correct_vertices"
+    - Example: {{"question_type": "transformations", "original_vertices": [[1,1],[4,1],[4,3]], "transformation_type": "translation", "transform_params": {{"dx": 3, "dy": 2}}, "correct_vertices": [[4,3],[7,3],[7,5]], "grid_range": [-8, 8], "mode": "plot"}}
+
+14. FRACTION MODEL (type: "fraction_model"):
+    - Student shades parts of a visual fraction model
+    - Include "model_type" (area/bar/number_line), "denominator", "correct_numerator"
+    - Example: {{"question_type": "fraction_model", "model_type": "area", "denominator": 8, "correct_numerator": 3, "answer": "3/8"}}
+
+15. PROBABILITY TREE (type: "probability_tree"):
+    - Student fills in probabilities on a tree diagram
+    - Include "tree" structure with branches and "correct_values"
+    - Example: {{"question_type": "probability_tree", "tree": {{"label": "Start", "branches": [{{"label": "Heads", "probability": "1/2", "branches": [{{"label": "Heads", "probability": "1/2"}}, {{"label": "Tails", "probability": "1/2"}}]}}, {{"label": "Tails", "probability": "1/2"}}]}}, "correct_values": {{"P(HH)": "1/4"}}}}
+
+16. TAPE DIAGRAM (type: "tape_diagram"):
+    - Student works with tape/bar model diagrams for ratios and proportions
+    - Include "tapes" array with labels and segments, "correct_values"
+    - Example: {{"question_type": "tape_diagram", "tapes": [{{"label": "Boys", "segments": 3, "value_per_segment": null}}, {{"label": "Girls", "segments": 5, "value_per_segment": null}}], "correct_values": {{"total": 40, "boys": 15, "girls": 25}}, "chart_title": "Ratio of Boys to Girls"}}
+
+17. VENN DIAGRAM (type: "venn_diagram"):
+    - Student fills in regions of a Venn diagram
+    - Include "sets" (2 or 3), "set_labels", "correct_values"
+    - Example: {{"question_type": "venn_diagram", "sets": 2, "set_labels": ["Even Numbers", "Multiples of 3"], "correct_values": {{"only_a": 4, "only_b": 3, "intersection": 2, "outside": 1}}, "mode": "count"}}
+
+18. PROTRACTOR (type: "protractor"):
+    - Student measures or constructs angles using a protractor visual
+    - Include "given_angle" or "target_angle", "mode" (measure/draw)
+    - Example: {{"question_type": "protractor", "given_angle": 45, "mode": "measure", "answer": "45", "show_classification": true}}
+
 CRITICAL RULES FOR VISUAL QUESTIONS (MUST FOLLOW):
 
-1. ONLY USE THESE VISUAL TYPES - no others exist in the system:
-   - bar_chart (with chart_data)
-   - box_plot (with data array)
-   - number_line (with min_val, max_val, points_to_plot)
-   - coordinate_plane (with points_to_plot as [x,y] pairs)
-   - geometry/triangle/rectangle/regular_polygon (with base and height, or sides and side_length for regular_polygon)
+1. USE THESE VISUAL TYPES — they render as interactive components in the student portal:
+   bar_chart, box_plot, number_line, coordinate_plane, function_graph,
+   triangle, rectangle, regular_polygon, dot_plot, stem_and_leaf, unit_circle,
+   transformations, fraction_model, probability_tree, tape_diagram, venn_diagram, protractor
 
-2. NEVER mention or reference:
-   - "See attached graph" - there are no attachments
-   - "Look at the diagram below" without providing the data
-   - Line graphs, pie charts, scatter plots, or histograms (not supported)
-   - Any visual that doesn't have its data in the question object
+2. NEVER use "short_answer" for a question about graphing, plotting, or visualizing — ALWAYS use the appropriate visual type above.
+   - Graphing equations → function_graph
+   - Plotting points → coordinate_plane
+   - Plotting on a number line → number_line
+   - Geometric shapes → triangle/rectangle/regular_polygon
+   - Data display → bar_chart/box_plot/dot_plot/stem_and_leaf
 
-3. EVERY visual question MUST include:
+3. NEVER mention or reference:
+   - "See attached graph" or "View the graph" — the system RENDERS the graph from data you provide
+   - "Look at the diagram below" without providing the data fields
+   - Any visual that doesn't have its data fields in the question JSON object
+
+4. EVERY visual question MUST include:
    - "question_type": one of the supported types above
-   - The required data fields for that type
-   - Example: {{"question_type": "bar_chart", "chart_data": {{"labels": [...], "values": [...], "title": "..."}}}}
+   - ALL required data fields for that type (see examples above)
+   - The data fields ARE the visual — the system draws the graph/chart/shape from them
 
-4. If you want to ask about data interpretation without a visual:
+5. If you want to ask about data interpretation without a visual:
    - Describe the data in words within the question text
    - Use "short_answer" type
    - Example: "A store sold 12 apples on Monday, 19 on Tuesday, and 8 on Wednesday. Which day had the most sales?"
@@ -1628,6 +1901,7 @@ Make the questions specific to the lesson content. Include a variety of question
 
         content = completion.choices[0].message.content
         assignment = json.loads(content)
+        _auto_upgrade_visual_types(assignment)
         _ensure_geometry_defaults(assignment)
         _ensure_data_table_defaults(assignment)
         _hydrate_math_visuals(assignment)
@@ -3061,6 +3335,7 @@ Generate a complete assessment in this JSON format:
 
         content = completion.choices[0].message.content
         assessment = json.loads(content)
+        _auto_upgrade_visual_types(assessment)
         _ensure_geometry_defaults(assessment)
         _ensure_data_table_defaults(assessment)
         _hydrate_math_visuals(assessment)
