@@ -8,6 +8,9 @@ export default function InteractiveGeometry({
   base = 6,
   height = 4,
   width = 6,  // For rectangles
+  sides,       // For regular_polygon
+  sideLength,  // For regular_polygon
+  mode = 'area',
   answer = '',
   onChange,
   correctAnswer = null,
@@ -127,12 +130,59 @@ export default function InteractiveGeometry({
     );
   };
 
+  const renderRegularPolygon = () => {
+    const n = Math.max(3, Math.min(12, sides || 6));
+    const sl = sideLength || 4;
+    const cx = svgWidth / 2;
+    const cy = svgHeight / 2;
+    const R = Math.min(svgWidth, svgHeight) / 2 - padding - 10;
+
+    const vertices = [];
+    for (let i = 0; i < n; i++) {
+      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+      vertices.push([cx + R * Math.cos(angle), cy + R * Math.sin(angle)]);
+    }
+    const pts = vertices.map(([x, y]) => `${x},${y}`).join(' ');
+    const midX = (vertices[0][0] + vertices[1][0]) / 2;
+    const midY = (vertices[0][1] + vertices[1][1]) / 2;
+    const showDecompose = mode === 'decompose';
+
+    return (
+      <g>
+        <polygon points={pts} fill="#dbeafe" stroke="#3b82f6" strokeWidth={2} />
+        {showDecompose && vertices.map(([vx, vy], i) => (
+          <line key={i} x1={cx} y1={cy} x2={vx} y2={vy}
+            stroke="#6366f1" strokeWidth={1.5} strokeDasharray="4,3" />
+        ))}
+        {showDecompose && <circle cx={cx} cy={cy} r={3} fill="#6366f1" />}
+        {!showDecompose && (
+          <line x1={cx} y1={cy} x2={midX} y2={midY}
+            stroke="#ef4444" strokeWidth={2} strokeDasharray="5,3" />
+        )}
+        <text x={midX} y={midY + 18} textAnchor="middle" fontSize={14}
+          fontWeight="bold" style={{ fill: '#3b82f6' }}>
+          s = {sl}
+        </text>
+        <text x={cx} y={cy + (showDecompose ? 0 : -8)} textAnchor="middle"
+          fontSize={12} style={{ fill: showDecompose ? '#6366f1' : 'var(--text-muted)' }}>
+          {showDecompose ? n + ' triangles' : 'n = ' + n}
+        </text>
+      </g>
+    );
+  };
+
   const getFormula = () => {
     switch (type) {
       case 'triangle':
         return 'A = ½ × base × height = ½ × b × h';
       case 'rectangle':
         return 'A = width × height = w × h';
+      case 'regular_polygon':
+        return mode === 'decompose'
+          ? 'A = n × (½ × s × a)'
+          : mode === 'perimeter'
+            ? 'P = n × s'
+            : 'A = ½ × n × s × a';
       default:
         return '';
     }
@@ -161,6 +211,7 @@ export default function InteractiveGeometry({
         <rect x={0} y={0} width={svgWidth} height={svgHeight} style={{ fill: 'var(--input-bg)' }} rx={8} />
         {type === 'triangle' && renderTriangle()}
         {type === 'rectangle' && renderRectangle()}
+        {type === 'regular_polygon' && renderRegularPolygon()}
       </svg>
 
       {showFormula && (

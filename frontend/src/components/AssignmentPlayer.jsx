@@ -295,11 +295,15 @@ function QuestionRenderer({
       case 'geometry':
       case 'triangle':
       case 'rectangle':
+      case 'regular_polygon':
         return (
           <InteractiveGeometry
             type={qType === 'geometry' ? 'triangle' : qType}
             base={question.base || 6}
             height={question.height || 4}
+            mode={question.mode || 'area'}
+            sides={question.sides}
+            sideLength={question.side_length}
             answer={answer || ''}
             onChange={onAnswer}
             correctAnswer={showAnswer ? question.answer : null}

@@ -1795,6 +1795,9 @@ def _load_standards():
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            # Handle both formats: wrapped dict {"standards": [...]} or flat array [...]
+            if isinstance(data, list):
+                return data
             return data.get('standards', [])
         except Exception:
             pass

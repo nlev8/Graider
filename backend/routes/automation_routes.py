@@ -205,6 +205,16 @@ def list_templates():
     return jsonify({"templates": templates})
 
 
+@automation_bp.route('/api/automations/templates/<template_id>', methods=['DELETE'])
+def delete_template(template_id):
+    """Delete a template file."""
+    safe_id = re.sub(r'[^a-z0-9_-]', '', template_id)
+    filepath = os.path.join(TEMPLATES_DIR, safe_id + ".json")
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    return jsonify({"status": "deleted"})
+
+
 # ── Run ──────────────────────────────────────────────────────
 
 @automation_bp.route('/api/automations/<workflow_id>/run', methods=['POST'])
@@ -282,11 +292,16 @@ def start_picker():
 
     data = request.json or {}
     start_url = data.get("url", "https://vportal.volusia.k12.fl.us/")
+    auto_login = data.get("login", False)
 
     _picker_state.update({"status": "picking", "events": [], "process": None})
 
+    cmd = ["node", PICKER_SCRIPT, "--url", start_url]
+    if auto_login:
+        cmd.append("--login")
+
     proc = subprocess.Popen(
-        ["node", PICKER_SCRIPT, "--url", start_url],
+        cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, bufsize=1,
     )

@@ -1,565 +1,1427 @@
-{
-  "state": "FL",
-  "subject": "Civics",
-  "grade": "7",
-  "standards": [
-    {
-      "code": "SS.7.C.1.1",
-      "benchmark": "Recognize how Enlightenment ideas including Montesquieu's view of separation of power and John Locke's theories related to natural law and how John Locke's social contract influenced the Founding Fathers.",
-      "topics": ["Enlightenment", "Natural Law", "Social Contract", "Separation of Powers"],
-      "dok": 2,
-      "item_specs": "Students may be asked to identify Enlightenment thinkers and match them to their ideas. Items may include excerpts from primary sources.",
-      "essential_questions": [
-        "How did Enlightenment ideas shape American democracy?",
-        "Why did the Founders believe government should be limited?"
-      ],
-      "learning_targets": [
-        "I can identify key Enlightenment thinkers and their ideas.",
-        "I can explain how social contract theory influenced the Declaration of Independence.",
-        "I can describe Montesquieu's influence on the structure of U.S. government."
-      ],
-      "vocabulary": ["Enlightenment", "natural rights", "social contract", "separation of powers", "John Locke", "Montesquieu", "consent of the governed"],
-      "sample_assessment": "Which Enlightenment thinker's ideas are MOST reflected in the structure of the three branches of government? A) John Locke B) Montesquieu C) Rousseau D) Voltaire"
-    },
-    {
-      "code": "SS.7.C.1.2",
-      "benchmark": "Trace the impact that the Magna Carta, English Bill of Rights, Mayflower Compact, and Thomas Paine's Common Sense had on colonists' views of government.",
-      "topics": ["Founding Documents", "Colonial Government", "Limited Government"],
-      "dok": 2,
-      "item_specs": "Students identify influences of historical documents on American government. May include document excerpts or timelines.",
-      "essential_questions": [
-        "How did earlier documents influence American ideas about rights and government?",
-        "What traditions did colonists bring from England?"
-      ],
-      "learning_targets": [
-        "I can explain how the Magna Carta established the idea of limited government.",
-        "I can describe how the Mayflower Compact was an early example of self-government.",
-        "I can analyze how Common Sense influenced colonial support for independence."
-      ],
-      "vocabulary": ["Magna Carta", "English Bill of Rights", "Mayflower Compact", "Common Sense", "self-government", "limited government", "due process"],
-      "sample_assessment": "The idea that government power should be limited and that rulers must follow the law originated with which document? A) Declaration of Independence B) Magna Carta C) U.S. Constitution D) Common Sense"
-    },
-    {
-      "code": "SS.7.C.1.3",
-      "benchmark": "Describe how English policies and responses to colonial concerns led to the writing of the Declaration of Independence.",
-      "topics": ["Colonial Grievances", "Declaration of Independence", "Revolution"],
-      "dok": 2,
-      "item_specs": "Students connect British actions to colonial responses. Items may include cause-effect relationships.",
-      "essential_questions": [
-        "What pushed the colonists from protest to revolution?",
-        "How did British policies unite the colonies?"
-      ],
-      "learning_targets": [
-        "I can identify key British policies that angered colonists.",
-        "I can explain the colonial response to taxation without representation.",
-        "I can describe events leading to the Declaration of Independence."
-      ],
-      "vocabulary": ["Stamp Act", "Intolerable Acts", "taxation without representation", "boycott", "Continental Congress", "grievances"],
-      "sample_assessment": "Which colonial grievance is BEST represented by the phrase 'no taxation without representation'? A) Quartering of soldiers B) Lack of colonial voice in Parliament C) Restriction of westward expansion D) Closing of Boston Harbor"
-    },
-    {
-      "code": "SS.7.C.1.4",
-      "benchmark": "Analyze the ideas (natural rights, role of the government) and complaints set forth in the Declaration of Independence.",
-      "topics": ["Natural Rights", "Declaration of Independence", "Grievances"],
-      "dok": 3,
-      "item_specs": "Students analyze excerpts from the Declaration. Higher-order items require interpretation of Enlightenment principles.",
-      "essential_questions": [
-        "What makes a government legitimate according to the Declaration?",
-        "When do people have the right to change their government?"
-      ],
-      "learning_targets": [
-        "I can identify the natural rights listed in the Declaration.",
-        "I can explain the purpose of government according to the Declaration.",
-        "I can analyze specific grievances against King George III."
-      ],
-      "vocabulary": ["unalienable rights", "life, liberty, pursuit of happiness", "consent of the governed", "grievances", "tyranny"],
-      "sample_assessment": "According to the Declaration of Independence, what is the PRIMARY purpose of government? A) To collect taxes B) To protect natural rights C) To maintain order D) To expand territory"
-    },
-    {
-      "code": "SS.7.C.1.5",
-      "benchmark": "Identify how the weaknesses of the Articles of Confederation led to the writing of the Constitution.",
-      "topics": ["Articles of Confederation", "Constitution", "Federalism"],
-      "dok": 2,
-      "item_specs": "Students identify weaknesses and connect them to Constitutional solutions. May use comparison charts.",
-      "essential_questions": [
-        "Why did the Articles of Confederation fail?",
-        "What problems did the Constitution solve?"
-      ],
-      "learning_targets": [
-        "I can list major weaknesses of the Articles of Confederation.",
-        "I can explain why Shays' Rebellion showed the need for stronger government.",
-        "I can compare the Articles to the Constitution."
-      ],
-      "vocabulary": ["Articles of Confederation", "Shays' Rebellion", "Constitutional Convention", "federalism", "weak central government"],
-      "sample_assessment": "Which was a major weakness of the Articles of Confederation? A) Too much power given to the President B) No power to tax or regulate trade C) Too many representatives in Congress D) Strict requirements for citizenship"
-    },
-    {
-      "code": "SS.7.C.1.6",
-      "benchmark": "Interpret the intentions of the Preamble of the Constitution.",
-      "topics": ["Preamble", "Constitution", "Goals of Government"],
-      "dok": 2,
-      "item_specs": "Students interpret phrases from the Preamble and connect them to government functions.",
-      "essential_questions": [
-        "What goals did the Founders set for the new government?",
-        "How does the Preamble reflect the purpose of the Constitution?"
-      ],
-      "learning_targets": [
-        "I can identify the six goals stated in the Preamble.",
-        "I can explain what 'We the People' means for popular sovereignty.",
-        "I can connect Preamble phrases to specific government actions."
-      ],
-      "vocabulary": ["Preamble", "popular sovereignty", "domestic tranquility", "general welfare", "common defense", "posterity"],
-      "sample_assessment": "Which phrase from the Preamble reflects the goal of maintaining peace within the country? A) 'provide for the common defense' B) 'establish justice' C) 'insure domestic tranquility' D) 'promote the general welfare'"
-    },
-    {
-      "code": "SS.7.C.1.7",
-      "benchmark": "Describe how the Constitution limits the powers of government through separation of powers and checks and balances.",
-      "topics": ["Separation of Powers", "Checks and Balances", "Limited Government"],
-      "dok": 2,
-      "item_specs": "Students identify examples of checks and balances. May include scenarios requiring application.",
-      "essential_questions": [
-        "How does the Constitution prevent any one branch from becoming too powerful?",
-        "Why did the Founders divide government power?"
-      ],
-      "learning_targets": [
-        "I can identify the three branches and their main powers.",
-        "I can give examples of checks and balances.",
-        "I can explain why separation of powers protects liberty."
-      ],
-      "vocabulary": ["separation of powers", "checks and balances", "veto", "override", "judicial review", "impeachment", "confirmation"],
-      "sample_assessment": "The President vetoes a bill passed by Congress. Congress then votes to override the veto. This is an example of: A) Federalism B) Checks and balances C) Judicial review D) Popular sovereignty"
-    },
-    {
-      "code": "SS.7.C.1.8",
-      "benchmark": "Explain the viewpoints of the Federalists and the Anti-Federalists regarding the ratification of the Constitution and inclusion of a bill of rights.",
-      "topics": ["Federalists", "Anti-Federalists", "Ratification", "Bill of Rights"],
-      "dok": 2,
-      "item_specs": "Students compare viewpoints. May include excerpts from Federalist Papers or Anti-Federalist writings.",
-      "essential_questions": [
-        "What were the main arguments for and against the Constitution?",
-        "Why was the Bill of Rights added?"
-      ],
-      "learning_targets": [
-        "I can explain the Federalist position on the Constitution.",
-        "I can explain Anti-Federalist concerns about the Constitution.",
-        "I can describe the compromise that led to the Bill of Rights."
-      ],
-      "vocabulary": ["Federalists", "Anti-Federalists", "ratification", "Federalist Papers", "Bill of Rights", "tyranny"],
-      "sample_assessment": "Anti-Federalists opposed ratification of the Constitution primarily because they believed it: A) Made the states too powerful B) Did not protect individual rights C) Created too many branches D) Was too similar to the Articles"
-    },
-    {
-      "code": "SS.7.C.1.9",
-      "benchmark": "Define the rule of law and recognize its influence on the development of the American legal, political, and governmental systems.",
-      "topics": ["Rule of Law", "Fairness", "Accountability"],
-      "dok": 2,
-      "item_specs": "Students identify examples of rule of law in action. May include scenarios.",
-      "essential_questions": [
-        "Why is it important that everyone, including leaders, must follow the law?",
-        "How does rule of law protect citizens?"
-      ],
-      "learning_targets": [
-        "I can define rule of law.",
-        "I can explain how rule of law limits government power.",
-        "I can identify examples of rule of law in American government."
-      ],
-      "vocabulary": ["rule of law", "due process", "equal protection", "accountability", "limited government"],
-      "sample_assessment": "Which scenario BEST demonstrates the principle of rule of law? A) A popular president ignores a court ruling B) A judge rules against a powerful corporation C) Citizens vote for their favorite candidate D) Congress passes a law supported by most people"
-    },
-    {
-      "code": "SS.7.C.2.1",
-      "benchmark": "Define the term 'citizen,' and identify legal means of becoming a United States citizen.",
-      "topics": ["Citizenship", "Naturalization", "Rights and Responsibilities"],
-      "dok": 1,
-      "item_specs": "Students identify paths to citizenship and requirements for naturalization.",
-      "essential_questions": [
-        "What does it mean to be an American citizen?",
-        "How can someone become a U.S. citizen?"
-      ],
-      "learning_targets": [
-        "I can define citizenship.",
-        "I can explain birthright citizenship.",
-        "I can describe the naturalization process."
-      ],
-      "vocabulary": ["citizen", "naturalization", "birthright citizenship", "14th Amendment", "resident", "immigrant"],
-      "sample_assessment": "Which is a requirement for becoming a naturalized U.S. citizen? A) Being born in the United States B) Having U.S. citizen parents C) Passing a citizenship test D) Serving in the military"
-    },
-    {
-      "code": "SS.7.C.2.2",
-      "benchmark": "Evaluate the obligations citizens have to obey laws, pay taxes, defend the nation, and serve on juries.",
-      "topics": ["Obligations", "Citizenship", "Civic Duty"],
-      "dok": 2,
-      "item_specs": "Students distinguish between rights and responsibilities. May include scenarios about civic duties.",
-      "essential_questions": [
-        "What responsibilities come with citizenship?",
-        "Why are civic duties important for democracy?"
-      ],
-      "learning_targets": [
-        "I can list the obligations of citizens.",
-        "I can explain why jury duty is important.",
-        "I can distinguish between civic duties and civic responsibilities."
-      ],
-      "vocabulary": ["civic duty", "civic responsibility", "jury duty", "Selective Service", "taxation", "obligation"],
-      "sample_assessment": "Which civic duty is required by law for eligible citizens? A) Voting in elections B) Volunteering in the community C) Serving on a jury when called D) Running for political office"
-    },
-    {
-      "code": "SS.7.C.2.4",
-      "benchmark": "Evaluate rights contained in the Bill of Rights and other amendments to the Constitution.",
-      "topics": ["Bill of Rights", "Amendments", "Civil Liberties"],
-      "dok": 3,
-      "item_specs": "Students apply amendments to scenarios. Higher-order items require evaluation of competing rights.",
-      "essential_questions": [
-        "How does the Bill of Rights protect individual freedoms?",
-        "What limits exist on constitutional rights?"
-      ],
-      "learning_targets": [
-        "I can identify rights protected by each amendment in the Bill of Rights.",
-        "I can apply constitutional rights to real-world scenarios.",
-        "I can explain how rights can be limited."
-      ],
-      "vocabulary": ["Bill of Rights", "First Amendment", "due process", "civil liberties", "civil rights", "search and seizure"],
-      "sample_assessment": "A student wears a political t-shirt to school and is told to change. Which amendment is MOST relevant to this situation? A) First Amendment B) Fourth Amendment C) Fifth Amendment D) Eighth Amendment"
-    },
-    {
-      "code": "SS.7.C.2.8",
-      "benchmark": "Identify America's current political parties, and illustrate their ideas about government.",
-      "topics": ["Political Parties", "Ideologies", "Two-Party System"],
-      "dok": 2,
-      "item_specs": "Students identify party positions on issues. May include platforms or policy comparisons.",
-      "essential_questions": [
-        "What role do political parties play in American democracy?",
-        "How do the major parties differ on key issues?"
-      ],
-      "learning_targets": [
-        "I can identify the two major political parties.",
-        "I can describe general differences in party platforms.",
-        "I can explain the purpose of political parties in elections."
-      ],
-      "vocabulary": ["political party", "Democrat", "Republican", "platform", "ideology", "liberal", "conservative", "third party"],
-      "sample_assessment": "What is the PRIMARY purpose of political parties in the United States? A) To write laws B) To nominate candidates and win elections C) To interpret the Constitution D) To conduct foreign policy"
-    },
-    {
-      "code": "SS.7.C.3.1",
-      "benchmark": "Compare different forms of government (direct democracy, representative democracy, socialism, communism, monarchy, oligarchy, autocracy).",
-      "topics": ["Forms of Government", "Democracy", "Authoritarianism"],
-      "dok": 2,
-      "item_specs": "Students classify governments and compare characteristics. May include descriptions for matching.",
-      "essential_questions": [
-        "How do governments differ in how power is held and used?",
-        "What makes democracy different from other forms of government?"
-      ],
-      "learning_targets": [
-        "I can define different forms of government.",
-        "I can compare democratic and authoritarian governments.",
-        "I can identify the form of government used by different countries."
-      ],
-      "vocabulary": ["democracy", "republic", "monarchy", "oligarchy", "autocracy", "dictatorship", "communism", "totalitarian"],
-      "sample_assessment": "In which form of government do citizens have the LEAST voice in decision-making? A) Direct democracy B) Representative democracy C) Constitutional monarchy D) Autocracy"
-    },
-    {
-      "code": "SS.7.C.3.3",
-      "benchmark": "Illustrate the structure and function (three branches of government established in Articles I, II, and III with corresponding powers) of government in the United States as established in the Constitution.",
-      "topics": ["Three Branches", "Structure of Government", "Articles I-III"],
-      "dok": 2,
-      "item_specs": "Students identify branch responsibilities and match powers to branches. May include organizational charts.",
-      "essential_questions": [
-        "What are the roles of the three branches of government?",
-        "How is power distributed among the branches?"
-      ],
-      "learning_targets": [
-        "I can identify the three branches and their leaders.",
-        "I can list the main powers of each branch.",
-        "I can explain which Article establishes each branch."
-      ],
-      "vocabulary": ["legislative branch", "executive branch", "judicial branch", "Congress", "President", "Supreme Court", "Article I", "Article II", "Article III"],
-      "sample_assessment": "Which branch of government is established by Article I of the Constitution? A) Executive B) Judicial C) Legislative D) Electoral"
-    },
-    {
-      "code": "SS.7.C.3.12",
-      "benchmark": "Analyze the significance and outcomes of landmark Supreme Court cases including, but not limited to, Marbury v. Madison, Plessy v. Ferguson, Brown v. Board of Education, Gideon v. Wainwright, Miranda v. Arizona, in re Gault, Tinker v. Des Moines, Hazelwood v. Kuhlmeier, United States v. Nixon, and Bush v. Gore.",
-      "topics": ["Supreme Court", "Landmark Cases", "Judicial Review"],
-      "dok": 3,
-      "item_specs": "Students analyze case outcomes and their impact. May include excerpts from rulings or application scenarios.",
-      "essential_questions": [
-        "How has the Supreme Court shaped American rights and government?",
-        "What is the lasting impact of landmark decisions?"
-      ],
-      "learning_targets": [
-        "I can identify the key issue in each landmark case.",
-        "I can explain the Supreme Court's ruling and reasoning.",
-        "I can analyze how each case impacted American society."
-      ],
-      "vocabulary": ["judicial review", "precedent", "majority opinion", "dissent", "constitutional", "unconstitutional", "appeal"],
-      "sample_assessment": "Which Supreme Court case established the principle of judicial review? A) Brown v. Board of Education B) Marbury v. Madison C) Miranda v. Arizona D) Tinker v. Des Moines"
-    },
-    {
-      "code": "SS.7.E.1.1",
-      "benchmark": "Explain how the principles of a market and mixed economy helped to develop the United States into a democratic nation.",
-      "topics": ["Market Economy", "Mixed Economy", "Democracy", "Economic Systems"],
-      "dok": 2,
-      "item_specs": "Students explain the relationship between economic freedom and democratic governance. Items may include scenarios comparing economic systems.",
-      "essential_questions": [
-        "How does a market economy support democratic values?",
-        "What is the difference between a market economy and a mixed economy?"
-      ],
-      "learning_targets": [
-        "I can explain the basic principles of a market economy.",
-        "I can describe how a mixed economy combines market and government elements.",
-        "I can connect economic freedom to the development of American democracy."
-      ],
-      "vocabulary": ["market economy", "mixed economy", "free enterprise", "private property", "economic freedom", "capitalism", "supply and demand"],
-      "sample_assessment": "Which feature of a market economy MOST supports democratic principles? A) Government sets all prices B) Individuals can own property and start businesses C) A central authority controls production D) The government provides all goods and services"
-    },
-    {
-      "code": "SS.7.E.1.2",
-      "benchmark": "Discuss the importance of borrowing and lending in the United States, the government's role in controlling financial institutions, and list the advantages and disadvantages of using credit.",
-      "topics": ["Credit", "Borrowing and Lending", "Financial Institutions", "Government Regulation"],
-      "dok": 2,
-      "item_specs": "Students identify advantages and disadvantages of credit use and explain government regulation of financial institutions. Items may include scenarios about borrowing decisions.",
-      "essential_questions": [
-        "Why is borrowing and lending important in a market economy?",
-        "What are the benefits and risks of using credit?"
-      ],
-      "learning_targets": [
-        "I can explain why borrowing and lending are important to the economy.",
-        "I can describe the government's role in regulating financial institutions.",
-        "I can list advantages and disadvantages of using credit."
-      ],
-      "vocabulary": ["credit", "interest", "loan", "debt", "borrower", "lender", "Federal Reserve", "regulation", "credit score"],
-      "sample_assessment": "Which is a DISADVANTAGE of using credit? A) Being able to make large purchases over time B) Building a positive financial history C) Paying more than the original price due to interest D) Having access to emergency funds"
-    },
-    {
-      "code": "SS.7.E.1.3",
-      "benchmark": "Review the concepts of supply and demand, choice, scarcity, and opportunity cost as they relate to the development of the mixed market economy in the United States.",
-      "topics": ["Supply and Demand", "Scarcity", "Opportunity Cost", "Choice"],
-      "dok": 2,
-      "item_specs": "Students apply economic concepts to real-world scenarios. Items may include supply and demand graphs or decision-making situations involving trade-offs.",
-      "essential_questions": [
-        "How do supply and demand affect prices?",
-        "Why must individuals and societies make economic choices?"
-      ],
-      "learning_targets": [
-        "I can explain the law of supply and demand.",
-        "I can define scarcity and explain how it forces economic choices.",
-        "I can identify opportunity cost in everyday decisions."
-      ],
-      "vocabulary": ["supply", "demand", "scarcity", "opportunity cost", "trade-off", "choice", "consumer", "producer", "equilibrium"],
-      "sample_assessment": "A student decides to work after school instead of joining the soccer team. The opportunity cost of this decision is: A) The money earned from the job B) The experience of playing soccer C) The time spent at work D) The cost of soccer equipment"
-    },
-    {
-      "code": "SS.7.E.1.4",
-      "benchmark": "Discuss the function of financial institutions in the development of a market economy.",
-      "topics": ["Financial Institutions", "Banks", "Market Economy"],
-      "dok": 2,
-      "item_specs": "Students identify roles of financial institutions and how they support economic growth. Items may include scenarios about banking services.",
-      "essential_questions": [
-        "What role do banks and financial institutions play in the economy?",
-        "How do financial institutions help individuals and businesses?"
-      ],
-      "learning_targets": [
-        "I can describe the main functions of banks and financial institutions.",
-        "I can explain how banks help the economy grow through lending.",
-        "I can identify different types of financial institutions."
-      ],
-      "vocabulary": ["bank", "savings account", "checking account", "investment", "deposit", "withdrawal", "financial institution", "credit union"],
-      "sample_assessment": "Which is a PRIMARY function of banks in a market economy? A) Setting prices for consumer goods B) Accepting deposits and making loans C) Collecting taxes for the government D) Manufacturing currency"
-    },
-    {
-      "code": "SS.7.E.1.5",
-      "benchmark": "Assess how profits, incentives, and competition motivate individuals, households, and businesses in a free market economy.",
-      "topics": ["Profit", "Incentives", "Competition", "Free Market"],
-      "dok": 3,
-      "item_specs": "Students analyze how economic motivations drive behavior in a free market. Items may include scenarios about business decisions or consumer behavior.",
-      "essential_questions": [
-        "How do profits and incentives drive economic decisions?",
-        "Why is competition important in a free market economy?"
-      ],
-      "learning_targets": [
-        "I can explain how the profit motive drives business decisions.",
-        "I can describe how incentives influence economic behavior.",
-        "I can assess how competition benefits consumers."
-      ],
-      "vocabulary": ["profit", "incentive", "competition", "entrepreneur", "free market", "consumer", "producer", "revenue", "cost"],
-      "sample_assessment": "How does competition MOST benefit consumers in a free market economy? A) It eliminates all small businesses B) It leads to lower prices and better products C) It reduces the number of choices available D) It allows one company to control the market"
-    },
-    {
-      "code": "SS.7.E.1.6",
-      "benchmark": "Compare the national budget process to the personal budget process.",
-      "topics": ["Budget", "National Budget", "Personal Finance", "Government Spending"],
-      "dok": 2,
-      "item_specs": "Students compare budgeting at the national and personal levels. Items may include budget scenarios or charts showing income and expenditures.",
-      "essential_questions": [
-        "How is the national budget similar to a personal budget?",
-        "Why is budgeting important for both governments and individuals?"
-      ],
-      "learning_targets": [
-        "I can describe the basic steps of creating a personal budget.",
-        "I can explain how the national budget process works.",
-        "I can compare similarities and differences between personal and national budgets."
-      ],
-      "vocabulary": ["budget", "income", "expenses", "surplus", "deficit", "national debt", "revenue", "expenditure", "appropriation"],
-      "sample_assessment": "When the federal government spends MORE money than it collects in revenue, this creates a: A) Surplus B) Deficit C) Balanced budget D) Tax refund"
-    },
-    {
-      "code": "SS.7.E.2.1",
-      "benchmark": "Explain how federal, state, and local taxes support the economy as a function of the United States government.",
-      "topics": ["Taxes", "Government Revenue", "Public Services"],
-      "dok": 2,
-      "item_specs": "Students identify types of taxes and explain how tax revenue funds government services. Items may include scenarios about tax-funded services.",
-      "essential_questions": [
-        "Why does the government collect taxes?",
-        "How do taxes at different levels of government support the economy?"
-      ],
-      "learning_targets": [
-        "I can identify different types of taxes (income, sales, property).",
-        "I can explain how taxes fund government services.",
-        "I can describe the role of taxes at the federal, state, and local levels."
-      ],
-      "vocabulary": ["tax", "income tax", "sales tax", "property tax", "revenue", "public services", "Internal Revenue Service (IRS)", "taxpayer"],
-      "sample_assessment": "Which government service is MOST commonly funded by local property taxes? A) National defense B) Social Security C) Public schools D) International trade agreements"
-    },
-    {
-      "code": "SS.7.E.2.2",
-      "benchmark": "Describe the banking system in the United States and its impact on the money supply.",
-      "topics": ["Banking System", "Money Supply", "Federal Reserve"],
-      "dok": 2,
-      "item_specs": "Students describe how the banking system and Federal Reserve influence the money supply. Items may include scenarios about monetary policy.",
-      "essential_questions": [
-        "How does the banking system affect the amount of money in the economy?",
-        "What role does the Federal Reserve play in the banking system?"
-      ],
-      "learning_targets": [
-        "I can describe the structure of the U.S. banking system.",
-        "I can explain the role of the Federal Reserve.",
-        "I can describe how banks impact the money supply through lending."
-      ],
-      "vocabulary": ["Federal Reserve", "money supply", "interest rate", "monetary policy", "central bank", "reserve requirement", "currency"],
-      "sample_assessment": "Which institution is responsible for regulating the money supply in the United States? A) The U.S. Treasury B) The Federal Reserve C) The Securities and Exchange Commission D) The Internal Revenue Service"
-    },
-    {
-      "code": "SS.7.E.2.3",
-      "benchmark": "Identify and describe United States laws and regulations adopted to promote economic competition.",
-      "topics": ["Economic Regulation", "Antitrust", "Competition", "Government Role"],
-      "dok": 2,
-      "item_specs": "Students identify laws that prevent monopolies and promote fair competition. Items may include scenarios about business practices.",
-      "essential_questions": [
-        "Why does the government regulate business practices?",
-        "How do antitrust laws protect consumers and competition?"
-      ],
-      "learning_targets": [
-        "I can explain why the government regulates economic competition.",
-        "I can identify key laws that prevent monopolies.",
-        "I can describe how regulations promote fair business practices."
-      ],
-      "vocabulary": ["antitrust", "monopoly", "regulation", "Sherman Antitrust Act", "competition", "consumer protection", "fair trade"],
-      "sample_assessment": "The PRIMARY purpose of antitrust laws is to: A) Increase government revenue B) Prevent one company from controlling an entire industry C) Reduce international trade D) Set minimum wages for workers"
-    },
-    {
-      "code": "SS.7.E.2.4",
-      "benchmark": "Identify entrepreneurs from various gender, social, and ethnic backgrounds who started a business seeking to make a profit.",
-      "topics": ["Entrepreneurship", "Diversity", "Business", "Profit"],
-      "dok": 1,
-      "item_specs": "Students identify diverse entrepreneurs and their contributions to the economy. Items may include matching entrepreneurs to their achievements.",
-      "essential_questions": [
-        "How have entrepreneurs from diverse backgrounds contributed to the American economy?",
-        "What qualities help entrepreneurs succeed?"
-      ],
-      "learning_targets": [
-        "I can identify entrepreneurs from various backgrounds.",
-        "I can explain how entrepreneurship contributes to economic growth.",
-        "I can describe the role of profit in motivating entrepreneurs."
-      ],
-      "vocabulary": ["entrepreneur", "profit", "innovation", "risk", "small business", "startup", "free enterprise"],
-      "sample_assessment": "An entrepreneur is BEST defined as someone who: A) Works for a large corporation B) Starts a business and takes on financial risk C) Invests only in government bonds D) Manages a nonprofit organization"
-    },
-    {
-      "code": "SS.7.E.2.5",
-      "benchmark": "Explain how economic institutions impact the national economy.",
-      "topics": ["Economic Institutions", "National Economy", "Government Agencies"],
-      "dok": 2,
-      "item_specs": "Students explain how institutions such as the Federal Reserve, SEC, and other agencies influence the national economy. Items may include matching institutions to their functions.",
-      "essential_questions": [
-        "What economic institutions influence the U.S. economy?",
-        "How do these institutions promote economic stability?"
-      ],
-      "learning_targets": [
-        "I can identify major economic institutions in the United States.",
-        "I can explain how the Federal Reserve influences the economy.",
-        "I can describe how government agencies regulate economic activity."
-      ],
-      "vocabulary": ["Federal Reserve", "Securities and Exchange Commission (SEC)", "Federal Deposit Insurance Corporation (FDIC)", "economic institution", "regulation", "monetary policy"],
-      "sample_assessment": "Which institution protects bank depositors by insuring their accounts? A) The Federal Reserve B) The SEC C) The FDIC D) The IRS"
-    },
-    {
-      "code": "SS.7.E.3.1",
-      "benchmark": "Explain how international trade requires a system for exchanging currency between and among nations.",
-      "topics": ["International Trade", "Currency Exchange", "Global Economy"],
-      "dok": 2,
-      "item_specs": "Students explain the need for currency exchange in international trade. Items may include scenarios about buying goods from other countries.",
-      "essential_questions": [
-        "Why is a system of currency exchange necessary for international trade?",
-        "How does currency exchange work between nations?"
-      ],
-      "learning_targets": [
-        "I can explain why nations need to exchange currency to trade.",
-        "I can describe how exchange rates work.",
-        "I can give examples of international trade requiring currency conversion."
-      ],
-      "vocabulary": ["exchange rate", "currency", "international trade", "import", "export", "foreign exchange", "global economy"],
-      "sample_assessment": "A U.S. company wants to buy goods from Japan. Before purchasing, the company must: A) Get permission from the President B) Convert U.S. dollars to Japanese yen C) Move its headquarters to Japan D) Stop trading with other countries"
-    },
-    {
-      "code": "SS.7.E.3.2",
-      "benchmark": "Assess how the changing value of currency affects trade of goods and services between nations.",
-      "topics": ["Currency Value", "Trade", "Exchange Rates", "Global Economy"],
-      "dok": 3,
-      "item_specs": "Students assess the impact of currency fluctuations on international trade. Items may include scenarios about changing exchange rates.",
-      "essential_questions": [
-        "How do changes in currency value affect international trade?",
-        "What happens when one country's currency becomes stronger or weaker?"
-      ],
-      "learning_targets": [
-        "I can explain how a strong or weak currency affects imports and exports.",
-        "I can assess the impact of changing exchange rates on trade.",
-        "I can describe how currency value changes affect consumers."
-      ],
-      "vocabulary": ["appreciation", "depreciation", "strong currency", "weak currency", "exchange rate", "trade balance", "import", "export"],
-      "sample_assessment": "If the U.S. dollar becomes STRONGER compared to the euro, what is the MOST likely result? A) American goods become cheaper for Europeans B) European goods become cheaper for Americans C) International trade stops completely D) Both currencies lose value"
-    },
-    {
-      "code": "SS.7.E.3.3",
-      "benchmark": "Compare and contrast a single resource economy with a diversified economy.",
-      "topics": ["Economic Diversification", "Single Resource Economy", "Economic Development"],
-      "dok": 2,
-      "item_specs": "Students compare economies that depend on one resource versus those with varied industries. Items may include examples of resource-dependent countries.",
-      "essential_questions": [
-        "What are the risks of depending on a single resource?",
-        "Why is a diversified economy more stable?"
-      ],
-      "learning_targets": [
-        "I can define a single resource economy and a diversified economy.",
-        "I can explain the risks of depending on one resource.",
-        "I can compare the economic stability of diversified and single-resource economies."
-      ],
-      "vocabulary": ["single resource economy", "diversified economy", "natural resources", "economic dependence", "industry", "stability", "vulnerability"],
-      "sample_assessment": "A country that earns almost ALL of its income from oil exports is an example of: A) A diversified economy B) A single resource economy C) A mixed market economy D) A command economy"
-    },
-    {
-      "code": "SS.7.E.3.4",
-      "benchmark": "Compare and contrast the standard of living in various countries today to that of the United States using gross domestic product (GDP) per capita as an indicator.",
-      "topics": ["Standard of Living", "GDP", "GDP Per Capita", "International Comparison"],
-      "dok": 2,
-      "item_specs": "Students compare living standards using GDP per capita. Items may include data tables or charts comparing countries.",
-      "essential_questions": [
-        "How is GDP per capita used to measure standard of living?",
-        "Why do standards of living differ between countries?"
-      ],
-      "learning_targets": [
-        "I can define GDP and GDP per capita.",
-        "I can use GDP per capita to compare standards of living.",
-        "I can explain factors that contribute to different standards of living."
-      ],
-      "vocabulary": ["gross domestic product (GDP)", "GDP per capita", "standard of living", "developed country", "developing country", "economic indicator", "per capita"],
-      "sample_assessment": "Which measure is MOST useful for comparing the standard of living between two countries? A) Total GDP B) GDP per capita C) Population size D) Total land area"
-    }
-  ]
-}
+[
+  {
+    "code": "SS.7.C.1.1",
+    "benchmark": "Recognize how Enlightenment ideas including Montesquieu's view of separation of power and John Locke's theories related to natural law and how Locke's social contract influenced the Founding Fathers.",
+    "topics": [
+      "Enlightenment",
+      "Natural Law",
+      "Social Contract",
+      "Separation of Powers"
+    ],
+    "dok": 2,
+    "item_specs": "Students may be asked to identify Enlightenment thinkers and match them to their ideas. Items may include excerpts from primary sources.",
+    "essential_questions": [
+      "How did Enlightenment ideas shape American democracy?",
+      "Why did the Founders believe government should be limited?"
+    ],
+    "learning_targets": [
+      "I can identify key Enlightenment thinkers and their ideas.",
+      "I can explain how social contract theory influenced the Declaration of Independence.",
+      "I can describe Montesquieu's influence on the structure of U.S. government."
+    ],
+    "vocabulary": [
+      "Enlightenment",
+      "natural rights",
+      "social contract",
+      "separation of powers",
+      "John Locke",
+      "Montesquieu",
+      "consent of the governed"
+    ],
+    "sample_assessment": "Which Enlightenment thinker's ideas are MOST reflected in the structure of the three branches of government? A) John Locke B) Montesquieu C) Rousseau D) Voltaire"
+  },
+  {
+    "code": "SS.7.C.1.2",
+    "benchmark": "Trace the impact that the Magna Carta, English Bill of Rights, Mayflower Compact, and Thomas Paine's Common Sense had on colonists' views of government.",
+    "topics": [
+      "Founding Documents",
+      "Colonial Government",
+      "Limited Government"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify influences of historical documents on American government. May include document excerpts or timelines.",
+    "essential_questions": [
+      "How did earlier documents influence American ideas about rights and government?",
+      "What traditions did colonists bring from England?"
+    ],
+    "learning_targets": [
+      "I can explain how the Magna Carta established the idea of limited government.",
+      "I can describe how the Mayflower Compact was an early example of self-government.",
+      "I can analyze how Common Sense influenced colonial support for independence."
+    ],
+    "vocabulary": [
+      "Magna Carta",
+      "English Bill of Rights",
+      "Mayflower Compact",
+      "Common Sense",
+      "self-government",
+      "limited government",
+      "due process"
+    ],
+    "sample_assessment": "The idea that government power should be limited and that rulers must follow the law originated with which document? A) Declaration of Independence B) Magna Carta C) U.S. Constitution D) Common Sense"
+  },
+  {
+    "code": "SS.7.C.1.3",
+    "benchmark": "Describe how English policies and responses to colonial concerns led to the writing of the Declaration of Independence.",
+    "topics": [
+      "Colonial Grievances",
+      "Declaration of Independence",
+      "Revolution"
+    ],
+    "dok": 2,
+    "item_specs": "Students connect British actions to colonial responses. Items may include cause-effect relationships and primary source excerpts.",
+    "essential_questions": [
+      "What pushed the colonists from protest to revolution?",
+      "How did British policies unite the colonies?"
+    ],
+    "learning_targets": [
+      "I can identify key British policies that angered colonists.",
+      "I can explain the colonial response to taxation without representation.",
+      "I can describe the events leading to the Declaration of Independence."
+    ],
+    "vocabulary": [
+      "Stamp Act",
+      "Intolerable Acts",
+      "taxation without representation",
+      "boycott",
+      "Continental Congress",
+      "grievance",
+      "Parliament"
+    ],
+    "sample_assessment": "Which British action MOST directly led to the colonial cry of 'no taxation without representation'? A) Quartering Act B) Stamp Act C) Proclamation of 1763 D) Navigation Acts"
+  },
+  {
+    "code": "SS.7.C.1.4",
+    "benchmark": "Analyze the ideas (natural rights, role of the government) and complaints set forth in the Declaration of Independence.",
+    "topics": [
+      "Declaration of Independence",
+      "Natural Rights",
+      "Grievances"
+    ],
+    "dok": 3,
+    "item_specs": "Students analyze the content and purpose of the Declaration of Independence. Items may include excerpts requiring interpretation.",
+    "essential_questions": [
+      "What are the main ideas expressed in the Declaration of Independence?",
+      "How does the Declaration define the purpose of government?"
+    ],
+    "learning_targets": [
+      "I can identify the natural rights listed in the Declaration of Independence.",
+      "I can explain the purpose of government according to the Declaration.",
+      "I can analyze specific grievances listed in the Declaration."
+    ],
+    "vocabulary": [
+      "natural rights",
+      "unalienable rights",
+      "life, liberty, pursuit of happiness",
+      "consent of the governed",
+      "grievance",
+      "tyranny",
+      "self-evident"
+    ],
+    "sample_assessment": "According to the Declaration of Independence, what should people do when a government fails to protect their natural rights? A) Pay higher taxes B) Alter or abolish it C) Elect a new king D) Write a new constitution"
+  },
+  {
+    "code": "SS.7.C.1.5",
+    "benchmark": "Identify how the weaknesses of the Articles of Confederation led to the writing of the Constitution.",
+    "topics": [
+      "Articles of Confederation",
+      "Constitutional Convention",
+      "Federalism"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify weaknesses of the Articles and connect them to provisions in the Constitution.",
+    "essential_questions": [
+      "Why did the Articles of Confederation fail?",
+      "How did the Constitution address the weaknesses of the Articles?"
+    ],
+    "learning_targets": [
+      "I can list the major weaknesses of the Articles of Confederation.",
+      "I can explain why the Constitutional Convention was called.",
+      "I can compare the Articles of Confederation to the Constitution."
+    ],
+    "vocabulary": [
+      "Articles of Confederation",
+      "Constitutional Convention",
+      "Shays' Rebellion",
+      "weak central government",
+      "no taxing power",
+      "no executive branch",
+      "ratification"
+    ],
+    "sample_assessment": "Which was a major weakness of the Articles of Confederation? A) The president had too much power B) Congress could not levy taxes C) States had no power D) There was no legislative branch"
+  },
+  {
+    "code": "SS.7.C.1.6",
+    "benchmark": "Interpret the intentions of the Preamble of the Constitution.",
+    "topics": [
+      "Preamble",
+      "Constitution",
+      "Goals of Government"
+    ],
+    "dok": 2,
+    "item_specs": "Students interpret the goals and purposes stated in the Preamble. Items may include matching phrases to their meanings.",
+    "essential_questions": [
+      "What are the goals of the U.S. government as stated in the Preamble?",
+      "Why does the Preamble begin with 'We the People'?"
+    ],
+    "learning_targets": [
+      "I can identify the six goals stated in the Preamble.",
+      "I can explain the meaning of each phrase in the Preamble.",
+      "I can connect Preamble goals to specific government actions."
+    ],
+    "vocabulary": [
+      "Preamble",
+      "domestic tranquility",
+      "common defense",
+      "general welfare",
+      "posterity",
+      "establish justice",
+      "form a more perfect union"
+    ],
+    "sample_assessment": "The Preamble phrase 'establish justice' means the government should: A) Collect taxes fairly B) Create a court system and fair laws C) Protect the country from invasion D) Promote economic growth"
+  },
+  {
+    "code": "SS.7.C.1.7",
+    "benchmark": "Describe how the Constitution limits the powers of government through separation of powers and checks and balances.",
+    "topics": [
+      "Separation of Powers",
+      "Checks and Balances",
+      "Limited Government"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify how the three branches check each other's power. Items may include scenarios or diagrams.",
+    "essential_questions": [
+      "How does the separation of powers prevent tyranny?",
+      "What are examples of checks and balances in action?"
+    ],
+    "learning_targets": [
+      "I can describe the powers of each branch of government.",
+      "I can explain how each branch checks the others.",
+      "I can provide examples of checks and balances in action."
+    ],
+    "vocabulary": [
+      "separation of powers",
+      "checks and balances",
+      "veto",
+      "override",
+      "judicial review",
+      "impeachment",
+      "confirmation"
+    ],
+    "sample_assessment": "The President vetoes a bill passed by Congress. Congress then votes to override the veto. This is an example of: A) Federalism B) Checks and balances C) Popular sovereignty D) Judicial review"
+  },
+  {
+    "code": "SS.7.C.1.8",
+    "benchmark": "Explain the viewpoints of the Federalists and the Anti-Federalists regarding the ratification of the Constitution and the inclusion of a bill of rights.",
+    "topics": [
+      "Federalists",
+      "Anti-Federalists",
+      "Ratification",
+      "Bill of Rights"
+    ],
+    "dok": 2,
+    "item_specs": "Students compare the arguments of Federalists and Anti-Federalists. Items may include primary source excerpts from the Federalist Papers.",
+    "essential_questions": [
+      "Why did the Federalists and Anti-Federalists disagree about the Constitution?",
+      "Why was the Bill of Rights added to the Constitution?"
+    ],
+    "learning_targets": [
+      "I can compare Federalist and Anti-Federalist positions.",
+      "I can explain why the Bill of Rights was added to the Constitution.",
+      "I can identify key figures on each side of the ratification debate."
+    ],
+    "vocabulary": [
+      "Federalist",
+      "Anti-Federalist",
+      "ratification",
+      "Bill of Rights",
+      "Federalist Papers",
+      "Alexander Hamilton",
+      "James Madison",
+      "Patrick Henry"
+    ],
+    "sample_assessment": "The Anti-Federalists opposed ratification of the Constitution primarily because it: A) Created a weak national government B) Did not include a bill of rights C) Gave too much power to the states D) Eliminated the presidency"
+  },
+  {
+    "code": "SS.7.C.1.9",
+    "benchmark": "Define the rule of law and recognize its influence on the development of the American legal, political, and governmental systems.",
+    "topics": [
+      "Rule of Law",
+      "Legal System",
+      "Constitutional Government"
+    ],
+    "dok": 2,
+    "item_specs": "Students define the rule of law and identify its applications in American government.",
+    "essential_questions": [
+      "What does it mean to have a 'rule of law'?",
+      "How does the rule of law protect citizens?"
+    ],
+    "learning_targets": [
+      "I can define the rule of law.",
+      "I can explain how the rule of law applies to all citizens, including government leaders.",
+      "I can describe how the rule of law shapes American government."
+    ],
+    "vocabulary": [
+      "rule of law",
+      "due process",
+      "equal protection",
+      "constitution",
+      "judicial review",
+      "precedent",
+      "accountability"
+    ],
+    "sample_assessment": "The rule of law means that: A) The president makes all the laws B) Laws apply equally to all people, including leaders C) Only judges can interpret laws D) Citizens do not have to follow unjust laws"
+  },
+  {
+    "code": "SS.7.C.2.1",
+    "benchmark": "Define the term 'citizen' and identify legal means of becoming a United States citizen.",
+    "topics": [
+      "Citizenship",
+      "Naturalization",
+      "Immigration"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify the ways a person can become a U.S. citizen, including birth and naturalization.",
+    "essential_questions": [
+      "What does it mean to be a citizen?",
+      "How can a person become a U.S. citizen?"
+    ],
+    "learning_targets": [
+      "I can define the term citizen.",
+      "I can explain the process of naturalization.",
+      "I can identify the two main ways to become a U.S. citizen."
+    ],
+    "vocabulary": [
+      "citizen",
+      "naturalization",
+      "immigration",
+      "14th Amendment",
+      "birthright citizenship",
+      "oath of allegiance",
+      "resident alien"
+    ],
+    "sample_assessment": "A person born in another country can become a U.S. citizen through the process of: A) Deportation B) Immigration C) Naturalization D) Annexation"
+  },
+  {
+    "code": "SS.7.C.2.2",
+    "benchmark": "Evaluate the obligations citizens have to obey laws, pay taxes, defend the nation, and serve on juries.",
+    "topics": [
+      "Civic Obligations",
+      "Responsibilities",
+      "Duties of Citizens"
+    ],
+    "dok": 2,
+    "item_specs": "Students distinguish between civic duties (required by law) and civic responsibilities (voluntary). Items may include scenarios.",
+    "essential_questions": [
+      "What are the obligations of U.S. citizens?",
+      "Why is it important for citizens to fulfill their civic duties?"
+    ],
+    "learning_targets": [
+      "I can identify the obligations of U.S. citizens.",
+      "I can distinguish between duties and responsibilities.",
+      "I can explain why civic participation matters."
+    ],
+    "vocabulary": [
+      "obligation",
+      "duty",
+      "responsibility",
+      "jury duty",
+      "selective service",
+      "taxation",
+      "civic participation"
+    ],
+    "sample_assessment": "Which is a civic DUTY (required by law) rather than a civic responsibility? A) Voting in elections B) Serving on a jury when called C) Volunteering in the community D) Staying informed about issues"
+  },
+  {
+    "code": "SS.7.C.2.3",
+    "benchmark": "Experience the responsibilities of citizens at the local, state, or federal levels.",
+    "topics": [
+      "Civic Participation",
+      "Community Service",
+      "Active Citizenship"
+    ],
+    "dok": 3,
+    "item_specs": "Students demonstrate civic participation through projects, simulations, or community engagement activities.",
+    "essential_questions": [
+      "How can citizens participate in their government?",
+      "What are examples of responsible citizenship at different levels?"
+    ],
+    "learning_targets": [
+      "I can identify ways to participate in local, state, and federal government.",
+      "I can demonstrate responsible citizenship through civic engagement.",
+      "I can evaluate the impact of citizen participation on government."
+    ],
+    "vocabulary": [
+      "civic engagement",
+      "community service",
+      "public hearing",
+      "petition",
+      "town hall",
+      "lobbying",
+      "grassroots"
+    ],
+    "sample_assessment": "Which is the BEST example of a citizen participating in government at the local level? A) Voting for president B) Attending a city council meeting C) Writing to a U.S. senator D) Watching national news"
+  },
+  {
+    "code": "SS.7.C.2.4",
+    "benchmark": "Evaluate rights contained in the Bill of Rights and other amendments to the Constitution.",
+    "topics": [
+      "Bill of Rights",
+      "Constitutional Amendments",
+      "Individual Rights"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify and apply rights from the Bill of Rights and later amendments to scenarios.",
+    "essential_questions": [
+      "What rights are protected by the Bill of Rights?",
+      "How do amendments expand and protect individual rights?"
+    ],
+    "learning_targets": [
+      "I can identify the rights protected by each amendment in the Bill of Rights.",
+      "I can apply constitutional rights to real-world scenarios.",
+      "I can explain how later amendments expanded rights."
+    ],
+    "vocabulary": [
+      "Bill of Rights",
+      "amendment",
+      "freedom of speech",
+      "freedom of religion",
+      "due process",
+      "equal protection",
+      "right to bear arms"
+    ],
+    "sample_assessment": "A student is told they cannot wear a political T-shirt to school. Which amendment would MOST likely be used to challenge this? A) First Amendment B) Second Amendment C) Fourth Amendment D) Fifth Amendment"
+  },
+  {
+    "code": "SS.7.C.2.5",
+    "benchmark": "Distinguish how the Constitution safeguards and limits individual rights.",
+    "topics": [
+      "Constitutional Rights",
+      "Limits on Rights",
+      "Individual Liberty"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze how rights are both protected and limited by the Constitution. Items may include court case scenarios.",
+    "essential_questions": [
+      "How does the Constitution protect individual rights?",
+      "Why are some rights limited?"
+    ],
+    "learning_targets": [
+      "I can explain how the Constitution protects individual rights.",
+      "I can identify situations where rights may be limited.",
+      "I can analyze the balance between individual rights and public safety."
+    ],
+    "vocabulary": [
+      "individual rights",
+      "public safety",
+      "clear and present danger",
+      "due process",
+      "equal protection",
+      "probable cause",
+      "warrant"
+    ],
+    "sample_assessment": "Freedom of speech does NOT protect a person who: A) Criticizes the government B) Writes an editorial C) Falsely shouts 'fire' in a crowded theater D) Holds a peaceful protest"
+  },
+  {
+    "code": "SS.7.C.2.6",
+    "benchmark": "Simulate the trial process and the role of juries in the administration of justice.",
+    "topics": [
+      "Trial Process",
+      "Jury System",
+      "Justice System"
+    ],
+    "dok": 3,
+    "item_specs": "Students demonstrate understanding of the trial process through simulations or scenario analysis.",
+    "essential_questions": [
+      "How does the trial process work in the United States?",
+      "What role do juries play in the justice system?"
+    ],
+    "learning_targets": [
+      "I can describe the steps in a trial.",
+      "I can explain the role of the jury in a trial.",
+      "I can distinguish between civil and criminal trials."
+    ],
+    "vocabulary": [
+      "trial",
+      "jury",
+      "verdict",
+      "plaintiff",
+      "defendant",
+      "prosecution",
+      "defense",
+      "evidence",
+      "testimony",
+      "acquittal"
+    ],
+    "sample_assessment": "In a criminal trial, the jury must find the defendant: A) Guilty by majority vote B) Guilty beyond a reasonable doubt C) Guilty based on the judge's recommendation D) Guilty based on media reports"
+  },
+  {
+    "code": "SS.7.C.2.8",
+    "benchmark": "Identify America's current political parties, and illustrate their ideas about government.",
+    "topics": [
+      "Political Parties",
+      "Democrat",
+      "Republican",
+      "Third Parties"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify major political parties and compare their platforms and positions.",
+    "essential_questions": [
+      "What are the main political parties in the United States?",
+      "How do political parties differ in their views on government?"
+    ],
+    "learning_targets": [
+      "I can identify the major political parties in the U.S.",
+      "I can compare the general positions of the Democratic and Republican parties.",
+      "I can explain the role of third parties in American politics."
+    ],
+    "vocabulary": [
+      "political party",
+      "Democrat",
+      "Republican",
+      "platform",
+      "third party",
+      "two-party system",
+      "partisan",
+      "bipartisan"
+    ],
+    "sample_assessment": "What is the primary purpose of a political party? A) To enforce laws B) To nominate candidates and win elections C) To interpret the Constitution D) To collect taxes"
+  },
+  {
+    "code": "SS.7.C.2.9",
+    "benchmark": "Evaluate candidates for political office by analyzing their qualifications, experience, issue-based platforms, debates, and political ads.",
+    "topics": [
+      "Elections",
+      "Candidates",
+      "Political Campaigns",
+      "Media Literacy"
+    ],
+    "dok": 3,
+    "item_specs": "Students evaluate campaign materials and candidate qualifications. Items may include analysis of political advertisements.",
+    "essential_questions": [
+      "How should citizens evaluate candidates for office?",
+      "How do media and advertising influence elections?"
+    ],
+    "learning_targets": [
+      "I can identify the qualifications needed for political office.",
+      "I can evaluate candidate platforms on key issues.",
+      "I can identify bias and propaganda in political advertisements."
+    ],
+    "vocabulary": [
+      "campaign",
+      "platform",
+      "debate",
+      "propaganda",
+      "bias",
+      "endorsement",
+      "political ad",
+      "slogan"
+    ],
+    "sample_assessment": "When evaluating a candidate, which source would provide the MOST reliable information about their positions? A) A campaign advertisement B) A social media post C) A nonpartisan voter guide D) A bumper sticker"
+  },
+  {
+    "code": "SS.7.C.2.10",
+    "benchmark": "Examine the impact of media, individuals, and interest groups on monitoring and influencing government.",
+    "topics": [
+      "Media Influence",
+      "Interest Groups",
+      "Lobbying",
+      "Public Opinion"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze how media and interest groups influence government decisions and public policy.",
+    "essential_questions": [
+      "How do media and interest groups influence government?",
+      "What role does public opinion play in a democracy?"
+    ],
+    "learning_targets": [
+      "I can explain how media influences public opinion.",
+      "I can describe the role of interest groups in government.",
+      "I can analyze how lobbying affects legislation."
+    ],
+    "vocabulary": [
+      "media",
+      "interest group",
+      "lobby",
+      "public opinion",
+      "propaganda",
+      "bias",
+      "PAC",
+      "watchdog"
+    ],
+    "sample_assessment": "An organization that tries to influence government policy in favor of a specific cause is called: A) A political party B) An interest group C) A government agency D) A news outlet"
+  },
+  {
+    "code": "SS.7.C.2.11",
+    "benchmark": "Analyze media and political communications (bias, symbolism, propaganda).",
+    "topics": [
+      "Media Literacy",
+      "Propaganda",
+      "Bias",
+      "Symbolism"
+    ],
+    "dok": 3,
+    "item_specs": "Students identify examples of bias, symbolism, and propaganda in political communications.",
+    "essential_questions": [
+      "How can you identify bias in media?",
+      "What propaganda techniques are used in political communications?"
+    ],
+    "learning_targets": [
+      "I can identify examples of bias in media.",
+      "I can recognize propaganda techniques.",
+      "I can analyze political symbols and their meanings."
+    ],
+    "vocabulary": [
+      "bias",
+      "propaganda",
+      "symbolism",
+      "bandwagon",
+      "name-calling",
+      "testimonial",
+      "card stacking",
+      "transfer"
+    ],
+    "sample_assessment": "A political advertisement that shows a candidate surrounded by American flags and bald eagles is using which propaganda technique? A) Bandwagon B) Name-calling C) Transfer D) Testimonial"
+  },
+  {
+    "code": "SS.7.C.2.12",
+    "benchmark": "Develop a plan to resolve a state or local problem by researching public policy alternatives, identifying appropriate government agencies to address the issue, and determining a course of action.",
+    "topics": [
+      "Civic Action",
+      "Problem Solving",
+      "Public Policy"
+    ],
+    "dok": 3,
+    "item_specs": "Students develop an action plan to address a civic issue. Items may involve research and presentation.",
+    "essential_questions": [
+      "How can citizens take action to solve community problems?",
+      "Which government agencies address specific issues?"
+    ],
+    "learning_targets": [
+      "I can identify a local or state problem and research possible solutions.",
+      "I can identify the appropriate government agency to address the issue.",
+      "I can develop and present a plan of action."
+    ],
+    "vocabulary": [
+      "public policy",
+      "civic action",
+      "government agency",
+      "advocacy",
+      "petition",
+      "resolution",
+      "public hearing"
+    ],
+    "sample_assessment": "A student wants to address a pothole problem on their street. Which would be the MOST effective first step? A) Contact the president B) Call the local city or county public works department C) Write a letter to the governor D) Post on social media"
+  },
+  {
+    "code": "SS.7.C.3.1",
+    "benchmark": "Compare different forms of government (direct democracy, representative democracy, socialism, communism, monarchy, oligarchy, autocracy).",
+    "topics": [
+      "Forms of Government",
+      "Democracy",
+      "Autocracy",
+      "Oligarchy"
+    ],
+    "dok": 2,
+    "item_specs": "Students compare and contrast different forms of government based on key characteristics.",
+    "essential_questions": [
+      "What are the different forms of government?",
+      "How does a democracy differ from other forms of government?"
+    ],
+    "learning_targets": [
+      "I can define and compare different forms of government.",
+      "I can identify the characteristics of a democracy.",
+      "I can explain the advantages of representative democracy."
+    ],
+    "vocabulary": [
+      "democracy",
+      "republic",
+      "monarchy",
+      "oligarchy",
+      "autocracy",
+      "communism",
+      "socialism",
+      "dictatorship",
+      "theocracy"
+    ],
+    "sample_assessment": "In which form of government do citizens have the MOST political power? A) Autocracy B) Oligarchy C) Democracy D) Monarchy"
+  },
+  {
+    "code": "SS.7.C.3.2",
+    "benchmark": "Compare parliamentary, federal, confederal, and unitary systems of government.",
+    "topics": [
+      "Systems of Government",
+      "Parliamentary",
+      "Federal",
+      "Unitary"
+    ],
+    "dok": 2,
+    "item_specs": "Students compare how power is distributed in different government systems.",
+    "essential_questions": [
+      "How do different systems of government distribute power?",
+      "What are the advantages and disadvantages of each system?"
+    ],
+    "learning_targets": [
+      "I can compare federal, confederal, and unitary systems.",
+      "I can explain the difference between parliamentary and presidential systems.",
+      "I can identify which system the U.S. uses."
+    ],
+    "vocabulary": [
+      "federal system",
+      "unitary system",
+      "confederal system",
+      "parliamentary",
+      "presidential",
+      "sovereignty",
+      "central government"
+    ],
+    "sample_assessment": "In a UNITARY system of government, power is: A) Divided between national and state governments B) Held by individual states C) Concentrated in the central government D) Shared equally among all citizens"
+  },
+  {
+    "code": "SS.7.C.3.3",
+    "benchmark": "Illustrate the structure and function (three branches of government established in Articles I, II, and III with corresponding powers) of government in the United States as established in the Constitution.",
+    "topics": [
+      "Three Branches",
+      "Legislative",
+      "Executive",
+      "Judicial"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify the structure and functions of each branch of government as defined in the Constitution.",
+    "essential_questions": [
+      "What are the three branches of government and their functions?",
+      "How does the Constitution organize the federal government?"
+    ],
+    "learning_targets": [
+      "I can describe the structure and function of each branch.",
+      "I can identify which article of the Constitution establishes each branch.",
+      "I can explain the specific powers of each branch."
+    ],
+    "vocabulary": [
+      "legislative branch",
+      "executive branch",
+      "judicial branch",
+      "Congress",
+      "President",
+      "Supreme Court",
+      "Article I",
+      "Article II",
+      "Article III"
+    ],
+    "sample_assessment": "Which branch of government is established in Article I of the Constitution? A) Executive B) Legislative C) Judicial D) Military"
+  },
+  {
+    "code": "SS.7.C.3.4",
+    "benchmark": "Identify the relationship and division of powers between the federal government and state governments.",
+    "topics": [
+      "Federalism",
+      "Shared Powers",
+      "Reserved Powers",
+      "Delegated Powers"
+    ],
+    "dok": 2,
+    "item_specs": "Students classify powers as delegated, reserved, or concurrent. Items may include Venn diagrams or scenarios.",
+    "essential_questions": [
+      "How is power divided between the federal and state governments?",
+      "What powers do the federal and state governments share?"
+    ],
+    "learning_targets": [
+      "I can identify delegated, reserved, and concurrent powers.",
+      "I can explain the concept of federalism.",
+      "I can describe how the 10th Amendment protects state powers."
+    ],
+    "vocabulary": [
+      "federalism",
+      "delegated powers",
+      "reserved powers",
+      "concurrent powers",
+      "10th Amendment",
+      "supremacy clause",
+      "enumerated powers"
+    ],
+    "sample_assessment": "Which power is SHARED by both federal and state governments? A) Declaring war B) Collecting taxes C) Issuing driver's licenses D) Printing money"
+  },
+  {
+    "code": "SS.7.C.3.5",
+    "benchmark": "Explain the constitutional amendment process.",
+    "topics": [
+      "Amendment Process",
+      "Constitutional Change",
+      "Article V"
+    ],
+    "dok": 2,
+    "item_specs": "Students describe the steps to propose and ratify a constitutional amendment.",
+    "essential_questions": [
+      "How can the Constitution be amended?",
+      "Why did the Founders make the amendment process difficult?"
+    ],
+    "learning_targets": [
+      "I can describe the two methods for proposing amendments.",
+      "I can explain the ratification process.",
+      "I can evaluate why the amendment process is intentionally difficult."
+    ],
+    "vocabulary": [
+      "amendment",
+      "propose",
+      "ratify",
+      "Article V",
+      "two-thirds",
+      "three-fourths",
+      "convention",
+      "state legislature"
+    ],
+    "sample_assessment": "To ratify a constitutional amendment, approval is needed from: A) The President B) The Supreme Court C) Three-fourths of state legislatures D) A majority of citizens"
+  },
+  {
+    "code": "SS.7.C.3.6",
+    "benchmark": "Evaluate constitutional rights and their impact on individuals and society.",
+    "topics": [
+      "Constitutional Rights",
+      "Civil Liberties",
+      "Individual Freedom"
+    ],
+    "dok": 3,
+    "item_specs": "Students evaluate how constitutional rights affect individuals and society through case study analysis.",
+    "essential_questions": [
+      "How do constitutional rights impact everyday life?",
+      "When can individual rights be limited for the common good?"
+    ],
+    "learning_targets": [
+      "I can evaluate the impact of specific constitutional rights on society.",
+      "I can analyze situations where rights may conflict.",
+      "I can explain how courts balance individual rights with public interest."
+    ],
+    "vocabulary": [
+      "civil liberties",
+      "civil rights",
+      "individual freedom",
+      "common good",
+      "precedent",
+      "landmark case",
+      "constitutional rights"
+    ],
+    "sample_assessment": "A city passes a law banning all protests in public parks. This law MOST likely violates which constitutional right? A) Right to bear arms B) Freedom of assembly C) Right to a fair trial D) Freedom from quartering soldiers"
+  },
+  {
+    "code": "SS.7.C.3.7",
+    "benchmark": "Analyze the impact of the 13th, 14th, 15th, 19th, 24th, and 26th amendments on participation of minority groups in the American political process.",
+    "topics": [
+      "Reconstruction Amendments",
+      "Voting Rights",
+      "Civil Rights Amendments"
+    ],
+    "dok": 2,
+    "item_specs": "Students connect specific amendments to the expansion of rights for minority groups.",
+    "essential_questions": [
+      "How have amendments expanded rights for minority groups?",
+      "Why were additional amendments needed to guarantee equal rights?"
+    ],
+    "learning_targets": [
+      "I can identify which groups benefited from each amendment.",
+      "I can explain how each amendment expanded political participation.",
+      "I can analyze why constitutional amendments were necessary for civil rights."
+    ],
+    "vocabulary": [
+      "13th Amendment",
+      "14th Amendment",
+      "15th Amendment",
+      "19th Amendment",
+      "24th Amendment",
+      "26th Amendment",
+      "suffrage",
+      "poll tax",
+      "equal protection"
+    ],
+    "sample_assessment": "Which amendment gave women the right to vote? A) 15th Amendment B) 19th Amendment C) 24th Amendment D) 26th Amendment"
+  },
+  {
+    "code": "SS.7.C.3.9",
+    "benchmark": "Illustrate the law making process at the local, state, and federal levels.",
+    "topics": [
+      "Lawmaking Process",
+      "Legislation",
+      "How a Bill Becomes a Law"
+    ],
+    "dok": 2,
+    "item_specs": "Students sequence the steps in the lawmaking process at various levels of government.",
+    "essential_questions": [
+      "How does a bill become a law at the federal level?",
+      "How does the lawmaking process differ at local, state, and federal levels?"
+    ],
+    "learning_targets": [
+      "I can sequence the steps of how a bill becomes a law.",
+      "I can compare the lawmaking process at different levels of government.",
+      "I can explain the role of committees in the legislative process."
+    ],
+    "vocabulary": [
+      "bill",
+      "law",
+      "veto",
+      "override",
+      "committee",
+      "debate",
+      "vote",
+      "conference committee",
+      "ordinance"
+    ],
+    "sample_assessment": "At the federal level, a bill must be passed by: A) The House only B) The Senate only C) Both the House and Senate D) The Supreme Court"
+  },
+  {
+    "code": "SS.7.C.3.10",
+    "benchmark": "Identify sources and types (civil, criminal, constitutional, military) of law.",
+    "topics": [
+      "Types of Law",
+      "Legal System",
+      "Sources of Law"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify and classify different types of law and their sources.",
+    "essential_questions": [
+      "What are the different types of law?",
+      "Where do laws come from?"
+    ],
+    "learning_targets": [
+      "I can identify the four types of law.",
+      "I can distinguish between civil and criminal law.",
+      "I can explain the sources of American law."
+    ],
+    "vocabulary": [
+      "civil law",
+      "criminal law",
+      "constitutional law",
+      "military law",
+      "statutory law",
+      "common law",
+      "precedent",
+      "ordinance"
+    ],
+    "sample_assessment": "A dispute between two neighbors over a property line would be handled in which type of court? A) Criminal B) Civil C) Military D) Constitutional"
+  },
+  {
+    "code": "SS.7.C.3.11",
+    "benchmark": "Diagram the levels, functions, and powers of courts at the state and federal levels.",
+    "topics": [
+      "Court System",
+      "Judicial Branch",
+      "Federal Courts",
+      "State Courts"
+    ],
+    "dok": 2,
+    "item_specs": "Students describe the organization of the court system and the jurisdiction of different courts.",
+    "essential_questions": [
+      "How is the court system organized?",
+      "What is the role of the Supreme Court?"
+    ],
+    "learning_targets": [
+      "I can diagram the levels of the federal court system.",
+      "I can explain the difference between original and appellate jurisdiction.",
+      "I can describe the role of the Supreme Court."
+    ],
+    "vocabulary": [
+      "Supreme Court",
+      "appellate court",
+      "district court",
+      "jurisdiction",
+      "appeal",
+      "original jurisdiction",
+      "appellate jurisdiction",
+      "circuit court"
+    ],
+    "sample_assessment": "Which court has the final say on whether a law is constitutional? A) District Court B) Circuit Court of Appeals C) U.S. Supreme Court D) State Supreme Court"
+  },
+  {
+    "code": "SS.7.C.3.12",
+    "benchmark": "Analyze the significance and outcomes of landmark Supreme Court cases including, but not limited to, Marbury v. Madison, Plessy v. Ferguson, Brown v. Board of Education, Gideon v. Wainwright, Miranda v. Arizona, In re Gault, Tinker v. Des Moines, Hazelwood v. Kuhlmeier, United States v. Nixon, and Bush v. Gore.",
+    "topics": [
+      "Landmark Cases",
+      "Supreme Court",
+      "Judicial Review",
+      "Civil Rights"
+    ],
+    "dok": 3,
+    "item_specs": "Students analyze the significance and outcomes of landmark Supreme Court decisions.",
+    "essential_questions": [
+      "How have Supreme Court decisions shaped American law?",
+      "What impact have landmark cases had on individual rights?"
+    ],
+    "learning_targets": [
+      "I can identify the key facts and outcomes of landmark Supreme Court cases.",
+      "I can explain how Marbury v. Madison established judicial review.",
+      "I can analyze how Brown v. Board of Education advanced civil rights."
+    ],
+    "vocabulary": [
+      "judicial review",
+      "precedent",
+      "landmark case",
+      "segregation",
+      "desegregation",
+      "Miranda rights",
+      "due process",
+      "equal protection"
+    ],
+    "sample_assessment": "Which landmark case established the principle of judicial review? A) Brown v. Board of Education B) Marbury v. Madison C) Miranda v. Arizona D) Gideon v. Wainwright"
+  },
+  {
+    "code": "SS.7.C.4.1",
+    "benchmark": "Differentiate concepts related to United States domestic and foreign policy.",
+    "topics": [
+      "Domestic Policy",
+      "Foreign Policy",
+      "National Interests"
+    ],
+    "dok": 2,
+    "item_specs": "Students distinguish between domestic and foreign policy and identify examples of each.",
+    "essential_questions": [
+      "What is the difference between domestic and foreign policy?",
+      "How does the U.S. government make foreign policy decisions?"
+    ],
+    "learning_targets": [
+      "I can define domestic and foreign policy.",
+      "I can identify examples of each type of policy.",
+      "I can explain who is responsible for foreign policy decisions."
+    ],
+    "vocabulary": [
+      "domestic policy",
+      "foreign policy",
+      "diplomacy",
+      "treaty",
+      "trade agreement",
+      "sanction",
+      "ambassador",
+      "national security"
+    ],
+    "sample_assessment": "Which is an example of U.S. foreign policy? A) Building new highways B) Signing a trade agreement with another country C) Raising the minimum wage D) Reforming the tax code"
+  },
+  {
+    "code": "SS.7.C.4.2",
+    "benchmark": "Recognize government and citizen participation in international organizations.",
+    "topics": [
+      "International Organizations",
+      "United Nations",
+      "NATO",
+      "Global Cooperation"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify major international organizations and the role of the U.S. and its citizens in them.",
+    "essential_questions": [
+      "What international organizations does the U.S. participate in?",
+      "Why do nations cooperate through international organizations?"
+    ],
+    "learning_targets": [
+      "I can identify major international organizations.",
+      "I can explain the purpose of the United Nations.",
+      "I can describe U.S. participation in international organizations."
+    ],
+    "vocabulary": [
+      "United Nations",
+      "NATO",
+      "World Bank",
+      "International Monetary Fund",
+      "diplomacy",
+      "humanitarian aid",
+      "peacekeeping"
+    ],
+    "sample_assessment": "The United Nations was created primarily to: A) Control world trade B) Maintain international peace and security C) Establish a world government D) Regulate the Internet"
+  },
+  {
+    "code": "SS.7.E.1.1",
+    "benchmark": "Explain how the principles of a market and mixed economy helped to develop the United States into a democratic nation.",
+    "topics": [
+      "Market Economy",
+      "Mixed Economy",
+      "Economic Freedom"
+    ],
+    "dok": 2,
+    "item_specs": "Students explain the relationship between economic freedom and political freedom in the U.S.",
+    "essential_questions": [
+      "How do market economies support democratic societies?",
+      "What role does the government play in a mixed economy?"
+    ],
+    "learning_targets": [
+      "I can explain the characteristics of a market economy.",
+      "I can describe how the U.S. economy is a mixed economy.",
+      "I can connect economic freedom to democratic principles."
+    ],
+    "vocabulary": [
+      "market economy",
+      "mixed economy",
+      "free enterprise",
+      "capitalism",
+      "supply and demand",
+      "private property",
+      "profit motive"
+    ],
+    "sample_assessment": "In a market economy, prices are determined primarily by: A) The government B) Supply and demand C) International organizations D) Labor unions"
+  },
+  {
+    "code": "SS.7.E.1.2",
+    "benchmark": "Discuss the importance of borrowing and lending in the United States, the government's role in controlling financial institutions, and list the advantages and disadvantages of using credit.",
+    "topics": [
+      "Credit",
+      "Banking",
+      "Financial Institutions",
+      "Government Regulation"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze the role of credit in the economy and identify government regulation of financial institutions.",
+    "essential_questions": [
+      "Why is borrowing and lending important to the economy?",
+      "What are the risks and benefits of using credit?"
+    ],
+    "learning_targets": [
+      "I can explain the importance of borrowing and lending.",
+      "I can describe the government's role in regulating financial institutions.",
+      "I can list advantages and disadvantages of using credit."
+    ],
+    "vocabulary": [
+      "credit",
+      "interest",
+      "loan",
+      "FDIC",
+      "Federal Reserve",
+      "debt",
+      "collateral",
+      "credit score"
+    ],
+    "sample_assessment": "What is one DISADVANTAGE of using credit? A) It allows you to buy things you need immediately B) It can lead to debt if not managed responsibly C) It helps build a credit history D) It provides financial flexibility"
+  },
+  {
+    "code": "SS.7.E.1.3",
+    "benchmark": "Review the concepts of supply and demand, choice, scarcity, and opportunity cost as they relate to the development of the mixed market economy in the United States.",
+    "topics": [
+      "Supply and Demand",
+      "Scarcity",
+      "Opportunity Cost",
+      "Economic Choice"
+    ],
+    "dok": 2,
+    "item_specs": "Students apply basic economic concepts to real-world scenarios involving the U.S. economy.",
+    "essential_questions": [
+      "How do supply and demand affect prices?",
+      "What is the relationship between scarcity and choice?"
+    ],
+    "learning_targets": [
+      "I can explain the law of supply and demand.",
+      "I can define scarcity and explain its impact on economic decisions.",
+      "I can identify opportunity costs in economic decisions."
+    ],
+    "vocabulary": [
+      "supply",
+      "demand",
+      "scarcity",
+      "opportunity cost",
+      "trade-off",
+      "incentive",
+      "equilibrium",
+      "surplus",
+      "shortage"
+    ],
+    "sample_assessment": "If the demand for a product increases but the supply stays the same, the price will MOST likely: A) Decrease B) Stay the same C) Increase D) Disappear"
+  },
+  {
+    "code": "SS.7.E.1.4",
+    "benchmark": "Discuss the function of financial institutions in the development of a market economy.",
+    "topics": [
+      "Financial Institutions",
+      "Banks",
+      "Economic Growth"
+    ],
+    "dok": 2,
+    "item_specs": "Students explain how banks and other financial institutions contribute to economic growth.",
+    "essential_questions": [
+      "What role do banks play in the economy?",
+      "How do financial institutions support economic growth?"
+    ],
+    "learning_targets": [
+      "I can describe the function of banks and financial institutions.",
+      "I can explain how savings and investment fuel economic growth.",
+      "I can identify different types of financial institutions."
+    ],
+    "vocabulary": [
+      "bank",
+      "savings",
+      "investment",
+      "interest rate",
+      "Federal Reserve",
+      "stock market",
+      "bond",
+      "mutual fund"
+    ],
+    "sample_assessment": "Which is a primary function of banks in a market economy? A) Setting prices for goods B) Providing loans to individuals and businesses C) Manufacturing products D) Collecting taxes"
+  },
+  {
+    "code": "SS.7.E.1.5",
+    "benchmark": "Assess how profits, incentives, and competition motivate individuals, households, and businesses in a free market economy.",
+    "topics": [
+      "Profit Motive",
+      "Competition",
+      "Incentives",
+      "Free Market"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze how economic incentives drive decision-making in a free market.",
+    "essential_questions": [
+      "How do profits motivate businesses?",
+      "Why is competition important in a free market economy?"
+    ],
+    "learning_targets": [
+      "I can explain how profit motivates businesses.",
+      "I can describe how competition benefits consumers.",
+      "I can identify incentives that influence economic decisions."
+    ],
+    "vocabulary": [
+      "profit",
+      "incentive",
+      "competition",
+      "free market",
+      "entrepreneur",
+      "consumer",
+      "producer",
+      "monopoly"
+    ],
+    "sample_assessment": "Competition in a free market economy benefits consumers because it: A) Eliminates all businesses B) Leads to higher prices C) Encourages lower prices and better products D) Reduces product choices"
+  },
+  {
+    "code": "SS.7.E.1.6",
+    "benchmark": "Compare the national budget process to the personal budget process.",
+    "topics": [
+      "Budgeting",
+      "National Budget",
+      "Personal Finance"
+    ],
+    "dok": 2,
+    "item_specs": "Students compare the process and components of government and personal budgets.",
+    "essential_questions": [
+      "How is the national budget similar to a personal budget?",
+      "What are the consequences of spending more than you earn?"
+    ],
+    "learning_targets": [
+      "I can compare the national budget process to personal budgeting.",
+      "I can identify sources of government revenue.",
+      "I can explain the concept of deficit spending."
+    ],
+    "vocabulary": [
+      "budget",
+      "revenue",
+      "expenditure",
+      "deficit",
+      "surplus",
+      "national debt",
+      "income",
+      "taxes"
+    ],
+    "sample_assessment": "Both the national budget and a personal budget must account for: A) Income and expenses B) Military spending C) Social Security D) Credit card payments"
+  },
+  {
+    "code": "SS.7.E.2.1",
+    "benchmark": "Explain how federal, state, and local taxes support the economy as a function of the United States government.",
+    "topics": [
+      "Taxation",
+      "Government Revenue",
+      "Public Services"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify types of taxes and explain how tax revenue supports government services.",
+    "essential_questions": [
+      "Why does the government collect taxes?",
+      "How do taxes support the economy and public services?"
+    ],
+    "learning_targets": [
+      "I can identify types of taxes at federal, state, and local levels.",
+      "I can explain how tax revenue funds government services.",
+      "I can describe the relationship between taxation and public goods."
+    ],
+    "vocabulary": [
+      "income tax",
+      "sales tax",
+      "property tax",
+      "excise tax",
+      "tariff",
+      "progressive tax",
+      "regressive tax",
+      "revenue"
+    ],
+    "sample_assessment": "Sales tax is an example of a tax collected at the: A) Federal level only B) State and local levels C) International level D) Military level"
+  },
+  {
+    "code": "SS.7.E.2.2",
+    "benchmark": "Describe the banking system in the United States and its impact on the money supply.",
+    "topics": [
+      "Banking System",
+      "Federal Reserve",
+      "Money Supply"
+    ],
+    "dok": 2,
+    "item_specs": "Students describe how the banking system and Federal Reserve affect the money supply.",
+    "essential_questions": [
+      "How does the banking system work in the United States?",
+      "What is the Federal Reserve and what does it do?"
+    ],
+    "learning_targets": [
+      "I can describe the structure of the U.S. banking system.",
+      "I can explain the role of the Federal Reserve.",
+      "I can describe how the Federal Reserve affects the money supply."
+    ],
+    "vocabulary": [
+      "Federal Reserve",
+      "money supply",
+      "interest rate",
+      "monetary policy",
+      "inflation",
+      "deflation",
+      "commercial bank",
+      "reserve requirement"
+    ],
+    "sample_assessment": "The Federal Reserve can reduce inflation by: A) Printing more money B) Raising interest rates C) Lowering taxes D) Increasing government spending"
+  },
+  {
+    "code": "SS.7.E.2.3",
+    "benchmark": "Identify and describe United States laws and regulations adopted to promote economic competition.",
+    "topics": [
+      "Antitrust",
+      "Economic Regulation",
+      "Competition"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify laws and regulations that promote fair competition in the marketplace.",
+    "essential_questions": [
+      "Why does the government regulate the economy?",
+      "How do antitrust laws promote competition?"
+    ],
+    "learning_targets": [
+      "I can identify laws that promote economic competition.",
+      "I can explain why monopolies are harmful to consumers.",
+      "I can describe the government's role in maintaining fair competition."
+    ],
+    "vocabulary": [
+      "antitrust",
+      "monopoly",
+      "regulation",
+      "Sherman Antitrust Act",
+      "consumer protection",
+      "fair trade",
+      "price fixing"
+    ],
+    "sample_assessment": "Antitrust laws were created to: A) Protect monopolies B) Prevent unfair business practices and promote competition C) Increase taxes on businesses D) Reduce international trade"
+  },
+  {
+    "code": "SS.7.E.3.1",
+    "benchmark": "Explain how international trade requires a system for exchanging currency between and among nations.",
+    "topics": [
+      "International Trade",
+      "Currency Exchange",
+      "Global Economy"
+    ],
+    "dok": 2,
+    "item_specs": "Students explain why currency exchange is necessary for international trade.",
+    "essential_questions": [
+      "Why is currency exchange necessary for international trade?",
+      "How does international trade benefit nations?"
+    ],
+    "learning_targets": [
+      "I can explain why nations trade with each other.",
+      "I can describe the system of currency exchange.",
+      "I can identify factors that affect exchange rates."
+    ],
+    "vocabulary": [
+      "international trade",
+      "currency exchange",
+      "exchange rate",
+      "import",
+      "export",
+      "tariff",
+      "trade balance"
+    ],
+    "sample_assessment": "If a U.S. company wants to buy goods from Japan, it must first: A) Get permission from the President B) Exchange U.S. dollars for Japanese yen C) Move its business to Japan D) Pay a special tax to Congress"
+  },
+  {
+    "code": "SS.7.E.3.2",
+    "benchmark": "Assess how the changing value of currency affects trade of goods and services between nations.",
+    "topics": [
+      "Currency Value",
+      "Trade",
+      "Exchange Rates"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze how changes in currency value affect international trade.",
+    "essential_questions": [
+      "How do changes in currency value affect international trade?",
+      "What happens when a nation's currency loses value?"
+    ],
+    "learning_targets": [
+      "I can explain how currency value affects imports and exports.",
+      "I can analyze the impact of a strong or weak dollar on trade.",
+      "I can describe factors that influence currency value."
+    ],
+    "vocabulary": [
+      "appreciation",
+      "depreciation",
+      "exchange rate",
+      "strong dollar",
+      "weak dollar",
+      "inflation",
+      "trade deficit"
+    ],
+    "sample_assessment": "If the U.S. dollar becomes stronger compared to the euro, U.S. consumers will find European goods: A) More expensive B) Less expensive C) Unavailable D) Unchanged in price"
+  },
+  {
+    "code": "SS.7.E.3.3",
+    "benchmark": "Compare and contrast a single resource economy with a diversified economy.",
+    "topics": [
+      "Economic Diversification",
+      "Single Resource Economy",
+      "Economic Stability"
+    ],
+    "dok": 2,
+    "item_specs": "Students compare economies that rely on one resource versus those with diverse economic activities.",
+    "essential_questions": [
+      "Why is a diversified economy more stable than a single resource economy?",
+      "What risks do single resource economies face?"
+    ],
+    "learning_targets": [
+      "I can define single resource and diversified economies.",
+      "I can compare the advantages of each type of economy.",
+      "I can identify countries with single resource economies."
+    ],
+    "vocabulary": [
+      "diversified economy",
+      "single resource economy",
+      "GDP",
+      "economic stability",
+      "natural resources",
+      "oil economy",
+      "industrialization"
+    ],
+    "sample_assessment": "A country that relies almost entirely on oil exports has a: A) Diversified economy B) Single resource economy C) Command economy D) Traditional economy"
+  },
+  {
+    "code": "SS.7.E.3.4",
+    "benchmark": "Compare and contrast the standard of living in various countries today to that of the United States using gross domestic product (GDP) per capita as an indicator.",
+    "topics": [
+      "Standard of Living",
+      "GDP",
+      "Economic Comparison"
+    ],
+    "dok": 2,
+    "item_specs": "Students use GDP per capita to compare standards of living across countries.",
+    "essential_questions": [
+      "How do we measure standard of living?",
+      "What does GDP per capita tell us about a country?"
+    ],
+    "learning_targets": [
+      "I can define GDP and GDP per capita.",
+      "I can use GDP per capita to compare standards of living.",
+      "I can identify factors that contribute to a high standard of living."
+    ],
+    "vocabulary": [
+      "GDP",
+      "GDP per capita",
+      "standard of living",
+      "developed nation",
+      "developing nation",
+      "literacy rate",
+      "life expectancy"
+    ],
+    "sample_assessment": "GDP per capita is calculated by dividing a country's GDP by its: A) Land area B) Number of businesses C) Population D) Number of exports"
+  }
+]

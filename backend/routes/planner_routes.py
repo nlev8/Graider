@@ -148,49 +148,70 @@ def load_standards(state, subject, grade=None):
     if filepath.exists():
         with open(filepath, 'r') as f:
             data = json.load(f)
-            standards = data.get('standards', [])
-            file_grade = data.get('grade', '')  # e.g., "7", "8", "9-10", "6-8"
+            # Handle both formats: wrapped dict {"standards": [...]} or flat array [...]
+            if isinstance(data, list):
+                standards = data
+                file_grade = ''
+            else:
+                standards = data.get('standards', [])
+                file_grade = data.get('grade', '')  # e.g., "7", "8", "9-10", "6-8"
 
             # Filter by grade if provided
             if grade and standards:
-                # First check if the file's grade field matches
-                # Handle grade ranges like "6-8", "9-10", "9-12"
-                if file_grade:
-                    if '-' in str(file_grade):
-                        # Grade range - check if requested grade is in range
-                        parts = str(file_grade).split('-')
-                        try:
-                            min_grade = int(parts[0])
-                            max_grade = int(parts[1])
-                            requested = int(grade) if grade.isdigit() else 0
-                            if min_grade <= requested <= max_grade:
-                                # Grade is in range - return all standards
-                                return standards
-                        except (ValueError, IndexError):
-                            pass
-                    elif str(file_grade) == str(grade):
-                        # Exact match - return all standards
-                        return standards
+                # Check if file covers a single grade that matches exactly
+                if file_grade and str(file_grade) == str(grade) and '-' not in str(file_grade):
+                    # Exact single-grade match - return all standards
+                    return standards
 
-                # Fall back to filtering by code pattern
+                # Check if the requested grade is within the file's range
+                grade_in_range = False
+                if file_grade and '-' in str(file_grade):
+                    parts = str(file_grade).split('-')
+                    try:
+                        min_grade = int(parts[0])
+                        max_grade = int(parts[1])
+                        requested = int(grade) if grade.isdigit() else 0
+                        grade_in_range = min_grade <= requested <= max_grade
+                    except (ValueError, IndexError):
+                        pass
+
+                # Map grades to high school courses (subject-specific)
+                GRADE_TO_COURSE = {
+                    'math': {'9': 'Algebra 1', '10': 'Geometry', '11': 'Algebra 2', '12': 'Pre-Calculus'},
+                    'science': {'9': 'Biology', '10': 'Chemistry', '11': 'Physics', '12': 'Earth/Space Science'},
+                    'us_history': {'9': 'American History', '10': 'American History', '11': 'American History', '12': 'American History'},
+                    'world_history': {'9': 'World History', '10': 'World History', '11': 'World History', '12': 'World History'},
+                }
+                subject_courses = GRADE_TO_COURSE.get(subject_clean, {})
+
+                # Filter by code pattern (for multi-grade files or fallback)
                 filtered = []
                 for s in standards:
                     code = s.get('code', '')
                     # Extract grade from code patterns like MA.6.xxx, SC.7.xxx, SS.8.xxx
-                    # Also handle K for kindergarten and high school (9-12)
-                    parts = code.split('.')
-                    if len(parts) >= 2:
-                        code_grade = parts[1]
+                    code_parts = code.split('.')
+                    if len(code_parts) >= 2:
+                        code_grade = code_parts[1]
                         # Match grade (handle K, 1-12)
                         if code_grade == grade or code_grade == f"0{grade}":
                             filtered.append(s)
                         # For kindergarten
                         elif grade == 'K' and code_grade in ['K', '0', '00']:
                             filtered.append(s)
-                        # For high school codes like "912" - match grades 9, 10, 11, 12
-                        elif code_grade == '912' and grade in ['9', '10', '11', '12']:
-                            filtered.append(s)
-                return filtered  # Return empty if no matches for this grade
+                        # For high school codes like "912" - filter by course field
+                        elif code_grade == '912' and grade in subject_courses:
+                            expected_course = subject_courses[grade]
+                            if s.get('course') == expected_course:
+                                filtered.append(s)
+
+                # If we found grade-specific standards, return them
+                if filtered:
+                    return filtered
+                # If grade is in the file's range but no code-based matches,
+                # return all (file may not use grade-based code patterns)
+                if grade_in_range:
+                    return standards
+                return []  # No matches for this grade
             return standards
     return []
 
@@ -559,7 +580,7 @@ SUPPORTED QUESTION TYPES:
 - math_equation (student writes an expression/equation)
 - data_table (include column_headers, row_labels, expected_data)
 - coordinates (include lat/lng answer and tolerance_km)
-- bar_chart, box_plot, number_line, coordinate_plane, geometry/triangle/rectangle
+- bar_chart, box_plot, number_line, coordinate_plane, geometry/triangle/rectangle/regular_polygon
 
 Return JSON with this structure:
 {{
@@ -1037,10 +1058,13 @@ VISUAL/GRAPHICAL QUESTION TYPES (include actual data for rendering):
    - Include "min_val", "max_val", and "points_to_plot" as [x, y] pairs
    - Example: {{"min_val": -5, "max_val": 5, "points_to_plot": [[2, 3], [-1, 4], [0, -2]]}}
 
-8. GEOMETRY (type: "geometry" or "triangle" or "rectangle"):
+8. GEOMETRY (type: "geometry", "triangle", "rectangle", or "regular_polygon"):
    - Student calculates area of shapes with given dimensions
    - Include "base", "height", and "question_type" (triangle or rectangle)
    - Example: {{"base": 6, "height": 4, "question_type": "triangle"}}
+   - REGULAR_POLYGON: {{"question_type": "regular_polygon", "sides": 7, "side_length": 4, "mode": "area", "answer": "58.14"}}
+     Use for pentagon (5), hexagon (6), heptagon (7), octagon (8), etc. Set "mode": "decompose" to show triangle decomposition.
+     NEVER use "heptagon", "pentagon", "hexagon", "octagon" etc. as question_type — always use "regular_polygon" with the "sides" field.
 
 CRITICAL RULES FOR VISUAL QUESTIONS (MUST FOLLOW):
 
@@ -1049,7 +1073,7 @@ CRITICAL RULES FOR VISUAL QUESTIONS (MUST FOLLOW):
    - box_plot (with data array)
    - number_line (with min_val, max_val, points_to_plot)
    - coordinate_plane (with points_to_plot as [x,y] pairs)
-   - geometry/triangle/rectangle (with base and height)
+   - geometry/triangle/rectangle/regular_polygon (with base and height, or sides and side_length for regular_polygon)
 
 2. NEVER mention or reference:
    - "See attached graph" - there are no attachments

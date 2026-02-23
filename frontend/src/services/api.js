@@ -886,6 +886,10 @@ export async function deleteAutomation(id) {
   return fetchApi('/api/automations/' + id, { method: 'DELETE' })
 }
 
+export async function deleteTemplate(id) {
+  return fetchApi('/api/automations/templates/' + id, { method: 'DELETE' })
+}
+
 export async function listAutomationTemplates() {
   return fetchApi('/api/automations/templates')
 }
@@ -905,10 +909,10 @@ export async function stopAutomationRun() {
   return fetchApi('/api/automations/run/stop', { method: 'POST' })
 }
 
-export async function startElementPicker(url) {
+export async function startElementPicker(url, login = false) {
   return fetchApi('/api/automations/picker/start', {
     method: 'POST',
-    body: JSON.stringify({ url: url || 'https://vportal.volusia.k12.fl.us/' }),
+    body: JSON.stringify({ url: url || 'https://vportal.volusia.k12.fl.us/', login }),
   })
 }
 
@@ -1045,6 +1049,7 @@ export default {
   getAutomation,
   saveAutomation,
   deleteAutomation,
+  deleteTemplate,
   listAutomationTemplates,
   runAutomation,
   getAutomationRunStatus,

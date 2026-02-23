@@ -41,7 +41,9 @@ export default function AutomationBuilder({ addToast }) {
   const [runStatus, setRunStatus] = useState(null);
   const [pickerActive, setPickerActive] = useState(false);
   const [pickerEvents, setPickerEvents] = useState([]);
+  const [pickerAutoLogin, setPickerAutoLogin] = useState(true);
   const pollRef = useRef(null);
+  const usePickedSelectorRef = useRef(null);
   const pickerPollRef = useRef(null);
 
   useEffect(() => { loadList(); }, []);
@@ -126,6 +128,18 @@ export default function AutomationBuilder({ addToast }) {
     }
   }
 
+  async function deleteTemplateItem(id, e) {
+    e.stopPropagation();
+    if (!confirm("Delete this template?")) return;
+    try {
+      await api.deleteTemplate(id);
+      addToast("Template deleted", "success");
+      loadList();
+    } catch (e) {
+      addToast("Failed to delete template", "error");
+    }
+  }
+
   async function startRun(id) {
     try {
       await api.runAutomation(id || current.id);
@@ -157,7 +171,7 @@ export default function AutomationBuilder({ addToast }) {
   // Element picker
   async function startPicker() {
     try {
-      await api.startElementPicker();
+      await api.startElementPicker(null, pickerAutoLogin);
       setPickerActive(true);
       setPickerEvents([]);
       pickerPollRef.current = setInterval(async () => {
@@ -165,6 +179,11 @@ export default function AutomationBuilder({ addToast }) {
           const res = await api.getPickerEvents();
           if (res.events && res.events.length > 0) {
             setPickerEvents(prev => [...prev, ...res.events]);
+            // Auto-apply the last picked selector to the current step
+            const lastEvent = res.events[res.events.length - 1];
+            if (lastEvent && lastEvent.selector && usePickedSelectorRef.current) {
+              usePickedSelectorRef.current(lastEvent.selector);
+            }
           }
           if (res.status === "done") {
             clearInterval(pickerPollRef.current);
@@ -204,6 +223,7 @@ export default function AutomationBuilder({ addToast }) {
     setCurrent({ ...current, steps });
     addToast("Selector applied: " + selector, "success");
   }
+  usePickedSelectorRef.current = usePickedSelector;
 
   function addStep(type) {
     if (!current) return;
@@ -313,7 +333,13 @@ export default function AutomationBuilder({ addToast }) {
                 <div key={tpl.id} style={{ ...cardStyle, borderStyle: "dashed" }} onClick={() => loadTemplate(tpl.id)}
                   onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"}
                   onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
-                  <span style={{ fontWeight: 600, fontSize: "1rem" }}>{tpl.name}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <span style={{ fontWeight: 600, fontSize: "1rem" }}>{tpl.name}</span>
+                    <button onClick={(e) => deleteTemplateItem(tpl.id, e)}
+                      style={{ background: "transparent", color: "var(--text-secondary)", border: "none", cursor: "pointer", padding: 4 }}>
+                      <Icon name="Trash2" size={14} />
+                    </button>
+                  </div>
                   {tpl.description && <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>{tpl.description}</p>}
                   <span style={{ fontSize: "0.8rem", color: "var(--accent-primary)" }}>Template - {tpl.step_count} steps</span>
                 </div>
@@ -415,7 +441,7 @@ export default function AutomationBuilder({ addToast }) {
                 background: "transparent", color: "var(--text-primary)", width: 300,
               }} />
           </div>
-          <div data-tutorial="automation-picker" style={{ display: "flex", gap: 8 }}>
+          <div data-tutorial="automation-picker" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {pickerActive ? (
               <button onClick={stopPicker} style={{
                 background: "#ef4444", color: "#fff", border: "none", borderRadius: 8,
@@ -424,14 +450,20 @@ export default function AutomationBuilder({ addToast }) {
                 Stop Picker
               </button>
             ) : (
-              <button onClick={startPicker} style={{
-                background: "var(--card-bg)", color: "var(--text-primary)",
-                border: "1px solid var(--glass-border)", borderRadius: 8,
-                padding: "8px 14px", cursor: "pointer", fontWeight: 600, fontSize: "0.85rem",
-                display: "flex", alignItems: "center", gap: 6,
-              }}>
-                <Icon name="MousePointer2" size={14} /> Element Picker
-              </button>
+              <>
+                <button onClick={startPicker} style={{
+                  background: "var(--card-bg)", color: "var(--text-primary)",
+                  border: "1px solid var(--glass-border)", borderRadius: 8,
+                  padding: "8px 14px", cursor: "pointer", fontWeight: 600, fontSize: "0.85rem",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  <Icon name="MousePointer2" size={14} /> Element Picker
+                </button>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8rem", color: "var(--text-secondary)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={pickerAutoLogin} onChange={e => setPickerAutoLogin(e.target.checked)} />
+                  Auto-login
+                </label>
+              </>
             )}
             <button onClick={saveWorkflow} style={{
               background: "var(--accent-primary)", color: "#fff", border: "none",
@@ -550,21 +582,33 @@ export default function AutomationBuilder({ addToast }) {
                     <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: 4 }}>
                       {f.label} {f.required && <span style={{ color: "#ef4444" }}>*</span>}
                     </label>
-                    <input
-                      type={f.type || "text"}
-                      value={step.params[f.key] || ""}
-                      onChange={e => updateStep(selectedStep, "params." + f.key, f.type === "number" ? parseInt(e.target.value) || 0 : e.target.value)}
-                      placeholder={f.placeholder}
-                      style={{
-                        width: "100%", padding: "8px 12px", borderRadius: 8,
-                        border: "1px solid var(--glass-border)", background: "var(--input-bg)",
-                        color: "var(--text-primary)", fontSize: "0.9rem", boxSizing: "border-box",
-                      }} />
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input
+                        type={f.type || "text"}
+                        value={step.params[f.key] || ""}
+                        onChange={e => updateStep(selectedStep, "params." + f.key, f.type === "number" ? parseInt(e.target.value) || 0 : e.target.value)}
+                        placeholder={f.placeholder}
+                        style={{
+                          flex: 1, padding: "8px 12px", borderRadius: 8,
+                          border: "1px solid var(--glass-border)", background: "var(--input-bg)",
+                          color: "var(--text-primary)", fontSize: "0.9rem", boxSizing: "border-box",
+                        }} />
+                      {(f.key === "selector" || f.key === "condition_selector") && step.params[f.key] && (
+                        <button onClick={() => updateStep(selectedStep, "params." + f.key, "")}
+                          title="Clear selector"
+                          style={{
+                            background: "none", border: "1px solid var(--glass-border)", borderRadius: 8,
+                            color: "#ef4444", cursor: "pointer", padding: "0 8px", fontSize: "1rem",
+                          }}>
+                          <Icon name="X" size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
 
                 {/* Picker events */}
-                {pickerActive && pickerEvents.length > 0 && (
+                {pickerEvents.length > 0 && (
                   <div style={{ marginTop: 16 }}>
                     <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: 8, color: "var(--accent-primary)" }}>
                       Picked Selectors

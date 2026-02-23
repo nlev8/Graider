@@ -1,151 +1,816 @@
-{
-  "state": "FL",
-  "subject": "Geography",
-  "grade": "6-8",
-  "standards": [
-    {
-      "code": "SS.6.G.1.1",
-      "benchmark": "Use latitude and longitude coordinates to understand the relationship between people and places on the Earth.",
-      "topics": ["Coordinates", "Maps", "Location"],
-      "dok": 2,
-      "item_specs": "Students use coordinate systems to locate places and describe spatial relationships.",
-      "essential_questions": [
-        "How do we describe the location of places on Earth?",
-        "Why is the grid system important for navigation?"
-      ],
-      "learning_targets": [
-        "I can use latitude and longitude to find locations.",
-        "I can explain the purpose of the coordinate system.",
-        "I can interpret maps using grid coordinates."
-      ],
-      "vocabulary": ["latitude", "longitude", "coordinates", "equator", "prime meridian", "hemisphere", "degrees"],
-      "sample_assessment": "The line of latitude at 0° is called the: A) Prime Meridian B) Equator C) Tropic of Cancer D) International Date Line"
-    },
-    {
-      "code": "SS.6.G.1.4",
-      "benchmark": "Utilize tools geographers use to study the world.",
-      "topics": ["Geographic Tools", "Maps", "Technology"],
-      "dok": 2,
-      "item_specs": "Students identify and use various geographic tools including maps, globes, and GIS.",
-      "essential_questions": [
-        "What tools do geographers use to study Earth?",
-        "How has technology changed geographic study?"
-      ],
-      "learning_targets": [
-        "I can identify different types of maps and their purposes.",
-        "I can use map scales and legends.",
-        "I can explain how GIS technology helps geographers."
-      ],
-      "vocabulary": ["map", "globe", "scale", "legend", "compass rose", "GIS", "satellite imagery", "cartographer"],
-      "sample_assessment": "A thematic map would BEST be used to show: A) Physical features B) Political boundaries C) Population density patterns D) Street directions"
-    },
-    {
-      "code": "SS.6.G.2.1",
-      "benchmark": "Explain how major physical characteristics, natural resources, climate, and absolute and relative locations have influenced settlement, interactions, and the economies of ancient civilizations.",
-      "topics": ["Physical Geography", "Human Settlement", "Resources"],
-      "dok": 3,
-      "item_specs": "Students analyze relationships between physical geography and human development.",
-      "essential_questions": [
-        "How does geography influence where people live?",
-        "What role do natural resources play in economic development?"
-      ],
-      "learning_targets": [
-        "I can explain how landforms affect human settlement.",
-        "I can analyze how climate influences human activity.",
-        "I can describe the relationship between resources and economy."
-      ],
-      "vocabulary": ["physical characteristics", "natural resources", "climate", "settlement", "economy", "landform", "vegetation"],
-      "sample_assessment": "Ancient civilizations developed near rivers primarily because rivers provided: A) Defense from enemies B) Water for farming and transportation C) Gold deposits D) Building stone"
-    },
-    {
-      "code": "SS.6.G.2.4",
-      "benchmark": "Explain how the geographical factors influenced the economic development, political relationships, and policies of ancient civilizations.",
-      "topics": ["Economic Geography", "Political Geography", "Ancient World"],
-      "dok": 3,
-      "item_specs": "Students analyze how geography shaped economic and political development.",
-      "essential_questions": [
-        "How did geography determine trade routes?",
-        "Why did some civilizations become powerful while others did not?"
-      ],
-      "learning_targets": [
-        "I can explain how geography influenced trade.",
-        "I can analyze how geographic barriers affected political relationships.",
-        "I can describe how resources led to conflict or cooperation."
-      ],
-      "vocabulary": ["trade routes", "geographic barriers", "strategic location", "isolation", "interaction", "cultural diffusion"],
-      "sample_assessment": "The Silk Road developed because: A) China was isolated from other civilizations B) There was demand for goods between East and West C) All civilizations spoke the same language D) The journey was short and easy"
-    },
-    {
-      "code": "SS.6.G.3.1",
-      "benchmark": "Explain how the physical landscape has affected the development of agriculture and industry in the ancient world.",
-      "topics": ["Agriculture", "Industry", "Landscape"],
-      "dok": 2,
-      "item_specs": "Students explain connections between physical features and economic activities.",
-      "essential_questions": [
-        "How did landscape determine what crops could be grown?",
-        "Why did industries develop in certain locations?"
-      ],
-      "learning_targets": [
-        "I can explain how terrain affects agriculture.",
-        "I can describe how access to resources influences industry.",
-        "I can analyze the relationship between geography and technology."
-      ],
-      "vocabulary": ["agriculture", "industry", "terrain", "fertile", "irrigation", "mining", "manufacturing"],
-      "sample_assessment": "The Nile River's annual flooding was important to Egyptian agriculture because it: A) Destroyed crops B) Deposited fertile soil C) Prevented farming D) Created deserts"
-    },
-    {
-      "code": "SS.6.G.4.1",
-      "benchmark": "Explain how family, ethnic, national, and professional identity have led to the development and maintenance of cultural traditions and norms.",
-      "topics": ["Cultural Geography", "Identity", "Traditions"],
-      "dok": 2,
-      "item_specs": "Students explain how identity shapes cultural practices.",
-      "essential_questions": [
-        "How does identity influence culture?",
-        "Why do cultural traditions persist over time?"
-      ],
-      "learning_targets": [
-        "I can explain how family shapes cultural identity.",
-        "I can describe how ethnic traditions are maintained.",
-        "I can analyze how geography influences cultural development."
-      ],
-      "vocabulary": ["culture", "tradition", "identity", "ethnic group", "customs", "heritage", "norms"],
-      "sample_assessment": "Cultural traditions are MOST often passed down through: A) Written laws B) Family and community C) Government mandates D) Economic systems"
-    },
-    {
-      "code": "SS.6.G.5.1",
-      "benchmark": "Identify the methods used to compensate for the scarcity of resources in the ancient world.",
-      "topics": ["Resources", "Scarcity", "Adaptation"],
-      "dok": 2,
-      "item_specs": "Students identify how ancient peoples addressed resource limitations.",
-      "essential_questions": [
-        "How did ancient peoples deal with scarce resources?",
-        "What innovations resulted from scarcity?"
-      ],
-      "learning_targets": [
-        "I can identify resources that were scarce in ancient times.",
-        "I can explain how trade addressed scarcity.",
-        "I can describe technological innovations that compensated for scarcity."
-      ],
-      "vocabulary": ["scarcity", "trade", "barter", "innovation", "adaptation", "specialization", "interdependence"],
-      "sample_assessment": "Ancient Mesopotamians compensated for lack of building stone by: A) Not building permanent structures B) Using mud bricks C) Importing stone from far away D) Building only in caves"
-    },
-    {
-      "code": "SS.6.G.6.1",
-      "benchmark": "Describe the Six Essential Elements of Geography.",
-      "topics": ["Geographic Elements", "Spatial Thinking", "Human Geography"],
-      "dok": 1,
-      "item_specs": "Students identify and describe the six essential elements of geography.",
-      "essential_questions": [
-        "What are the essential elements of geographic study?",
-        "How do geographers organize their knowledge?"
-      ],
-      "learning_targets": [
-        "I can list the Six Essential Elements of Geography.",
-        "I can explain what each element studies.",
-        "I can give examples of each element."
-      ],
-      "vocabulary": ["location", "place", "human-environment interaction", "movement", "region", "spatial perspective"],
-      "sample_assessment": "Which Essential Element of Geography deals with how humans modify and adapt to their environment? A) Location B) Place C) Human-Environment Interaction D) Movement"
-    }
-  ]
-}
+[
+  {
+    "code": "SS.6.G.1.1",
+    "benchmark": "Use latitude and longitude coordinates to understand the relationship between people and places on the Earth.",
+    "topics": [
+      "Coordinates",
+      "Maps",
+      "Location"
+    ],
+    "dok": 2,
+    "item_specs": "Students use coordinate systems to locate places and describe spatial relationships.",
+    "essential_questions": [
+      "How do we describe the location of places on Earth?",
+      "Why is the grid system important for navigation?"
+    ],
+    "learning_targets": [
+      "I can use latitude and longitude to find locations.",
+      "I can explain the purpose of the coordinate system.",
+      "I can interpret maps using grid coordinates."
+    ],
+    "vocabulary": [
+      "latitude",
+      "longitude",
+      "coordinates",
+      "equator",
+      "prime meridian",
+      "hemisphere",
+      "degrees"
+    ],
+    "sample_assessment": "The line of latitude at 0 degrees is called the: A) Prime Meridian B) Equator C) Tropic of Cancer D) International Date Line"
+  },
+  {
+    "code": "SS.6.G.1.2",
+    "benchmark": "Analyze the purposes of map projections (political, physical, special purpose) and explain the applications of various types of maps.",
+    "topics": [
+      "Map Projections",
+      "Map Types",
+      "Cartography"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify different map types and analyze their purposes and limitations.",
+    "essential_questions": [
+      "Why do different maps show different information?",
+      "What are the limitations of flat maps?"
+    ],
+    "learning_targets": [
+      "I can identify and compare different types of maps.",
+      "I can explain the purpose of political, physical, and special purpose maps.",
+      "I can analyze the strengths and limitations of map projections."
+    ],
+    "vocabulary": [
+      "map projection",
+      "political map",
+      "physical map",
+      "thematic map",
+      "topographic map",
+      "Mercator projection",
+      "distortion"
+    ],
+    "sample_assessment": "Which type of map would be BEST for showing the elevation of a mountain range? A) Political map B) Physical map C) Road map D) Climate map"
+  },
+  {
+    "code": "SS.6.G.1.3",
+    "benchmark": "Identify natural wonders of the ancient world.",
+    "topics": [
+      "Ancient Wonders",
+      "Geography",
+      "Ancient World"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify and locate natural wonders and landmarks of the ancient world.",
+    "essential_questions": [
+      "What are the natural wonders of the ancient world?",
+      "How did natural features influence ancient civilizations?"
+    ],
+    "learning_targets": [
+      "I can identify natural wonders of the ancient world.",
+      "I can locate natural wonders on a map.",
+      "I can explain how natural features influenced ancient peoples."
+    ],
+    "vocabulary": [
+      "natural wonder",
+      "ancient world",
+      "landmark",
+      "geographical feature",
+      "monument"
+    ],
+    "sample_assessment": "Which of the following is considered a natural wonder of the ancient world? A) The Colosseum B) The Great Wall of China C) The Grand Canyon D) The Pyramids of Giza"
+  },
+  {
+    "code": "SS.6.G.1.4",
+    "benchmark": "Utilize tools geographers use to study the world.",
+    "topics": [
+      "Geographic Tools",
+      "Maps",
+      "Technology"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify and use various geographic tools including maps, globes, and GIS.",
+    "essential_questions": [
+      "What tools do geographers use to study Earth?",
+      "How has technology changed geographic study?"
+    ],
+    "learning_targets": [
+      "I can identify different types of maps and their purposes.",
+      "I can use map scales and legends.",
+      "I can explain how GIS technology helps geographers."
+    ],
+    "vocabulary": [
+      "map",
+      "globe",
+      "scale",
+      "legend",
+      "compass rose",
+      "GIS",
+      "satellite imagery",
+      "cartographer"
+    ],
+    "sample_assessment": "A thematic map would BEST be used to show: A) Physical features B) Political boundaries C) Population density patterns D) Street directions"
+  },
+  {
+    "code": "SS.6.G.1.5",
+    "benchmark": "Use scale, cardinal, and intermediate directions, and estimation of distances between places on current and ancient maps of the world.",
+    "topics": [
+      "Map Skills",
+      "Scale",
+      "Directions",
+      "Distance"
+    ],
+    "dok": 2,
+    "item_specs": "Students use map elements to determine direction and estimate distance.",
+    "essential_questions": [
+      "How do we use scale to measure distance on a map?",
+      "What are cardinal and intermediate directions?"
+    ],
+    "learning_targets": [
+      "I can use a map scale to estimate distances.",
+      "I can identify cardinal and intermediate directions.",
+      "I can apply map skills to both ancient and modern maps."
+    ],
+    "vocabulary": [
+      "scale",
+      "cardinal directions",
+      "intermediate directions",
+      "compass rose",
+      "distance",
+      "northeast",
+      "southwest"
+    ],
+    "sample_assessment": "On a map with a scale of 1 inch = 100 miles, two cities that are 3 inches apart are approximately how far from each other? A) 100 miles B) 200 miles C) 300 miles D) 400 miles"
+  },
+  {
+    "code": "SS.6.G.1.6",
+    "benchmark": "Use a map to identify major bodies of water of the world, and explain ways they have impacted the development of civilizations.",
+    "topics": [
+      "Bodies of Water",
+      "Civilizations",
+      "Trade Routes"
+    ],
+    "dok": 2,
+    "item_specs": "Students locate major bodies of water and analyze their influence on human settlement and trade.",
+    "essential_questions": [
+      "How have major bodies of water influenced civilizations?",
+      "Why did ancient civilizations develop near water?"
+    ],
+    "learning_targets": [
+      "I can locate major oceans, seas, and rivers on a world map.",
+      "I can explain how bodies of water influenced trade and settlement.",
+      "I can analyze the relationship between water access and civilization development."
+    ],
+    "vocabulary": [
+      "ocean",
+      "sea",
+      "river",
+      "Mediterranean",
+      "Nile",
+      "Tigris",
+      "Euphrates",
+      "trade route",
+      "irrigation"
+    ],
+    "sample_assessment": "Which body of water was MOST important to trade in the ancient Mediterranean world? A) Atlantic Ocean B) Mediterranean Sea C) Pacific Ocean D) Indian Ocean"
+  },
+  {
+    "code": "SS.6.G.1.7",
+    "benchmark": "Use maps to identify characteristics and boundaries of ancient civilizations that have shaped the world today.",
+    "topics": [
+      "Ancient Civilizations",
+      "Boundaries",
+      "Historical Maps"
+    ],
+    "dok": 2,
+    "item_specs": "Students use historical maps to identify the locations and boundaries of ancient civilizations.",
+    "essential_questions": [
+      "Where were the major ancient civilizations located?",
+      "How have ancient boundaries shaped the modern world?"
+    ],
+    "learning_targets": [
+      "I can locate ancient civilizations on a map.",
+      "I can identify the geographic boundaries of ancient empires.",
+      "I can compare ancient and modern political boundaries."
+    ],
+    "vocabulary": [
+      "civilization",
+      "empire",
+      "boundary",
+      "territory",
+      "Mesopotamia",
+      "Egypt",
+      "Greece",
+      "Rome",
+      "China"
+    ],
+    "sample_assessment": "The ancient civilization of Mesopotamia was located between which two rivers? A) Nile and Congo B) Tigris and Euphrates C) Ganges and Indus D) Yellow and Yangtze"
+  },
+  {
+    "code": "SS.6.G.2.1",
+    "benchmark": "Explain how major physical characteristics, natural resources, climate, and absolute and relative locations have influenced settlement, interactions, and the economies of ancient civilizations of the world.",
+    "topics": [
+      "Physical Geography",
+      "Human Settlement",
+      "Resources"
+    ],
+    "dok": 3,
+    "item_specs": "Students analyze relationships between physical geography and human development.",
+    "essential_questions": [
+      "How does geography influence where people live?",
+      "What role do natural resources play in economic development?"
+    ],
+    "learning_targets": [
+      "I can explain how physical features influenced settlement patterns.",
+      "I can analyze the relationship between resources and economic development.",
+      "I can describe how climate affected ancient civilizations."
+    ],
+    "vocabulary": [
+      "physical characteristics",
+      "natural resources",
+      "climate",
+      "absolute location",
+      "relative location",
+      "settlement",
+      "fertile"
+    ],
+    "sample_assessment": "Ancient Egyptian civilization developed along the Nile River primarily because: A) The river provided transportation to other continents B) Annual floods deposited fertile soil for farming C) The river protected them from all invaders D) The Nile was the largest river in the world"
+  },
+  {
+    "code": "SS.6.G.2.2",
+    "benchmark": "Differentiate between continents, regions, countries, and cities in order to understand the complexities of regions created by civilizations.",
+    "topics": [
+      "Regions",
+      "Geographic Organization",
+      "Political Geography"
+    ],
+    "dok": 2,
+    "item_specs": "Students classify geographic areas by type and analyze regional characteristics.",
+    "essential_questions": [
+      "How do we organize the world into different geographic units?",
+      "What makes a region different from a country?"
+    ],
+    "learning_targets": [
+      "I can distinguish between continents, regions, countries, and cities.",
+      "I can identify the characteristics that define a region.",
+      "I can explain how civilizations created complex regions."
+    ],
+    "vocabulary": [
+      "continent",
+      "region",
+      "country",
+      "city-state",
+      "nation",
+      "border",
+      "cultural region"
+    ],
+    "sample_assessment": "Which is the BEST example of a cultural region? A) The continent of Africa B) The country of France C) The Middle East D) The city of Rome"
+  },
+  {
+    "code": "SS.6.G.2.3",
+    "benchmark": "Analyze the relationship of physical geography to the development of ancient river valley civilizations.",
+    "topics": [
+      "River Valley Civilizations",
+      "Physical Geography",
+      "Agriculture"
+    ],
+    "dok": 3,
+    "item_specs": "Students analyze how rivers and physical geography enabled the development of early civilizations.",
+    "essential_questions": [
+      "Why did early civilizations develop in river valleys?",
+      "How did rivers support the growth of agriculture?"
+    ],
+    "learning_targets": [
+      "I can identify the major river valley civilizations.",
+      "I can explain how rivers supported agriculture and trade.",
+      "I can analyze the connection between geography and civilization development."
+    ],
+    "vocabulary": [
+      "river valley",
+      "fertile crescent",
+      "irrigation",
+      "flood plain",
+      "agriculture",
+      "surplus",
+      "civilization"
+    ],
+    "sample_assessment": "The development of agriculture in river valleys led to: A) Decreased population B) Nomadic lifestyles C) Food surpluses and the growth of cities D) Isolation from other civilizations"
+  },
+  {
+    "code": "SS.6.G.2.4",
+    "benchmark": "Explain how the geographical location of ancient civilizations contributed to the culture and politics of those societies.",
+    "topics": [
+      "Cultural Geography",
+      "Political Development",
+      "Location"
+    ],
+    "dok": 2,
+    "item_specs": "Students connect geographic location to cultural and political developments in ancient societies.",
+    "essential_questions": [
+      "How did location shape the culture of ancient civilizations?",
+      "How did geography influence political structures?"
+    ],
+    "learning_targets": [
+      "I can explain how geography influenced cultural practices.",
+      "I can describe how location affected political development.",
+      "I can analyze the relationship between geography and government forms."
+    ],
+    "vocabulary": [
+      "culture",
+      "politics",
+      "geography",
+      "isolation",
+      "trade",
+      "city-state",
+      "empire",
+      "cultural diffusion"
+    ],
+    "sample_assessment": "The mountainous terrain of ancient Greece contributed to the development of: A) A unified empire B) Independent city-states C) A single religion D) Large-scale farming"
+  },
+  {
+    "code": "SS.6.G.2.5",
+    "benchmark": "Interpret how geographic boundaries invite or limit interaction with other regions and cultures.",
+    "topics": [
+      "Geographic Boundaries",
+      "Cultural Interaction",
+      "Barriers"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze how geographic features serve as bridges or barriers between cultures.",
+    "essential_questions": [
+      "How do geographic features connect or separate cultures?",
+      "What role do natural boundaries play in cultural exchange?"
+    ],
+    "learning_targets": [
+      "I can identify geographic features that serve as boundaries.",
+      "I can explain how geography can invite or limit cultural interaction.",
+      "I can analyze examples of geographic barriers and bridges."
+    ],
+    "vocabulary": [
+      "boundary",
+      "barrier",
+      "bridge",
+      "mountain range",
+      "desert",
+      "ocean",
+      "trade route",
+      "Silk Road"
+    ],
+    "sample_assessment": "The Sahara Desert served as a geographic barrier that: A) Connected North Africa to sub-Saharan Africa easily B) Limited interaction between North and sub-Saharan Africa C) Had no effect on trade D) Encouraged migration southward"
+  },
+  {
+    "code": "SS.6.G.4.2",
+    "benchmark": "Use maps to trace significant migrations, and analyze their results.",
+    "topics": [
+      "Migration",
+      "Human Movement",
+      "Maps"
+    ],
+    "dok": 2,
+    "item_specs": "Students use maps to trace migration patterns and analyze their causes and effects.",
+    "essential_questions": [
+      "Why do people migrate?",
+      "How have migrations shaped the ancient world?"
+    ],
+    "learning_targets": [
+      "I can trace migration routes on a map.",
+      "I can identify push and pull factors of migration.",
+      "I can analyze the results of significant migrations."
+    ],
+    "vocabulary": [
+      "migration",
+      "push factor",
+      "pull factor",
+      "nomad",
+      "settlement",
+      "diaspora",
+      "route"
+    ],
+    "sample_assessment": "A push factor for migration would be: A) Better farmland B) Job opportunities C) Drought and famine D) Religious freedom"
+  },
+  {
+    "code": "SS.7.G.1.1",
+    "benchmark": "Locate the fifty states and their capital cities in addition to the nation's capital on a map.",
+    "topics": [
+      "U.S. States",
+      "Capital Cities",
+      "Map Skills"
+    ],
+    "dok": 1,
+    "item_specs": "Students locate U.S. states and capitals on a map.",
+    "essential_questions": [
+      "Where are the fifty states located?",
+      "What are the capital cities of each state?"
+    ],
+    "learning_targets": [
+      "I can locate all fifty states on a U.S. map.",
+      "I can identify the capital city of each state.",
+      "I can locate Washington, D.C., on a map."
+    ],
+    "vocabulary": [
+      "state",
+      "capital",
+      "Washington D.C.",
+      "region",
+      "border",
+      "territory"
+    ],
+    "sample_assessment": "Which city is the capital of the United States? A) New York City B) Los Angeles C) Washington, D.C. D) Philadelphia"
+  },
+  {
+    "code": "SS.7.G.1.2",
+    "benchmark": "Locate on a world map the territories and protectorates of the United States of America.",
+    "topics": [
+      "U.S. Territories",
+      "Protectorates",
+      "World Map"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify and locate U.S. territories and protectorates on a world map.",
+    "essential_questions": [
+      "What territories does the United States hold?",
+      "Where are U.S. territories located in the world?"
+    ],
+    "learning_targets": [
+      "I can identify U.S. territories and protectorates.",
+      "I can locate U.S. territories on a world map.",
+      "I can explain the relationship between territories and the federal government."
+    ],
+    "vocabulary": [
+      "territory",
+      "protectorate",
+      "Puerto Rico",
+      "Guam",
+      "U.S. Virgin Islands",
+      "American Samoa",
+      "commonwealth"
+    ],
+    "sample_assessment": "Which of the following is a U.S. territory? A) Cuba B) Puerto Rico C) Mexico D) Canada"
+  },
+  {
+    "code": "SS.7.G.1.3",
+    "benchmark": "Interpret maps to identify geopolitical divisions and boundaries of places in North America.",
+    "topics": [
+      "Geopolitical Divisions",
+      "Boundaries",
+      "North America"
+    ],
+    "dok": 2,
+    "item_specs": "Students interpret maps to identify political boundaries and divisions in North America.",
+    "essential_questions": [
+      "How are political boundaries shown on maps?",
+      "What geopolitical divisions exist in North America?"
+    ],
+    "learning_targets": [
+      "I can identify geopolitical boundaries on a map of North America.",
+      "I can describe the political divisions of the United States.",
+      "I can interpret maps showing counties, states, and national boundaries."
+    ],
+    "vocabulary": [
+      "geopolitical",
+      "boundary",
+      "border",
+      "county",
+      "state",
+      "nation",
+      "jurisdiction"
+    ],
+    "sample_assessment": "Geopolitical boundaries are MOST often determined by: A) Physical features only B) Cultural and political agreements C) Random lines on a map D) Climate patterns"
+  },
+  {
+    "code": "SS.7.G.2.1",
+    "benchmark": "Locate major cultural landmarks that are emblematic of the United States.",
+    "topics": [
+      "Cultural Landmarks",
+      "United States",
+      "National Identity"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify and locate major cultural landmarks of the United States.",
+    "essential_questions": [
+      "What are the major cultural landmarks of the United States?",
+      "Why are these landmarks important to American identity?"
+    ],
+    "learning_targets": [
+      "I can identify major cultural landmarks of the United States.",
+      "I can locate these landmarks on a map.",
+      "I can explain the significance of national landmarks."
+    ],
+    "vocabulary": [
+      "landmark",
+      "monument",
+      "Statue of Liberty",
+      "Mount Rushmore",
+      "National Mall",
+      "Liberty Bell",
+      "cultural heritage"
+    ],
+    "sample_assessment": "Which landmark is located in New York Harbor and symbolizes freedom and immigration? A) Mount Rushmore B) The Liberty Bell C) The Statue of Liberty D) The Lincoln Memorial"
+  },
+  {
+    "code": "SS.7.G.2.2",
+    "benchmark": "Locate major physical landmarks that are emblematic of the United States.",
+    "topics": [
+      "Physical Landmarks",
+      "Natural Features",
+      "United States Geography"
+    ],
+    "dok": 1,
+    "item_specs": "Students identify and locate major physical landmarks of the United States.",
+    "essential_questions": [
+      "What are the major physical landmarks of the United States?",
+      "How have physical landmarks shaped American identity?"
+    ],
+    "learning_targets": [
+      "I can identify major physical landmarks of the United States.",
+      "I can locate physical landmarks on a U.S. map.",
+      "I can explain how physical features have influenced American settlement."
+    ],
+    "vocabulary": [
+      "Grand Canyon",
+      "Mississippi River",
+      "Rocky Mountains",
+      "Great Lakes",
+      "Appalachian Mountains",
+      "Great Plains",
+      "physical feature"
+    ],
+    "sample_assessment": "Which physical landmark forms a natural boundary between several U.S. states and flows into the Gulf of Mexico? A) The Rocky Mountains B) The Mississippi River C) The Great Lakes D) The Grand Canyon"
+  },
+  {
+    "code": "SS.8.G.1.1",
+    "benchmark": "Use maps to describe the physical and cultural attributes of major regions of North America.",
+    "topics": [
+      "North America",
+      "Physical Geography",
+      "Cultural Geography"
+    ],
+    "dok": 2,
+    "item_specs": "Students use maps to identify and describe physical and cultural characteristics of North American regions.",
+    "essential_questions": [
+      "What are the major regions of North America?",
+      "How do physical and cultural features define regions?"
+    ],
+    "learning_targets": [
+      "I can identify major regions of North America on a map.",
+      "I can describe the physical features of each region.",
+      "I can explain how culture varies across regions."
+    ],
+    "vocabulary": [
+      "region",
+      "physical feature",
+      "cultural attribute",
+      "New England",
+      "Southeast",
+      "Midwest",
+      "Great Plains",
+      "Pacific Coast"
+    ],
+    "sample_assessment": "Which U.S. region is characterized by fertile plains and large-scale agriculture? A) New England B) The Midwest C) The Pacific Coast D) The Southeast"
+  },
+  {
+    "code": "SS.8.G.1.2",
+    "benchmark": "Use appropriate geographic tools and terms to identify and describe significant places and regions in American history.",
+    "topics": [
+      "Historical Geography",
+      "American History",
+      "Geographic Tools"
+    ],
+    "dok": 2,
+    "item_specs": "Students use geographic tools to analyze places significant in American history.",
+    "essential_questions": [
+      "How did geography shape key events in American history?",
+      "What geographic tools help us understand the past?"
+    ],
+    "learning_targets": [
+      "I can use maps and other tools to identify historically significant places.",
+      "I can describe the geographic context of major events in American history.",
+      "I can explain how geography influenced historical outcomes."
+    ],
+    "vocabulary": [
+      "geographic tools",
+      "historical map",
+      "region",
+      "settlement",
+      "frontier",
+      "territory",
+      "colony"
+    ],
+    "sample_assessment": "The geographic feature that MOST influenced westward expansion was: A) The Appalachian Mountains B) The Mississippi River and flat Great Plains C) The Pacific Ocean D) The Great Lakes"
+  },
+  {
+    "code": "SS.8.G.2.1",
+    "benchmark": "Identify the physical elements and the human elements that define and differentiate regions as relevant to American history.",
+    "topics": [
+      "Regional Geography",
+      "Physical Elements",
+      "Human Elements"
+    ],
+    "dok": 2,
+    "item_specs": "Students identify physical and human characteristics that define U.S. regions in historical context.",
+    "essential_questions": [
+      "What physical and human elements define a region?",
+      "How did regional differences shape American history?"
+    ],
+    "learning_targets": [
+      "I can identify physical elements that define regions.",
+      "I can identify human elements that differentiate regions.",
+      "I can explain how regional differences influenced American history."
+    ],
+    "vocabulary": [
+      "physical element",
+      "human element",
+      "climate",
+      "terrain",
+      "economy",
+      "culture",
+      "sectionalism"
+    ],
+    "sample_assessment": "Which factor MOST contributed to the economic differences between the Northern and Southern states before the Civil War? A) Climate and geography B) Population size C) Access to the ocean D) Proximity to Canada"
+  },
+  {
+    "code": "SS.8.G.4.1",
+    "benchmark": "Interpret population density maps and other data to analyze demographic patterns in North America.",
+    "topics": [
+      "Population Density",
+      "Demographics",
+      "Data Analysis"
+    ],
+    "dok": 2,
+    "item_specs": "Students analyze population data and maps to identify demographic patterns.",
+    "essential_questions": [
+      "What patterns exist in North American population distribution?",
+      "What factors influence where people settle?"
+    ],
+    "learning_targets": [
+      "I can interpret population density maps.",
+      "I can identify patterns in population distribution.",
+      "I can analyze factors that influence settlement patterns."
+    ],
+    "vocabulary": [
+      "population density",
+      "demographics",
+      "urban",
+      "rural",
+      "suburban",
+      "migration",
+      "census"
+    ],
+    "sample_assessment": "Population density is HIGHEST in areas that: A) Have harsh climates B) Are near water and transportation C) Are mountainous D) Have limited resources"
+  },
+  {
+    "code": "SS.8.G.4.4",
+    "benchmark": "Interpret databases, case studies, and maps to describe the role that regions play in influencing trade, migration patterns, and cultural/political interaction in North America throughout time.",
+    "topics": [
+      "Trade Patterns",
+      "Migration",
+      "Regional Interaction"
+    ],
+    "dok": 3,
+    "item_specs": "Students use multiple sources to analyze how regions influence trade and cultural interaction over time.",
+    "essential_questions": [
+      "How have regions influenced trade and migration in North America?",
+      "How do regions interact culturally and politically?"
+    ],
+    "learning_targets": [
+      "I can use maps to trace trade routes in North America.",
+      "I can explain how regional differences drive migration patterns.",
+      "I can analyze cultural and political interactions between regions."
+    ],
+    "vocabulary": [
+      "trade route",
+      "migration pattern",
+      "cultural interaction",
+      "regional economy",
+      "commerce",
+      "interdependence"
+    ],
+    "sample_assessment": "The development of railroads in the 1800s MOST affected regional interaction by: A) Reducing trade B) Connecting regions for faster trade and migration C) Isolating communities D) Replacing water transportation entirely"
+  },
+  {
+    "code": "SS.8.G.5.1",
+    "benchmark": "Describe human dependence on the physical environment and natural resources to satisfy basic needs in local environments in the United States.",
+    "topics": [
+      "Human-Environment Interaction",
+      "Natural Resources",
+      "Sustainability"
+    ],
+    "dok": 2,
+    "item_specs": "Students describe how humans depend on natural resources and the physical environment.",
+    "essential_questions": [
+      "How do humans depend on the physical environment?",
+      "What natural resources are essential for human survival?"
+    ],
+    "learning_targets": [
+      "I can describe how humans depend on natural resources.",
+      "I can explain how the physical environment affects daily life.",
+      "I can identify renewable and nonrenewable resources."
+    ],
+    "vocabulary": [
+      "natural resource",
+      "renewable",
+      "nonrenewable",
+      "sustainability",
+      "conservation",
+      "environment",
+      "ecosystem"
+    ],
+    "sample_assessment": "Which is an example of a nonrenewable resource? A) Solar energy B) Wind C) Coal D) Timber"
+  },
+  {
+    "code": "SS.8.G.5.2",
+    "benchmark": "Describe the impact of human modifications on the physical environment and ecosystems of the United States throughout history.",
+    "topics": [
+      "Environmental Impact",
+      "Human Modification",
+      "Ecosystems"
+    ],
+    "dok": 2,
+    "item_specs": "Students describe how human activities have modified the environment throughout American history.",
+    "essential_questions": [
+      "How have humans modified the environment in the United States?",
+      "What are the consequences of environmental modification?"
+    ],
+    "learning_targets": [
+      "I can identify ways humans have modified the environment.",
+      "I can describe the impact of industrialization on ecosystems.",
+      "I can analyze the consequences of environmental changes."
+    ],
+    "vocabulary": [
+      "modification",
+      "deforestation",
+      "industrialization",
+      "pollution",
+      "urbanization",
+      "conservation",
+      "erosion"
+    ],
+    "sample_assessment": "The construction of the Transcontinental Railroad in the 1860s led to which environmental impact? A) Increased biodiversity B) Destruction of buffalo habitat and grasslands C) Cleaner waterways D) Reduced deforestation"
+  },
+  {
+    "code": "SS.8.G.6.1",
+    "benchmark": "Use appropriate maps and other graphic representations to analyze geographic problems and changes over time.",
+    "topics": [
+      "Geographic Analysis",
+      "Problem Solving",
+      "Change Over Time"
+    ],
+    "dok": 3,
+    "item_specs": "Students use maps and graphics to analyze geographic problems and historical changes.",
+    "essential_questions": [
+      "How can maps help us understand geographic problems?",
+      "How has the geographic landscape changed over time?"
+    ],
+    "learning_targets": [
+      "I can use maps to analyze geographic problems.",
+      "I can compare maps from different time periods.",
+      "I can identify geographic changes over time."
+    ],
+    "vocabulary": [
+      "geographic problem",
+      "spatial analysis",
+      "change over time",
+      "historical map",
+      "geographic pattern",
+      "trend"
+    ],
+    "sample_assessment": "Comparing a map of the United States in 1800 to one in 1900 would BEST show: A) Changes in climate B) Westward expansion of territories and states C) Shifts in ocean currents D) Changes in mountain elevations"
+  },
+  {
+    "code": "SS.8.G.6.2",
+    "benchmark": "Illustrate places and events in U.S. history through the use of narratives and graphic representations.",
+    "topics": [
+      "Historical Geography",
+      "Narratives",
+      "Graphic Representations"
+    ],
+    "dok": 2,
+    "item_specs": "Students create and interpret narratives and graphics that illustrate historical events and places.",
+    "essential_questions": [
+      "How can maps and graphics help tell the story of American history?",
+      "What role does place play in understanding historical events?"
+    ],
+    "learning_targets": [
+      "I can create graphic representations of historical events.",
+      "I can use narratives to explain geographic significance.",
+      "I can connect places to important events in U.S. history."
+    ],
+    "vocabulary": [
+      "narrative",
+      "graphic representation",
+      "historical event",
+      "place",
+      "spatial",
+      "illustration",
+      "timeline"
+    ],
+    "sample_assessment": "A map showing the route of Lewis and Clark's expedition is an example of: A) A political map B) A graphic representation of a historical event C) A physical map D) A population density map"
+  }
+]
