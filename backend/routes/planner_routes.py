@@ -139,14 +139,16 @@ def _build_section_categories_prompt(categories, subject=''):
     return '\n'.join(lines)
 
 
-def _post_process_assignment(assignment, target_question_count=None):
-    """Unified 5-phase deterministic post-processing pipeline.
+def _post_process_assignment(assignment, target_question_count=None, target_total_points=None):
+    """Unified 6-phase deterministic post-processing pipeline.
 
     Phase 1: _classify_question_type — assigns question_type from text/structure
     Phase 2: _hydrate_question — populates rendering fields (dimensions, answers, etc.)
     Phase 3: _validate_question — downgrades broken questions to short_answer
     Phase 3b: _filter_project_questions — removes project/activity prompts
+    Phase 3c: _validate_question_quality — flags problematic questions
     Phase 4: _enforce_question_count — trims/pads to target (if provided)
+    Phase 5: _normalize_points — ensures points sum correctly
     """
     if not assignment or not isinstance(assignment, dict):
         return assignment, None
@@ -166,9 +168,16 @@ def _post_process_assignment(assignment, target_question_count=None):
         s for s in assignment.get('sections', [])
         if s.get('questions')
     ]
+    # Phase 3c: Validate question quality (deterministic + optional AI fix)
+    warnings = _validate_question_quality(assignment)
+    if warnings:
+        _auto_fix_flagged_questions(assignment, warnings)
     extra_usage = None
+    # Phase 4: Enforce question count (if target given)
     if target_question_count is not None:
         assignment, extra_usage = _enforce_question_count(assignment, target_question_count)
+    # Phase 5: Normalize points (always runs)
+    _normalize_points(assignment, target_total_points)
     return assignment, extra_usage
 
 
@@ -196,6 +205,407 @@ def _is_project_question(q):
     """Return True if the question is a project/activity that can't be answered in the portal."""
     text = q.get('question', '')
     return bool(_PROJECT_KEYWORDS.search(text))
+
+
+# ── Phase 3c: Question quality validation ─────────────────────────────────
+
+# Patterns for common theorem setups to detect over-determined or inconsistent values
+_TANGENT_SECANT_RE = _re.compile(
+    r'tangent.*(?:external|outside).*?(\d+(?:\.\d+)?).*?(?:whole|secant).*?(\d+(?:\.\d+)?)',
+    _re.IGNORECASE | _re.DOTALL,
+)
+_CHORD_CHORD_RE = _re.compile(
+    r'chord.*?(\d+(?:\.\d+)?)\s*[×*·]\s*(\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)\s*[×*·]\s*(\d+(?:\.\d+)?)',
+    _re.IGNORECASE,
+)
+_PYTHAGOREAN_RE = _re.compile(
+    r'(?:right\s+triangle|hypotenuse|legs?).*?(\d+(?:\.\d+)?).*?(\d+(?:\.\d+)?).*?(\d+(?:\.\d+)?)',
+    _re.IGNORECASE | _re.DOTALL,
+)
+
+
+def _validate_question_quality(assignment):
+    """Phase 3c: Run deterministic quality checks on every question.
+
+    Returns a list of warning dicts: [{section_idx, question_idx, issue, severity}]
+    Attaches 'warning' and 'warning_severity' fields to flagged questions.
+    """
+    warnings = []
+    for sIdx, section in enumerate(assignment.get('sections', [])):
+        for qIdx, q in enumerate(section.get('questions', [])):
+            issues = _check_question_quality(q)
+            if issues:
+                # Use the most severe issue as the primary warning
+                worst = max(issues, key=lambda i: 0 if i['severity'] == 'warning' else 1)
+                q['warning'] = worst['issue']
+                q['warning_severity'] = worst['severity']
+                for issue in issues:
+                    warnings.append({
+                        'section_idx': sIdx,
+                        'question_idx': qIdx,
+                        'issue': issue['issue'],
+                        'severity': issue['severity'],
+                    })
+    return warnings
+
+
+def _check_question_quality(q):
+    """Run Tier A deterministic checks on a single question. Returns list of issues."""
+    issues = []
+    qt = q.get('question_type', q.get('type', 'short_answer'))
+    text = q.get('question', '')
+
+    # Check 1: Points sanity
+    pts = q.get('points')
+    if pts is not None and (not isinstance(pts, (int, float)) or pts <= 0 or pts > 20):
+        issues.append({'issue': f'Invalid point value: {pts}', 'severity': 'error'})
+
+    # Check 2: Answer exists for non-essay/extended types
+    non_answer_types = {'essay', 'extended_response', 'multi_part'}
+    if qt not in non_answer_types:
+        answer = q.get('answer')
+        if answer is None or answer == '' or answer == []:
+            issues.append({'issue': 'Missing answer key', 'severity': 'warning'})
+
+    # Check 3: MC answer matches one of the options
+    if qt == 'multiple_choice' and q.get('options') and q.get('answer'):
+        answer = str(q['answer']).strip()
+        options = q.get('options', [])
+        option_texts = [str(o).strip() for o in options]
+        # Check both direct match and letter-prefix match (e.g., "B" matches "B) ...")
+        matched = False
+        for opt_text in option_texts:
+            if answer == opt_text or opt_text.startswith(answer + ')') or opt_text.startswith(answer + '.'):
+                matched = True
+                break
+        # Also check if answer is a letter A-D and we have that many options
+        if not matched and len(answer) == 1 and answer.upper() in 'ABCDEFGH':
+            idx = ord(answer.upper()) - ord('A')
+            if 0 <= idx < len(options):
+                matched = True
+        if not matched:
+            issues.append({'issue': 'Answer does not match any option', 'severity': 'error'})
+
+    # Check 4: Over-determined math problems (more givens than needed)
+    if qt in ('math_equation', 'geometry', 'short_answer', 'triangle', 'circle',
+              'rectangle', 'trapezoid', 'regular_polygon'):
+        numbers = _re.findall(r'\b\d+(?:\.\d+)?\b', text)
+        # More than 5 distinct numeric values in a single question is suspicious
+        distinct_nums = set(numbers)
+        if len(distinct_nums) > 5:
+            issues.append({
+                'issue': f'Potentially over-determined: {len(distinct_nums)} numeric values given',
+                'severity': 'warning',
+            })
+
+    # Check 5: Tangent-secant consistency check
+    if 'tangent' in text.lower() and ('secant' in text.lower() or 'external' in text.lower()):
+        numbers = [float(n) for n in _re.findall(r'\b\d+(?:\.\d+)?\b', text)]
+        if len(numbers) >= 3:
+            # t² = external × whole — check if any triplet satisfies this
+            from itertools import combinations
+            found_valid = False
+            for combo in combinations(numbers, 3):
+                a, b, c = sorted(combo)
+                # Check t² = ext × whole in all permutations
+                if (abs(a * a - b * c) < 0.5 or abs(b * b - a * c) < 0.5
+                        or abs(c * c - a * b) < 0.5):
+                    found_valid = True
+                    break
+            if not found_valid and len(numbers) >= 3:
+                issues.append({
+                    'issue': 'Given values may not satisfy tangent-secant theorem (t² = external × whole)',
+                    'severity': 'warning',
+                })
+
+    # Check 6: Pythagorean theorem consistency
+    if _re.search(r'\b(right\s+triangle|hypotenuse)\b', text, _re.IGNORECASE):
+        numbers = [float(n) for n in _re.findall(r'\b\d+(?:\.\d+)?\b', text)]
+        if len(numbers) >= 3:
+            from itertools import combinations
+            found_valid = False
+            for combo in combinations(numbers, 3):
+                a, b, c = sorted(combo)
+                if abs(a * a + b * b - c * c) < 0.5:
+                    found_valid = True
+                    break
+            if not found_valid:
+                issues.append({
+                    'issue': 'Given values may not satisfy Pythagorean theorem (a² + b² = c²)',
+                    'severity': 'warning',
+                })
+
+    # Check 7: Mixing 3D physical with 2D geometry
+    _3d_words = _re.compile(
+        r'\b(tower|cable|pole|building|ladder|wall|ground|shadow|height of the)\b', _re.IGNORECASE
+    )
+    _2d_theorems = _re.compile(
+        r'\b(inscribed angle|central angle|chord[- ]chord|tangent[- ]secant|secant[- ]secant|'
+        r'arc length|sector area|power of a point)\b', _re.IGNORECASE
+    )
+    if _3d_words.search(text) and _2d_theorems.search(text):
+        issues.append({
+            'issue': 'Mixes 3D physical scenario with 2D circle theorem — may confuse students',
+            'severity': 'warning',
+        })
+
+    # ── ELA / Reading checks ──────────────────────────────────────────────
+
+    # Check 8: Question references a passage/text but none is included
+    _PASSAGE_REF_RE = _re.compile(
+        r'\b(according to the (passage|text|article|excerpt|author|narrator|speaker|poem|story)'
+        r'|refer(ring)? to the (passage|text|reading|excerpt|article)'
+        r'|based on the (passage|text|reading|excerpt|article)'
+        r'|in the (passage|text|excerpt|article|poem|story) above'
+        r'|re-?read (the |this )?(passage|text|excerpt|paragraph|stanza)'
+        r'|the (passage|text|excerpt|article|poem|story) (states|describes|suggests|implies|reveals|shows|demonstrates|indicates|mentions)'
+        r'|use (textual |)evidence from the (passage|text|reading)'
+        r'|cite evidence from the (passage|text))\b',
+        _re.IGNORECASE,
+    )
+    if _PASSAGE_REF_RE.search(text):
+        # A question referencing a passage should have substantial text embedding it.
+        # Heuristic: if the question is under 300 chars, the passage is almost certainly
+        # not included inline — it's a dangling reference.
+        if len(text) < 300:
+            issues.append({
+                'issue': 'References a passage/text but no passage appears to be included in the question',
+                'severity': 'error',
+            })
+
+    # Check 9: "Read the following" but passage is too short to be real
+    _READ_FOLLOWING_RE = _re.compile(
+        r'\b(read the following|read this)\s+(passage|text|excerpt|article|poem|paragraph|story)',
+        _re.IGNORECASE,
+    )
+    if _READ_FOLLOWING_RE.search(text):
+        # Split on the directive to find the passage portion
+        parts = _READ_FOLLOWING_RE.split(text, maxsplit=1)
+        # The passage body is everything after the "read the following passage" phrase
+        passage_body = parts[-1] if len(parts) > 1 else ''
+        # Strip any trailing question portion (often after a blank line or question mark)
+        passage_lines = passage_body.split('\n')
+        passage_content = '\n'.join(
+            ln for ln in passage_lines
+            if not _re.match(r'^\s*(question|what |how |why |which |where |when |who |identify|explain|describe|analyze|compare|evaluate)', ln, _re.IGNORECASE)
+        ).strip()
+        if len(passage_content) < 80:
+            issues.append({
+                'issue': 'Says "read the following" but the included passage is too short or missing',
+                'severity': 'warning',
+            })
+
+    # Check 10: Quotation/citation without attribution
+    _QUOTE_RE = _re.compile(r'[""\u201c].{15,}?[""\u201d]')
+    _ATTRIBUTION_RE = _re.compile(
+        r'\b(according to|written by|by [A-Z]|from ["\u201c]|—\s*[A-Z]|\(\w+,?\s*\d{4}\))\b',
+        _re.IGNORECASE,
+    )
+    if _QUOTE_RE.search(text) and not _ATTRIBUTION_RE.search(text):
+        # Only flag for ELA-style questions (not math word problems that might quote a scenario)
+        if qt in ('short_answer', 'extended_response', 'essay', 'multiple_choice'):
+            # Check the quote isn't just a math expression or short phrase
+            quote_match = _QUOTE_RE.search(text)
+            quoted_text = quote_match.group(0) if quote_match else ''
+            if len(quoted_text) > 40:  # Substantial quote, not a term definition
+                issues.append({
+                    'issue': 'Contains a substantial quotation without clear attribution (author/source)',
+                    'severity': 'warning',
+                })
+
+    # ── Science checks ─────────────────────────────────────────────────────
+
+    # Check 11: Mixed unit systems (metric + imperial in same question)
+    _METRIC_UNITS = _re.compile(
+        r'\b(\d+(?:\.\d+)?)\s*'
+        r'(meters?|m\b|centimeters?|cm\b|millimeters?|mm\b|kilometers?|km\b'
+        r'|grams?|g\b|kilograms?|kg\b|milligrams?|mg\b'
+        r'|liters?|L\b|milliliters?|mL\b'
+        r'|degrees?\s*[Cc]elsius|°C'
+        r'|newtons?|N\b|joules?|J\b|watts?|W\b|pascals?|Pa\b)',
+        _re.IGNORECASE,
+    )
+    _IMPERIAL_UNITS = _re.compile(
+        r'\b(\d+(?:\.\d+)?)\s*'
+        r'(feet|ft\b|foot|inches|in\b|inch|yards?|yd\b|miles?\b|mi\b'
+        r'|pounds?|lbs?\b|ounces?|oz\b|tons?\b'
+        r'|gallons?|gal\b|quarts?|qt\b|pints?\b|cups?\b|fl\.?\s*oz'
+        r'|degrees?\s*[Ff]ahrenheit|°F)',
+        _re.IGNORECASE,
+    )
+    has_metric = _METRIC_UNITS.search(text)
+    has_imperial = _IMPERIAL_UNITS.search(text)
+    # Mixed units are a problem UNLESS the question is explicitly about conversion
+    _CONVERSION_HINT = _re.compile(
+        r'\b(convert|conversion|equivalent|how many .+ in|express .+ in|change .+ to)\b',
+        _re.IGNORECASE,
+    )
+    if has_metric and has_imperial and not _CONVERSION_HINT.search(text):
+        issues.append({
+            'issue': 'Mixes metric and imperial units — use one system or make it a conversion problem',
+            'severity': 'warning',
+        })
+
+    # Check 12: Physically impossible values for common quantities
+    _IMPOSSIBLE_CHECKS = [
+        # (pattern to find value+unit, validation function, issue message)
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Cc]elsius|°C)\b'),
+            lambda v: v < -273.15,
+            'Temperature below absolute zero ({val}°C)',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Ff]ahrenheit|°F)\b'),
+            lambda v: v < -459.67,
+            'Temperature below absolute zero ({val}°F)',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:kg|kilograms?|g|grams?|mg|milligrams?|lbs?|pounds?|oz|ounces?)\b', _re.IGNORECASE),
+            lambda v: v < 0,
+            'Negative mass ({val}) — mass cannot be negative',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:m/s|km/h|mph|ft/s)\b', _re.IGNORECASE),
+            lambda v: v < 0,
+            'Negative speed ({val}) — speed is a scalar and cannot be negative',
+        ),
+        (
+            _re.compile(r'\bpH\s+(?:of\s+)?(-?\d+(?:\.\d+)?)\b', _re.IGNORECASE),
+            lambda v: v < 0 or v > 14,
+            'pH value {val} is outside valid range (0-14)',
+        ),
+        (
+            _re.compile(r'(\d+(?:\.\d+)?)\s*%\s*(?:concentration|efficiency|probability|chance|yield)\b', _re.IGNORECASE),
+            lambda v: v > 100,
+            'Percentage value {val}% exceeds 100%',
+        ),
+    ]
+    for pattern, is_invalid, msg_template in _IMPOSSIBLE_CHECKS:
+        match = pattern.search(text)
+        if match:
+            try:
+                val = float(match.group(1))
+                if is_invalid(val):
+                    issues.append({
+                        'issue': msg_template.format(val=match.group(1)),
+                        'severity': 'error',
+                    })
+            except (ValueError, IndexError):
+                pass
+
+    # Check 13: Science question references a diagram/figure/lab setup not provided
+    _FIGURE_REF_RE = _re.compile(
+        r'\b(refer to (the |)(figure|diagram|graph|chart|table|image|picture|illustration|lab setup|model|map)'
+        r'|(figure|diagram|graph|chart|table|image|illustration)\s+(above|below|on the right|on the left|shown)'
+        r'|see (the |)(figure|diagram|graph|chart) (\d+|[A-Z])'
+        r'|use the (data|graph|chart|diagram|figure|table) (provided|shown|above|below))\b',
+        _re.IGNORECASE,
+    )
+    if _FIGURE_REF_RE.search(text):
+        # For data_table type, the table data is in structured fields — that's fine
+        if qt not in ('data_table', 'box_plot', 'dot_plot', 'stem_and_leaf',
+                       'bar_chart', 'coordinate_plane', 'function_graph'):
+            # Check if there's structured visual data attached
+            has_visual_data = any(q.get(f) for f in [
+                'chart_data', 'data', 'expected_data', 'column_headers',
+                'original_vertices', 'points_to_plot',
+            ])
+            if not has_visual_data and len(text) < 500:
+                issues.append({
+                    'issue': 'References a figure/diagram/graph but no visual data is included in the question',
+                    'severity': 'error',
+                })
+
+    return issues
+
+
+def _auto_fix_flagged_questions(assignment, warnings):
+    """Attempt AI-powered fixes for flagged questions.
+
+    Uses gpt-4o-mini to review and fix problematic questions in a single batch.
+    Only called when deterministic checks flag issues.
+    """
+    # Collect questions with errors (not just warnings)
+    error_items = [w for w in warnings if w['severity'] == 'error']
+    if not error_items:
+        return  # Only auto-fix errors; warnings are shown to teacher
+
+    # Build batch for AI review
+    batch = []
+    for w in error_items:
+        s = assignment.get('sections', [])[w['section_idx']]
+        q = s.get('questions', [])[w['question_idx']]
+        batch.append({
+            'index': len(batch),
+            'section_idx': w['section_idx'],
+            'question_idx': w['question_idx'],
+            'question': q.get('question', ''),
+            'question_type': q.get('question_type', 'short_answer'),
+            'answer': q.get('answer', ''),
+            'options': q.get('options', []),
+            'issue': w['issue'],
+        })
+
+    if not batch or len(batch) > 20:
+        return  # Skip if too many — something else is wrong
+
+    try:
+        from openai import OpenAI
+        api_key = os.getenv('OPENAI_API_KEY', '')
+        if not api_key or api_key.startswith('your-'):
+            return
+        client = OpenAI(api_key=api_key)
+
+        prompt = f"""Review these {len(batch)} questions that were flagged for issues.
+For each, provide a corrected version. Return JSON array:
+[{{"index": 0, "fixed_question": "corrected question text", "fixed_answer": "corrected answer", "fixed_options": ["A) ...", ...] or null}}]
+
+Flagged questions:
+{json.dumps(batch, indent=2)}
+
+Rules:
+- Fix mathematical inconsistencies so given values are correct
+- For MC questions, ensure the answer matches one option
+- Keep the same difficulty level and topic
+- Return ONLY the JSON array, no other text"""
+
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You fix assessment questions. Return valid JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+        )
+
+        content = completion.choices[0].message.content
+        result = json.loads(content)
+        fixes = result if isinstance(result, list) else result.get('fixes', result.get('questions', []))
+
+        # Apply fixes
+        for fix in fixes:
+            idx = fix.get('index')
+            if idx is None or idx >= len(batch):
+                continue
+            item = batch[idx]
+            s = assignment.get('sections', [])[item['section_idx']]
+            q = s.get('questions', [])[item['question_idx']]
+            if fix.get('fixed_question'):
+                q['question'] = fix['fixed_question']
+            if fix.get('fixed_answer'):
+                q['answer'] = fix['fixed_answer']
+            if fix.get('fixed_options') and isinstance(fix['fixed_options'], list):
+                q['options'] = fix['fixed_options']
+            # Update warning to indicate it was auto-fixed
+            q['warning'] = f"Auto-fixed: {item['issue']}"
+            q['warning_severity'] = 'info'
+
+        usage = _extract_usage(completion, "gpt-4o-mini")
+        _record_planner_cost(usage)
+
+    except Exception as e:
+        print(f"Auto-fix quality check failed (non-fatal): {e}")
 
 
 # Types where the AI's classification is trusted (complex structural content)
@@ -1303,6 +1713,73 @@ def _merge_usage(base, extra):
     }
 
 
+# ── Phase 5: Deterministic point normalization ────────────────────────────
+
+_DEFAULT_POINTS = {
+    'multiple_choice': 1, 'true_false': 1, 'matching': 1,
+    'short_answer': 2, 'fill_blank': 1, 'math_equation': 2,
+    'data_table': 3, 'geometry': 3, 'coordinate_plane': 3,
+    'number_line': 2, 'extended_response': 4, 'essay': 4,
+    'multi_part': 4, 'grid_match': 3, 'multiselect': 2,
+    'triangle': 3, 'rectangle': 3, 'circle': 3, 'trapezoid': 3,
+    'regular_polygon': 3, 'function_graph': 3, 'box_plot': 3,
+    'dot_plot': 3, 'stem_and_leaf': 3, 'bar_chart': 3,
+    'transformations': 3, 'fraction_model': 2, 'probability_tree': 3,
+    'tape_diagram': 2, 'venn_diagram': 3, 'protractor': 2,
+    'inline_dropdown': 1,
+}
+
+
+def _normalize_points(assignment, target_total=None):
+    """Phase 5: Ensure every question has points and section/total sums are correct.
+
+    1. Assign default points to any question missing them (based on question_type).
+    2. Recalculate each section's points as sum of its question points.
+    3. If target_total is provided and sum doesn't match, scale proportionally.
+    4. Update assignment total_points.
+    """
+    sections = assignment.get('sections', [])
+    if not sections:
+        return
+
+    # Step 1: Ensure every question has a points field
+    for section in sections:
+        for q in section.get('questions', []):
+            qt = q.get('question_type', q.get('type', 'short_answer'))
+            if not q.get('points') or not isinstance(q.get('points'), (int, float)) or q['points'] <= 0:
+                q['points'] = _DEFAULT_POINTS.get(qt, 2)
+
+    # Step 2: Recalculate section points from question sums
+    for section in sections:
+        section['points'] = sum(q.get('points', 1) for q in section.get('questions', []))
+
+    # Step 3: If target_total given and doesn't match, scale proportionally
+    current_total = sum(s.get('points', 0) for s in sections)
+    if target_total and current_total > 0 and current_total != target_total:
+        scale = target_total / current_total
+        # Collect all questions for scaling
+        all_questions = []
+        for section in sections:
+            all_questions.extend(section.get('questions', []))
+        if all_questions:
+            # Scale each question's points (minimum 1)
+            for q in all_questions:
+                q['points'] = max(1, round(q['points'] * scale))
+            # Recalculate actual sum after rounding
+            rounded_total = sum(q['points'] for q in all_questions)
+            drift = target_total - rounded_total
+            if drift != 0:
+                # Absorb rounding drift into the question with the most points
+                largest_q = max(all_questions, key=lambda q: q['points'])
+                largest_q['points'] = max(1, largest_q['points'] + drift)
+            # Recalculate section points after scaling
+            for section in sections:
+                section['points'] = sum(q.get('points', 1) for q in section.get('questions', []))
+
+    # Step 4: Update assignment total_points
+    assignment['total_points'] = sum(s.get('points', 0) for s in sections)
+
+
 def _compute_geometry_answer(qt, q):
     """Compute answer for any (shape, mode) pair. Returns float or None."""
     import math
@@ -1944,6 +2421,10 @@ CRITICAL REQUIREMENTS:
 3. Include clear, specific answer keys for every question
 4. ONLY include section types that the teacher has enabled above — do NOT add vocabulary or matching sections unless explicitly enabled
 5. All questions must be answerable based on the standards content
+6. For math/computation questions: SELF-CHECK that all given numeric values are consistent. Verify the numbers satisfy any stated theorem or formula BEFORE including the question. Never give more numeric values than needed to solve the problem.
+7. Every question must be solvable with ONLY the given information — no hidden assumptions or missing data.
+8. For ELA/reading questions: If a question asks students to analyze, cite, or refer to a passage/text/excerpt, the FULL passage MUST be included in the "question" field. NEVER reference a passage that is not embedded. "According to the passage..." is only valid if the passage text precedes it in the question field.
+9. For science questions: Use ONE consistent unit system (metric or imperial) per question unless the question is explicitly about unit conversion. All numeric values must be physically possible (no negative mass, no temperatures below absolute zero, no pH outside 0-14).
 
 Return JSON with this structure:
 {{
@@ -2174,7 +2655,7 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                 plan = json.loads(content)
                 if content_type == 'Assignment':
                     target_q = config.get('totalQuestions', 10)
-                    plan, extra_usage = _post_process_assignment(plan, target_q)
+                    plan, extra_usage = _post_process_assignment(plan, target_q, target_total_points=100)
                     if extra_usage:
                         for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
                             total_usage[k] += extra_usage.get(k, 0)
@@ -2204,7 +2685,7 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         if content_type == 'Assignment':
             target_q = config.get('totalQuestions', 10)
-            plan, extra_usage = _post_process_assignment(plan, target_q)
+            plan, extra_usage = _post_process_assignment(plan, target_q, target_total_points=100)
         else:
             extra_usage = None
             # Strip stray sections/questions from non-assignment types so
@@ -2433,6 +2914,11 @@ CRITICAL REQUIREMENTS:
 - Word problems should use realistic scenarios (shopping, cooking, sports) not fictional games or apps
 - Avoid vague or overly complex language for the grade level
 - NEVER use vague instructions like "analyze the data" without providing the data inline
+- For math/computation questions: SELF-CHECK that all given numeric values are consistent. If a problem states theorem values (e.g., tangent squared = external times whole), verify the numbers satisfy the equation BEFORE including the question. Never give more numeric values than needed to solve the problem (over-determined systems confuse students).
+- Word problems must clearly map to a single geometric/algebraic setup. Avoid mixing 2D circle theorems with 3D physical scenarios (towers, cables) unless the mapping is explicit and unambiguous.
+- Every question must be solvable with ONLY the given information — no hidden assumptions or missing data required.
+- For ELA/reading questions: If a question asks students to analyze, cite, or refer to a passage/text/excerpt, the FULL passage MUST be included in the "question" field. NEVER say "according to the passage" or "refer to the text" without embedding the actual passage text before the question. Quotations longer than one sentence must include attribution (author or source).
+- For science questions: Use ONE consistent unit system (metric or imperial) per question — do NOT mix systems unless the question is explicitly about unit conversion. All values must be physically plausible (no negative mass, no temperatures below absolute zero, no pH outside 0-14, no percentages above 100% for concentrations/efficiency).
 
 QUESTION TYPE GUIDANCE:
 - For most questions, DO NOT set question_type — the system assigns it automatically from your text and structure.
@@ -2493,9 +2979,84 @@ Return JSON with this structure:
 }}
 
 SUBJECT-SPECIFIC GUIDANCE:
-- For MATH subjects: Include at least one "math_equation" section where students solve and write expressions
-- For SCIENCE subjects: Include a "data_table" section for lab data, measurements, or observations
-- For GEOGRAPHY subjects: Include a "coordinates" section for map/location questions
+
+For MATH subjects:
+- Include at least one "math_equation" section where students solve and write expressions
+- Write geometry dimensions in text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations in text: "Graph y = 2x + 1 on the coordinate plane"
+
+For ELA / READING subjects:
+- Passage-based questions MUST embed the full passage in the "question" field BEFORE the question prompt.
+  Example MC question JSON:
+  {{"question": "Read the following passage:\\n\\nThe morning sun crept over the rooftops, casting long shadows across the empty schoolyard. Maria clutched her notebook and hesitated at the gate. Three years in this country and the words still tangled on her tongue like knots in wet rope. But today was different. Today she had a story to tell.\\n\\nThe author uses the simile 'like knots in wet rope' to convey that Maria —", "options": ["A) is frustrated by the rainy weather", "B) struggles to express herself in English", "C) is nervous about her school assignment", "D) feels tangled in a difficult situation"], "answer": "B", "dok": 2, "points": 1}}
+- For vocabulary-in-context questions, include the sentence with the target word:
+  {{"question": "In the sentence 'The committee voted to ratify the new policy despite vocal opposition,' what does the word 'ratify' most likely mean?", "options": ["A) reject", "B) formally approve", "C) discuss publicly", "D) delay indefinitely"], "answer": "B", "dok": 2, "points": 1}}
+- Extended response must give the source text first, then the prompt with a rubric:
+  {{"question": "Read the following excerpt from Frederick Douglass's 'Narrative of the Life of Frederick Douglass':\\n\\n'I did not, when a slave, understand the deep meaning of those rude and apparently incoherent songs. I was myself within the circle; and neither saw nor heard as those without might see and hear.'\\n\\nExplain how Douglass uses contrast to develop his central idea about the experience of slavery. Use at least two pieces of textual evidence to support your analysis.", "answer": "Strong response addresses Douglass's contrast between inside/outside perspective, quotes specific language, and explains how the rhetorical strategy develops the theme of misunderstanding slavery from the outside.", "dok": 3, "points": 4}}
+- For matching sections, use literary/rhetorical terms:
+  {{"question": "Match each literary device to its correct definition.", "terms": ["Metaphor", "Alliteration", "Foreshadowing", "Irony"], "definitions": ["Repetition of initial consonant sounds", "A hint about future events in a story", "A comparison without using like or as", "A contrast between expectation and reality"], "answer": {{"Metaphor": "A comparison without using like or as", "Alliteration": "Repetition of initial consonant sounds", "Foreshadowing": "A hint about future events in a story", "Irony": "A contrast between expectation and reality"}}, "dok": 1, "points": 2}}
+
+For SCIENCE subjects:
+The portal has interactive visual components — use them instead of referencing diagrams/figures.
+NEVER say "refer to the diagram" or "look at the figure." Use structured data fields and the system renders the visual.
+
+- DATA TABLE (question_type: "data_table") — for lab data, measurements, classification, calculations:
+  {{"question": "A student measured the time for a ball to roll down ramps of different heights. Complete the data table by calculating average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "answer": "speed = distance / time", "dok": 2, "points": 3}}
+
+  Classification table:
+  {{"question": "Classify each substance as an element, compound, or mixture.", "question_type": "data_table", "column_headers": ["Substance", "Classification", "Reasoning"], "row_labels": ["Oxygen (O₂)", "Water (H₂O)", "Salt water", "Iron (Fe)"], "expected_data": [["Oxygen (O₂)", "Element", "Single type of atom"], ["Water (H₂O)", "Compound", "Two elements chemically bonded"], ["Salt water", "Mixture", "Separable by evaporation"], ["Iron (Fe)", "Element", "Single type of atom"]], "answer": "See expected_data", "dok": 2, "points": 3}}
+
+- BAR CHART (question_type: "bar_chart") — for comparing measurements, experiment results:
+  {{"question": "The bar chart shows average monthly rainfall in Jacksonville, FL. Which month had the greatest increase compared to the previous month?", "question_type": "bar_chart", "chart_data": {{"labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], "values": [3.3, 3.0, 3.9, 2.8, 3.6, 5.7], "title": "Average Monthly Rainfall (inches)"}}, "answer": "June (increased 2.1 inches from May)", "dok": 2, "points": 2}}
+
+- DOT PLOT (question_type: "dot_plot") — for frequency distributions, repeated measurements:
+  {{"question": "A student measured 15 leaf lengths (cm): 5, 6, 6, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10. Create a dot plot showing the frequency of each length.", "question_type": "dot_plot", "minVal": 4, "maxVal": 11, "step": 1, "correct_dots": {{"5": 1, "6": 2, "7": 3, "8": 4, "9": 3, "10": 2}}, "answer": "Roughly normal distribution centered at 8 cm", "dok": 2, "points": 2}}
+
+- BOX PLOT (question_type: "box_plot") — for data spread, comparing datasets:
+  {{"question": "Calculate the five-number summary for each class's test scores.", "question_type": "box_plot", "data": [[65, 70, 72, 75, 78, 80, 82, 85, 88, 92], [55, 60, 68, 72, 75, 75, 80, 85, 90, 95]], "data_labels": ["Class A", "Class B"], "expected_values": {{"Class A": {{"min": 65, "q1": 72, "median": 79, "q3": 85, "max": 92}}, "Class B": {{"min": 55, "q1": 68, "median": 75, "q3": 85, "max": 95}}}}, "answer": "Class B has greater spread (range 40 vs 27) but lower median", "dok": 3, "points": 3}}
+
+- COORDINATE PLANE (question_type: "coordinate_plane") — for plotting experimental data:
+  {{"question": "A student recorded distance (m) over time (s): (0,0), (1,2), (2,4), (3,6), (4,8). Plot these points. What relationship do they show?", "question_type": "coordinate_plane", "x_range": [0, 6], "y_range": [0, 10], "points_to_plot": [[0,0], [1,2], [2,4], [3,6], [4,8]], "answer": "Linear/proportional — constant speed of 2 m/s", "dok": 2, "points": 3}}
+
+- FUNCTION GRAPH (question_type: "function_graph") — for graphing physics equations:
+  {{"question": "A ball thrown upward has height h = 20t - 5t². Graph this function. When does it reach maximum height?", "question_type": "function_graph", "x_range": [0, 5], "y_range": [0, 25], "correct_expressions": ["20x - 5x^2"], "answer": "Maximum height at t = 2 seconds (h = 20 m)", "dok": 3, "points": 3}}
+
+- NUMBER LINE (question_type: "number_line") — for pH scale, temperature, ordering:
+  {{"question": "Place these substances on the pH scale: lemon juice (pH 2), pure water (pH 7), baking soda (pH 9), stomach acid (pH 1.5), bleach (pH 13).", "question_type": "number_line", "min_val": 0, "max_val": 14, "points_to_plot": [1.5, 2, 7, 9, 13], "answer": "Stomach acid (1.5), lemon juice (2), water (7), baking soda (9), bleach (13)", "dok": 1, "points": 2}}
+
+- VENN DIAGRAM (question_type: "venn_diagram") — for classification, comparing:
+  {{"question": "Classify these characteristics as Plant Cells Only, Animal Cells Only, or Both: cell wall, cell membrane, chloroplasts, mitochondria, nucleus, large central vacuole, lysosomes, cytoplasm.", "question_type": "venn_diagram", "sets": 2, "labels": ["Plant Cells Only", "Animal Cells Only"], "mode": "element", "answer": "Plant Only: cell wall, chloroplasts, large central vacuole. Animal Only: lysosomes. Both: cell membrane, mitochondria, nucleus, cytoplasm", "dok": 2, "points": 3}}
+
+- Experiment-based MC (describe full setup, no diagram references):
+  {{"question": "A student places three identical plants in separate rooms. Plant A receives 12 hours of sunlight, Plant B receives 6 hours, and Plant C receives 0 hours. All plants receive the same water and soil. After 2 weeks, the student measures each plant's height. What is the independent variable?", "options": ["A) The height of the plants", "B) The amount of water given", "C) The number of hours of sunlight", "D) The type of plant used"], "answer": "C", "dok": 2, "points": 1}}
+
+- Calculation with units (metric preferred for FL science):
+  {{"question": "A block with a mass of 2.5 kg is pushed with a force of 10 N. Using F = ma, calculate the acceleration. Show your work.", "answer": "a = F/m = 10 N / 2.5 kg = 4 m/s²", "dok": 2, "points": 2}}
+
+CRITICAL RULES FOR SCIENCE:
+- Use ONE unit system per question (metric preferred). All values must be physically plausible.
+- NEVER reference a diagram, figure, or image. Use the interactive components above instead.
+- For classification → use data_table or venn_diagram
+- For data analysis → use bar_chart, dot_plot, box_plot, or data_table
+- For graphing relationships → use coordinate_plane or function_graph
+- For ordering/scales → use number_line
+
+For SOCIAL STUDIES / HISTORY subjects:
+- Primary source questions MUST embed the source text, not reference it externally:
+  {{"question": "Read the following excerpt from the Declaration of Independence (1776):\\n\\n'We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness. — That to secure these rights, Governments are instituted among Men, deriving their just powers from the consent of the governed.'\\n\\nBased on this excerpt, which Enlightenment idea MOST influenced the founders?", "options": ["A) Divine right of kings", "B) Social contract theory", "C) Mercantilism", "D) Manifest destiny"], "answer": "B", "dok": 2, "points": 1}}
+- Cause-and-effect questions should be specific, not vague:
+  {{"question": "Which event was a DIRECT cause of the United States entering World War I in 1917?", "options": ["A) The assassination of Archduke Franz Ferdinand", "B) Germany's unrestricted submarine warfare against American ships", "C) The Treaty of Versailles", "D) The formation of the League of Nations"], "answer": "B", "dok": 2, "points": 1}}
+- Extended response with document analysis:
+  {{"question": "Read the following quote from President Abraham Lincoln's Gettysburg Address (1863):\\n\\n'Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure.'\\n\\nExplain how Lincoln connects the founding ideals of the United States to the purpose of the Civil War. In your response, identify at least one specific founding ideal Lincoln references and explain why he believed the war was necessary to preserve it.", "answer": "Strong response identifies equality and/or liberty as founding ideals, explains Lincoln frames the Civil War as a test of whether democratic self-government can survive, and connects the 'proposition that all men are created equal' to the broader struggle over slavery and union.", "dok": 3, "points": 4}}
+- Matching for key terms/events:
+  {{"question": "Match each amendment to the right it protects.", "terms": ["1st Amendment", "2nd Amendment", "4th Amendment", "5th Amendment"], "definitions": ["Right to bear arms", "Freedom of speech, religion, and press", "Protection against self-incrimination", "Protection against unreasonable searches"], "answer": {{"1st Amendment": "Freedom of speech, religion, and press", "2nd Amendment": "Right to bear arms", "4th Amendment": "Protection against unreasonable searches", "5th Amendment": "Protection against self-incrimination"}}, "dok": 1, "points": 2}}
+
+For GEOGRAPHY subjects:
+- Include a "coordinates" section for map/location questions
+- Location-based questions should test real places with coordinates:
+  {{"question": "What is the capital city located nearest to the coordinates 30.4°N, 84.3°W?", "answer": "Tallahassee, Florida", "dok": 1, "points": 1}}
+- Map analysis with data_table for comparison:
+  {{"question": "Complete the table comparing physical features of Florida's five geographic regions.", "question_type": "data_table", "column_headers": ["Region", "Major Landform", "Elevation Range", "Key Water Feature"], "row_labels": ["Northwest", "Northeast", "Central", "Southwest", "Southeast"], "expected_data": [["Northwest", "Rolling hills", "50-100 m", "Apalachicola River"], ["Northeast", "Coastal plains", "0-30 m", "St. Johns River"], ["Central", "Lake region", "20-50 m", "Lake Okeechobee"], ["Southwest", "Low coastal plain", "0-15 m", "Everglades"], ["Southeast", "Coastal ridge", "0-5 m", "Biscayne Bay"]], "answer": "Students identify correct landforms, elevation ranges, and water features for each region", "dok": 2, "points": 3}}
 {f'''
 TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
 {config.get('globalAINotes', '')}
@@ -2516,7 +3077,7 @@ Make the questions specific to the lesson content. Include a variety of question
         content = completion.choices[0].message.content
         assignment = json.loads(content)
         target_q = config.get('totalQuestions', 10)
-        assignment, extra_usage = _post_process_assignment(assignment, target_q)
+        assignment, extra_usage = _post_process_assignment(assignment, target_q, target_total_points=100)
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
         assignment['subject'] = config.get('subject', 'General')
@@ -3779,25 +4340,37 @@ DOK 1 - Recall & Reproduction:
 - Recall facts, terms, definitions
 - Identify, recognize, list, name
 - Simple one-step procedures
-- Example: "What year did the Civil War begin?"
+- Math example: "What is the value of 3² + 4²?"
+- ELA example: "What is the definition of a metaphor?"
+- Science example: "What is the chemical symbol for water?"
+- Social Studies example: "What year did the Civil War begin?"
 
 DOK 2 - Skills & Concepts:
 - Compare, contrast, classify, organize
 - Make observations, collect data
 - Explain relationships, cause/effect
-- Example: "Compare the economies of the North and South before the Civil War."
+- Math example: "Compare the slopes of y = 2x + 1 and y = 3x - 4. Which line is steeper?"
+- ELA example: "How does the author's use of dialogue in paragraph 3 reveal the character's motivation?"
+- Science example: "Based on the data table, describe the relationship between ramp height and average speed."
+- Social Studies example: "Compare the economies of the North and South before the Civil War."
 
 DOK 3 - Strategic Thinking:
 - Analyze, evaluate, synthesize
 - Draw conclusions, cite evidence
 - Develop a logical argument
-- Example: "Using evidence from the text, explain how economic differences contributed to sectional tensions."
+- Math example: "A store offers 20% off plus an additional 10% at checkout. A customer claims this is the same as 30% off. Use mathematics to prove or disprove this claim."
+- ELA example: "Using evidence from the text, analyze how the author's word choice creates a tone of urgency in the final paragraph."
+- Science example: "Design an experiment to test whether salt concentration affects the boiling point of water. Identify your variables and explain your procedure."
+- Social Studies example: "Using evidence from both documents, explain how economic differences contributed to sectional tensions leading to the Civil War."
 
 DOK 4 - Extended Thinking:
 - Design, create, connect across content
 - Research, investigate over time
 - Apply concepts to new situations
-- Example: "Research and create a presentation analyzing how Civil War-era economic patterns continue to influence regional differences today."
+- Math example: "Design a budget for a school fundraiser that must raise at least $500. Include revenue projections, expenses, and a break-even analysis with supporting calculations."
+- ELA example: "Write an argumentative essay evaluating whether social media has a net positive or negative effect on teen literacy. Cite at least three sources."
+- Science example: "Propose a solution to reduce nutrient runoff in Florida's waterways. Explain the science behind your solution and predict its environmental impact."
+- Social Studies example: "Analyze how Civil War-era economic patterns continue to influence regional differences in the United States today. Support your argument with historical and modern evidence."
 """
 
         # Question type instructions
@@ -3818,6 +4391,140 @@ QUESTION TYPE GUIDANCE:
   inline_dropdown (include dropdowns array with options + correct index)
 - Every question MUST include: "dok" (1-4), "standard" (code), "points", and answer.
 """
+
+        # Build subject-specific question examples
+        subject_lower = config.get('subject', '').lower()
+        subject_question_examples = ""
+        if any(kw in subject_lower for kw in ['ela', 'english', 'reading', 'language arts', 'literature', 'writing']):
+            subject_question_examples = """
+SUBJECT-SPECIFIC QUESTION EXAMPLES (ELA/Reading — follow these patterns):
+
+Passage-based MC (MUST embed the full passage):
+{"question": "Read the following passage:\\n\\nThe morning sun crept over the rooftops, casting long shadows across the empty schoolyard. Maria clutched her notebook and hesitated at the gate. Three years in this country and the words still tangled on her tongue like knots in wet rope. But today was different. Today she had a story to tell.\\n\\nThe author uses the simile 'like knots in wet rope' to convey that Maria —", "options": ["A) is frustrated by the rainy weather", "B) struggles to express herself in English", "C) is nervous about her school assignment", "D) feels tangled in a difficult situation"], "answer": "B", "dok": 2, "points": 1}
+
+Vocabulary in context:
+{"question": "In the sentence 'The committee voted to ratify the new policy despite vocal opposition,' what does 'ratify' most likely mean?", "options": ["A) reject", "B) formally approve", "C) discuss publicly", "D) delay indefinitely"], "answer": "B", "dok": 2, "points": 1}
+
+Extended response with source text:
+{"question": "Read the following excerpt from Frederick Douglass's 'Narrative of the Life of Frederick Douglass':\\n\\n'I did not, when a slave, understand the deep meaning of those rude and apparently incoherent songs. I was myself within the circle; and neither saw nor heard as those without might see and hear.'\\n\\nExplain how Douglass uses contrast to develop his central idea about the experience of slavery. Use at least two pieces of textual evidence.", "answer": "Strong response addresses inside/outside perspective contrast, quotes specific language, explains how the strategy develops the theme.", "dok": 3, "points": 4}
+
+Matching (literary/rhetorical terms):
+{"question": "Match each literary device to its definition.", "terms": ["Metaphor", "Alliteration", "Foreshadowing", "Irony"], "definitions": ["Repetition of initial consonant sounds", "A hint about future events", "A comparison without like or as", "A contrast between expectation and reality"], "dok": 1, "points": 2}
+
+CRITICAL: EVERY passage-based question must have the passage text INSIDE the question field. Never say 'according to the passage' without providing it.
+"""
+        elif any(kw in subject_lower for kw in ['science', 'biology', 'chemistry', 'physics', 'earth', 'environmental']):
+            subject_question_examples = """
+SUBJECT-SPECIFIC QUESTION EXAMPLES (Science — follow these patterns):
+
+The portal has interactive visual components you MUST use instead of asking students to "look at a diagram."
+NEVER reference a figure, diagram, or image that isn't provided as structured data. Use the components below.
+
+=== DATA TABLE (question_type: "data_table") ===
+Use for: lab data, experiment results, classification, measurements, calculations.
+Students see headers and row labels and fill in the values.
+
+Lab data collection:
+{"question": "A student measured the time it takes for a ball to roll down ramps of different heights. Complete the data table by calculating the average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "answer": "Students calculate speed = distance / time for each trial", "dok": 2, "points": 3}
+
+Classification table:
+{"question": "Classify each substance as an element, compound, or mixture by completing the table.", "question_type": "data_table", "column_headers": ["Substance", "Classification", "Reasoning"], "row_labels": ["Oxygen (O₂)", "Water (H₂O)", "Salt water", "Iron (Fe)", "Carbon dioxide (CO₂)"], "expected_data": [["Oxygen (O₂)", "Element", "Single type of atom"], ["Water (H₂O)", "Compound", "Two elements chemically bonded"], ["Salt water", "Mixture", "Can be separated by evaporation"], ["Iron (Fe)", "Element", "Single type of atom"], ["Carbon dioxide (CO₂)", "Compound", "Two elements chemically bonded"]], "answer": "See expected_data", "dok": 2, "points": 3}
+
+=== BAR CHART (question_type: "bar_chart") ===
+Use for: comparing measurements, experiment results, population data, rainfall, temperatures.
+The chart displays automatically from the data — students answer a text question about it.
+
+{"question": "The bar chart shows the average monthly rainfall in Jacksonville, FL from January to June. Which month had the greatest increase in rainfall compared to the previous month? Explain your reasoning.", "question_type": "bar_chart", "chart_data": {"labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], "values": [3.3, 3.0, 3.9, 2.8, 3.6, 5.7], "title": "Average Monthly Rainfall (inches)"}, "answer": "June — increased by 2.1 inches from May (5.7 - 3.6 = 2.1), the largest single-month increase", "dok": 2, "points": 2}
+
+=== DOT PLOT (question_type: "dot_plot") ===
+Use for: frequency distributions, repeated measurements, class survey data.
+Students click to place dots above values on a number line.
+
+{"question": "A student measured the length of 15 leaves from a tree (in cm): 5, 6, 6, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10. Create a dot plot showing the frequency of each leaf length.", "question_type": "dot_plot", "minVal": 4, "maxVal": 11, "step": 1, "correct_dots": {"5": 1, "6": 2, "7": 3, "8": 4, "9": 3, "10": 2}, "answer": "Dot plot shows a roughly normal distribution centered at 8 cm", "dok": 2, "points": 2}
+
+=== BOX PLOT (question_type: "box_plot") ===
+Use for: data spread analysis, comparing datasets, identifying outliers.
+Students fill in the five-number summary values.
+
+{"question": "The following data shows test scores for two classes. Calculate the five-number summary (min, Q1, median, Q3, max) for each class and compare their distributions.", "question_type": "box_plot", "data": [[65, 70, 72, 75, 78, 80, 82, 85, 88, 92], [55, 60, 68, 72, 75, 75, 80, 85, 90, 95]], "data_labels": ["Class A", "Class B"], "expected_values": {"Class A": {"min": 65, "q1": 72, "median": 79, "q3": 85, "max": 92}, "Class B": {"min": 55, "q1": 68, "median": 75, "q3": 85, "max": 95}}, "answer": "Class B has greater spread (range 40 vs 27) but lower median (75 vs 79)", "dok": 3, "points": 3}
+
+=== COORDINATE PLANE (question_type: "coordinate_plane") ===
+Use for: plotting experimental data points, graphing relationships, distance/position.
+Students click to place points on an x-y grid.
+
+{"question": "A student recorded the distance (m) a toy car traveled over time (s): (0,0), (1,2), (2,4), (3,6), (4,8). Plot these data points on the coordinate plane. What type of relationship do the data show?", "question_type": "coordinate_plane", "x_range": [0, 6], "y_range": [0, 10], "points_to_plot": [[0,0], [1,2], [2,4], [3,6], [4,8]], "answer": "Linear/proportional relationship — distance increases by 2 m every second (constant speed of 2 m/s)", "dok": 2, "points": 3}
+
+=== FUNCTION GRAPH (question_type: "function_graph") ===
+Use for: graphing physics equations, linear relationships, exponential growth/decay.
+Students type equations and see them graphed live.
+
+{"question": "A ball is thrown upward with an initial velocity of 20 m/s. Its height (in meters) over time can be modeled by h = 20t - 5t². Graph this function. At what time does the ball reach its maximum height?", "question_type": "function_graph", "x_range": [0, 5], "y_range": [0, 25], "correct_expressions": ["20x - 5x^2"], "answer": "Maximum height at t = 2 seconds (h = 20 meters)", "dok": 3, "points": 3}
+
+=== NUMBER LINE (question_type: "number_line") ===
+Use for: pH scale, temperature, timelines, ordering values.
+Students click to place points on a linear scale.
+
+{"question": "Place the following substances on the pH scale based on their approximate pH values: lemon juice (pH 2), pure water (pH 7), baking soda (pH 9), stomach acid (pH 1.5), bleach (pH 13).", "question_type": "number_line", "min_val": 0, "max_val": 14, "points_to_plot": [1.5, 2, 7, 9, 13], "answer": "Stomach acid (1.5), lemon juice (2), pure water (7), baking soda (9), bleach (13)", "dok": 1, "points": 2}
+
+=== VENN DIAGRAM (question_type: "venn_diagram") ===
+Use for: classification, comparing organisms/elements/processes, set relationships.
+Students fill in values or labels in overlapping regions.
+
+{"question": "Use the Venn diagram to classify the following characteristics as belonging to Plant Cells Only, Animal Cells Only, or Both: cell wall, cell membrane, chloroplasts, mitochondria, nucleus, large central vacuole, lysosomes, cytoplasm.", "question_type": "venn_diagram", "sets": 2, "labels": ["Plant Cells Only", "Animal Cells Only"], "mode": "element", "answer": "Plant Only: cell wall, chloroplasts, large central vacuole. Animal Only: lysosomes. Both: cell membrane, mitochondria, nucleus, cytoplasm", "dok": 2, "points": 3}
+
+=== STANDARD TYPES (no special question_type needed) ===
+
+Experiment-based MC (describe the full setup):
+{"question": "A student places three identical plants in separate rooms. Plant A receives 12 hours of sunlight, Plant B receives 6 hours, and Plant C receives 0 hours. All plants receive the same amount of water and soil. After 2 weeks, the student measures the height of each plant. What is the independent variable in this experiment?", "options": ["A) The height of the plants", "B) The amount of water given", "C) The number of hours of sunlight", "D) The type of plant used"], "answer": "C", "dok": 2, "points": 1}
+
+Calculation with units (use metric, show work):
+{"question": "A block with a mass of 2.5 kg is pushed with a force of 10 N across a frictionless surface. Using Newton's second law (F = ma), calculate the acceleration of the block. Show your work.", "answer": "a = F/m = 10 N / 2.5 kg = 4 m/s²", "dok": 2, "points": 2}
+
+Vocabulary matching (science terms):
+{"question": "Match each term to its correct definition.", "terms": ["Independent variable", "Dependent variable", "Control group", "Hypothesis"], "definitions": ["The group that does not receive the experimental treatment", "The factor that is measured in an experiment", "A testable prediction about the outcome", "The factor that the scientist changes on purpose"], "answer": {"Independent variable": "The factor that the scientist changes on purpose", "Dependent variable": "The factor that is measured in an experiment", "Control group": "The group that does not receive the experimental treatment", "Hypothesis": "A testable prediction about the outcome"}, "dok": 1, "points": 2}
+
+CRITICAL RULES FOR SCIENCE QUESTIONS:
+- Use ONE consistent unit system per question (metric preferred for FL science). All values must be physically plausible.
+- NEVER reference a diagram, figure, image, or illustration. Use the interactive components above instead.
+- For classification tasks, use data_table or venn_diagram — not "draw a chart" or "create a diagram."
+- For data analysis, ALWAYS include the actual data using bar_chart, dot_plot, box_plot, or data_table.
+- For graphing relationships, use coordinate_plane (plotting points) or function_graph (typing equations).
+- For ordering/scales, use number_line.
+"""
+        elif any(kw in subject_lower for kw in ['social studies', 'history', 'civics', 'government', 'economics', 'world history', 'us history', 'american history']):
+            subject_question_examples = """
+SUBJECT-SPECIFIC QUESTION EXAMPLES (Social Studies/History — follow these patterns):
+
+Primary source MC (MUST embed the source text):
+{"question": "Read the following excerpt from the Declaration of Independence (1776):\\n\\n'We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness. — That to secure these rights, Governments are instituted among Men, deriving their just powers from the consent of the governed.'\\n\\nWhich Enlightenment idea MOST influenced the founders?", "options": ["A) Divine right of kings", "B) Social contract theory", "C) Mercantilism", "D) Manifest destiny"], "answer": "B", "dok": 2, "points": 1}
+
+Cause-and-effect MC (be specific, not vague):
+{"question": "Which event was a DIRECT cause of the United States entering World War I in 1917?", "options": ["A) The assassination of Archduke Franz Ferdinand", "B) Germany's unrestricted submarine warfare against American ships", "C) The Treaty of Versailles", "D) The formation of the League of Nations"], "answer": "B", "dok": 2, "points": 1}
+
+Document-based extended response:
+{"question": "Read the following quote from Lincoln's Gettysburg Address (1863):\\n\\n'Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure.'\\n\\nExplain how Lincoln connects the founding ideals to the purpose of the Civil War. Identify at least one founding ideal and explain why Lincoln believed the war was necessary to preserve it.", "answer": "Strong response identifies equality/liberty as founding ideals, explains Lincoln frames the war as a test of democratic self-government, connects 'all men are created equal' to the struggle over slavery.", "dok": 3, "points": 4}
+
+Amendment matching:
+{"question": "Match each amendment to the right it protects.", "terms": ["1st Amendment", "2nd Amendment", "4th Amendment", "5th Amendment"], "definitions": ["Right to bear arms", "Freedom of speech, religion, and press", "Protection against self-incrimination", "Protection against unreasonable searches"], "dok": 1, "points": 2}
+
+CRITICAL: Primary source and document-based questions MUST embed the full source text in the question field. Never reference a document that isn't provided inline.
+"""
+        elif any(kw in subject_lower for kw in ['geography', 'world geography']):
+            subject_question_examples = """
+SUBJECT-SPECIFIC QUESTION EXAMPLES (Geography — follow these patterns):
+
+Location/coordinates question:
+{"question": "What is the capital city located nearest to the coordinates 30.4°N, 84.3°W?", "answer": "Tallahassee, Florida", "dok": 1, "points": 1}
+
+Region comparison data table:
+{"question": "Complete the table comparing physical features of Florida's geographic regions.", "question_type": "data_table", "column_headers": ["Region", "Major Landform", "Elevation Range", "Key Water Feature"], "row_labels": ["Northwest", "Central", "Southeast"], "expected_data": [["Northwest", "Rolling hills", "50-100 m", "Apalachicola River"], ["Central", "Lake region", "20-50 m", "Lake Okeechobee"], ["Southeast", "Coastal ridge", "0-5 m", "Biscayne Bay"]], "answer": "Students identify correct landforms, elevations, and water features", "dok": 2, "points": 3}
+
+Map analysis MC:
+{"question": "A geographer is studying population density along Florida's coast. Which factor BEST explains why population density is higher on the southeastern coast than the northwestern coast?", "options": ["A) The southeastern coast has more rainfall", "B) The southeastern coast has warmer average winter temperatures and established tourism infrastructure", "C) The northwestern coast has more hurricanes", "D) The southeastern coast was settled first by European colonists"], "answer": "B", "dok": 3, "points": 1}
+
+CRITICAL: Include real geographic data and coordinates. Use the portal's interactive coordinate_plane or data_table components rather than asking students to draw maps.
+"""
+        # For math or unrecognized subjects, no extra examples needed (math already has them in question_type_instructions)
 
         prompt = f"""You are an expert assessment developer creating a standards-aligned {assessment_type} for grade {config.get('grade', '8')} {config.get('subject', 'students')}.
 
@@ -3842,7 +4549,7 @@ DOK LEVEL DISTRIBUTION:
 - DOK 4 (Extended Thinking): {dok_distribution.get('4', 0)} questions
 
 {question_type_instructions}
-
+{subject_question_examples}
 CRITICAL REQUIREMENTS:
 1. EVERY question MUST include: "dok" (1-4), "standard" (code), "points", and appropriate answer format
 2. STRICTLY use the point values specified above for each question type - this is not optional
@@ -3856,6 +4563,11 @@ CRITICAL REQUIREMENTS:
 10. The total_points field MUST equal exactly {total_points}
 11. The portal has no drawing canvas. For questions that require hand-drawn work (diagrams, constructions, graphs), tell the student to "show your work on paper and upload a photo" using the image upload option. For most math/geometry, prefer using the interactive visual components (geometry renderer, coordinate plane, number line, protractor) instead of asking students to draw. Only use image upload when no interactive component fits.
 12. NEVER generate project, activity, or tool-based prompts. Students complete this assessment entirely within the online portal. Do NOT ask students to use external tools (Canva, Google Slides, PowerPoint, Desmos, GeoGebra, etc.), create physical products (posters, infographics, models, presentations, brochures, dioramas), collaborate with classmates, or perform tasks that cannot be answered with text, numbers, or the portal's interactive components. Every question must be directly answerable on screen.
+13. For math/computation questions: SELF-CHECK that all given numeric values are consistent. If a problem states theorem values (e.g., tangent squared = external times whole), verify the numbers satisfy the equation BEFORE including the question. Never give more numeric values than needed to solve the problem (over-determined systems confuse students).
+14. Word problems must clearly map to a single geometric/algebraic setup. Avoid mixing 2D circle theorems with 3D physical scenarios (towers, cables) unless the mapping is explicit and unambiguous.
+15. Every question must be solvable with ONLY the given information — no hidden assumptions or missing data required.
+16. For ELA/reading questions: If a question asks students to analyze, cite, or refer to a passage/text/excerpt, the FULL passage MUST be included in the "question" field. NEVER say "according to the passage" or "refer to the text" without embedding the actual passage text before the question. Quotations longer than one sentence must include attribution (author or source).
+17. For science questions: Use ONE consistent unit system (metric or imperial) per question — do NOT mix systems unless the question is explicitly about unit conversion. All values must be physically plausible (no negative mass, no temperatures below absolute zero, no pH outside 0-14, no percentages above 100% for concentrations/efficiency). If referencing a figure, diagram, or lab setup, include the data in structured fields — never reference a visual that doesn't exist.
 
 SECTION CATEGORIES TO INCLUDE:
 {_build_section_categories_prompt(section_categories, config.get('subject', ''))}
@@ -3912,7 +4624,19 @@ Generate a complete assessment in this JSON format:
 
         content = completion.choices[0].message.content
         assessment = json.loads(content)
-        assessment, _ = _post_process_assignment(assessment)
+        assessment, _ = _post_process_assignment(assessment, target_total_points=total_points)
+
+        # Collect any quality warnings attached to questions
+        quality_warnings = []
+        for sIdx, section in enumerate(assessment.get('sections', [])):
+            for qIdx, q in enumerate(section.get('questions', [])):
+                if q.get('warning'):
+                    quality_warnings.append({
+                        "section_index": sIdx,
+                        "question_index": qIdx,
+                        "issue": q['warning'],
+                        "severity": q.get('warning_severity', 'warning'),
+                    })
 
         # Add metadata for portal grading context
         assessment['generated_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -3922,7 +4646,10 @@ Generate a complete assessment in this JSON format:
 
         usage = _extract_usage(completion, "gpt-4o")
         _record_planner_cost(usage)
-        return jsonify({"assessment": assessment, "method": "AI", "usage": usage})
+        result = {"assessment": assessment, "method": "AI", "usage": usage}
+        if quality_warnings:
+            result["warnings"] = quality_warnings
+        return jsonify(result)
 
     except Exception as e:
         error_msg = str(e)
@@ -4738,6 +5465,118 @@ Respond in JSON format:
 
     except Exception as e:
         print(f"Grade assessment error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@planner_bp.route('/api/regenerate-questions', methods=['POST'])
+def regenerate_questions():
+    """Regenerate specific questions in an assessment/assignment using AI.
+
+    Expects:
+      questions_to_replace: [{section_index, question_index, question_type, points, dok, standard}, ...]
+      existing_questions: [str, ...] — question texts to avoid duplicating
+      config: {grade, subject, globalAINotes}
+    Returns:
+      replacements: [{section_index, question_index, question: {...}}, ...]
+      usage: cost/token info
+    """
+    data = request.json
+    questions_to_replace = data.get('questions_to_replace', [])
+    existing_questions = data.get('existing_questions', [])
+    config = data.get('config', {})
+
+    if not questions_to_replace:
+        return jsonify({"error": "No questions specified for regeneration"}), 400
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        grade = config.get('grade', '')
+        subject = config.get('subject', '')
+        global_notes = config.get('globalAINotes', '')
+
+        # Build replacement specs
+        specs = []
+        for i, q in enumerate(questions_to_replace):
+            spec = f"{i + 1}. Type: {q.get('question_type', 'short_answer')}"
+            if q.get('points'):
+                spec += f", Points: {q['points']}"
+            if q.get('dok'):
+                spec += f", DOK level: {q['dok']}"
+            if q.get('standard'):
+                spec += f", Standard: {q['standard']}"
+            specs.append(spec)
+
+        existing_list = "\n".join(f"- {q}" for q in existing_questions[:50]) if existing_questions else "None"
+
+        prompt = f"""Generate {len(questions_to_replace)} replacement question(s) for a grade {grade} {subject} assessment.
+
+Each replacement must match the specified type, DOK level, and point value exactly.
+DO NOT duplicate any of these existing questions:
+{existing_list}
+
+{f'Teacher instructions: {global_notes}' if global_notes else ''}
+
+Replacement specifications:
+{chr(10).join(specs)}
+
+Return a JSON object with a "questions" array. Each element must include:
+- "question": the question text
+- "answer": the correct answer
+- "points": point value
+- "question_type": exact type as specified
+- "dok": DOK level as specified
+- "number": sequential number starting from 1
+
+For multiple_choice questions, include an "options" array of 4 strings (A) through D) format.
+For true_false questions, answer must be "True" or "False".
+For matching questions, include "terms" and "definitions" arrays.
+For math questions, include step-by-step solution in the answer.
+
+Make questions grade-appropriate, clear, and assessable by AI grading systems."""
+
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert assessment developer. Generate high-quality assessment questions that are clear, unambiguous, and appropriate for AI-based grading. Always return valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.8,
+        )
+
+        content = completion.choices[0].message.content
+        result = json.loads(content)
+        new_questions = result.get('questions', [])
+
+        # Post-process each replacement through the standard pipeline
+        replacements = []
+        for i, q_spec in enumerate(questions_to_replace):
+            if i < len(new_questions):
+                new_q = new_questions[i]
+                # Preserve DOK and standard from original spec
+                new_q['dok'] = q_spec.get('dok', new_q.get('dok', 1))
+                new_q['standard'] = q_spec.get('standard', new_q.get('standard', ''))
+                # Run through classification and hydration pipeline
+                _classify_question_type(new_q)
+                _hydrate_question(new_q)
+                _validate_question(new_q)
+                replacements.append({
+                    "section_index": q_spec['section_index'],
+                    "question_index": q_spec['question_index'],
+                    "question": new_q,
+                })
+
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+
+        return jsonify({"replacements": replacements, "usage": usage})
+
+    except Exception as e:
+        print(f"Regenerate questions error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

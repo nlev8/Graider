@@ -25,6 +25,8 @@ import {
 } from "recharts";
 import Icon from "./components/Icon";
 import { AssignmentPlayer } from "./components";
+import QuestionEditToolbar from "./components/QuestionEditToolbar";
+import QuestionEditOverlay from "./components/QuestionEditOverlay";
 import StudentPortal from "./components/StudentPortal";
 import * as api from "./services/api";
 import { getAuthHeaders } from "./services/api";
@@ -1317,8 +1319,20 @@ function App() {
   const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
   const [previewResults, setPreviewResults] = useState(null);
 
-  // Reset preview results when assignment changes
-  useEffect(() => { setPreviewResults(null); }, [lessonPlan, generatedAssignment]);
+  // Question editing state
+  const [editMode, setEditMode] = useState(false);
+  const [selectedQuestions, setSelectedQuestions] = useState(new Set());
+  const [editingQuestion, setEditingQuestion] = useState(null); // "sIdx-qIdx" key
+  const [regeneratingQuestions, setRegeneratingQuestions] = useState(new Set());
+
+  // Reset preview results and edit state when assignment changes
+  useEffect(() => {
+    setPreviewResults(null);
+    setEditMode(false);
+    setSelectedQuestions(new Set());
+    setEditingQuestion(null);
+    setRegeneratingQuestions(new Set());
+  }, [lessonPlan, generatedAssignment]);
 
   // Saved lessons for assessment generation
   const [savedLessons, setSavedLessons] = useState({ units: {}, lessons: [] });
@@ -1617,6 +1631,14 @@ function App() {
   const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
   const [gradingAssessment, setGradingAssessment] = useState(false);
   const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", or "calendar"
+
+  // Reset edit state when assessment changes
+  useEffect(() => {
+    setEditMode(false);
+    setSelectedQuestions(new Set());
+    setEditingQuestion(null);
+    setRegeneratingQuestions(new Set());
+  }, [generatedAssessment]);
 
   // Calendar state
   const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} })
@@ -4493,6 +4515,241 @@ ${signature}`;
       addToast("Error generating assignment: " + e.message, "error");
     } finally {
       setAssignmentLoading(false);
+    }
+  };
+
+  // ── Question Edit Mode Handlers ──
+
+  /** Get the active assignment object (could be generatedAssignment, lessonPlan with sections, or generatedAssessment) */
+  const getActiveAssignment = () => {
+    if (generatedAssignment) return generatedAssignment;
+    if (lessonPlan?.sections && !lessonPlan.days) return lessonPlan;
+    if (generatedAssessment) return generatedAssessment;
+    return null;
+  };
+
+  /** Set the active assignment object back into whichever state holds it */
+  const setActiveAssignment = (updated) => {
+    if (generatedAssignment) {
+      setGeneratedAssignment(updated);
+    } else if (lessonPlan?.sections && !lessonPlan.days) {
+      setLessonPlan(updated);
+    } else if (generatedAssessment) {
+      setGeneratedAssessment(updated);
+    }
+  };
+
+  /** Count total questions in the active assignment */
+  const getTotalQuestionCount = () => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return 0;
+    return a.sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0);
+  };
+
+  /** Toggle a question's selection */
+  const toggleQuestionSelect = (qKey) => {
+    setSelectedQuestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(qKey)) next.delete(qKey);
+      else next.add(qKey);
+      return next;
+    });
+  };
+
+  /** Select all questions */
+  const selectAllQuestions = () => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return;
+    const keys = new Set();
+    a.sections.forEach((s, sIdx) => {
+      (s.questions || []).forEach((_, qIdx) => keys.add(sIdx + "-" + qIdx));
+    });
+    setSelectedQuestions(keys);
+  };
+
+  /** Save an inline-edited question back into the assignment */
+  const saveEditedQuestion = (sIdx, qIdx, updatedQuestion) => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return;
+    const copy = JSON.parse(JSON.stringify(a));
+    if (copy.sections[sIdx]?.questions?.[qIdx]) {
+      // Preserve the original number
+      updatedQuestion.number = copy.sections[sIdx].questions[qIdx].number;
+      copy.sections[sIdx].questions[qIdx] = updatedQuestion;
+      // Recalculate section points
+      copy.sections[sIdx].points = copy.sections[sIdx].questions.reduce(
+        (sum, q) => sum + (q.points || 0), 0
+      );
+      // Recalculate total
+      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+      setActiveAssignment(copy);
+    }
+    setEditingQuestion(null);
+    addToast("Question updated", "success");
+  };
+
+  /** Delete all selected questions */
+  const deleteSelectedQuestions = () => {
+    const a = getActiveAssignment();
+    if (!a?.sections || selectedQuestions.size === 0) return;
+    const copy = JSON.parse(JSON.stringify(a));
+    const deleteCount = selectedQuestions.size;
+
+    // Filter out selected questions from each section
+    copy.sections.forEach((section, sIdx) => {
+      section.questions = (section.questions || []).filter(
+        (_, qIdx) => !selectedQuestions.has(sIdx + "-" + qIdx)
+      );
+      // Renumber
+      section.questions.forEach((q, i) => { q.number = i + 1; });
+      // Recalculate section points
+      section.points = section.questions.reduce((sum, q) => sum + (q.points || 0), 0);
+    });
+
+    // Remove empty sections
+    copy.sections = copy.sections.filter((s) => s.questions && s.questions.length > 0);
+
+    // Recalculate total
+    copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+
+    setActiveAssignment(copy);
+    setSelectedQuestions(new Set());
+    addToast(deleteCount + " question(s) removed", "success");
+  };
+
+  /** Regenerate selected questions via AI */
+  const regenerateSelectedQuestions = async () => {
+    const a = getActiveAssignment();
+    if (!a?.sections || selectedQuestions.size === 0) return;
+
+    // Build the replacement specs and existing questions list
+    const questionsToReplace = [];
+    const existingQuestions = [];
+
+    a.sections.forEach((section, sIdx) => {
+      (section.questions || []).forEach((q, qIdx) => {
+        const key = sIdx + "-" + qIdx;
+        if (selectedQuestions.has(key)) {
+          questionsToReplace.push({
+            section_index: sIdx,
+            question_index: qIdx,
+            question_type: q.question_type || q.type || "short_answer",
+            points: q.points || 1,
+            dok: q.dok || 1,
+            standard: q.standard || "",
+          });
+        } else {
+          existingQuestions.push(q.question || "");
+        }
+      });
+    });
+
+    setRegeneratingQuestions(new Set(selectedQuestions));
+
+    try {
+      const data = await api.regenerateQuestions(
+        questionsToReplace,
+        existingQuestions,
+        {
+          grade: config.grade_level || "",
+          subject: config.subject || "",
+          globalAINotes: config.globalAINotes || "",
+        }
+      );
+
+      if (data.error) {
+        addToast("Regeneration error: " + data.error, "error");
+        return;
+      }
+
+      // Merge replacements into the assignment
+      const copy = JSON.parse(JSON.stringify(a));
+      (data.replacements || []).forEach((r) => {
+        const section = copy.sections[r.section_index];
+        if (section?.questions?.[r.question_index]) {
+          // Preserve the original question number
+          r.question.number = section.questions[r.question_index].number;
+          section.questions[r.question_index] = r.question;
+        }
+      });
+
+      // Recalculate points
+      copy.sections.forEach((section) => {
+        section.points = section.questions.reduce((sum, q) => sum + (q.points || 0), 0);
+      });
+      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+
+      setActiveAssignment(copy);
+      setSelectedQuestions(new Set());
+
+      const costMsg = data.usage?.cost_display ? " (" + data.usage.cost_display + ")" : "";
+      addToast(data.replacements.length + " question(s) regenerated" + costMsg, "success");
+    } catch (e) {
+      addToast("Regeneration failed: " + e.message, "error");
+    } finally {
+      setRegeneratingQuestions(new Set());
+    }
+  };
+
+  /** Regenerate a single question */
+  const regenerateOneQuestion = async (sIdx, qIdx) => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return;
+    const q = a.sections[sIdx]?.questions?.[qIdx];
+    if (!q) return;
+
+    const key = sIdx + "-" + qIdx;
+    setRegeneratingQuestions(new Set([key]));
+
+    const existingTexts = [];
+    a.sections.forEach((s) => {
+      (s.questions || []).forEach((ques) => existingTexts.push(ques.question || ""));
+    });
+
+    try {
+      const data = await api.regenerateQuestions(
+        [{
+          section_index: sIdx,
+          question_index: qIdx,
+          question_type: q.question_type || q.type || "short_answer",
+          points: q.points || 1,
+          dok: q.dok || 1,
+          standard: q.standard || "",
+        }],
+        existingTexts,
+        {
+          grade: config.grade_level || "",
+          subject: config.subject || "",
+          globalAINotes: config.globalAINotes || "",
+        }
+      );
+
+      if (data.error) {
+        addToast("Regeneration error: " + data.error, "error");
+        return;
+      }
+
+      const copy = JSON.parse(JSON.stringify(a));
+      (data.replacements || []).forEach((r) => {
+        const section = copy.sections[r.section_index];
+        if (section?.questions?.[r.question_index]) {
+          r.question.number = section.questions[r.question_index].number;
+          section.questions[r.question_index] = r.question;
+        }
+      });
+      copy.sections.forEach((section) => {
+        section.points = section.questions.reduce((sum, ques) => sum + (ques.points || 0), 0);
+      });
+      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+
+      setActiveAssignment(copy);
+      setEditingQuestion(null);
+      const costMsg = data.usage?.cost_display ? " (" + data.usage.cost_display + ")" : "";
+      addToast("Question regenerated" + costMsg, "success");
+    } catch (e) {
+      addToast("Regeneration failed: " + e.message, "error");
+    } finally {
+      setRegeneratingQuestions(new Set());
     }
   };
 
@@ -20761,6 +21018,14 @@ ${signature}`;
                                   >
                                     <Icon name="Settings" size={16} /> Set Up Grading
                                   </button>
+                                  <button
+                                    onClick={() => { setEditMode((prev) => !prev); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                    className={editMode ? "btn btn-primary" : "btn btn-secondary"}
+                                    style={{ padding: "8px 14px", ...(editMode ? { background: "linear-gradient(135deg, #f59e0b, #d97706)" } : {}) }}
+                                    title={editMode ? "Exit edit mode" : "Edit individual questions"}
+                                  >
+                                    <Icon name={editMode ? "X" : "Pencil"} size={16} /> {editMode ? "Exit Edit" : "Edit Questions"}
+                                  </button>
                                 </>
                               ) : generatedAssignment ? (
                                 /* Assignment was created from this lesson — export it as PDF */
@@ -20796,6 +21061,14 @@ ${signature}`;
                                     title="Export teacher version with answers as PDF"
                                   >
                                     <Icon name="Key" size={16} /> Answer Key
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditMode((prev) => !prev); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                    className={editMode ? "btn btn-primary" : "btn btn-secondary"}
+                                    style={{ padding: "8px 14px", ...(editMode ? { background: "linear-gradient(135deg, #f59e0b, #d97706)" } : {}) }}
+                                    title={editMode ? "Exit edit mode" : "Edit individual questions"}
+                                  >
+                                    <Icon name={editMode ? "X" : "Pencil"} size={16} /> {editMode ? "Exit Edit" : "Edit Questions"}
                                   </button>
                                 </>
                               ) : (
@@ -20907,19 +21180,42 @@ ${signature}`;
                           {/* Content display - varies by type */}
                           {lessonPlan.sections && !lessonPlan.days ? (
                             /* Assignment display - interactive AssignmentPlayer */
-                            <AssignmentPlayer
-                              assignment={lessonPlan}
-                              showAnswers={previewShowAnswers}
-                              results={previewResults}
-                              onSubmit={async (answers) => {
-                                try {
-                                  const published = await api.publishAssignment(lessonPlan);
-                                  const result = await api.submitAssignment(published.assignment_id, answers, "Teacher Preview");
-                                  setPreviewResults(result.results);
-                                  addToast("Assignment graded! Score: " + result.results.percent + "%", "success");
-                                } catch (err) { addToast("Error grading: " + err.message, "error"); }
-                              }}
-                            />
+                            <>
+                              {editMode && (
+                                <QuestionEditToolbar
+                                  selectedCount={selectedQuestions.size}
+                                  totalCount={getTotalQuestionCount()}
+                                  onSelectAll={selectAllQuestions}
+                                  onDeselectAll={() => setSelectedQuestions(new Set())}
+                                  onDeleteSelected={deleteSelectedQuestions}
+                                  onRegenerateSelected={regenerateSelectedQuestions}
+                                  onDoneEditing={() => { setEditMode(false); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                  isRegenerating={regeneratingQuestions.size > 0}
+                                />
+                              )}
+                              <AssignmentPlayer
+                                assignment={lessonPlan}
+                                showAnswers={previewShowAnswers}
+                                results={previewResults}
+                                editMode={editMode}
+                                selectedQuestions={selectedQuestions}
+                                editingQuestion={editingQuestion}
+                                regeneratingQuestions={regeneratingQuestions}
+                                onToggleSelect={toggleQuestionSelect}
+                                onStartEdit={setEditingQuestion}
+                                onSaveEdit={saveEditedQuestion}
+                                onCancelEdit={() => setEditingQuestion(null)}
+                                onRegenerateOne={regenerateOneQuestion}
+                                onSubmit={async (answers) => {
+                                  try {
+                                    const published = await api.publishAssignment(lessonPlan);
+                                    const result = await api.submitAssignment(published.assignment_id, answers, "Teacher Preview");
+                                    setPreviewResults(result.results);
+                                    addToast("Assignment graded! Score: " + result.results.percent + "%", "success");
+                                  } catch (err) { addToast("Error grading: " + err.message, "error"); }
+                                }}
+                              />
+                            </>
                           ) : lessonPlan.phases ? (
                             /* Project display - phases with tasks */
                             <div
@@ -21473,6 +21769,15 @@ ${signature}`;
                                     Set Up Grading
                                   </button>
                                   <button
+                                    onClick={() => { setEditMode((prev) => !prev); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                    className={editMode ? "btn btn-primary" : "btn btn-secondary"}
+                                    style={{ padding: "8px 14px", ...(editMode ? { background: "linear-gradient(135deg, #f59e0b, #d97706)" } : {}) }}
+                                    title={editMode ? "Exit edit mode" : "Edit individual questions"}
+                                  >
+                                    <Icon name={editMode ? "X" : "Pencil"} size={16} />
+                                    {editMode ? " Exit Edit" : " Edit Questions"}
+                                  </button>
+                                  <button
                                     onClick={() => setGeneratedAssignment(null)}
                                     className="btn btn-secondary"
                                     style={{ padding: "6px 12px" }}
@@ -21482,10 +21787,31 @@ ${signature}`;
                                 </div>
                               </div>
 
+                              {editMode && (
+                                <QuestionEditToolbar
+                                  selectedCount={selectedQuestions.size}
+                                  totalCount={getTotalQuestionCount()}
+                                  onSelectAll={selectAllQuestions}
+                                  onDeselectAll={() => setSelectedQuestions(new Set())}
+                                  onDeleteSelected={deleteSelectedQuestions}
+                                  onRegenerateSelected={regenerateSelectedQuestions}
+                                  onDoneEditing={() => { setEditMode(false); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                  isRegenerating={regeneratingQuestions.size > 0}
+                                />
+                              )}
                               <AssignmentPlayer
                                 assignment={generatedAssignment}
                                 showAnswers={previewShowAnswers}
                                 results={previewResults}
+                                editMode={editMode}
+                                selectedQuestions={selectedQuestions}
+                                editingQuestion={editingQuestion}
+                                regeneratingQuestions={regeneratingQuestions}
+                                onToggleSelect={toggleQuestionSelect}
+                                onStartEdit={setEditingQuestion}
+                                onSaveEdit={saveEditedQuestion}
+                                onCancelEdit={() => setEditingQuestion(null)}
+                                onRegenerateOne={regenerateOneQuestion}
                                 onSubmit={async (answers) => {
                                   try {
                                     const published = await api.publishAssignment(generatedAssignment);
@@ -22849,6 +23175,15 @@ ${signature}`;
                                   <Icon name={gradingAssessment ? "Loader" : "CheckCircle"} size={16} />
                                   {gradingAssessment ? "Grading..." : "Grade My Answers"}
                                 </button>
+                                <button
+                                  onClick={() => { setEditMode((prev) => !prev); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                  className={editMode ? "btn btn-primary" : "btn btn-secondary"}
+                                  style={{ padding: "8px 16px", ...(editMode ? { background: "linear-gradient(135deg, #f59e0b, #d97706)" } : {}) }}
+                                  title={editMode ? "Exit edit mode" : "Edit individual questions"}
+                                >
+                                  <Icon name={editMode ? "X" : "Pencil"} size={16} />
+                                  {editMode ? " Exit Edit" : " Edit Questions"}
+                                </button>
                                 <div style={{ position: "relative" }}>
                                   <button
                                     onClick={() => setShowPlatformExport(!showPlatformExport)}
@@ -23024,6 +23359,20 @@ ${signature}`;
                               </div>
                             )}
 
+                            {/* Edit Toolbar */}
+                            {editMode && (
+                              <QuestionEditToolbar
+                                selectedCount={selectedQuestions.size}
+                                totalCount={getTotalQuestionCount()}
+                                onSelectAll={selectAllQuestions}
+                                onDeselectAll={() => setSelectedQuestions(new Set())}
+                                onDeleteSelected={deleteSelectedQuestions}
+                                onRegenerateSelected={regenerateSelectedQuestions}
+                                onDoneEditing={() => { setEditMode(false); setSelectedQuestions(new Set()); setEditingQuestion(null); }}
+                                isRegenerating={regeneratingQuestions.size > 0}
+                              />
+                            )}
+
                             {/* Sections */}
                             {generatedAssessment.sections?.map((section, sIdx) => (
                               <div key={sIdx} style={{ marginBottom: "25px" }}>
@@ -23056,7 +23405,8 @@ ${signature}`;
                                     gap: "12px",
                                   }}
                                 >
-                                  {section.questions?.map((q, qIdx) => (
+                                  {section.questions?.map((q, qIdx) => {
+                                    const qCard = (
                                     <div
                                       key={qIdx}
                                       style={{
@@ -23141,6 +23491,24 @@ ${signature}`;
                                           </span>
                                         </div>
                                       </div>
+                                      {/* Quality warning badge */}
+                                      {q.warning && (
+                                        <div style={{
+                                          padding: "6px 10px",
+                                          background: q.warning_severity === "error" ? "rgba(239,68,68,0.15)" : q.warning_severity === "info" ? "rgba(59,130,246,0.15)" : "rgba(245,158,11,0.15)",
+                                          border: q.warning_severity === "error" ? "1px solid rgba(239,68,68,0.3)" : q.warning_severity === "info" ? "1px solid rgba(59,130,246,0.3)" : "1px solid rgba(245,158,11,0.3)",
+                                          borderRadius: "6px",
+                                          fontSize: "0.8rem",
+                                          color: q.warning_severity === "error" ? "#ef4444" : q.warning_severity === "info" ? "#3b82f6" : "#f59e0b",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "8px",
+                                        }}>
+                                          <Icon name="AlertTriangle" size={14} />
+                                          {q.warning}
+                                        </div>
+                                      )}
                                       {/* Multiple Choice Options - Interactive */}
                                       {q.options && q.options.length > 0 && (
                                         <div
@@ -23386,7 +23754,26 @@ ${signature}`;
                                         </div>
                                       )}
                                     </div>
-                                  ))}
+                                    );
+                                    return editMode ? (
+                                      <QuestionEditOverlay
+                                        key={qIdx}
+                                        question={q}
+                                        sectionIndex={sIdx}
+                                        questionIndex={qIdx}
+                                        isSelected={selectedQuestions.has(sIdx + "-" + qIdx)}
+                                        isEditing={editingQuestion === sIdx + "-" + qIdx}
+                                        isRegenerating={regeneratingQuestions.has(sIdx + "-" + qIdx)}
+                                        onToggleSelect={toggleQuestionSelect}
+                                        onStartEdit={setEditingQuestion}
+                                        onSaveEdit={saveEditedQuestion}
+                                        onCancelEdit={() => setEditingQuestion(null)}
+                                        onRegenerateOne={regenerateOneQuestion}
+                                      >
+                                        {qCard}
+                                      </QuestionEditOverlay>
+                                    ) : qCard;
+                                  })}
                                 </div>
                               </div>
                             ))}
@@ -23409,7 +23796,7 @@ ${signature}`;
                             </h3>
                             <button
                               onClick={fetchPublishedAssessments}
-                              className="btn"
+                              className="btn btn-secondary"
                               style={{ padding: "8px 12px", fontSize: "0.85rem" }}
                               disabled={loadingPublished}
                             >
@@ -23627,7 +24014,7 @@ ${signature}`;
                           </h3>
                           <button
                             onClick={fetchSavedAssessments}
-                            className="btn"
+                            className="btn btn-secondary"
                             style={{ padding: "8px 12px", fontSize: "0.85rem" }}
                             disabled={loadingSavedAssessments}
                           >

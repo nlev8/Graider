@@ -16,6 +16,7 @@ import InteractiveProtractor from './InteractiveProtractor';
 import MathInput from './MathInput';
 import DataTable from './DataTable';
 import VirtualMathKeyboard from './VirtualMathKeyboard';
+import QuestionEditOverlay from './QuestionEditOverlay';
 import MultiselectQuestion from './MultiselectQuestion';
 import MultiPartQuestion from './MultiPartQuestion';
 import GridMatchQuestion from './GridMatchQuestion';
@@ -32,7 +33,17 @@ export default function AssignmentPlayer({
   studentName = '',
   readOnly = false,
   showAnswers = false,
-  results: externalResults = null
+  results: externalResults = null,
+  // Question edit mode props
+  editMode = false,
+  selectedQuestions,
+  editingQuestion,
+  regeneratingQuestions,
+  onToggleSelect,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onRegenerateOne,
 }) {
   const [answers, setAnswers] = useState({});
   const [currentSection, setCurrentSection] = useState(0);
@@ -238,25 +249,48 @@ export default function AssignmentPlayer({
         <div style={styles.section}>
           <h2 style={styles.sectionTitle}>{sections[currentSection].name}</h2>
 
-          {sections[currentSection].questions?.map((question, qIdx) => (
-            <QuestionRenderer
-              key={qIdx}
-              question={question}
-              questionIndex={qIdx}
-              sectionIndex={currentSection}
-              answer={answers[`${currentSection}-${qIdx}`]?.value}
-              onAnswer={(value) => updateAnswer(currentSection, qIdx, value)}
-              readOnly={readOnly}
-              showAnswer={showAnswers}
-              result={results?.questions?.[`${currentSection}-${qIdx}`]}
-              onInputFocus={handleInputFocus}
-              focusedInputKey={focusedInput?.key}
-              onKeyboardInsert={handleKeyboardInsert}
-              onKeyboardBackspace={handleKeyboardBackspace}
-              onKeyboardClose={() => setFocusedInput(null)}
-              keyboardMode={focusedInput?.mode}
-            />
-          ))}
+          {sections[currentSection].questions?.map((question, qIdx) => {
+            const renderer = (
+              <QuestionRenderer
+                key={editMode ? undefined : qIdx}
+                question={question}
+                questionIndex={qIdx}
+                sectionIndex={currentSection}
+                answer={answers[`${currentSection}-${qIdx}`]?.value}
+                onAnswer={(value) => updateAnswer(currentSection, qIdx, value)}
+                readOnly={readOnly}
+                showAnswer={showAnswers}
+                result={results?.questions?.[`${currentSection}-${qIdx}`]}
+                onInputFocus={handleInputFocus}
+                focusedInputKey={focusedInput?.key}
+                onKeyboardInsert={handleKeyboardInsert}
+                onKeyboardBackspace={handleKeyboardBackspace}
+                onKeyboardClose={() => setFocusedInput(null)}
+                keyboardMode={focusedInput?.mode}
+              />
+            );
+            if (editMode) {
+              return (
+                <QuestionEditOverlay
+                  key={qIdx}
+                  question={question}
+                  sectionIndex={currentSection}
+                  questionIndex={qIdx}
+                  isSelected={selectedQuestions?.has(currentSection + "-" + qIdx)}
+                  isEditing={editingQuestion === currentSection + "-" + qIdx}
+                  isRegenerating={regeneratingQuestions?.has(currentSection + "-" + qIdx)}
+                  onToggleSelect={onToggleSelect}
+                  onStartEdit={onStartEdit}
+                  onSaveEdit={onSaveEdit}
+                  onCancelEdit={onCancelEdit}
+                  onRegenerateOne={onRegenerateOne}
+                >
+                  {renderer}
+                </QuestionEditOverlay>
+              );
+            }
+            return renderer;
+          })}
         </div>
       )}
 
@@ -960,6 +994,24 @@ function QuestionRenderer({
         )}
       </div>
       <RenderQuestionText text={question.question} style={styles.questionText} />
+
+      {/* Quality warning badge */}
+      {question.warning && (
+        <div style={{
+          padding: "6px 10px",
+          background: question.warning_severity === "error" ? "rgba(239,68,68,0.15)" : question.warning_severity === "info" ? "rgba(59,130,246,0.15)" : "rgba(245,158,11,0.15)",
+          border: question.warning_severity === "error" ? "1px solid rgba(239,68,68,0.3)" : question.warning_severity === "info" ? "1px solid rgba(59,130,246,0.3)" : "1px solid rgba(245,158,11,0.3)",
+          borderRadius: "6px",
+          fontSize: "0.8rem",
+          color: question.warning_severity === "error" ? "#ef4444" : question.warning_severity === "info" ? "#3b82f6" : "#f59e0b",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "8px",
+        }}>
+          ⚠ {question.warning}
+        </div>
+      )}
 
       <div style={styles.inputContainer}>
         {renderInput()}

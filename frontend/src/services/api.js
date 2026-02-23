@@ -324,6 +324,17 @@ export async function gradeAssessmentAnswers(assessment, answers) {
   })
 }
 
+export async function regenerateQuestions(questionsToReplace, existingQuestions, config) {
+  return fetchApi('/api/regenerate-questions', {
+    method: 'POST',
+    body: JSON.stringify({
+      questions_to_replace: questionsToReplace,
+      existing_questions: existingQuestions,
+      config,
+    }),
+  })
+}
+
 // ============ Assessment Templates ============
 
 export async function uploadAssessmentTemplate(file, platform, name) {
@@ -1003,6 +1014,7 @@ export default {
   deletePublishedAssessment,
   getStudentAssessment,
   submitStudentAssessment,
+  regenerateQuestions,
   // Saved Assessments
   saveAssessmentLocally,
   listSavedAssessments,
