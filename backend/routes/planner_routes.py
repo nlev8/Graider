@@ -913,23 +913,51 @@ def _ensure_geometry_defaults(assignment):
 
 
 def _ensure_data_table_defaults(assignment):
-    """Normalize data_table questions so frontend receives the expected field names."""
+    """Normalize data_table questions so frontend receives the expected field names.
+
+    Also downgrades broken data_table questions (missing expected_data or
+    analysis-type questions that shouldn't be tables) to short_answer.
+    """
     if not assignment or not isinstance(assignment, dict):
         return assignment
+    import re
+    # Words that signal the student should analyze existing data, not fill in blanks
+    _ANALYSIS_PATTERN = re.compile(
+        r'\b(determine|identify|describe|explain|analyze|interpret|compare|classify)\b', re.IGNORECASE
+    )
     for section in assignment.get('sections', []):
         for q in section.get('questions', []):
             qt = q.get('question_type', q.get('type', ''))
-            if qt == 'data_table':
-                # Map AI-generated field names to frontend-expected names
-                if 'column_headers' in q and 'headers' not in q:
-                    q['headers'] = q['column_headers']
-                # Create blank initial_data from expected_data shape
-                expected = q.get('expected_data', [])
-                if expected and 'initial_data' not in q:
-                    q['initial_data'] = [[''] * len(row) for row in expected]
-                # Ensure num_rows for PDF export
-                if expected and 'num_rows' not in q:
-                    q['num_rows'] = len(expected)
+            if qt != 'data_table':
+                continue
+            # Map AI-generated field names to frontend-expected names
+            if 'column_headers' in q and 'headers' not in q:
+                q['headers'] = q['column_headers']
+            expected = q.get('expected_data', [])
+            # Downgrade: no expected_data means the table would render empty
+            if not expected:
+                q['question_type'] = 'short_answer'
+                continue
+            # Downgrade: analysis questions where the student reads data, not fills it
+            question_text = q.get('question', '')
+            if _ANALYSIS_PATTERN.search(question_text) and 'fill' not in question_text.lower() and 'complete' not in question_text.lower() and 'calculate' not in question_text.lower():
+                # Convert expected_data into a readable table in the question text
+                headers = q.get('headers', q.get('column_headers', []))
+                if headers:
+                    table_lines = [' | '.join(str(h) for h in headers)]
+                    table_lines.append(' | '.join('---' for _ in headers))
+                    for row in expected:
+                        table_lines.append(' | '.join(str(v) for v in row))
+                    table_md = '\n'.join(table_lines)
+                    if table_md not in question_text:
+                        q['question'] = question_text.rstrip() + '\n\n' + table_md
+                q['question_type'] = 'short_answer'
+                continue
+            # Normal data_table: create blank initial_data from expected_data shape
+            if 'initial_data' not in q:
+                q['initial_data'] = [[''] * len(row) for row in expected]
+            if 'num_rows' not in q:
+                q['num_rows'] = len(expected)
     return assignment
 
 
