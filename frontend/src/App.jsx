@@ -3930,7 +3930,17 @@ ${signature}`;
 
   const exportAssignment = async (format) => {
     try {
-      const data = await api.exportAssignment({ assignment, format });
+      // Convert customMarkers to questions format for backend
+      const exportData = { ...assignment };
+      if ((!exportData.questions || exportData.questions.length === 0) && exportData.customMarkers?.length > 0) {
+        exportData.questions = exportData.customMarkers.map((m, i) => ({
+          marker: (typeof m === 'string' ? m : m.start) || ('Section ' + (i + 1)),
+          prompt: '',
+          points: typeof m === 'object' ? (m.points || 10) : 10,
+          type: typeof m === 'object' ? (m.type || 'written') : 'written',
+        }));
+      }
+      const data = await api.exportAssignment({ assignment: exportData, format });
       if (data.error) addToast("Error: " + data.error, "error");
       else addToast("Assignment exported!", "success");
     } catch (e) {
@@ -19777,11 +19787,12 @@ ${signature}`;
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "300px 1fr",
+                      gridTemplateColumns: (lessonPlan && ((lessonPlan.sections && !lessonPlan.days) || generatedAssignment)) ? "1fr" : "300px 1fr",
                       gap: "25px",
                     }}
                   >
-                    {/* Sidebar */}
+                    {/* Sidebar — hidden when viewing a generated assignment; visible for lesson plans so user can configure & create assignments */}
+                    {!(lessonPlan && ((lessonPlan.sections && !lessonPlan.days) || generatedAssignment)) && (
                     <div
                       style={{
                         display: "flex",
@@ -20133,6 +20144,7 @@ ${signature}`;
                         </div>
                       </div>
                     </div>
+                    )}
 
                     {/* Main Content */}
                     <div>
@@ -20170,7 +20182,7 @@ ${signature}`;
                                 {unitConfig.type + " Ideas"}
                               </h3>
                               <button
-                                onClick={() => setBrainstormIdeas([])}
+                                onClick={() => { setBrainstormIdeas([]); setSelectedIdea(null); }}
                                 className="btn btn-secondary"
                                 style={{
                                   padding: "6px 12px",
@@ -20660,7 +20672,7 @@ ${signature}`;
                                 flexWrap: "wrap",
                               }}
                             >
-                              {lessonPlan.sections ? (
+                              {lessonPlan.sections && !lessonPlan.days ? (
                                 /* Assignment-type content: Export PDF, Answer Key, Interactive Preview, Set Up Grading */
                                 <>
                                   <button
@@ -20750,6 +20762,42 @@ ${signature}`;
                                     <Icon name="Settings" size={16} /> Set Up Grading
                                   </button>
                                 </>
+                              ) : generatedAssignment ? (
+                                /* Assignment was created from this lesson — export it as PDF */
+                                <>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", false);
+                                        if (result.error) addToast("Error: " + result.error, "error");
+                                        else addToast("Assignment exported as PDF!", "success");
+                                      } catch (e) {
+                                        addToast("Export failed: " + e.message, "error");
+                                      }
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export assignment as PDF with graphics"
+                                  >
+                                    <Icon name="Download" size={16} /> Export PDF
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", true);
+                                        if (result.error) addToast("Error: " + result.error, "error");
+                                        else addToast("Answer key exported as PDF!", "success");
+                                      } catch (e) {
+                                        addToast("Export failed: " + e.message, "error");
+                                      }
+                                    }}
+                                    className="btn btn-secondary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export teacher version with answers as PDF"
+                                  >
+                                    <Icon name="Key" size={16} /> Answer Key
+                                  </button>
+                                </>
                               ) : (
                                 /* Lesson plan / project: standard Export + Save */
                                 <>
@@ -20768,8 +20816,8 @@ ${signature}`;
                               >
                                 <Icon name="FolderPlus" size={16} /> Save to Unit
                               </button>
-                              {/* Hide Create Assignment when already viewing an assignment or project */}
-                              {!lessonPlan.sections && !lessonPlan.phases && (
+                              {/* Hide Create Assignment when already viewing an assignment or project (but show for lesson plans even if they have sections) */}
+                              {(!lessonPlan.sections || lessonPlan.days) && !lessonPlan.phases && (
                               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                 <select
                                   value={assignmentType}
@@ -20857,7 +20905,7 @@ ${signature}`;
                           )}
 
                           {/* Content display - varies by type */}
-                          {lessonPlan.sections ? (
+                          {lessonPlan.sections && !lessonPlan.days ? (
                             /* Assignment display - interactive AssignmentPlayer */
                             <AssignmentPlayer
                               assignment={lessonPlan}
@@ -21379,18 +21427,33 @@ ${signature}`;
                                         });
                                       }
 
-                                      // Map sections to customMarkers
-                                      const markers = (generatedAssignment.sections || []).map((section) => ({
+                                      // Map sections to customMarkers, normalized so markers + effort = 100
+                                      const effortPts = assignment.effortPoints ?? 15;
+                                      const rawMarkers = (generatedAssignment.sections || []).map((section) => ({
                                         start: section.name + ":",
                                         points: section.points || 10,
                                         type: "written",
                                       }));
+                                      const rawTotal = rawMarkers.reduce((sum, m) => sum + m.points, 0);
+                                      const available = 100 - effortPts;
+                                      const markers = rawTotal > 0 && rawTotal !== available
+                                        ? rawMarkers.map((m) => ({
+                                            ...m,
+                                            points: Math.round((m.points / rawTotal) * available),
+                                          }))
+                                        : rawMarkers;
+                                      // Fix rounding drift so total is exactly 100
+                                      const markerSum = markers.reduce((s, m) => s + m.points, 0);
+                                      if (markers.length > 0 && markerSum !== available) {
+                                        markers[0].points += available - markerSum;
+                                      }
 
                                       setAssignment({
                                         ...assignment,
                                         title: generatedAssignment.title || "",
-                                        totalPoints: generatedAssignment.total_points || 100,
+                                        totalPoints: 100,
                                         customMarkers: markers,
+                                        effortPoints: effortPts,
                                         gradingNotes: gradingNotes.trim(),
                                         useSectionPoints: true,
                                         sectionTemplate: "Custom",

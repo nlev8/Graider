@@ -196,16 +196,16 @@ export function renderTriangle(props, W, H, pad) {
         {/* Right angle mark if any angle is 90° */}
         {has90 === 'B' && rightAngleMark(bx, by, 12, 'bl')}
         {has90 === 'C' && rightAngleMark(cx, cy, 12, 'br')}
-        {/* Top vertex (A) */}
+        {/* Top vertex (A) — label pushed outward along bisector */}
         {has90 !== 'A' && angleArc(topX, topY, arcA1, arcA2, 18, '#ef4444')}
         {has90 === 'A' && <rect x={topX - 6} y={topY} width={8} height={8} fill="none" stroke="var(--text-muted)" strokeWidth={1} />}
-        {dimensionLabel(topX, topY - 12, typeof vals[0] === 'number' ? vals[0] + '\u00B0' : vals[0], { color: '#ef4444', size: 12 })}
-        {/* Bottom-left (B) */}
+        {(() => { const midA = ((arcA1 + arcA2) / 2) * Math.PI / 180; return dimensionLabel(topX + 32 * Math.cos(midA), topY - 32 * Math.sin(midA), typeof vals[0] === 'number' ? vals[0] + '\u00B0' : vals[0], { color: '#ef4444', size: 12 }); })()}
+        {/* Bottom-left (B) — label pushed outward along bisector */}
         {has90 !== 'B' && angleArc(bx, by, arcB1, arcB2, 18, '#22c55e')}
-        {dimensionLabel(bx + 30, by - 14, typeof vals[1] === 'number' ? vals[1] + '\u00B0' : vals[1], { color: '#22c55e', size: 12 })}
-        {/* Bottom-right (C) */}
+        {(() => { const midB = ((arcB1 + arcB2) / 2) * Math.PI / 180; return dimensionLabel(bx + 36 * Math.cos(midB), by - 36 * Math.sin(midB), typeof vals[1] === 'number' ? vals[1] + '\u00B0' : vals[1], { color: '#22c55e', size: 12 }); })()}
+        {/* Bottom-right (C) — label pushed outward along bisector */}
         {has90 !== 'C' && angleArc(cx, cy, arcC1, arcC2, 18, '#6366f1')}
-        {dimensionLabel(cx - 32, cy - 14, typeof vals[2] === 'number' ? vals[2] + '\u00B0' : vals[2], { color: '#6366f1', size: 12 })}
+        {(() => { const midC = ((arcC1 + arcC2) / 2) * Math.PI / 180; return dimensionLabel(cx + 36 * Math.cos(midC), cy - 36 * Math.sin(midC), typeof vals[2] === 'number' ? vals[2] + '\u00B0' : vals[2], { color: '#6366f1', size: 12 }); })()}
       </g>
     );
   }

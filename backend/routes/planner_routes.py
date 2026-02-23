@@ -140,11 +140,12 @@ def _build_section_categories_prompt(categories, subject=''):
 
 
 def _post_process_assignment(assignment, target_question_count=None):
-    """Unified 4-phase deterministic post-processing pipeline.
+    """Unified 5-phase deterministic post-processing pipeline.
 
     Phase 1: _classify_question_type — assigns question_type from text/structure
     Phase 2: _hydrate_question — populates rendering fields (dimensions, answers, etc.)
     Phase 3: _validate_question — downgrades broken questions to short_answer
+    Phase 3b: _filter_project_questions — removes project/activity prompts
     Phase 4: _enforce_question_count — trims/pads to target (if provided)
     """
     if not assignment or not isinstance(assignment, dict):
@@ -154,10 +155,47 @@ def _post_process_assignment(assignment, target_question_count=None):
             _classify_question_type(q, section)   # Phase 1: Deterministic type
             _hydrate_question(q)                   # Phase 2: Populate fields
             _validate_question(q)                  # Phase 3: Downgrade if broken
+    # Phase 3b: Strip questions that are projects/activities (not answerable in portal)
+    for section in assignment.get('sections', []):
+        section['questions'] = [
+            q for q in section.get('questions', [])
+            if not _is_project_question(q)
+        ]
+    # Remove empty sections left after filtering
+    assignment['sections'] = [
+        s for s in assignment.get('sections', [])
+        if s.get('questions')
+    ]
     extra_usage = None
     if target_question_count is not None:
         assignment, extra_usage = _enforce_question_count(assignment, target_question_count)
     return assignment, extra_usage
+
+
+# ── Phase 3b: Project/activity question filter ──────────────────────────────
+import re as _re
+
+_PROJECT_KEYWORDS = _re.compile(
+    r'\b('
+    r'create\s+(a|an|the)\s+(infographic|poster|brochure|pamphlet|flyer|diorama|model|presentation|slideshow|video|song|rap|skit|collage|mural|display|exhibit|portfolio|scrapbook|comic|storyboard)'
+    r'|design\s+(a|an|the)\s+(infographic|poster|brochure|pamphlet|flyer|project|presentation|website|app)'
+    r'|using\s+(canva|google\s+slides?|powerpoint|prezi|piktochart|adobe|imovie|tinkercad|scratch|desmos|geogebra)'
+    r'|submit\s+(the|your|a|an)\s+(infographic|poster|project|presentation|video|recording|physical)'
+    r'|build\s+(a|an)\s+(model|diorama|prototype|display)'
+    r'|perform\s+(a|an)\s+(skit|presentation|demonstration)'
+    r'|collaborate\s+with\s+(your|a)\s+(partner|group|classmates?|team)'
+    r'|work\s+with\s+(your|a)\s+(partner|group|classmates?|team)\s+to'
+    r'|present\s+(your|the)\s+(findings|project|work|results)\s+to\s+(the\s+)?class'
+    r'|record\s+(a|yourself|your)\s+(video|audio|presentation|screencast)'
+    r')\b',
+    _re.IGNORECASE,
+)
+
+
+def _is_project_question(q):
+    """Return True if the question is a project/activity that can't be answered in the portal."""
+    text = q.get('question', '')
+    return bool(_PROJECT_KEYWORDS.search(text))
 
 
 # Types where the AI's classification is trusted (complex structural content)
@@ -464,8 +502,21 @@ def _hydrate_data_table(q):
     if 'column_headers' in q and 'headers' not in q:
         q['headers'] = q['column_headers']
     expected = q.get('expected_data', [])
-    # Downgrade: no expected_data means the table would render empty
+    # If no expected_data but we have headers/row_labels, build a fillable table
     if not expected:
+        headers = q.get('headers', q.get('column_headers', []))
+        row_labels = q.get('row_labels', [])
+        num_rows = q.get('num_rows', len(row_labels) if row_labels else 5)
+        num_cols = len(headers) if headers else 2
+        if headers or row_labels:
+            if not headers:
+                q['headers'] = [f'Column {i+1}' for i in range(num_cols)]
+            expected = [[''] * num_cols for _ in range(num_rows)]
+            q['expected_data'] = expected
+            q['initial_data'] = [[''] * num_cols for _ in range(num_rows)]
+            q['num_rows'] = num_rows
+            return
+        # No structural data at all — downgrade
         q['question_type'] = 'short_answer'
         return
     # Downgrade: analysis questions where the student reads data, not fills it
@@ -2121,11 +2172,15 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
                 content = completion.choices[0].message.content
                 plan = json.loads(content)
-                target_q = config.get('totalQuestions', 10) if content_type == 'Assignment' else None
-                plan, extra_usage = _post_process_assignment(plan, target_q)
-                if extra_usage:
-                    for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
-                        total_usage[k] += extra_usage.get(k, 0)
+                if content_type == 'Assignment':
+                    target_q = config.get('totalQuestions', 10)
+                    plan, extra_usage = _post_process_assignment(plan, target_q)
+                    if extra_usage:
+                        for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
+                            total_usage[k] += extra_usage.get(k, 0)
+                else:
+                    if plan.get('days') and plan.get('sections'):
+                        del plan['sections']
                 plan['approach'] = approach_name
                 variations.append(plan)
 
@@ -2146,8 +2201,17 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         content = completion.choices[0].message.content
         plan = json.loads(content)
-        target_q = config.get('totalQuestions', 10) if content_type == 'Assignment' else None
-        plan, extra_usage = _post_process_assignment(plan, target_q)
+
+        if content_type == 'Assignment':
+            target_q = config.get('totalQuestions', 10)
+            plan, extra_usage = _post_process_assignment(plan, target_q)
+        else:
+            extra_usage = None
+            # Strip stray sections/questions from non-assignment types so
+            # the frontend never misidentifies a lesson plan as an assignment
+            if plan.get('days') and plan.get('sections'):
+                del plan['sections']
+
         usage = _extract_usage(completion, "gpt-4o")
         usage = _merge_usage(usage, extra_usage)
         _record_planner_cost(usage)
@@ -3791,6 +3855,7 @@ CRITICAL REQUIREMENTS:
 9. Use grade-appropriate vocabulary and complexity
 10. The total_points field MUST equal exactly {total_points}
 11. The portal has no drawing canvas. For questions that require hand-drawn work (diagrams, constructions, graphs), tell the student to "show your work on paper and upload a photo" using the image upload option. For most math/geometry, prefer using the interactive visual components (geometry renderer, coordinate plane, number line, protractor) instead of asking students to draw. Only use image upload when no interactive component fits.
+12. NEVER generate project, activity, or tool-based prompts. Students complete this assessment entirely within the online portal. Do NOT ask students to use external tools (Canva, Google Slides, PowerPoint, Desmos, GeoGebra, etc.), create physical products (posters, infographics, models, presentations, brochures, dioramas), collaborate with classmates, or perform tasks that cannot be answered with text, numbers, or the portal's interactive components. Every question must be directly answerable on screen.
 
 SECTION CATEGORIES TO INCLUDE:
 {_build_section_categories_prompt(section_categories, config.get('subject', ''))}

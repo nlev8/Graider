@@ -128,6 +128,18 @@ def export_assignment():
     title = assignment.get('title', 'Untitled Assignment')
     instructions = assignment.get('instructions', '')
     questions = assignment.get('questions', [])
+    if not questions:
+        # Fallback: convert customMarkers to questions format
+        for i, m in enumerate(assignment.get('customMarkers', [])):
+            if isinstance(m, str):
+                questions.append({'marker': m, 'prompt': '', 'points': 10, 'type': 'written'})
+            elif isinstance(m, dict):
+                questions.append({
+                    'marker': m.get('start', f'Section {i+1}'),
+                    'prompt': '',
+                    'points': m.get('points', 10),
+                    'type': m.get('type', 'written'),
+                })
     table_structured = assignment.get('tableStructured', False)
 
     output_folder = os.path.expanduser("~/Downloads/Graider/Assignments")
