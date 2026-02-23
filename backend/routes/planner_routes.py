@@ -7,6 +7,7 @@ import sys
 import json
 import time
 import math
+import re
 import subprocess
 from flask import Blueprint, request, jsonify
 from pathlib import Path
@@ -138,130 +139,563 @@ def _build_section_categories_prompt(categories, subject=''):
     return '\n'.join(lines)
 
 
-def _auto_upgrade_visual_types(assignment):
-    """Programmatically detect questions that should be visual types but were generated as short_answer.
+def _post_process_assignment(assignment, target_question_count=None):
+    """Unified 4-phase deterministic post-processing pipeline.
 
-    The AI sometimes generates questions like 'View the graph of y = 2x + 1...' as short_answer
-    instead of function_graph with the proper data fields. This function:
-    1. Detects equation patterns in question text and upgrades to function_graph
-    2. Detects coordinate/point plotting and upgrades to coordinate_plane
-    3. Ensures all visual types have their required data fields
-    4. Validates existing visual questions have complete data
+    Phase 1: _classify_question_type — assigns question_type from text/structure
+    Phase 2: _hydrate_question — populates rendering fields (dimensions, answers, etc.)
+    Phase 3: _validate_question — downgrades broken questions to short_answer
+    Phase 4: _enforce_question_count — trims/pads to target (if provided)
     """
-    import re
-
     if not assignment or not isinstance(assignment, dict):
-        return assignment
-
+        return assignment, None
     for section in assignment.get('sections', []):
         for q in section.get('questions', []):
-            qt = q.get('question_type', q.get('type', ''))
-            text = q.get('question', '').lower()
+            _classify_question_type(q, section)   # Phase 1: Deterministic type
+            _hydrate_question(q)                   # Phase 2: Populate fields
+            _validate_question(q)                  # Phase 3: Downgrade if broken
+    extra_usage = None
+    if target_question_count is not None:
+        assignment, extra_usage = _enforce_question_count(assignment, target_question_count)
+    return assignment, extra_usage
 
-            # ── Auto-upgrade: short_answer questions about graphing → function_graph ──
-            if qt in ('short_answer', '') and _looks_like_graphing_question(text):
-                equations = _extract_equations_from_text(q.get('question', ''))
-                if equations:
-                    q['question_type'] = 'function_graph'
-                    q.setdefault('x_range', [-10, 10])
-                    q.setdefault('y_range', [-10, 10])
-                    q['correct_expressions'] = equations
-                    q.setdefault('max_expressions', len(equations))
-                    # Clean the question text — remove "view the graph" phrasing
-                    cleaned = re.sub(
-                        r'(?i)(view|see|look at|observe|examine)\s+(the\s+)?(graph|diagram|plot|coordinate plane)\s*(below|above|shown|of)?\s*',
-                        '', q.get('question', '')
-                    ).strip()
-                    if cleaned:
-                        q['question'] = cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned.upper()
 
-            # ── Validate function_graph has required fields ──
-            if q.get('question_type') == 'function_graph':
-                q.setdefault('x_range', [-10, 10])
-                q.setdefault('y_range', [-10, 10])
-                # Try to extract expressions from question text if missing
-                if not q.get('correct_expressions'):
-                    equations = _extract_equations_from_text(q.get('question', ''))
-                    if equations:
-                        q['correct_expressions'] = equations
-                q.setdefault('max_expressions', max(len(q.get('correct_expressions', [])), 1))
+# Types where the AI's classification is trusted (complex structural content)
+_TRUSTED_AI_TYPES = frozenset({
+    'data_table', 'box_plot', 'dot_plot', 'stem_and_leaf', 'bar_chart',
+    'transformations', 'fraction_model', 'probability_tree',
+    'tape_diagram', 'venn_diagram', 'protractor', 'angle_protractor',
+    'unit_circle', 'multiselect', 'multi_part', 'grid_match',
+    'inline_dropdown',
+})
 
-            # ── Validate coordinate_plane has required fields ──
-            if q.get('question_type') == 'coordinate_plane':
-                q.setdefault('min_val', -10)
-                q.setdefault('max_val', 10)
-                q.setdefault('points_to_plot', [])
 
-            # ── Validate number_line has required fields ──
-            if q.get('question_type') == 'number_line':
-                q.setdefault('min_val', -10)
-                q.setdefault('max_val', 10)
-                q.setdefault('points_to_plot', [])
+def _classify_question_type(q, section=None):
+    """Deterministic question type classification.
 
-            # ── Validate box_plot has required fields ──
-            if q.get('question_type') == 'box_plot':
-                q.setdefault('data', [[]])
-                q.setdefault('labels', ['Data'])
+    Assigns question_type based on text analysis and structural fields.
+    Runs ONCE per question.
 
-            # ── Validate bar_chart has required fields ──
-            if q.get('question_type') == 'bar_chart':
-                q.setdefault('chart_data', {'labels': [], 'values': [], 'title': ''})
+    Priority order:
+    1. Preserve AI-specified type for trusted complex types
+    2. Structural detection (options -> MC, terms -> matching, etc.)
+    3. Geometry detection (shape + mode keywords)
+    4. Graphing detection (equation patterns)
+    5. Math equation detection
+    6. Extended response detection
+    7. Section type hint fallback
+    8. Default -> short_answer
+    """
+    ai_type = q.get('question_type', q.get('type', ''))
 
-            # ── Validate dot_plot has required fields ──
-            if q.get('question_type') == 'dot_plot':
-                q.setdefault('min_val', 0)
-                q.setdefault('max_val', 10)
-                q.setdefault('step', 1)
-                q.setdefault('correct_dots', {})
+    # Phase 0: Trust AI for complex structural types
+    if ai_type in _TRUSTED_AI_TYPES:
+        q['question_type'] = ai_type
+        return
 
-            # ── Validate stem_and_leaf has required fields ──
-            if q.get('question_type') == 'stem_and_leaf':
-                q.setdefault('data', [])
-                q.setdefault('stems', [])
-                q.setdefault('correct_leaves', {})
+    text = q.get('question', '')
+    text_lower = text.lower()
+    answer = str(q.get('answer', ''))
 
-            # ── Validate transformations has required fields ──
-            if q.get('question_type') == 'transformations':
-                q.setdefault('original_vertices', [[1, 1], [4, 1], [4, 3]])
-                q.setdefault('transformation_type', 'translation')
-                q.setdefault('transform_params', {})
-                q.setdefault('correct_vertices', [])
-                q.setdefault('grid_range', [-8, 8])
-                q.setdefault('mode', 'plot')
+    # Phase 1: Structural detection (fields present)
+    if q.get('options') and len(q.get('options', [])) >= 2:
+        q['question_type'] = 'multiple_choice'
+        return
 
-            # ── Validate fraction_model has required fields ──
-            if q.get('question_type') == 'fraction_model':
-                q.setdefault('model_type', 'area')
-                q.setdefault('denominator', 4)
+    if q.get('terms') and q.get('definitions'):
+        q['question_type'] = 'matching'
+        return
 
-            # ── Validate unit_circle has required fields ──
-            if q.get('question_type') == 'unit_circle':
-                q.setdefault('hidden_angles', [])
-                q.setdefault('hidden_values', [])
-                q.setdefault('correct_values', {})
+    if answer.strip().lower() in ('true', 'false'):
+        q['question_type'] = 'true_false'
+        return
 
-            # ── Validate protractor has required fields ──
-            if q.get('question_type') in ('protractor', 'angle_protractor'):
-                q.setdefault('mode', 'measure')
+    if '___' in text or '____' in text:
+        q['question_type'] = 'fill_blank'
+        return
 
-            # ── Validate venn_diagram has required fields ──
-            if q.get('question_type') == 'venn_diagram':
-                q.setdefault('sets', 2)
-                q.setdefault('set_labels', ['Set A', 'Set B'])
-                q.setdefault('correct_values', {})
-                q.setdefault('mode', 'count')
+    # Phase 2: Geometry detection
+    if not _is_identification_question(text):
+        shape, polygon_sides = _detect_primary_shape(text)
+        mode = _detect_mode(text)
+        if shape and mode:
+            q['question_type'] = shape
+            q['mode'] = mode
+            if polygon_sides:
+                q.setdefault('sides', polygon_sides)
+            return
+        # Shape without mode — check if AI already set a geometry type with mode
+        if shape and ai_type in _ALL_GEOMETRY_TYPES and q.get('mode'):
+            q['question_type'] = shape
+            if polygon_sides:
+                q.setdefault('sides', polygon_sides)
+            return
 
-            # ── Validate tape_diagram has required fields ──
-            if q.get('question_type') == 'tape_diagram':
-                q.setdefault('tapes', [])
-                q.setdefault('correct_values', {})
+    # Phase 3: Graphing detection
+    if _looks_like_graphing_question(text_lower):
+        equations = _extract_equations_from_text(text)
+        if equations:
+            q['question_type'] = 'function_graph'
+            q['correct_expressions'] = equations
+            return
 
-            # ── Validate probability_tree has required fields ──
-            if q.get('question_type') == 'probability_tree':
-                q.setdefault('tree', None)
-                q.setdefault('correct_values', {})
+    if 'coordinate plane' in text_lower or ('plot' in text_lower and 'point' in text_lower):
+        q['question_type'] = 'coordinate_plane'
+        return
 
-    return assignment
+    if 'number line' in text_lower and any(w in text_lower for w in ('plot', 'place', 'mark', 'graph')):
+        q['question_type'] = 'number_line'
+        return
+
+    # Phase 4: Math equation detection
+    math_verbs = ('solve', 'simplify', 'evaluate', 'factor', 'expand', 'calculate')
+    if any(v in text_lower for v in math_verbs) and re.search(r'[=+\-*/^]', text):
+        q['question_type'] = 'math_equation'
+        return
+
+    # Phase 5: Extended response
+    essay_kw = ('essay', 'in detail', 'write a paragraph', 'extended response', 'explain at length')
+    if any(k in text_lower for k in essay_kw) or len(answer) > 300:
+        q['question_type'] = 'essay'
+        return
+
+    # Phase 6: Section type hint
+    if section:
+        sec_type = section.get('type', '')
+        if sec_type in ('fill_blank', 'essay', 'matching'):
+            q['question_type'] = sec_type
+            return
+
+    # Phase 7: Clear bad AI geometry type (no mode detected → not visual)
+    if ai_type in _ALL_GEOMETRY_TYPES:
+        q['question_type'] = 'short_answer'
+        return
+
+    # Default
+    q['question_type'] = ai_type if ai_type else 'short_answer'
+
+
+# Required fields per question_type — missing any → downgrade to short_answer
+_REQUIRED_FIELDS = {
+    'multiple_choice': ['options'],
+    'matching': ['terms', 'definitions'],
+    'data_table': ['headers', 'expected_data'],
+    'function_graph': ['correct_expressions'],
+    'box_plot': ['data'],
+    'dot_plot': ['correct_dots'],
+    'stem_and_leaf': ['correct_leaves'],
+    'bar_chart': ['chart_data'],
+    'transformations': ['original_vertices', 'transformation_type'],
+    'multiselect': ['options', 'correct'],
+    'multi_part': ['parts'],
+    'grid_match': ['row_labels', 'column_labels', 'correct'],
+    'inline_dropdown': ['dropdowns'],
+    # Geometry types — mode is the minimum requirement (dimensions filled by hydration)
+    'triangle': ['mode'],
+    'rectangle': ['mode'],
+    'circle': ['mode'],
+    'trapezoid': ['mode'],
+    'parallelogram': ['mode'],
+    'regular_polygon': ['mode', 'sides'],
+    'rectangular_prism': ['mode'],
+    'cylinder': ['mode'],
+    'cone': ['mode'],
+    'pyramid': ['mode'],
+    'sphere': ['mode'],
+}
+
+
+def _validate_question(q):
+    """Check required fields for question_type. Downgrade to short_answer if broken."""
+    qt = q.get('question_type', 'short_answer')
+    required = _REQUIRED_FIELDS.get(qt, [])
+    for field in required:
+        val = q.get(field)
+        if val is None or val == '' or val == []:
+            q['question_type'] = 'short_answer'
+            return
+
+
+# ── Unified hydration dispatch ────────────────────────────────────────────
+
+def _hydrate_question(q):
+    """Populate rendering fields based on question_type. Deterministic — no AI calls."""
+    qt = q.get('question_type', 'short_answer')
+
+    # --- Geometry types ---
+    if qt in _ALL_GEOMETRY_TYPES:
+        _hydrate_geometry(q, qt)
+        return
+
+    # --- Function graph ---
+    if qt == 'function_graph':
+        q.setdefault('x_range', [-10, 10])
+        q.setdefault('y_range', [-10, 10])
+        q.setdefault('max_expressions', 3)
+        if not q.get('correct_expressions'):
+            eqs = _extract_equations_from_text(q.get('question', ''))
+            if eqs:
+                q['correct_expressions'] = eqs
+        return
+
+    # --- Coordinate plane ---
+    if qt == 'coordinate_plane':
+        q.setdefault('x_range', [-10, 10])
+        q.setdefault('y_range', [-10, 10])
+        q.setdefault('points_to_plot', [])
+        return
+
+    # --- Number line ---
+    if qt == 'number_line':
+        q.setdefault('min_val', -10)
+        q.setdefault('max_val', 10)
+        q.setdefault('points_to_plot', [])
+        return
+
+    # --- Data table ---
+    if qt == 'data_table':
+        _hydrate_data_table(q)
+        return
+
+    # --- Box plot ---
+    if qt == 'box_plot':
+        _hydrate_box_plot(q)
+        return
+
+    # --- Dot plot ---
+    if qt == 'dot_plot':
+        _hydrate_dot_plot(q)
+        return
+
+    # --- Stem and leaf ---
+    if qt == 'stem_and_leaf':
+        _hydrate_stem_and_leaf(q)
+        return
+
+    # --- Bar chart ---
+    if qt == 'bar_chart':
+        q.setdefault('chart_data', {'labels': [], 'values': [], 'title': ''})
+        return
+
+    # --- Transformations ---
+    if qt == 'transformations':
+        _hydrate_transformations(q)
+        return
+
+    # --- Fraction model ---
+    if qt == 'fraction_model':
+        _hydrate_fraction_model(q)
+        return
+
+    # --- Unit circle ---
+    if qt == 'unit_circle':
+        _hydrate_unit_circle(q)
+        return
+
+    # --- Protractor ---
+    if qt in ('protractor', 'angle_protractor'):
+        _hydrate_protractor(q)
+        return
+
+    # --- Venn diagram ---
+    if qt == 'venn_diagram':
+        q.setdefault('sets', 2)
+        q.setdefault('set_labels', ['Set A', 'Set B'])
+        q.setdefault('correct_values', {})
+        q.setdefault('mode', 'count')
+        return
+
+    # --- Tape diagram ---
+    if qt == 'tape_diagram':
+        q.setdefault('tapes', [])
+        q.setdefault('correct_values', {})
+        return
+
+    # --- Probability tree ---
+    if qt == 'probability_tree':
+        q.setdefault('tree', None)
+        q.setdefault('correct_values', {})
+        return
+
+    # --- FAST types ---
+    if qt == 'multiselect':
+        correct = q.get('correct', [])
+        if isinstance(correct, list):
+            q['correct'] = [int(c) for c in correct if isinstance(c, (int, float))]
+    elif qt == 'multi_part':
+        for part in q.get('parts', []):
+            part.setdefault('question_type', 'multiple_choice')
+    elif qt == 'grid_match':
+        _hydrate_grid_match(q)
+    elif qt == 'inline_dropdown':
+        _hydrate_inline_dropdown(q)
+
+
+def _hydrate_geometry(q, qt):
+    """Populate geometry dimensions and compute answer."""
+    # Extract dimensions from question text BEFORE applying defaults
+    _extract_dimensions_from_text(q)
+    # Apply shape-specific defaults for any missing fields
+    defaults = _GEOMETRY_DEFAULTS.get(qt)
+    if defaults:
+        for field, value in defaults.items():
+            q.setdefault(field, value)
+    # Compute derived slant heights for cones/pyramids
+    if qt == 'cone' and 'slant_height' not in q:
+        q['slant_height'] = round(math.sqrt(q.get('radius', 4)**2 + q.get('height', 6)**2), 2)
+    if qt == 'pyramid' and 'slant_height' not in q:
+        bv, hv = q.get('base', 6), q.get('height', 8)
+        q['slant_height'] = round(math.sqrt(hv**2 + (bv/2)**2), 2)
+    # Compute answer from formula registry
+    result = _compute_geometry_answer(qt, q)
+    if result is not None:
+        q['answer'] = str(round(result, 2))
+
+
+# Regex compiled once for data_table analysis detection
+_ANALYSIS_PATTERN = re.compile(
+    r'\b(determine|identify|describe|explain|analyze|interpret|compare|classify)\b', re.IGNORECASE
+)
+
+
+def _hydrate_data_table(q):
+    """Normalize data_table fields. Downgrade analysis-type or empty tables to short_answer."""
+    # Map AI-generated field names to frontend-expected names
+    if 'column_headers' in q and 'headers' not in q:
+        q['headers'] = q['column_headers']
+    expected = q.get('expected_data', [])
+    # Downgrade: no expected_data means the table would render empty
+    if not expected:
+        q['question_type'] = 'short_answer'
+        return
+    # Downgrade: analysis questions where the student reads data, not fills it
+    question_text = q.get('question', '')
+    if (_ANALYSIS_PATTERN.search(question_text)
+            and 'fill' not in question_text.lower()
+            and 'complete' not in question_text.lower()
+            and 'calculate' not in question_text.lower()):
+        headers = q.get('headers', q.get('column_headers', []))
+        if headers:
+            table_lines = [' | '.join(str(h) for h in headers)]
+            table_lines.append(' | '.join('---' for _ in headers))
+            for row in expected:
+                table_lines.append(' | '.join(str(v) for v in row))
+            table_md = '\n'.join(table_lines)
+            if table_md not in question_text:
+                q['question'] = question_text.rstrip() + '\n\n' + table_md
+        q['question_type'] = 'short_answer'
+        return
+    # Normal data_table: create blank initial_data from expected_data shape
+    if 'initial_data' not in q:
+        q['initial_data'] = [[''] * len(row) for row in expected]
+    if 'num_rows' not in q:
+        q['num_rows'] = len(expected)
+
+
+def _hydrate_box_plot(q):
+    """Compute 5-number summary from data array."""
+    q.setdefault('data', [[]])
+    q.setdefault('labels', ['Data'])
+    raw = q.get('data', [])
+    if raw and isinstance(raw[0], list):
+        raw = raw[0]
+    if raw:
+        d = sorted(raw)
+        n = len(d)
+        def median_of(arr):
+            m = len(arr)
+            if m % 2 == 0:
+                return (arr[m//2 - 1] + arr[m//2]) / 2
+            return arr[m//2]
+        med = median_of(d)
+        lower = d[:n//2]
+        upper = d[n//2 + (1 if n % 2 else 0):]
+        q1 = median_of(lower) if lower else d[0]
+        q3 = median_of(upper) if upper else d[-1]
+        q['correct_values'] = {
+            'min': d[0], 'max': d[-1], 'median': med,
+            'q1': q1, 'q3': q3,
+            'range': d[-1] - d[0], 'iqr': q3 - q1
+        }
+
+
+def _hydrate_dot_plot(q):
+    """Compute correct_dots frequency map from data array."""
+    q.setdefault('min_val', 0)
+    q.setdefault('max_val', 10)
+    q.setdefault('step', 1)
+    q.setdefault('correct_dots', {})
+    data = q.get('data', [])
+    if data and not q.get('correct_dots'):
+        dots = {}
+        for val in data:
+            key = str(val)
+            dots[key] = dots.get(key, 0) + 1
+        q['correct_dots'] = dots
+
+
+def _hydrate_stem_and_leaf(q):
+    """Compute correct leaves from data array."""
+    q.setdefault('data', [])
+    q.setdefault('stems', [])
+    q.setdefault('correct_leaves', {})
+    data = q.get('data', [])
+    if data and not q.get('correct_leaves'):
+        leaves = {}
+        for val in sorted(data):
+            stem = val // 10
+            leaf = val % 10
+            key = str(stem)
+            if key not in leaves:
+                leaves[key] = []
+            leaves[key].append(str(leaf))
+        q['correct_leaves'] = {k: ' '.join(v) for k, v in leaves.items()}
+        if not q.get('stems'):
+            q['stems'] = sorted(set(str(val // 10) for val in data))
+
+
+def _hydrate_transformations(q):
+    """Compute correct_vertices from original + transform params."""
+    q.setdefault('original_vertices', [[1, 1], [4, 1], [4, 3]])
+    q.setdefault('transformation_type', 'translation')
+    q.setdefault('transform_params', {})
+    q.setdefault('correct_vertices', [])
+    q.setdefault('grid_range', [-8, 8])
+    q.setdefault('mode', 'plot')
+    orig = q.get('original_vertices', q.get('originalVertices', []))
+    t_type = q.get('transformation_type', q.get('transformationType', ''))
+    params = q.get('transform_params', q.get('transformParams', {}))
+    if orig and t_type and params and not q.get('correct_vertices', q.get('correctVertices')):
+        computed = []
+        for v in orig:
+            x, y = v[0], v[1]
+            if t_type == 'translation':
+                computed.append([x + params.get('dx', 0), y + params.get('dy', 0)])
+            elif t_type == 'reflection':
+                axis = params.get('axis', 'y-axis')
+                if axis == 'y-axis':
+                    computed.append([-x, y])
+                elif axis == 'x-axis':
+                    computed.append([x, -y])
+                elif axis == 'y=x':
+                    computed.append([y, x])
+                elif axis == 'y=-x':
+                    computed.append([-y, -x])
+                else:
+                    computed.append([x, y])
+            elif t_type == 'rotation':
+                deg = params.get('degrees', 90)
+                cx = params.get('centerX', 0)
+                cy = params.get('centerY', 0)
+                rad = math.radians(deg)
+                nx = round((x - cx) * math.cos(rad) - (y - cy) * math.sin(rad) + cx, 2)
+                ny = round((x - cx) * math.sin(rad) + (y - cy) * math.cos(rad) + cy, 2)
+                computed.append([nx, ny])
+            elif t_type == 'dilation':
+                k = params.get('scale', 2)
+                cx = params.get('centerX', 0)
+                cy = params.get('centerY', 0)
+                computed.append([round(cx + k * (x - cx), 2), round(cy + k * (y - cy), 2)])
+            else:
+                computed.append([x, y])
+        q['correct_vertices'] = computed
+        q['correctVertices'] = computed
+
+
+def _hydrate_fraction_model(q):
+    """Compute correct_numerator from answer fraction string."""
+    q.setdefault('model_type', 'area')
+    q.setdefault('denominator', 4)
+    ans = q.get('answer', '')
+    if ans and '/' in str(ans) and not q.get('correct_numerator'):
+        try:
+            parts = str(ans).split('/')
+            num = int(parts[0].strip())
+            q['correct_numerator'] = num
+        except (ValueError, IndexError):
+            pass
+
+
+def _hydrate_unit_circle(q):
+    """Fill in standard trig values for hidden angles."""
+    q.setdefault('hidden_angles', [])
+    q.setdefault('hidden_values', [])
+    q.setdefault('correct_values', {})
+    if not q.get('correct_values') and not q.get('correctAnswers'):
+        std_angles = {
+            '0': {'cos': '1', 'sin': '0'},
+            '30': {'cos': '\u221a3/2', 'sin': '1/2'},
+            '45': {'cos': '\u221a2/2', 'sin': '\u221a2/2'},
+            '60': {'cos': '1/2', 'sin': '\u221a3/2'},
+            '90': {'cos': '0', 'sin': '1'},
+            '120': {'cos': '-1/2', 'sin': '\u221a3/2'},
+            '135': {'cos': '-\u221a2/2', 'sin': '\u221a2/2'},
+            '150': {'cos': '-\u221a3/2', 'sin': '1/2'},
+            '180': {'cos': '-1', 'sin': '0'},
+            '210': {'cos': '-\u221a3/2', 'sin': '-1/2'},
+            '225': {'cos': '-\u221a2/2', 'sin': '-\u221a2/2'},
+            '240': {'cos': '-1/2', 'sin': '-\u221a3/2'},
+            '270': {'cos': '0', 'sin': '-1'},
+            '300': {'cos': '1/2', 'sin': '-\u221a3/2'},
+            '315': {'cos': '\u221a2/2', 'sin': '-\u221a2/2'},
+            '330': {'cos': '\u221a3/2', 'sin': '-1/2'},
+            '360': {'cos': '1', 'sin': '0'},
+        }
+        hidden = q.get('hidden_values', q.get('hiddenValues', []))
+        if hidden:
+            vals = {}
+            for h in hidden:
+                angle_str = str(h).replace('\u00b0', '')
+                if angle_str in std_angles:
+                    for k, v in std_angles[angle_str].items():
+                        vals[f"{angle_str}_{k}"] = v
+            if vals:
+                q['correct_values'] = vals
+                q['correctAnswers'] = vals
+
+
+def _hydrate_protractor(q):
+    """Set protractor defaults and compute answer from target_angle."""
+    q.setdefault('mode', 'measure')
+    mode = q.get('mode', 'measure')
+    if mode == 'construct' and q.get('target_angle') and not q.get('answer'):
+        q['answer'] = str(q['target_angle'])
+    elif mode == 'classify' and q.get('target_angle') and not q.get('answer'):
+        angle = q['target_angle']
+        if angle < 90:
+            q['answer'] = 'acute'
+        elif angle == 90:
+            q['answer'] = 'right'
+        elif angle < 180:
+            q['answer'] = 'obtuse'
+        elif angle == 180:
+            q['answer'] = 'straight'
+        else:
+            q['answer'] = 'reflex'
+
+
+def _hydrate_grid_match(q):
+    """Validate correct matrix dimensions match labels."""
+    rows = q.get('row_labels', [])
+    cols = q.get('column_labels', [])
+    correct = q.get('correct', [])
+    if len(correct) != len(rows):
+        q['correct'] = correct[:len(rows)] + [[0] * len(cols)] * max(0, len(rows) - len(correct))
+    for i, row in enumerate(q.get('correct', [])):
+        if len(row) != len(cols):
+            q['correct'][i] = row[:len(cols)] + [0] * max(0, len(cols) - len(row))
+
+
+def _hydrate_inline_dropdown(q):
+    """Validate dropdown count matches placeholders in question text."""
+    text = q.get('question', '')
+    placeholders = re.findall(r'\{(\d+)\}', text)
+    dropdowns = q.get('dropdowns', [])
+    expected_count = len(placeholders)
+    if len(dropdowns) < expected_count:
+        while len(dropdowns) < expected_count:
+            dropdowns.append({'options': ['\u2014'], 'correct': 0})
+        q['dropdowns'] = dropdowns
 
 
 # ── Shape keyword → question_type mapping ──────────────────────────────────
@@ -423,84 +857,6 @@ def _infer_shape_answer(text):
         return 'parallelogram'
 
     return None
-
-
-def _auto_correct_geometry_types(assignment):
-    """Programmatically detect and correct geometry question_type mismatches.
-
-    The AI sometimes generates the wrong geometry type — e.g., a question about
-    a parallelogram gets question_type='triangle'. This function:
-    0. Detects identification questions and downgrades them to short_answer
-    1. Scans question text for shape keywords to find the PRIMARY shape
-    2. Corrects question_type if it doesn't match the primary shape
-    3. Upgrades short_answer questions about geometry to the correct type
-    4. Detects and sets the correct mode (area, volume, perimeter, etc.)
-    5. Sets polygon sides for named polygons (hexagon=6, pentagon=5, etc.)
-    """
-    if not assignment or not isinstance(assignment, dict):
-        return assignment
-
-    for section in assignment.get('sections', []):
-        for q in section.get('questions', []):
-            qt = q.get('question_type', q.get('type', ''))
-            text = q.get('question', '')
-            if not text:
-                continue
-
-            detected_shape, polygon_sides = _detect_primary_shape(text)
-            detected_mode = _detect_mode(text)
-
-            # ── Step 0: Downgrade to short_answer if no computation mode ──
-            # Identification questions ("what type", "identify") or conceptual
-            # questions ("prove", "explain") with no detected mode → short_answer.
-            if qt in _ALL_GEOMETRY_TYPES:
-                if _is_identification_question(text):
-                    q['question_type'] = 'short_answer'
-                    inferred = _infer_shape_answer(text)
-                    if inferred:
-                        q.setdefault('answer', inferred)
-                    for field in ('base', 'height', 'width', 'radius', 'topBase',
-                                  'mode', 'sides', 'side_length', 'slant_height'):
-                        q.pop(field, None)
-                    continue
-                # No detected computation mode → not a visual geometry question
-                if not detected_mode and not q.get('mode'):
-                    q['question_type'] = 'short_answer'
-                    for field in ('base', 'height', 'width', 'radius', 'topBase',
-                                  'mode', 'sides', 'side_length', 'slant_height'):
-                        q.pop(field, None)
-                    continue
-
-            if not detected_shape:
-                continue
-
-            # ── Case 1: question_type is a DIFFERENT geometry type → correct it ──
-            if qt in _ALL_GEOMETRY_TYPES and qt != detected_shape:
-                # Don't override specialized modes that map to triangle
-                # (pythagorean, angles, trig, similarity are triangle-based)
-                triangle_modes = {'pythagorean', 'angles', 'trig', 'similarity'}
-                if qt in triangle_modes and detected_shape == 'triangle':
-                    continue  # e.g., pythagorean IS a triangle, don't downgrade
-                if detected_shape in triangle_modes:
-                    continue  # The detected "mode" is the type, not a shape mismatch
-                q['question_type'] = detected_shape
-
-            # ── Case 2: short_answer/math_equation about a geometry shape → upgrade ──
-            elif qt in ('short_answer', '', 'math_equation') and detected_mode:
-                q['question_type'] = detected_shape
-
-            # ── Set polygon sides for named polygons ──
-            if polygon_sides and q.get('question_type') == 'regular_polygon':
-                q.setdefault('sides', polygon_sides)
-
-            # ── Set mode from text if not already set or if it's just 'area' default ──
-            if detected_mode:
-                current_mode = q.get('mode', '')
-                # Override mode if it's missing or is generic 'area' but text says otherwise
-                if not current_mode or (current_mode == 'area' and detected_mode != 'area'):
-                    q['mode'] = detected_mode
-
-    return assignment
 
 
 def _looks_like_graphing_question(text):
@@ -896,118 +1252,6 @@ def _merge_usage(base, extra):
     }
 
 
-def _ensure_geometry_defaults(assignment):
-    """Ensure geometry questions in an assignment have required default fields."""
-    if not assignment or not isinstance(assignment, dict):
-        return assignment
-    for section in assignment.get('sections', []):
-        for q in section.get('questions', []):
-            qt = q.get('question_type', '')
-            defaults = _GEOMETRY_DEFAULTS.get(qt)
-            if defaults:
-                # Extract dimensions from question text BEFORE applying defaults
-                _extract_dimensions_from_text(q)
-                for field, value in defaults.items():
-                    q.setdefault(field, value)
-    return assignment
-
-
-def _ensure_data_table_defaults(assignment):
-    """Normalize data_table questions so frontend receives the expected field names.
-
-    Also downgrades broken data_table questions (missing expected_data or
-    analysis-type questions that shouldn't be tables) to short_answer.
-    """
-    if not assignment or not isinstance(assignment, dict):
-        return assignment
-    import re
-    # Words that signal the student should analyze existing data, not fill in blanks
-    _ANALYSIS_PATTERN = re.compile(
-        r'\b(determine|identify|describe|explain|analyze|interpret|compare|classify)\b', re.IGNORECASE
-    )
-    for section in assignment.get('sections', []):
-        for q in section.get('questions', []):
-            qt = q.get('question_type', q.get('type', ''))
-            if qt != 'data_table':
-                continue
-            # Map AI-generated field names to frontend-expected names
-            if 'column_headers' in q and 'headers' not in q:
-                q['headers'] = q['column_headers']
-            expected = q.get('expected_data', [])
-            # Downgrade: no expected_data means the table would render empty
-            if not expected:
-                q['question_type'] = 'short_answer'
-                continue
-            # Downgrade: analysis questions where the student reads data, not fills it
-            question_text = q.get('question', '')
-            if _ANALYSIS_PATTERN.search(question_text) and 'fill' not in question_text.lower() and 'complete' not in question_text.lower() and 'calculate' not in question_text.lower():
-                # Convert expected_data into a readable table in the question text
-                headers = q.get('headers', q.get('column_headers', []))
-                if headers:
-                    table_lines = [' | '.join(str(h) for h in headers)]
-                    table_lines.append(' | '.join('---' for _ in headers))
-                    for row in expected:
-                        table_lines.append(' | '.join(str(v) for v in row))
-                    table_md = '\n'.join(table_lines)
-                    if table_md not in question_text:
-                        q['question'] = question_text.rstrip() + '\n\n' + table_md
-                q['question_type'] = 'short_answer'
-                continue
-            # Normal data_table: create blank initial_data from expected_data shape
-            if 'initial_data' not in q:
-                q['initial_data'] = [[''] * len(row) for row in expected]
-            if 'num_rows' not in q:
-                q['num_rows'] = len(expected)
-    return assignment
-
-
-def _ensure_fast_defaults(assignment):
-    """Validate and normalize FAST item types (multiselect, multi_part, grid_match, inline_dropdown)."""
-    if not assignment or not isinstance(assignment, dict):
-        return assignment
-    import re
-    for section in assignment.get('sections', []):
-        for q in section.get('questions', []):
-            qt = q.get('question_type', q.get('type', ''))
-
-            if qt == 'multiselect':
-                # Ensure correct is a list of ints
-                correct = q.get('correct', [])
-                if isinstance(correct, list):
-                    q['correct'] = [int(c) for c in correct if isinstance(c, (int, float))]
-
-            elif qt == 'multi_part':
-                # Ensure each part has question_type
-                for part in q.get('parts', []):
-                    if 'question_type' not in part:
-                        part['question_type'] = 'multiple_choice'
-
-            elif qt == 'grid_match':
-                # Validate correct matrix dimensions match labels
-                rows = q.get('row_labels', [])
-                cols = q.get('column_labels', [])
-                correct = q.get('correct', [])
-                if len(correct) != len(rows):
-                    q['correct'] = correct[:len(rows)] + [[0] * len(cols)] * max(0, len(rows) - len(correct))
-                for i, row in enumerate(q.get('correct', [])):
-                    if len(row) != len(cols):
-                        q['correct'][i] = row[:len(cols)] + [0] * max(0, len(cols) - len(row))
-
-            elif qt == 'inline_dropdown':
-                # Validate dropdown count matches placeholders
-                text = q.get('question', '')
-                placeholders = re.findall(r'\{(\d+)\}', text)
-                dropdowns = q.get('dropdowns', [])
-                expected_count = len(placeholders)
-                if len(dropdowns) < expected_count:
-                    # Pad with empty dropdowns so rendering doesn't crash
-                    while len(dropdowns) < expected_count:
-                        dropdowns.append({'options': ['—'], 'correct': 0})
-                    q['dropdowns'] = dropdowns
-
-    return assignment
-
-
 def _compute_geometry_answer(qt, q):
     """Compute answer for any (shape, mode) pair. Returns float or None."""
     import math
@@ -1116,193 +1360,6 @@ def _compute_geometry_answer(qt, q):
                 return opp / math.sin(theta_rad)
 
     return None  # Unsupported (shape, mode) pair
-
-
-def _hydrate_math_visuals(assignment):
-    """Programmatically compute correct answers and visual data for math/visual questions.
-
-    The AI should only pick the concept and provide minimal params (dimensions, data, etc.).
-    This function does ALL the math — areas, volumes, quartiles, transformations, etc.
-    Code is 100% correct; AI is bad at arithmetic.
-    """
-    import math
-
-    if not assignment or not isinstance(assignment, dict):
-        return assignment
-
-    for section in assignment.get('sections', []):
-        for q in section.get('questions', []):
-            qt = q.get('question_type', q.get('type', ''))
-
-            # ── Geometry: compute answer from dimensions via formula registry ──
-            if qt in _ALL_GEOMETRY_TYPES:
-                # Compute derived slant heights for cones/pyramids
-                if qt == 'cone' and 'slant_height' not in q:
-                    q['slant_height'] = round(math.sqrt(q.get('radius', 4)**2 + q.get('height', 6)**2), 2)
-                if qt == 'pyramid' and 'slant_height' not in q:
-                    bv, hv = q.get('base', 6), q.get('height', 8)
-                    q['slant_height'] = round(math.sqrt(hv**2 + (bv/2)**2), 2)
-                # Compute answer from formula registry
-                result = _compute_geometry_answer(qt, q)
-                if result is not None:
-                    q['answer'] = str(round(result, 2))
-
-            # ── Box Plot: compute 5-number summary from data ──
-            elif qt == 'box_plot':
-                raw = q.get('data', [])
-                if raw and isinstance(raw[0], list):
-                    raw = raw[0]
-                if raw:
-                    d = sorted(raw)
-                    n = len(d)
-                    def median_of(arr):
-                        m = len(arr)
-                        if m % 2 == 0:
-                            return (arr[m//2 - 1] + arr[m//2]) / 2
-                        return arr[m//2]
-                    med = median_of(d)
-                    lower = d[:n//2]
-                    upper = d[n//2 + (1 if n % 2 else 0):]
-                    q1 = median_of(lower) if lower else d[0]
-                    q3 = median_of(upper) if upper else d[-1]
-                    q['correct_values'] = {
-                        'min': d[0], 'max': d[-1], 'median': med,
-                        'q1': q1, 'q3': q3,
-                        'range': d[-1] - d[0], 'iqr': q3 - q1
-                    }
-
-            # ── Stem and Leaf: compute correct leaves from data ──
-            elif qt == 'stem_and_leaf':
-                data = q.get('data', [])
-                if data and not q.get('correct_leaves'):
-                    leaves = {}
-                    for val in sorted(data):
-                        stem = val // 10
-                        leaf = val % 10
-                        key = str(stem)
-                        if key not in leaves:
-                            leaves[key] = []
-                        leaves[key].append(str(leaf))
-                    q['correct_leaves'] = {k: ' '.join(v) for k, v in leaves.items()}
-                    if not q.get('stems'):
-                        q['stems'] = sorted(set(str(val // 10) for val in data))
-
-            # ── Dot Plot: compute correct_dots from data ──
-            elif qt == 'dot_plot':
-                data = q.get('data', [])
-                if data and not q.get('correct_dots'):
-                    dots = {}
-                    for val in data:
-                        key = str(val)
-                        dots[key] = dots.get(key, 0) + 1
-                    q['correct_dots'] = dots
-
-            # ── Transformations: compute correct_vertices from params ──
-            elif qt == 'transformations':
-                orig = q.get('original_vertices', q.get('originalVertices', []))
-                t_type = q.get('transformation_type', q.get('transformationType', ''))
-                params = q.get('transform_params', q.get('transformParams', {}))
-                if orig and t_type and params and not q.get('correct_vertices', q.get('correctVertices')):
-                    computed = []
-                    for v in orig:
-                        x, y = v[0], v[1]
-                        if t_type == 'translation':
-                            computed.append([x + params.get('dx', 0), y + params.get('dy', 0)])
-                        elif t_type == 'reflection':
-                            axis = params.get('axis', 'y-axis')
-                            if axis == 'y-axis':
-                                computed.append([-x, y])
-                            elif axis == 'x-axis':
-                                computed.append([x, -y])
-                            elif axis == 'y=x':
-                                computed.append([y, x])
-                            elif axis == 'y=-x':
-                                computed.append([-y, -x])
-                            else:
-                                computed.append([x, y])
-                        elif t_type == 'rotation':
-                            deg = params.get('degrees', 90)
-                            cx = params.get('centerX', 0)
-                            cy = params.get('centerY', 0)
-                            rad = math.radians(deg)
-                            nx = round((x - cx) * math.cos(rad) - (y - cy) * math.sin(rad) + cx, 2)
-                            ny = round((x - cx) * math.sin(rad) + (y - cy) * math.cos(rad) + cy, 2)
-                            computed.append([nx, ny])
-                        elif t_type == 'dilation':
-                            k = params.get('scale', 2)
-                            cx = params.get('centerX', 0)
-                            cy = params.get('centerY', 0)
-                            computed.append([round(cx + k * (x - cx), 2), round(cy + k * (y - cy), 2)])
-                        else:
-                            computed.append([x, y])
-                    q['correct_vertices'] = computed
-                    q['correctVertices'] = computed
-
-            # ── Fraction Model: compute correct_numerator from answer fraction ──
-            elif qt == 'fraction_model':
-                ans = q.get('answer', '')
-                denom = q.get('denominator', 4)
-                if ans and '/' in str(ans) and not q.get('correct_numerator'):
-                    try:
-                        parts = str(ans).split('/')
-                        num = int(parts[0].strip())
-                        q['correct_numerator'] = num
-                    except (ValueError, IndexError):
-                        pass
-
-            # ── Protractor: set answer from target_angle for construct mode ──
-            elif qt in ('protractor', 'angle_protractor'):
-                mode = q.get('mode', 'measure')
-                if mode == 'construct' and q.get('target_angle') and not q.get('answer'):
-                    q['answer'] = str(q['target_angle'])
-                elif mode == 'classify' and q.get('target_angle') and not q.get('answer'):
-                    angle = q['target_angle']
-                    if angle < 90:
-                        q['answer'] = 'acute'
-                    elif angle == 90:
-                        q['answer'] = 'right'
-                    elif angle < 180:
-                        q['answer'] = 'obtuse'
-                    elif angle == 180:
-                        q['answer'] = 'straight'
-                    else:
-                        q['answer'] = 'reflex'
-
-            # ── Unit Circle: set standard trig values ──
-            elif qt == 'unit_circle':
-                if not q.get('correct_values') and not q.get('correctAnswers'):
-                    std_angles = {
-                        '0': {'cos': '1', 'sin': '0'},
-                        '30': {'cos': '\u221a3/2', 'sin': '1/2'},
-                        '45': {'cos': '\u221a2/2', 'sin': '\u221a2/2'},
-                        '60': {'cos': '1/2', 'sin': '\u221a3/2'},
-                        '90': {'cos': '0', 'sin': '1'},
-                        '120': {'cos': '-1/2', 'sin': '\u221a3/2'},
-                        '135': {'cos': '-\u221a2/2', 'sin': '\u221a2/2'},
-                        '150': {'cos': '-\u221a3/2', 'sin': '1/2'},
-                        '180': {'cos': '-1', 'sin': '0'},
-                        '210': {'cos': '-\u221a3/2', 'sin': '-1/2'},
-                        '225': {'cos': '-\u221a2/2', 'sin': '-\u221a2/2'},
-                        '240': {'cos': '-1/2', 'sin': '-\u221a3/2'},
-                        '270': {'cos': '0', 'sin': '-1'},
-                        '300': {'cos': '1/2', 'sin': '-\u221a3/2'},
-                        '315': {'cos': '\u221a2/2', 'sin': '-\u221a2/2'},
-                        '330': {'cos': '\u221a3/2', 'sin': '-1/2'},
-                        '360': {'cos': '1', 'sin': '0'},
-                    }
-                    hidden = q.get('hidden_values', q.get('hiddenValues', []))
-                    if hidden:
-                        vals = {}
-                        for h in hidden:
-                            angle_str = str(h).replace('\u00b0', '')
-                            if angle_str in std_angles:
-                                for k, v in std_angles[angle_str].items():
-                                    vals[f"{angle_str}_{k}"] = v
-                        if vals:
-                            q['correct_values'] = vals
-                            q['correctAnswers'] = vals
-
-    return assignment
 
 
 planner_bp = Blueprint('planner', __name__)
@@ -1837,32 +1894,6 @@ CRITICAL REQUIREMENTS:
 4. ONLY include section types that the teacher has enabled above — do NOT add vocabulary or matching sections unless explicitly enabled
 5. All questions must be answerable based on the standards content
 
-SUPPORTED QUESTION TYPES:
-- multiple_choice, fill_blank, short_answer, matching, essay, true_false
-- math_equation (student writes an expression/equation)
-- data_table (include column_headers, row_labels, expected_data)
-- coordinates (include lat/lng answer and tolerance_km)
-- bar_chart, box_plot, number_line, coordinate_plane, geometry/triangle/rectangle/regular_polygon
-- function_graph (student graphs functions on a coordinate plane — include x_range, y_range, correct_expressions)
-- dot_plot (include categories or min_val/max_val/step, correct_dots)
-- stem_and_leaf (include data array, stems, correct_leaves)
-- unit_circle (include hidden_angles, hidden_values, correct_values)
-- transformations (include original_vertices, transformation_type, transform_params, correct_vertices)
-- fraction_model (include model_type, denominator, correct_numerator)
-- probability_tree (include tree structure, correct_values)
-- tape_diagram (include tapes array, correct_values)
-- venn_diagram (include sets count, set_labels, correct_values)
-- protractor (include given_angle or target_angle, mode: measure/draw)
-
-GEOMETRY QUESTION TYPES (use for math/geometry standards):
-- TRIANGLE (area): {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
-- TRIANGLE (pythagorean): {{"question_type": "triangle", "mode": "pythagorean", "side_a": 5, "side_b": 12, "side_c": 13, "missing_side": "c", "answer": "13"}}
-  CRITICAL: For pythagorean questions, ALWAYS include "side_a", "side_b", "side_c" with the actual numbers. Set "missing_side" to whichever side the student must find. The visual renders these values — omitting them shows wrong numbers.
-- RECTANGLE: {{"question_type": "rectangle", "base": 8, "height": 5, "mode": "area", "answer": "40"}}
-- REGULAR_POLYGON: {{"question_type": "regular_polygon", "sides": 7, "side_length": 4, "mode": "area", "answer": "58.14"}}
-  Use for pentagon (5), hexagon (6), heptagon (7), octagon (8), etc. Set "mode": "decompose" to show triangle decomposition.
-  NEVER use "heptagon", "pentagon", "hexagon", "octagon" etc. as question_type — always use "regular_polygon" with the "sides" field.
-
 Return JSON with this structure:
 {{
     "title": "Assignment title",
@@ -1898,41 +1929,25 @@ Return JSON with this structure:
 }}
 {teacher_notes_block}
 
-STUDENT PORTAL CAPABILITIES — Questions are completed digitally. Students CAN:
-- Type text answers (short_answer, essay)
-- Select from multiple choice or true/false options
-- Type math expressions using a virtual keyboard (math_equation)
-- Fill in data table cells (data_table)
-- Plot points on number lines and coordinate planes by clicking
-- Interact with geometry visualizations (measure areas, perimeters, etc.)
-- Graph functions on an interactive coordinate plane (function_graph)
-- Drag box plot handles, fill in 5-number summaries
-- Use an interactive protractor to measure or construct angles
-- Fill in probability trees, Venn diagrams, tape diagrams, fraction models
+QUESTION TYPE GUIDANCE:
+- For most questions, DO NOT set question_type — the system assigns it automatically from your text and structure.
+- Write geometry dimensions clearly in question text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
+- For multiple choice, include "options" array. For matching, include "terms" and "definitions".
+- ONLY set question_type explicitly for these complex types that need structured data:
+  data_table (include headers, row_labels, expected_data),
+  box_plot (include data array), dot_plot (include data),
+  stem_and_leaf (include data), bar_chart (include chart_data),
+  transformations (include original_vertices, transformation_type, transform_params),
+  fraction_model (include model_type, denominator, correct_numerator),
+  probability_tree, tape_diagram, venn_diagram,
+  protractor (include mode, target_angle),
+  multiselect (include options, correct indices),
+  multi_part (include parts array),
+  grid_match (include row_labels, column_labels, correct matrix),
+  inline_dropdown (include dropdowns array)
 
-VISUAL/GRAPHICAL QUESTION TYPES — the system renders these PROGRAMMATICALLY as interactive components:
-- function_graph: {{"question_type": "function_graph", "x_range": [-10, 10], "y_range": [-10, 10], "correct_expressions": ["y = 2*x + 1"], "max_expressions": 2}}
-- coordinate_plane: {{"question_type": "coordinate_plane", "min_val": -5, "max_val": 5, "points_to_plot": [[2, 3], [-1, 4]]}}
-- number_line: {{"question_type": "number_line", "min_val": -10, "max_val": 10, "points_to_plot": [-3, 0, 5]}}
-- bar_chart: {{"question_type": "bar_chart", "chart_data": {{"labels": [...], "values": [...], "title": "..."}}}}
-- box_plot: {{"question_type": "box_plot", "data": [[45, 52, 58, 65, 70, 78, 85, 92]], "labels": ["Scores"]}}
-- dot_plot: {{"question_type": "dot_plot", "min_val": 0, "max_val": 10, "step": 1, "correct_dots": {{"3": 2, "5": 4}}}}
-- stem_and_leaf: {{"question_type": "stem_and_leaf", "data": [23, 25, 31, 34], "stems": [2, 3], "correct_leaves": {{"2": [3, 5], "3": [1, 4]}}}}
-- triangle (area): {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area"}}
-- triangle (pythagorean): {{"question_type": "triangle", "mode": "pythagorean", "side_a": 5, "side_b": 12, "side_c": 13, "missing_side": "c", "answer": "13"}}
-  CRITICAL: For pythagorean questions, ALWAYS include "side_a", "side_b", "side_c" with the actual numbers from your question. Set "missing_side" to "a", "b", or "c". The visual renders from these fields — if you omit them, the triangle shows wrong numbers.
-- rectangle/regular_polygon: {{"question_type": "rectangle", "base": 8, "height": 5, "mode": "area"}}
-- transformations: {{"question_type": "transformations", "original_vertices": [[1,1],[4,1],[4,3]], "transformation_type": "translation", "transform_params": {{"dx": 3, "dy": 2}}, "correct_vertices": [[4,3],[7,3],[7,5]]}}
-- fraction_model: {{"question_type": "fraction_model", "model_type": "area", "denominator": 8, "correct_numerator": 3}}
-- unit_circle: {{"question_type": "unit_circle", "hidden_angles": [30, 45, 60], "hidden_values": ["sin", "cos"], "correct_values": {{...}}}}
-- probability_tree/tape_diagram/venn_diagram/protractor: see full docs in assignment-from-lesson endpoint
-
-CRITICAL VISUAL RULES:
-1. NEVER use "short_answer" for graphing, plotting, or shape questions — ALWAYS use the appropriate visual type above
-2. NEVER say "View the graph" or "See the diagram" — the system RENDERS the visual from the data fields you provide
-3. EVERY visual question MUST include "question_type" and ALL required data fields for that type
-
-Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types. For STEM subjects, use interactive visual components wherever appropriate.
+Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types. For STEM subjects, include geometry and graphing questions with dimensions in the question text.
 
 """
 
@@ -2106,19 +2121,11 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
                 content = completion.choices[0].message.content
                 plan = json.loads(content)
-                _auto_upgrade_visual_types(plan)
-                _auto_correct_geometry_types(plan)
-                _ensure_geometry_defaults(plan)
-                _ensure_data_table_defaults(plan)
-                _ensure_fast_defaults(plan)
-                _hydrate_math_visuals(plan)
-                # Enforce question count for assignment variations
-                if content_type == 'Assignment':
-                    target_q = config.get('totalQuestions', 10)
-                    plan, extra_usage = _enforce_question_count(plan, target_q, client, config)
-                    if extra_usage:
-                        for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
-                            total_usage[k] += extra_usage.get(k, 0)
+                target_q = config.get('totalQuestions', 10) if content_type == 'Assignment' else None
+                plan, extra_usage = _post_process_assignment(plan, target_q)
+                if extra_usage:
+                    for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
+                        total_usage[k] += extra_usage.get(k, 0)
                 plan['approach'] = approach_name
                 variations.append(plan)
 
@@ -2139,18 +2146,10 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         content = completion.choices[0].message.content
         plan = json.loads(content)
-        _auto_upgrade_visual_types(plan)
-        _auto_correct_geometry_types(plan)
-        _ensure_geometry_defaults(plan)
-        _ensure_data_table_defaults(plan)
-        _ensure_fast_defaults(plan)
-        _hydrate_math_visuals(plan)
+        target_q = config.get('totalQuestions', 10) if content_type == 'Assignment' else None
+        plan, extra_usage = _post_process_assignment(plan, target_q)
         usage = _extract_usage(completion, "gpt-4o")
-        # Enforce question count for assignments
-        if content_type == 'Assignment':
-            target_q = config.get('totalQuestions', 10)
-            plan, extra_usage = _enforce_question_count(plan, target_q, client, config)
-            usage = _merge_usage(usage, extra_usage)
+        usage = _merge_usage(usage, extra_usage)
         _record_planner_cost(usage)
         return jsonify({"plan": plan, "method": "AI", "usage": usage})
 
@@ -2371,168 +2370,26 @@ CRITICAL REQUIREMENTS:
 - Avoid vague or overly complex language for the grade level
 - NEVER use vague instructions like "analyze the data" without providing the data inline
 
-STUDENT PORTAL CAPABILITIES — Questions are completed digitally. Students CAN:
-- Type text answers (short_answer, essay)
-- Select from multiple choice or true/false options
-- Type math expressions using a virtual keyboard (math_equation)
-- Fill in data table cells (data_table)
-- Plot points on number lines and coordinate planes by clicking
-- Interact with geometry visualizations (measure areas, perimeters, etc.)
-- Drag box plot handles, fill in 5-number summaries
-- Use an interactive protractor to measure or construct angles
-- Fill in probability trees, Venn diagrams, tape diagrams, fraction models
-
-Students CANNOT:
-- Draw, sketch, or create freehand diagrams directly in the portal
-- Physically construct anything — no compass, ruler, or protractor drawing
-
-Students CAN upload images:
-- Students can upload photos of handwritten work (paper-and-pencil drawings, constructions, etc.)
-- Use this when no interactive component fits the task
-
-PREFERRED: Use interactive components whenever possible. Only fall back to "upload a photo" for tasks that genuinely require freehand drawing.
-
-Rephrase examples:
-- "Draw supplementary angles" → "If one angle is 130°, what is the supplementary angle? Explain." (short_answer or math_equation)
-- "Sketch the graph of y=2x+1" → Use type "function_graph" or "coordinate_plane" with points to plot
-- "Draw a triangle" → Use type "geometry" or "triangle" with given dimensions
-- "Construct an angle of 45°" → Use type "protractor" with mode "construct" and target_angle 45
-- "Draw and label a diagram of the cell cycle" → "Describe the stages of the cell cycle. You may upload a photo of your diagram." (short_answer with allow_image_upload: true)
-
-SPECIAL STEM QUESTION TYPES (use when appropriate):
-
-1. MATH EQUATIONS (type: "math_equation"):
-   - Student writes a mathematical expression/equation as their answer
-   - System can check symbolic equivalence (2x+4 equals 4+2x)
-   - Use for: solving equations, simplifying expressions, writing formulas
-   - Include "answer" as the correct expression (e.g., "x = 5" or "3/4")
-
-2. DATA TABLES (type: "data_table"):
-   - Student fills in a table with numerical data that THEY compute or provide
-   - System grades with tolerance (±5% for measurements)
-   - Use for: science labs, statistics, recording observations, completing function tables
-   - ONLY use when the student needs to FILL IN missing values. Do NOT use data_table for questions where data is already given and the student must analyze, plot, or interpret it — those should be "short_answer", "coordinate_plane", or "multiple_choice"
-   - MUST include "column_headers" (e.g., ["x", "y"]), "row_labels" (e.g., ["1", "2", "3"]), and "expected_data" (2D array of correct cell values)
-   - The table structure MUST be fully defined — never tell students to "complete a table" without providing the table
-
-3. COORDINATES (type: "coordinates"):
-   - Student provides geographic coordinates (latitude, longitude)
-   - System grades based on distance (within X km is correct)
-   - Use for: geography, map skills, location identification
-   - Include "answer" as {{"lat": 25.7617, "lng": -80.1918}} and "tolerance_km" (default 50)
-
-VISUAL/GRAPHICAL QUESTION TYPES (include actual data for rendering — the system renders these PROGRAMMATICALLY):
-
-4. BAR CHART (type: "bar_chart"):
-   - Display a bar graph and ask interpretation questions
-   - MUST include "chart_data" with labels and values
-   - Example: {{"question_type": "bar_chart", "chart_data": {{"labels": ["Mon", "Tue", "Wed", "Thu", "Fri"], "values": [12, 19, 8, 15, 22], "title": "Daily Sales", "y_label": "Number Sold"}}}}
-
-5. BOX PLOT (type: "box_plot"):
-   - Student identifies min, Q1, median, Q3, max, range, IQR
-   - MUST include "data" array with the dataset
-   - Example: {{"question_type": "box_plot", "data": [[45, 52, 58, 60, 65, 70, 72, 78, 85, 92]], "labels": ["Class Scores"]}}
-
-6. NUMBER LINE (type: "number_line"):
-   - Student plots points on a number line
-   - Include "min_val", "max_val", and "points_to_plot"
-   - Example: {{"question_type": "number_line", "min_val": -10, "max_val": 10, "points_to_plot": [-3, 0, 5]}}
-
-7. COORDINATE PLANE (type: "coordinate_plane"):
-   - Student plots points on an x-y grid (4 quadrants)
-   - Include "min_val", "max_val", and "points_to_plot" as [x, y] pairs
-   - Example: {{"question_type": "coordinate_plane", "min_val": -5, "max_val": 5, "points_to_plot": [[2, 3], [-1, 4], [0, -2]]}}
-
-8. GEOMETRY (type: "triangle", "rectangle", or "regular_polygon"):
-   - Student calculates area of shapes with given dimensions
-   - Include "base", "height", and "question_type" (triangle or rectangle)
-   - Example (area): {{"question_type": "triangle", "base": 6, "height": 4, "mode": "area", "answer": "12"}}
-   - Example (pythagorean): {{"question_type": "triangle", "mode": "pythagorean", "side_a": 5, "side_b": 12, "side_c": 13, "missing_side": "c", "answer": "13"}}
-     CRITICAL: For pythagorean questions, ALWAYS include "side_a", "side_b", "side_c" with the actual numbers. Set "missing_side" to whichever side the student must find. The visual renders these values — omitting them shows wrong numbers.
-   - REGULAR_POLYGON: {{"question_type": "regular_polygon", "sides": 7, "side_length": 4, "mode": "area", "answer": "58.14"}}
-     Use for pentagon (5), hexagon (6), heptagon (7), octagon (8), etc. Set "mode": "decompose" to show triangle decomposition.
-     NEVER use "heptagon", "pentagon", "hexagon", "octagon" etc. as question_type — always use "regular_polygon" with the "sides" field.
-
-9. FUNCTION GRAPH (type: "function_graph") — CRITICAL FOR ALGEBRA/GRAPHING:
-   - Student graphs functions on an interactive coordinate plane
-   - MUST include "x_range", "y_range" as [min, max], and "correct_expressions" as an array of equation strings
-   - Use for: graphing linear equations, systems of equations, quadratic/polynomial functions, slope/intercept
-   - Example: {{"question_type": "function_graph", "x_range": [-10, 10], "y_range": [-10, 10], "correct_expressions": ["y = 2*x + 1", "y = -x + 3"], "max_expressions": 2, "answer": "The lines intersect at (0.67, 2.33)"}}
-   - EVERY question about graphing lines, functions, or systems MUST use this type — NEVER use "short_answer" for graphing questions
-
-10. DOT PLOT (type: "dot_plot"):
-    - Student places dots on categories or a number line
-    - Include "categories" (string array) or "min_val"/"max_val"/"step" for numeric, and "correct_dots"
-    - Example: {{"question_type": "dot_plot", "min_val": 0, "max_val": 10, "step": 1, "correct_dots": {{"3": 2, "5": 4, "7": 1}}, "chart_title": "Quiz Scores"}}
-
-11. STEM AND LEAF (type: "stem_and_leaf"):
-    - Student organizes data into stems and leaves
-    - Include "data" (number array), "stems" (array of stem values), "correct_leaves"
-    - Example: {{"question_type": "stem_and_leaf", "data": [23, 25, 31, 34, 37, 42, 45], "stems": [2, 3, 4], "correct_leaves": {{"2": [3, 5], "3": [1, 4, 7], "4": [2, 5]}}, "chart_title": "Test Scores"}}
-
-12. UNIT CIRCLE (type: "unit_circle"):
-    - Student fills in missing angles or trig values on the unit circle
-    - Include "hidden_angles" (angles to blank out), "hidden_values" (which values to hide), "correct_values"
-    - Example: {{"question_type": "unit_circle", "hidden_angles": [30, 45, 60], "hidden_values": ["sin", "cos"], "correct_values": {{"30": {{"sin": "1/2", "cos": "√3/2"}}}}, "show_radians": true}}
-
-13. TRANSFORMATIONS (type: "transformations"):
-    - Student applies geometric transformations (translation, reflection, rotation, dilation)
-    - Include "original_vertices", "transformation_type", "transform_params", "correct_vertices"
-    - Example: {{"question_type": "transformations", "original_vertices": [[1,1],[4,1],[4,3]], "transformation_type": "translation", "transform_params": {{"dx": 3, "dy": 2}}, "correct_vertices": [[4,3],[7,3],[7,5]], "grid_range": [-8, 8], "mode": "plot"}}
-
-14. FRACTION MODEL (type: "fraction_model"):
-    - Student shades parts of a visual fraction model
-    - Include "model_type" (area/bar/number_line), "denominator", "correct_numerator"
-    - Example: {{"question_type": "fraction_model", "model_type": "area", "denominator": 8, "correct_numerator": 3, "answer": "3/8"}}
-
-15. PROBABILITY TREE (type: "probability_tree"):
-    - Student fills in probabilities on a tree diagram
-    - Include "tree" structure with branches and "correct_values"
-    - Example: {{"question_type": "probability_tree", "tree": {{"label": "Start", "branches": [{{"label": "Heads", "probability": "1/2", "branches": [{{"label": "Heads", "probability": "1/2"}}, {{"label": "Tails", "probability": "1/2"}}]}}, {{"label": "Tails", "probability": "1/2"}}]}}, "correct_values": {{"P(HH)": "1/4"}}}}
-
-16. TAPE DIAGRAM (type: "tape_diagram"):
-    - Student works with tape/bar model diagrams for ratios and proportions
-    - Include "tapes" array with labels and segments, "correct_values"
-    - Example: {{"question_type": "tape_diagram", "tapes": [{{"label": "Boys", "segments": 3, "value_per_segment": null}}, {{"label": "Girls", "segments": 5, "value_per_segment": null}}], "correct_values": {{"total": 40, "boys": 15, "girls": 25}}, "chart_title": "Ratio of Boys to Girls"}}
-
-17. VENN DIAGRAM (type: "venn_diagram"):
-    - Student fills in regions of a Venn diagram
-    - Include "sets" (2 or 3), "set_labels", "correct_values"
-    - Example: {{"question_type": "venn_diagram", "sets": 2, "set_labels": ["Even Numbers", "Multiples of 3"], "correct_values": {{"only_a": 4, "only_b": 3, "intersection": 2, "outside": 1}}, "mode": "count"}}
-
-18. PROTRACTOR (type: "protractor"):
-    - Student measures or constructs angles using a protractor visual
-    - Include "given_angle" or "target_angle", "mode" (measure/draw)
-    - Example: {{"question_type": "protractor", "given_angle": 45, "mode": "measure", "answer": "45", "show_classification": true}}
-
-CRITICAL RULES FOR VISUAL QUESTIONS (MUST FOLLOW):
-
-1. USE THESE VISUAL TYPES — they render as interactive components in the student portal:
-   bar_chart, box_plot, number_line, coordinate_plane, function_graph,
-   triangle, rectangle, regular_polygon, dot_plot, stem_and_leaf, unit_circle,
-   transformations, fraction_model, probability_tree, tape_diagram, venn_diagram, protractor
-
-2. NEVER use "short_answer" for a question about graphing, plotting, or visualizing — ALWAYS use the appropriate visual type above.
-   - Graphing equations → function_graph
-   - Plotting points → coordinate_plane
-   - Plotting on a number line → number_line
-   - Geometric shapes → triangle/rectangle/regular_polygon
-   - Data display → bar_chart/box_plot/dot_plot/stem_and_leaf
-
-3. NEVER mention or reference:
-   - "See attached graph" or "View the graph" — the system RENDERS the graph from data you provide
-   - "Look at the diagram below" without providing the data fields
-   - Any visual that doesn't have its data fields in the question JSON object
-
-4. EVERY visual question MUST include:
-   - "question_type": one of the supported types above
-   - ALL required data fields for that type (see examples above)
-   - The data fields ARE the visual — the system draws the graph/chart/shape from them
-
-5. If you want to ask about data interpretation without a visual:
-   - Describe the data in words within the question text
-   - Use "short_answer" type
-   - Example: "A store sold 12 apples on Monday, 19 on Tuesday, and 8 on Wednesday. Which day had the most sales?"
+QUESTION TYPE GUIDANCE:
+- For most questions, DO NOT set question_type — the system assigns it automatically from your text and structure.
+- Write geometry dimensions clearly in question text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
+- For multiple choice, include "options" array. For matching, include "terms" and "definitions".
+- For data_table: ONLY use when students must FILL IN values. Include "column_headers", "row_labels", "expected_data". NEVER use for analysis-type questions.
+- ONLY set question_type explicitly for these complex types that need structured data:
+  data_table (include headers, row_labels, expected_data),
+  box_plot (include data array), dot_plot (include data),
+  stem_and_leaf (include data), bar_chart (include chart_data),
+  transformations (include original_vertices, transformation_type, transform_params),
+  fraction_model (include model_type, denominator, correct_numerator),
+  probability_tree, tape_diagram, venn_diagram,
+  protractor (include mode, target_angle),
+  multiselect (include options, correct indices),
+  multi_part (include parts array),
+  grid_match (include row_labels, column_labels, correct matrix),
+  inline_dropdown (include dropdowns array)
+- Students CANNOT draw/sketch. Use interactive components or ask them to upload a photo of handwritten work.
+- NEVER say "View the graph" or "See the diagram" — the system renders visuals from data fields.
 
 Return JSON with this structure:
 {{
@@ -2594,15 +2451,8 @@ Make the questions specific to the lesson content. Include a variety of question
 
         content = completion.choices[0].message.content
         assignment = json.loads(content)
-        _auto_upgrade_visual_types(assignment)
-        _auto_correct_geometry_types(assignment)
-        _ensure_geometry_defaults(assignment)
-        _ensure_data_table_defaults(assignment)
-        _ensure_fast_defaults(assignment)
-        _hydrate_math_visuals(assignment)
-        # Enforce question count
         target_q = config.get('totalQuestions', 10)
-        assignment, extra_usage = _enforce_question_count(assignment, target_q, client, config)
+        assignment, extra_usage = _post_process_assignment(assignment, target_q)
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
         assignment['subject'] = config.get('subject', 'General')
@@ -3888,156 +3738,21 @@ DOK 4 - Extended Thinking:
 
         # Question type instructions
         question_type_instructions = """
-QUESTION TYPE FORMATS:
-
-MULTIPLE CHOICE (type: "multiple_choice"):
-{
-    "number": 1,
-    "question": "Question text here?",
-    "dok": 2,
-    "standard": "SS.8.A.1.1",
-    "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],
-    "answer": "B",
-    "explanation": "Brief explanation of why B is correct",
-    "points": 1
-}
-
-SHORT ANSWER (type: "short_answer"):
-{
-    "number": 5,
-    "question": "Question requiring 2-3 sentence response",
-    "dok": 2,
-    "standard": "SS.8.A.1.2",
-    "answer": "Expected answer or key points to include",
-    "rubric": "2 pts: Complete answer with evidence. 1 pt: Partial answer. 0 pts: Incorrect/no answer",
-    "points": 2
-}
-
-EXTENDED RESPONSE (type: "extended_response"):
-{
-    "number": 10,
-    "question": "Complex question requiring paragraph response with analysis",
-    "dok": 3,
-    "standard": "SS.8.A.2.1",
-    "answer": "Model response or key elements that should be included",
-    "rubric": "4 pts: Thorough analysis with multiple pieces of evidence...",
-    "points": 4
-}
-
-TRUE/FALSE (type: "true_false"):
-{
-    "number": 3,
-    "question": "Statement to evaluate",
-    "dok": 1,
-    "standard": "SS.8.A.1.1",
-    "answer": "True",
-    "explanation": "Why this is true/false",
-    "points": 1
-}
-
-MATCHING (type: "matching"):
-{
-    "number": 8,
-    "question": "Match the terms to their definitions",
-    "dok": 1,
-    "standard": "SS.8.A.1.1",
-    "terms": ["Term 1", "Term 2", "Term 3"],
-    "definitions": ["Definition A", "Definition B", "Definition C"],
-    "answer": {"Term 1": "Definition B", "Term 2": "Definition C", "Term 3": "Definition A"},
-    "points": 3
-}
-
-MATH EQUATION (type: "math_equation"):
-{
-    "number": 12,
-    "question": "Solve for x: 3x + 7 = 22",
-    "question_type": "math_equation",
-    "dok": 2,
-    "standard": "MA.8.AR.2.1",
-    "answer": "x = 5",
-    "points": 2
-}
-
-DATA TABLE (type: "data_table"):
-{
-    "number": 15,
-    "question": "Complete the table showing the relationship between x and y, where y = 2x + 1",
-    "question_type": "data_table",
-    "dok": 2,
-    "standard": "MA.8.AR.1.1",
-    "column_headers": ["x", "y"],
-    "row_labels": ["1", "2", "3", "4", "5"],
-    "expected_data": [["3"], ["5"], ["7"], ["9"], ["11"]],
-    "points": 3
-}
-
-MULTISELECT (type: "multiselect"):
-{
-    "number": 16,
-    "question": "Select all expressions equivalent to 7 + 3 x 4 x 2",
-    "question_type": "multiselect",
-    "dok": 2,
-    "standard": "MA.5.AR.2.1",
-    "options": ["(7+3) x 4 x 2", "7 + (3x4) x 2", "7 + 3 x (4x2)", "7 + (3x4x2)", "(7+3) x (4x2)"],
-    "correct": [1, 2, 3],
-    "explanation": "Options B, C, and D are equivalent by the associative property of multiplication",
-    "points": 2
-}
-
-MULTI-PART (type: "multi_part"):
-{
-    "number": 17,
-    "question": "Jerry incorrectly subtracts 3.6 from 3.966 as shown.",
-    "question_type": "multi_part",
-    "dok": 2,
-    "standard": "MA.5.NSO.2.5",
-    "parts": [
-        {
-            "label": "Part A",
-            "question_type": "multiple_choice",
-            "question": "Which statement best describes Jerry's mistake?",
-            "options": ["A) Jerry should have regrouped", "B) Jerry subtracted in the wrong order", "C) Decimal is in the wrong place", "D) Place values not aligned"],
-            "answer": "D",
-            "points": 1
-        },
-        {
-            "label": "Part B",
-            "question_type": "multiple_choice",
-            "question": "What is the correct answer to Jerry's problem?",
-            "options": ["A) 0.034", "B) 0.366", "C) 0.606", "D) 9.06"],
-            "answer": "B",
-            "points": 1
-        }
-    ],
-    "points": 2
-}
-
-GRID MATCHING (type: "grid_match"):
-{
-    "number": 18,
-    "question": "Match each expression with the statement that describes it.",
-    "question_type": "grid_match",
-    "dok": 2,
-    "standard": "MA.5.AR.1.1",
-    "row_labels": ["3+7x4", "4+3x7", "(4+3)x7"],
-    "column_labels": ["Sum of 4 and 3, multiplied by 7", "Product of 3 and 7, added to 4", "Product of 4 and 7, added to 3"],
-    "correct": [[0,1,0],[0,0,1],[1,0,0]],
-    "points": 3
-}
-
-INLINE DROPDOWN (type: "inline_dropdown"):
-{
-    "number": 19,
-    "question": "The value of the expression is predicted to be {0} because 12 is being multiplied by a fraction {1}.",
-    "question_type": "inline_dropdown",
-    "dok": 2,
-    "standard": "MA.5.FR.2.1",
-    "dropdowns": [
-        { "options": ["equal to 12", "less than 12", "greater than 12"], "correct": 1 },
-        { "options": ["equal to 1", "less than 1", "greater than 1"], "correct": 1 }
-    ],
-    "points": 2
-}
+QUESTION TYPE GUIDANCE:
+- For most questions, DO NOT set question_type — the system assigns it from your text and structure.
+- Include "options" for multiple choice, "terms"/"definitions" for matching.
+- Write geometry dimensions clearly in text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
+- ONLY set question_type explicitly for complex types needing structured data:
+  data_table (include column_headers, row_labels, expected_data),
+  box_plot (include data), dot_plot (include data), stem_and_leaf (include data),
+  bar_chart (include chart_data), transformations, fraction_model, probability_tree,
+  tape_diagram, venn_diagram, protractor,
+  multiselect (include options + correct indices array),
+  multi_part (include parts array with label, question_type, question, options, answer),
+  grid_match (include row_labels, column_labels, correct 2D array),
+  inline_dropdown (include dropdowns array with options + correct index)
+- Every question MUST include: "dok" (1-4), "standard" (code), "points", and answer.
 """
 
         prompt = f"""You are an expert assessment developer creating a standards-aligned {assessment_type} for grade {config.get('grade', '8')} {config.get('subject', 'students')}.
@@ -4132,12 +3847,7 @@ Generate a complete assessment in this JSON format:
 
         content = completion.choices[0].message.content
         assessment = json.loads(content)
-        _auto_upgrade_visual_types(assessment)
-        _auto_correct_geometry_types(assessment)
-        _ensure_geometry_defaults(assessment)
-        _ensure_data_table_defaults(assessment)
-        _ensure_fast_defaults(assessment)
-        _hydrate_math_visuals(assessment)
+        assessment, _ = _post_process_assignment(assessment)
 
         # Add metadata for portal grading context
         assessment['generated_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
