@@ -795,6 +795,98 @@ _GEOMETRY_DEFAULTS = {
 }
 
 
+def _count_questions(assignment):
+    """Count total questions across all sections."""
+    total = 0
+    for section in assignment.get('sections', []):
+        total += len(section.get('questions', []))
+    return total
+
+
+def _enforce_question_count(assignment, target, client, config):
+    """If the assignment has fewer questions than target, make a follow-up call for more.
+
+    Returns (assignment, extra_usage) where extra_usage is None or a usage dict.
+    """
+    current = _count_questions(assignment)
+    if current >= target - 1:  # allow 1 under target
+        return assignment, None
+
+    needed = target - current
+    grade = config.get('grade', config.get('grade_level', '7'))
+    subject = config.get('subject', 'General')
+
+    # Build context from existing sections
+    existing_types = []
+    for s in assignment.get('sections', []):
+        for q in s.get('questions', []):
+            existing_types.append(q.get('question_type', 'short_answer'))
+
+    prompt = f"""The following assignment for grade {grade} {subject} currently has {current} questions but needs {target} total.
+
+Assignment title: {assignment.get('title', 'Untitled')}
+Existing question types used: {', '.join(set(existing_types))}
+
+Generate exactly {needed} additional questions that fit this assignment. Use a variety of question types.
+Return JSON with this exact structure:
+{{
+    "additional_questions": [
+        {{
+            "number": {current + 1},
+            "question": "Question text",
+            "question_type": "short_answer",
+            "answer": "Correct answer",
+            "points": 2
+        }}
+    ]
+}}
+Number them starting at {current + 1}. Match the difficulty and topic of the existing assignment."""
+
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert teacher. Return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        extra = json.loads(completion.choices[0].message.content)
+        new_qs = extra.get('additional_questions', [])
+
+        if new_qs:
+            # Append to the last section (or largest section)
+            sections = assignment.get('sections', [])
+            if sections:
+                best = max(sections, key=lambda s: len(s.get('questions', [])))
+                best.setdefault('questions', []).extend(new_qs)
+                # Update section points
+                section_pts = sum(q.get('points', 2) for q in best['questions'])
+                best['points'] = section_pts
+
+        extra_usage = _extract_usage(completion, "gpt-4o-mini")
+        return assignment, extra_usage
+    except Exception as e:
+        print(f"Question count enforcement follow-up failed: {e}")
+        return assignment, None
+
+
+def _merge_usage(base, extra):
+    """Merge an extra usage dict into a base usage dict."""
+    if not extra:
+        return base
+    if not base:
+        return extra
+    return {
+        "model": base.get("model", "gpt-4o"),
+        "input_tokens": base.get("input_tokens", 0) + extra.get("input_tokens", 0),
+        "output_tokens": base.get("output_tokens", 0) + extra.get("output_tokens", 0),
+        "total_tokens": base.get("total_tokens", 0) + extra.get("total_tokens", 0),
+        "cost": round(base.get("cost", 0) + extra.get("cost", 0), 6),
+        "cost_display": f"${base.get('cost', 0) + extra.get('cost', 0):.4f}",
+    }
+
+
 def _ensure_geometry_defaults(assignment):
     """Ensure geometry questions in an assignment have required default fields."""
     if not assignment or not isinstance(assignment, dict):
@@ -1798,7 +1890,7 @@ CRITICAL VISUAL RULES:
 
 Make the questions SPECIFIC with real content tied to the standards. Include a variety of question types. For STEM subjects, use interactive visual components wherever appropriate.
 
-REMINDER: You MUST generate approximately {total_q} questions total. Count your questions before returning — if you have fewer than {total_q}, add more questions to reach the target."""
+"""
 
         elif content_type == 'Project':
             prompt = common_header + f"""
@@ -1976,6 +2068,13 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                 _ensure_data_table_defaults(plan)
                 _ensure_fast_defaults(plan)
                 _hydrate_math_visuals(plan)
+                # Enforce question count for assignment variations
+                if content_type == 'Assignment':
+                    target_q = config.get('totalQuestions', 10)
+                    plan, extra_usage = _enforce_question_count(plan, target_q, client, config)
+                    if extra_usage:
+                        for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
+                            total_usage[k] += extra_usage.get(k, 0)
                 plan['approach'] = approach_name
                 variations.append(plan)
 
@@ -2003,6 +2102,11 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
         _ensure_fast_defaults(plan)
         _hydrate_math_visuals(plan)
         usage = _extract_usage(completion, "gpt-4o")
+        # Enforce question count for assignments
+        if content_type == 'Assignment':
+            target_q = config.get('totalQuestions', 10)
+            plan, extra_usage = _enforce_question_count(plan, target_q, client, config)
+            usage = _merge_usage(usage, extra_usage)
         _record_planner_cost(usage)
         return jsonify({"plan": plan, "method": "AI", "usage": usage})
 
@@ -2433,7 +2537,7 @@ TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
 ''' if config.get('globalAINotes') else ''}
 Make the questions specific to the lesson content. Include a variety of question types appropriate for the assignment type.
 
-REMINDER: You MUST generate approximately {config.get('totalQuestions', 10)} questions total. Count your questions before returning — if you have fewer than {config.get('totalQuestions', 10)}, add more questions to reach the target."""
+"""
 
         completion = client.chat.completions.create(
             model="gpt-4o",
@@ -2452,10 +2556,14 @@ REMINDER: You MUST generate approximately {config.get('totalQuestions', 10)} que
         _ensure_data_table_defaults(assignment)
         _ensure_fast_defaults(assignment)
         _hydrate_math_visuals(assignment)
+        # Enforce question count
+        target_q = config.get('totalQuestions', 10)
+        assignment, extra_usage = _enforce_question_count(assignment, target_q, client, config)
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
         assignment['subject'] = config.get('subject', 'General')
         usage = _extract_usage(completion, "gpt-4o")
+        usage = _merge_usage(usage, extra_usage)
         _record_planner_cost(usage)
         return jsonify({"assignment": assignment, "method": "AI", "usage": usage})
 
