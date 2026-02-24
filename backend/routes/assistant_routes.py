@@ -107,9 +107,24 @@ def _convert_messages_for_openai(messages, system_prompt):
                         "content": tr.get("content", "")
                     })
                 continue
-            # Multimodal content blocks — extract text
-            text_parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
-            oai_messages.append({"role": "user", "content": " ".join(text_parts) if text_parts else str(content)})
+            # Multimodal content blocks — convert images + text to OpenAI format
+            oai_content = []
+            for b in content:
+                if not isinstance(b, dict):
+                    continue
+                if b.get("type") == "text":
+                    oai_content.append({"type": "text", "text": b["text"]})
+                elif b.get("type") == "image":
+                    # Convert Anthropic image format to OpenAI image_url format
+                    src = b.get("source", {})
+                    mt = src.get("media_type", "image/png")
+                    data = src.get("data", "")
+                    oai_content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mt};base64,{data}"}
+                    })
+            if oai_content:
+                oai_messages.append({"role": "user", "content": oai_content})
             continue
 
         # Handle assistant messages with tool_use blocks
@@ -431,8 +446,8 @@ def _load_resource_names():
     return names
 
 
-# Cap total injected resource text at 80K chars (~20K tokens)
-MAX_RESOURCE_INJECTION = 80000
+# Cap total injected resource text at 120K chars (~30K tokens)
+MAX_RESOURCE_INJECTION = 120000
 
 
 def _load_resource_content():
@@ -786,9 +801,9 @@ CURRICULUM & LESSON TOOLS:
 - get_recent_lessons: List saved lesson plans by unit. Shows topics, standards covered, vocabulary, and objectives from past lessons. Use when the teacher says "create a quiz for this unit", "what have we been working on", or references past lessons.
 - save_memory: Save important facts about the teacher or their classes for future conversations. Use when the teacher shares preferences, class structure, or workflow habits.
 
-RESOURCE TOOLS (CRITICAL — when the teacher mentions "resources", "curriculum map", "pacing guide", or any uploaded document, you MUST call read_resource BEFORE answering):
-- list_resources: List all uploaded supporting documents. Only needed if you don't know what files exist.
-- read_resource: Read the full text content of an uploaded document. The filenames are already listed in the UPLOADED REFERENCE DOCUMENTS section above — use them directly. ALWAYS call this when the teacher asks about curriculum content, pacing, or uploaded materials. Do NOT answer from the calendar alone when the teacher explicitly asks about uploaded resources.
+RESOURCE TOOLS:
+- list_resources: List all uploaded supporting documents with metadata.
+- read_resource: Read the full text content of a specific uploaded document. Use if you need to re-read or if document content was truncated in the system context above.
 
 TEACHING CALENDAR TOOLS:
 - get_calendar: Read the teaching calendar for a date range. Shows scheduled lessons and holidays. AUTHORITATIVE — if it returns lessons, those ARE what the teacher is teaching. Never say "nothing is scheduled" when scheduled_lessons is non-empty. When asked about a specific day (e.g. "Tuesday"), query that exact date. When generating worksheets for a date, the worksheet topic MUST match the scheduled lesson for that date. Defaults to the next 7 days.
@@ -799,9 +814,19 @@ When generating worksheets or quizzes, ALWAYS call get_standards first to find r
 
 When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar first to check for conflicts, then schedule each day sequentially on school days only.
 
-CRITICAL: The teaching calendar is the SOURCE OF TRUTH for what the teacher is teaching on any given day. If get_calendar returns a scheduled lesson for a date, that lesson IS what the teacher is teaching — use its title, unit, and topic for any worksheet/document generation. However, if the calendar has NO lessons scheduled for the requested dates, AUTOMATICALLY fall back to the uploaded curriculum map or pacing guide — call read_resource on the curriculum/pacing document to find what topic the teacher should be covering. Never respond with just "nothing is scheduled" without checking the curriculum resources first.
+CRITICAL: The teaching calendar is the SOURCE OF TRUTH for what the teacher is teaching on any given day. If get_calendar returns a scheduled lesson for a date, that lesson IS what the teacher is teaching — use its title, unit, and topic for any worksheet/document generation. When the calendar has NO lessons scheduled, get_calendar AUTOMATICALLY returns structured curriculum_map data (unit, benchmarks, vocabulary, textbook chapters, resources) parsed from the uploaded curriculum map. Present ALL of this structured data to the teacher — never summarize or omit fields.
 
-STANDARDS & RESOURCES: Curriculum standards are indexed in your context above — use get_standards with a topic keyword for full details (vocabulary, learning targets, essential questions). Uploaded reference documents (pacing guides, curriculum maps, calendars) are listed by filename only — you MUST call read_resource(filename) to read their actual content before answering questions about them. When the teacher says "check the curriculum map" or "look at the pacing guide", call read_resource immediately. Never guess at document contents from the filename alone. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools.
+When get_calendar returns a "curriculum_map" object, present EVERY field:
+1. Unit name and week numbers
+2. Exact date range
+3. EVERY benchmark with its full code and description text — quote them verbatim
+4. The COMPLETE vocabulary list — list every term
+5. Textbook chapters and page numbers exactly as returned
+6. ALL resources: Nearpod activities, Nearpod lessons, videos, and DBQs with their exact titles
+Then ALSO check the UPLOADED REFERENCE DOCUMENTS in your system context for additional details from other uploaded files (standards framework, pacing guides, school calendars) and include any relevant supplementary information.
+Never say "feel free to ask for more details" — the data is already there. Present it all.
+
+STANDARDS & RESOURCES: Curriculum standards are indexed in your context above — use get_standards with a topic keyword for full details (vocabulary, learning targets, essential questions). Uploaded reference documents have their full content in the UPLOADED REFERENCE DOCUMENTS section above. Always cross-reference ALL uploaded resources when answering curriculum questions. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools.
 
 EDTECH QUIZ GENERATORS (zero-cost, no AI API calls):
 - generate_kahoot_quiz: Create Kahoot-compatible .xlsx quiz from standards/grades/content. Questions built from vocabulary and sample assessments.
@@ -900,13 +925,18 @@ STUDENT INFO:
         prompt += "Compact index — use get_standards tool with a topic keyword for full details (vocabulary, learning targets, essential questions).\n"
         prompt += "\n".join(compact)
 
-    # Resources: only inject filenames and descriptions, NOT full content.
-    # Full text fetched on demand via read_resource tool.
-    resource_names = _load_resource_names()
-    if resource_names:
+    # Inject full resource content so the AI can answer directly without tool calls
+    resource_content = _load_resource_content()
+    if resource_content:
         prompt += "\n\n## UPLOADED REFERENCE DOCUMENTS\n"
-        prompt += "The teacher has uploaded these documents. IMPORTANT: Only filenames are listed here — the actual content is NOT in your context. You MUST call read_resource(filename) to read the content. When the teacher asks about curriculum, pacing, or references a specific document, ALWAYS call read_resource first before answering.\n"
-        prompt += "\n".join(f"- {r}" for r in resource_names)
+        prompt += "The teacher has uploaded these documents. Their full content is included below — use it directly to answer questions about curriculum, pacing, and scheduling.\n\n"
+        prompt += resource_content
+    else:
+        resource_names = _load_resource_names()
+        if resource_names:
+            prompt += "\n\n## UPLOADED REFERENCE DOCUMENTS\n"
+            prompt += "The teacher has uploaded these documents. Use read_resource(filename) to access their content.\n"
+            prompt += "\n".join(f"- {r}" for r in resource_names)
 
     # Inject rubric settings (grading categories, weights, style)
     rubric_data = _load_rubric()
@@ -1348,6 +1378,15 @@ def assistant_chat():
                                         ))
                                     elif block.get("type") == "text":
                                         parts.append(block["text"])
+                                    elif block.get("type") == "image":
+                                        # Convert Anthropic image to Gemini inline_data
+                                        src = block.get("source", {})
+                                        parts.append({
+                                            "inline_data": {
+                                                "mime_type": src.get("media_type", "image/png"),
+                                                "data": src.get("data", "")
+                                            }
+                                        })
                                     elif block.get("type") == "tool_use":
                                         parts.append(genai_pkg.types.Part.from_function_response(
                                             name=block.get("name", ""),
