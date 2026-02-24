@@ -3971,11 +3971,17 @@ ${signature}`;
   };
 
   // Planner functions
-  const domainNameMap = {
-    NSO: "Number Sense & Ops", AR: "Algebraic Reasoning", GR: "Geometric Reasoning",
-    DP: "Data & Probability", F: "Functions", T: "Trigonometry",
-    LT: "Logic & Thinking", FL: "Financial Literacy",
+  const domainNamesBySubject = {
+    Math: { NSO: "Number Sense & Ops", AR: "Algebraic Reasoning", GR: "Geometric Reasoning", DP: "Data & Probability", F: "Functions", T: "Trigonometry", LT: "Logic & Thinking", FL: "Financial Literacy" },
+    Science: { N: "Nature of Science", P: "Physical Science", L: "Life Science", E: "Earth & Space" },
+    "English/ELA": { R: "Reading", C: "Communication", V: "Vocabulary" },
+    "Social Studies": { A: "American History", C: "Civics & Gov", E: "Economics", G: "Geography", W: "World History" },
+    Civics: { C: "Civics & Gov", E: "Economics" },
+    Geography: { G: "Geography" },
+    "US History": { A: "American History" },
+    "World History": { W: "World History" },
   };
+  const domainNameMap = domainNamesBySubject[config.subject] || domainNamesBySubject.Math;
 
   const scrollToDomain = (ref, domain) => {
     const container = ref.current;
@@ -4002,6 +4008,14 @@ ${signature}`;
 
   // Brainstorm lesson ideas
   const brainstormIdeasHandler = async () => {
+    if (!config.subject) {
+      addToast("Please select a subject in Settings before generating", "warning");
+      return;
+    }
+    if (!config.grade_level) {
+      addToast("Please select a grade level in Settings before generating", "warning");
+      return;
+    }
     if (selectedStandards.length === 0) {
       addToast("Please select at least one standard", "warning");
       return;
@@ -4047,6 +4061,14 @@ ${signature}`;
 
   // Generate lesson plan (optionally from selected idea, optionally with variations)
   const generateLessonPlan = async (generateVariations = false) => {
+    if (!config.subject) {
+      addToast("Please select a subject in Settings before generating", "warning");
+      return;
+    }
+    if (!config.grade_level) {
+      addToast("Please select a grade level in Settings before generating", "warning");
+      return;
+    }
     if (selectedStandards.length === 0) {
       addToast("Please select at least one standard", "warning");
       return;
@@ -4118,6 +4140,14 @@ ${signature}`;
 
   // Assessment generation handlers
   const generateAssessmentHandler = async () => {
+    if (!config.subject) {
+      addToast("Please select a subject in Settings before generating", "warning");
+      return;
+    }
+    if (!config.grade_level) {
+      addToast("Please select a grade level in Settings before generating", "warning");
+      return;
+    }
     if (selectedStandards.length === 0) {
       addToast("Please select at least one standard", "warning");
       return;
@@ -4149,6 +4179,10 @@ ${signature}`;
       if (data.error) {
         addToast("Error: " + data.error, "error");
       } else if (data.assessment) {
+        if (!data.assessment.time_limit && data.assessment.time_limit !== 0) {
+          const match = data.assessment.time_estimate?.match(/(\d+)/);
+          data.assessment.time_limit = match ? parseInt(match[1]) : null;
+        }
         setGeneratedAssessment(data.assessment);
         setAssessmentAnswers({}); // Clear previous answers
         addToast("Assessment generated successfully!", "success");
@@ -4159,6 +4193,32 @@ ${signature}`;
     } finally {
       setAssessmentLoading(false);
     }
+  };
+
+  const redistributePoints = (newTotal) => {
+    if (!generatedAssessment) return;
+    const currentTotal = generatedAssessment.total_points || 100;
+    if (newTotal === currentTotal || newTotal < 1) return;
+
+    const sections = (generatedAssessment.sections || []).map(s => {
+      const questions = (s.questions || []).map(q => ({
+        ...q,
+        points: Math.max(1, Math.round((q.points || 1) * newTotal / currentTotal))
+      }));
+      return { ...s, questions, points: questions.reduce((sum, q) => sum + q.points, 0) };
+    });
+
+    const actualTotal = sections.reduce((sum, s) => sum + s.points, 0);
+    if (actualTotal !== newTotal && sections.length > 0) {
+      const lastSection = sections[sections.length - 1];
+      if (lastSection.questions.length > 0) {
+        const lastQ = lastSection.questions[lastSection.questions.length - 1];
+        lastQ.points += (newTotal - actualTotal);
+        lastSection.points += (newTotal - actualTotal);
+      }
+    }
+
+    setGeneratedAssessment({ ...generatedAssessment, sections, total_points: newTotal });
   };
 
   const exportAssessmentHandler = async (includeAnswerKey = false) => {
@@ -4211,13 +4271,13 @@ ${signature}`;
       addToast("No assessment to publish", "warning");
       return;
     }
-    // Reset publish settings
+    // Reset publish settings, pre-fill time limit from assessment
     setPublishSettings({
       period: '',
       periodFilename: '',
       isMakeup: false,
       selectedStudents: [],
-      timeLimit: null,
+      timeLimit: generatedAssessment.time_limit || null,
       applyAccommodations: true,
     });
     setPublishModalStudents([]);
@@ -4362,6 +4422,10 @@ ${signature}`;
       if (data.error) {
         addToast("Error loading assessment: " + data.error, "error");
       } else if (data.assessment) {
+        if (!data.assessment.time_limit && data.assessment.time_limit !== 0) {
+          const match = data.assessment.time_estimate?.match(/(\d+)/);
+          data.assessment.time_limit = match ? parseInt(match[1]) : null;
+        }
         setGeneratedAssessment(data.assessment);
         setAssessmentAnswers({});
         setAssessmentGradingResults(null);
@@ -4481,6 +4545,14 @@ ${signature}`;
 
   // Generate assignment from lesson plan
   const generateAssignmentFromLessonHandler = async () => {
+    if (!config.subject) {
+      addToast("Please select a subject in Settings before generating", "warning");
+      return;
+    }
+    if (!config.grade_level) {
+      addToast("Please select a grade level in Settings before generating", "warning");
+      return;
+    }
     if (!lessonPlan) {
       addToast("Please generate a lesson plan first", "warning");
       return;
@@ -21747,7 +21819,7 @@ ${signature}`;
                                       setAssignment({
                                         ...assignment,
                                         title: generatedAssignment.title || "",
-                                        totalPoints: 100,
+                                        totalPoints: generatedAssignment.total_points || 100,
                                         customMarkers: markers,
                                         effortPoints: effortPts,
                                         gradingNotes: gradingNotes.trim(),
@@ -23115,10 +23187,91 @@ ${signature}`;
                                     gap: "15px",
                                     fontSize: "0.9rem",
                                     color: "var(--text-secondary)",
+                                    alignItems: "center",
                                   }}
                                 >
-                                  <span>{generatedAssessment.total_points} points</span>
-                                  <span>{generatedAssessment.time_estimate}</span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <Icon name="Award" size={14} />
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={generatedAssessment.total_points}
+                                      onChange={(e) => {
+                                        const newTotal = parseInt(e.target.value) || 1;
+                                        redistributePoints(newTotal);
+                                      }}
+                                      style={{
+                                        width: "60px",
+                                        padding: "4px 8px",
+                                        background: "rgba(255,255,255,0.1)",
+                                        border: "1px solid var(--glass-border)",
+                                        borderRadius: "6px",
+                                        color: "var(--text-primary)",
+                                        fontSize: "0.9rem",
+                                        textAlign: "center",
+                                      }}
+                                    />
+                                    <span>points</span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <Icon name="Clock" size={14} />
+                                    {generatedAssessment.time_limit != null ? (
+                                      <>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={generatedAssessment.time_limit}
+                                          onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            setGeneratedAssessment({ ...generatedAssessment, time_limit: val > 0 ? val : 1 });
+                                          }}
+                                          style={{
+                                            width: "60px",
+                                            padding: "4px 8px",
+                                            background: "rgba(255,255,255,0.1)",
+                                            border: "1px solid var(--glass-border)",
+                                            borderRadius: "6px",
+                                            color: "var(--text-primary)",
+                                            fontSize: "0.9rem",
+                                            textAlign: "center",
+                                          }}
+                                        />
+                                        <span>min</span>
+                                        <button
+                                          onClick={() => setGeneratedAssessment({ ...generatedAssessment, time_limit: null })}
+                                          style={{
+                                            background: "none",
+                                            border: "none",
+                                            color: "var(--text-muted)",
+                                            cursor: "pointer",
+                                            padding: "2px 4px",
+                                            fontSize: "0.85rem",
+                                            lineHeight: 1,
+                                          }}
+                                          title="Remove time limit"
+                                        >
+                                          ✕
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        onClick={() => setGeneratedAssessment({ ...generatedAssessment, time_limit: 30 })}
+                                        style={{
+                                          background: "none",
+                                          border: "none",
+                                          color: "var(--accent-secondary)",
+                                          cursor: "pointer",
+                                          padding: "0",
+                                          fontSize: "0.85rem",
+                                          textDecoration: "none",
+                                        }}
+                                        onMouseEnter={(e) => e.target.style.textDecoration = "underline"}
+                                        onMouseLeave={(e) => e.target.style.textDecoration = "none"}
+                                      >
+                                        + Set time limit
+                                      </button>
+                                    )}
+                                  </div>
                                   <span>
                                     {generatedAssessment.sections?.reduce(
                                       (sum, s) => sum + (s.questions?.length || 0),
@@ -23128,7 +23281,7 @@ ${signature}`;
                                   </span>
                                 </div>
                               </div>
-                              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "15px" }}>
                                 <button
                                   onClick={() => {
                                     setGeneratedAssessment(null);

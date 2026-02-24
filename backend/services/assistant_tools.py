@@ -901,7 +901,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "read_resource",
-        "description": "Read the full text content of an uploaded supporting document. Use after list_resources to read a specific file. Supports PDF, DOCX, DOC, TXT, and MD files. Use this when the teacher asks about pacing, curriculum content, or when you need reference material for generating lessons, worksheets, or assessments.",
+        "description": "Read the full text content of an uploaded supporting document. The filenames are listed in the UPLOADED REFERENCE DOCUMENTS section of your context — pass the exact filename. Supports PDF, DOCX, DOC, TXT, and MD files. ALWAYS use this when the teacher mentions 'curriculum map', 'pacing guide', 'resources', or any uploaded document. Call this BEFORE answering any question about curriculum content, pacing, or uploaded materials.",
         "input_schema": {
             "type": "object",
             "properties": {

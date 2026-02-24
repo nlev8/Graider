@@ -786,9 +786,9 @@ CURRICULUM & LESSON TOOLS:
 - get_recent_lessons: List saved lesson plans by unit. Shows topics, standards covered, vocabulary, and objectives from past lessons. Use when the teacher says "create a quiz for this unit", "what have we been working on", or references past lessons.
 - save_memory: Save important facts about the teacher or their classes for future conversations. Use when the teacher shares preferences, class structure, or workflow habits.
 
-RESOURCE TOOLS:
-- list_resources: List all uploaded supporting documents (pacing guides, curriculum docs, rubrics). Discover what reference materials are available.
-- read_resource: Read the full text content of a specific uploaded document. Use for curriculum guides, pacing calendars, or any reference material the teacher has uploaded.
+RESOURCE TOOLS (CRITICAL — when the teacher mentions "resources", "curriculum map", "pacing guide", or any uploaded document, you MUST call read_resource BEFORE answering):
+- list_resources: List all uploaded supporting documents. Only needed if you don't know what files exist.
+- read_resource: Read the full text content of an uploaded document. The filenames are already listed in the UPLOADED REFERENCE DOCUMENTS section above — use them directly. ALWAYS call this when the teacher asks about curriculum content, pacing, or uploaded materials. Do NOT answer from the calendar alone when the teacher explicitly asks about uploaded resources.
 
 TEACHING CALENDAR TOOLS:
 - get_calendar: Read the teaching calendar for a date range. Shows scheduled lessons and holidays. AUTHORITATIVE — if it returns lessons, those ARE what the teacher is teaching. Never say "nothing is scheduled" when scheduled_lessons is non-empty. When asked about a specific day (e.g. "Tuesday"), query that exact date. When generating worksheets for a date, the worksheet topic MUST match the scheduled lesson for that date. Defaults to the next 7 days.
@@ -799,9 +799,9 @@ When generating worksheets or quizzes, ALWAYS call get_standards first to find r
 
 When scheduling multi-day lessons, skip weekends and holidays. Use get_calendar first to check for conflicts, then schedule each day sequentially on school days only.
 
-CRITICAL: The teaching calendar is the SOURCE OF TRUTH for what the teacher is teaching on any given day. If get_calendar returns a scheduled lesson for a date, that lesson IS what the teacher is teaching — use its title, unit, and topic for any worksheet/document generation. The pacing guide and curriculum map are REFERENCE materials for planning; the calendar is what's ACTUALLY scheduled. Never override calendar entries with pacing guide suggestions.
+CRITICAL: The teaching calendar is the SOURCE OF TRUTH for what the teacher is teaching on any given day. If get_calendar returns a scheduled lesson for a date, that lesson IS what the teacher is teaching — use its title, unit, and topic for any worksheet/document generation. However, if the calendar has NO lessons scheduled for the requested dates, AUTOMATICALLY fall back to the uploaded curriculum map or pacing guide — call read_resource on the curriculum/pacing document to find what topic the teacher should be covering. Never respond with just "nothing is scheduled" without checking the curriculum resources first.
 
-STANDARDS & RESOURCES: The full curriculum standards and uploaded reference documents (pacing guides, calendars, curriculum docs) are included in your context above. Use them directly when generating curriculum-aligned content — you already know all the standards and have the pacing guide content. Reference specific standard codes. For additional standard details (learning targets, essential questions), use get_standards with a topic keyword. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools.
+STANDARDS & RESOURCES: Curriculum standards are indexed in your context above — use get_standards with a topic keyword for full details (vocabulary, learning targets, essential questions). Uploaded reference documents (pacing guides, curriculum maps, calendars) are listed by filename only — you MUST call read_resource(filename) to read their actual content before answering questions about them. When the teacher says "check the curriculum map" or "look at the pacing guide", call read_resource immediately. Never guess at document contents from the filename alone. Never make up standard codes or curriculum requirements — use only what's in your context or returned by tools.
 
 EDTECH QUIZ GENERATORS (zero-cost, no AI API calls):
 - generate_kahoot_quiz: Create Kahoot-compatible .xlsx quiz from standards/grades/content. Questions built from vocabulary and sample assessments.
@@ -905,7 +905,7 @@ STUDENT INFO:
     resource_names = _load_resource_names()
     if resource_names:
         prompt += "\n\n## UPLOADED REFERENCE DOCUMENTS\n"
-        prompt += "The teacher has uploaded these documents. Use read_resource tool to access full content when needed.\n"
+        prompt += "The teacher has uploaded these documents. IMPORTANT: Only filenames are listed here — the actual content is NOT in your context. You MUST call read_resource(filename) to read the content. When the teacher asks about curriculum, pacing, or references a specific document, ALWAYS call read_resource first before answering.\n"
         prompt += "\n".join(f"- {r}" for r in resource_names)
 
     # Inject rubric settings (grading categories, weights, style)

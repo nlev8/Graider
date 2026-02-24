@@ -73,6 +73,30 @@ GEOMETRY_SUBTYPES = {
 }
 
 
+def _build_subject_boundary_prompt(subject, grade, standard_codes=None):
+    """Build mandatory subject/grade boundary constraint for AI prompts."""
+    if not subject or not grade:
+        return ''
+
+    valid_codes_line = ''
+    if standard_codes:
+        valid_codes_line = (
+            f"\n- Valid standard codes for this assessment: {', '.join(standard_codes)}"
+            f"\n- ONLY use these exact standard codes in question 'standard' fields"
+        )
+
+    return f"""
+SUBJECT BOUNDARY CONSTRAINT (MANDATORY — VIOLATIONS WILL BE REJECTED):
+This content is EXCLUSIVELY for {subject} at grade {grade} level.
+- EVERY question MUST directly test {subject} content knowledge
+- EVERY question's "standard" field MUST reference one of the provided standards{valid_codes_line}
+- Ensure vocabulary and cognitive complexity are appropriate for grade {grade}
+- Do NOT generate questions that primarily test a different subject area
+- Cross-disciplinary skills (reading a graph, writing an explanation) are acceptable ONLY when they serve {subject} content
+- Questions violating these constraints will be automatically detected and regenerated
+"""
+
+
 def _build_section_categories_prompt(categories, subject=''):
     """Build AI prompt section describing which assessment sections to generate."""
     if not categories or not any(categories.values()):
@@ -139,7 +163,8 @@ def _build_section_categories_prompt(categories, subject=''):
     return '\n'.join(lines)
 
 
-def _post_process_assignment(assignment, target_question_count=None, target_total_points=None):
+def _post_process_assignment(assignment, target_question_count=None, target_total_points=None,
+                             subject=None, grade=None, valid_standard_codes=None):
     """Unified 6-phase deterministic post-processing pipeline.
 
     Phase 1: _classify_question_type — assigns question_type from text/structure
@@ -169,9 +194,11 @@ def _post_process_assignment(assignment, target_question_count=None, target_tota
         if s.get('questions')
     ]
     # Phase 3c: Validate question quality (deterministic + optional AI fix)
-    warnings = _validate_question_quality(assignment)
+    warnings = _validate_question_quality(assignment, subject=subject, grade=grade,
+                                          valid_standard_codes=valid_standard_codes)
     if warnings:
-        _auto_fix_flagged_questions(assignment, warnings)
+        _auto_fix_flagged_questions(assignment, warnings, subject=subject, grade=grade,
+                                    valid_standard_codes=valid_standard_codes)
     extra_usage = None
     # Phase 4: Enforce question count (if target given)
     if target_question_count is not None:
@@ -224,7 +251,7 @@ _PYTHAGOREAN_RE = _re.compile(
 )
 
 
-def _validate_question_quality(assignment):
+def _validate_question_quality(assignment, subject=None, grade=None, valid_standard_codes=None):
     """Phase 3c: Run deterministic quality checks on every question.
 
     Returns a list of warning dicts: [{section_idx, question_idx, issue, severity}]
@@ -233,7 +260,8 @@ def _validate_question_quality(assignment):
     warnings = []
     for sIdx, section in enumerate(assignment.get('sections', [])):
         for qIdx, q in enumerate(section.get('questions', [])):
-            issues = _check_question_quality(q)
+            issues = _check_question_quality(q, subject=subject, grade=grade,
+                                             valid_standard_codes=valid_standard_codes)
             if issues:
                 # Use the most severe issue as the primary warning
                 worst = max(issues, key=lambda i: 0 if i['severity'] == 'warning' else 1)
@@ -249,16 +277,15 @@ def _validate_question_quality(assignment):
     return warnings
 
 
-def _check_question_quality(q):
+def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=None):
     """Run Tier A deterministic checks on a single question. Returns list of issues."""
     issues = []
     qt = q.get('question_type', q.get('type', 'short_answer'))
     text = q.get('question', '')
 
-    # Check 1: Points sanity
-    pts = q.get('points')
-    if pts is not None and (not isinstance(pts, (int, float)) or pts <= 0 or pts > 20):
-        issues.append({'issue': f'Invalid point value: {pts}', 'severity': 'error'})
+    # Check 1: Removed — point values are corrected by _normalize_points (Phase 5).
+    # Flagging here produced confusing "Auto-fixed: Invalid point value" warnings
+    # on questions whose points were already corrected by the time the user sees them.
 
     # Check 2: Answer exists for non-essay/extended types
     non_answer_types = {'essay', 'extended_response', 'multi_part'}
@@ -516,10 +543,52 @@ def _check_question_quality(q):
                     'severity': 'error',
                 })
 
+    # Check 14: data_table with empty or placeholder expected_data
+    if qt == 'data_table':
+        expected = q.get('expected_data', [])
+        if not expected:
+            issues.append({
+                'issue': 'Data table has no expected_data — table will appear empty',
+                'severity': 'error',
+            })
+        elif expected:
+            # Check if all cells are empty/placeholder
+            all_empty = all(
+                all(cell == '' or cell is None for cell in row)
+                for row in expected
+            )
+            if all_empty:
+                issues.append({
+                    'issue': 'Data table expected_data contains only empty values — no correct answers provided',
+                    'severity': 'error',
+                })
+
+    # CHECK 15: Off-subject detection via standards validation
+    if valid_standard_codes and q.get('standard'):
+        q_standard = q['standard'].strip()
+        if q_standard and q_standard not in valid_standard_codes:
+            # Check prefix match (e.g., "SC.6.E" matches "SC.6.E.7.1")
+            prefix_match = any(q_standard.startswith(code) or code.startswith(q_standard)
+                               for code in valid_standard_codes)
+            if not prefix_match:
+                issues.append({
+                    'issue': f'Off-subject: standard "{q_standard}" is not in the selected '
+                             f'{subject or "subject"} standards for grade {grade or "this grade"}',
+                    'severity': 'error',
+                })
+
+    # CHECK 16: Missing standard field (required for subject enforcement)
+    if valid_standard_codes and not q.get('standard'):
+        issues.append({
+            'issue': 'Missing standard code — cannot verify subject alignment',
+            'severity': 'warning',
+        })
+
     return issues
 
 
-def _auto_fix_flagged_questions(assignment, warnings):
+def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
+                                valid_standard_codes=None):
     """Attempt AI-powered fixes for flagged questions.
 
     Uses gpt-4o-mini to review and fix problematic questions in a single batch.
@@ -556,10 +625,22 @@ def _auto_fix_flagged_questions(assignment, warnings):
             return
         client = OpenAI(api_key=api_key)
 
+        subject_constraint = ''
+        if subject and grade:
+            standards_hint = ''
+            if valid_standard_codes:
+                standards_hint = f"\n- Valid standard codes: {', '.join(valid_standard_codes[:10])}"
+            subject_constraint = f"""
+CRITICAL SUBJECT CONSTRAINT:
+- All fixed questions MUST be for {subject} at grade {grade} level{standards_hint}
+- If a question was flagged as off-subject, REPLACE it entirely with a {subject} question
+  that maps to one of the valid standard codes above
+"""
+
         prompt = f"""Review these {len(batch)} questions that were flagged for issues.
 For each, provide a corrected version. Return JSON array:
-[{{"index": 0, "fixed_question": "corrected question text", "fixed_answer": "corrected answer", "fixed_options": ["A) ...", ...] or null}}]
-
+[{{"index": 0, "fixed_question": "corrected question text", "fixed_answer": "corrected answer", "fixed_options": ["A) ...", ...] or null, "fixed_standard": "standard code or null"}}]
+{subject_constraint}
 Flagged questions:
 {json.dumps(batch, indent=2)}
 
@@ -567,6 +648,7 @@ Rules:
 - Fix mathematical inconsistencies so given values are correct
 - For MC questions, ensure the answer matches one option
 - Keep the same difficulty level and topic
+- If flagged as off-subject, replace with an on-subject question for the correct standard
 - Return ONLY the JSON array, no other text"""
 
         completion = client.chat.completions.create(
@@ -597,6 +679,8 @@ Rules:
                 q['answer'] = fix['fixed_answer']
             if fix.get('fixed_options') and isinstance(fix['fixed_options'], list):
                 q['options'] = fix['fixed_options']
+            if fix.get('fixed_standard'):
+                q['standard'] = fix['fixed_standard']
             # Update warning to indicate it was auto-fixed
             q['warning'] = f"Auto-fixed: {item['issue']}"
             q['warning_severity'] = 'info'
@@ -905,6 +989,75 @@ _ANALYSIS_PATTERN = re.compile(
     r'\b(determine|identify|describe|explain|analyze|interpret|compare|classify)\b', re.IGNORECASE
 )
 
+# Keywords that signal a column is the computed result (student fills it in)
+_CALC_KEYWORDS = re.compile(
+    r'\b(calculat|comput|find|determin|solv)', re.IGNORECASE
+)
+# Formula pattern: "result = operand op operand" e.g. "speed = distance ÷ time"
+_FORMULA_RE = re.compile(
+    r'(\w[\w\s/]*?)\s*=\s*\w[\w\s/]*?\s*[÷/×*+\-]\s*\w', re.IGNORECASE
+)
+
+
+def _infer_editable_columns(q, question_text):
+    """Infer which columns students should fill in based on question text and headers.
+
+    Returns a list of 0-based column indices, or empty list if can't determine.
+    """
+    headers = q.get('headers', q.get('column_headers', []))
+    if not headers:
+        return []
+
+    text_lower = question_text.lower()
+
+    # Strategy 1: Match formula result variable to a column header
+    # e.g. "speed = distance ÷ time" → editable column is "speed" / "avg speed"
+    formula_match = _FORMULA_RE.search(question_text)
+    if formula_match:
+        result_var = formula_match.group(1).strip().lower()
+        for idx, h in enumerate(headers):
+            h_lower = h.lower()
+            # Check if the formula result variable appears in the header
+            # e.g. "speed" in "Avg Speed (m/s)" or "density" in "Density (g/mL)"
+            if result_var in h_lower or any(
+                word in h_lower for word in result_var.split() if len(word) > 2
+            ):
+                return [idx]
+
+    # Strategy 2: "calculate/compute/find the X" → match X to headers
+    calc_phrases = re.findall(
+        r'(?:calculat|comput|find|determin)\w*\s+(?:the\s+)?(?:average\s+|mean\s+|total\s+|net\s+)?'
+        r'(\w[\w\s]{2,30}?)(?:\s+(?:for|of|in|from|using|based)\b|[.,;]|\s*$)',
+        text_lower,
+    )
+    if calc_phrases:
+        editable = []
+        for phrase in calc_phrases:
+            phrase_words = set(phrase.strip().split())
+            for idx, h in enumerate(headers):
+                h_words = set(re.sub(r'\([^)]*\)', '', h).lower().split())
+                # Match if the calculated thing shares significant words with a header
+                overlap = phrase_words & h_words - {'the', 'a', 'an', 'each', 'for', 'of'}
+                if overlap and len(overlap) >= 1:
+                    if idx not in editable:
+                        editable.append(idx)
+        if editable:
+            return editable
+
+    # Strategy 3: If row_labels match the first column of expected_data,
+    # the first column is labels (given). If all other columns are numeric
+    # but only the last column is the "result", mark the last as editable.
+    # This catches generic "complete the table" with an obvious structure.
+    expected = q.get('expected_data', [])
+    row_labels = q.get('row_labels', [])
+    if expected and row_labels and _CALC_KEYWORDS.search(text_lower):
+        # If there's a clear calculation keyword and we couldn't match above,
+        # assume the last column is the computed result
+        if len(headers) >= 3:
+            return [len(headers) - 1]
+
+    return []
+
 
 def _hydrate_data_table(q):
     """Normalize data_table fields. Downgrade analysis-type or empty tables to short_answer."""
@@ -946,9 +1099,19 @@ def _hydrate_data_table(q):
                 q['question'] = question_text.rstrip() + '\n\n' + table_md
         q['question_type'] = 'short_answer'
         return
-    # Normal data_table: create blank initial_data from expected_data shape
+    # Normal data_table: create initial_data from expected_data
+    # Determine editable columns: explicit from AI, or infer from question text + headers
     if 'initial_data' not in q:
-        q['initial_data'] = [[''] * len(row) for row in expected]
+        editable = q.get('editable_columns') or _infer_editable_columns(q, question_text)
+        if editable:
+            q['editable_columns'] = editable  # persist for frontend/grading
+            q['initial_data'] = [
+                ['' if cIdx in editable else val for cIdx, val in enumerate(row)]
+                for row in expected
+            ]
+        else:
+            # Can't determine — all cells editable (classification tables, etc.)
+            q['initial_data'] = [[''] * len(row) for row in expected]
     if 'num_rows' not in q:
         q['num_rows'] = len(expected)
 
@@ -2111,6 +2274,13 @@ def brainstorm_lesson_ideas():
     if not selected_standards:
         return jsonify({"error": "No standards selected"})
 
+    _subject = config.get('subject', '').strip()
+    _grade = config.get('grade', '').strip()
+    if not _subject or not _grade:
+        from flask import current_app
+        current_app.logger.warning(
+            f"Brainstorm requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
+
     try:
         from openai import OpenAI
         from dotenv import load_dotenv
@@ -2190,7 +2360,11 @@ NO TECHNOLOGY TOOLS SELECTED: Focus entirely on non-digital activities using sta
         for i, s in enumerate(selected_standards, 1):
             standards_text += f"\n{i}. {s}"
 
+        subject_boundary = _build_subject_boundary_prompt(
+            config.get('subject', ''), config.get('grade', ''))
+
         prompt = f"""You are an expert curriculum developer brainstorming lesson plan ideas for a {config.get('grade', '7')}th grade {config.get('subject', 'Social Studies')} class.
+{subject_boundary}
 {support_docs}
 
 STANDARDS TO COVER (every idea MUST directly address these specific standards):
@@ -2270,6 +2444,13 @@ def generate_lesson_plan():
 
     if not selected_standards:
         return jsonify({"error": "No standards selected"})
+
+    _subject = config.get('subject', '').strip()
+    _grade = config.get('grade', '').strip()
+    if not _subject or not _grade:
+        from flask import current_app
+        current_app.logger.warning(
+            f"Lesson plan requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
 
     try:
         from openai import OpenAI
@@ -2372,8 +2553,13 @@ Develop this specific concept into a complete, detailed lesson plan.
         else:
             title_instruction = "Title: Generate a descriptive, engaging title based on the standards and content below."
 
+        # Build subject boundary constraint for prompt injection
+        subject_boundary = _build_subject_boundary_prompt(
+            config.get('subject', ''), config.get('grade', ''))
+
         # Build content-type-specific prompt, JSON structure, and instructions
         common_header = f"""You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
+{subject_boundary}
 {support_docs}
 {idea_guidance}
 {tools_instruction}
@@ -2467,7 +2653,7 @@ QUESTION TYPE GUIDANCE:
 - Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
 - For multiple choice, include "options" array. For matching, include "terms" and "definitions".
 - ONLY set question_type explicitly for these complex types that need structured data:
-  data_table (include headers, row_labels, expected_data),
+  data_table (include headers, row_labels, expected_data with ALL values filled, editable_columns for calculation tables),
   box_plot (include data array), dot_plot (include data),
   stem_and_leaf (include data), bar_chart (include chart_data),
   transformations (include original_vertices, transformation_type, transform_params),
@@ -2655,7 +2841,11 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                 plan = json.loads(content)
                 if content_type == 'Assignment':
                     target_q = config.get('totalQuestions', 10)
-                    plan, extra_usage = _post_process_assignment(plan, target_q, target_total_points=100)
+                    lp_std_codes = [s.split(':')[0].strip() for s in selected_standards if ':' in s]
+                    plan, extra_usage = _post_process_assignment(
+                        plan, target_q, target_total_points=100,
+                        subject=config.get('subject'), grade=config.get('grade'),
+                        valid_standard_codes=lp_std_codes if lp_std_codes else None)
                     if extra_usage:
                         for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
                             total_usage[k] += extra_usage.get(k, 0)
@@ -2685,7 +2875,11 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
         if content_type == 'Assignment':
             target_q = config.get('totalQuestions', 10)
-            plan, extra_usage = _post_process_assignment(plan, target_q, target_total_points=100)
+            lp_std_codes = [s.split(':')[0].strip() for s in selected_standards if ':' in s]
+            plan, extra_usage = _post_process_assignment(
+                plan, target_q, target_total_points=100,
+                subject=config.get('subject'), grade=config.get('grade'),
+                valid_standard_codes=lp_std_codes if lp_std_codes else None)
         else:
             extra_usage = None
             # Strip stray sections/questions from non-assignment types so
@@ -2747,6 +2941,13 @@ def generate_assignment_from_lesson():
     lesson_plan = data.get('lessonPlan', {})
     config = data.get('config', {})
     assignment_type = data.get('assignmentType', 'worksheet')  # worksheet, quiz, project, homework
+
+    _subject = config.get('subject', '').strip()
+    _grade = config.get('grade', '').strip()
+    if not _subject or not _grade:
+        from flask import current_app
+        current_app.logger.warning(
+            f"Assignment-from-lesson requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
 
     if not lesson_plan:
         return jsonify({"error": "No lesson plan provided"})
@@ -2876,7 +3077,11 @@ CRITICAL: When an assignment requires digital creation (infographics, presentati
 NO TECHNOLOGY TOOLS SPECIFIED: Focus on paper-based or physical deliverables only.
 """
 
+        subject_boundary = _build_subject_boundary_prompt(
+            config.get('subject', ''), config.get('grade', ''))
+
         prompt = f"""You are an expert teacher creating an assessment/assignment based on a lesson plan.
+{subject_boundary}
 {tools_instruction}
 LESSON PLAN DETAILS:
 Title: {lesson_title}
@@ -2906,7 +3111,7 @@ Create a complete, ready-to-use assignment that:
 
 CRITICAL REQUIREMENTS:
 - THE ASSIGNMENT MUST BE 100% SELF-CONTAINED. Every resource referenced in the instructions (tables, charts, data sets, reading passages, maps, diagrams, timelines, primary sources) MUST be fully included in the assignment JSON. NEVER tell students to "complete the data table" or "analyze the chart" without providing the actual table data or chart data in the question object. If a question references a table, include "expected_data" with headers and pre-filled data. If it references a reading passage, include the full passage text in the question field.
-- For data_table questions: ALWAYS include "column_headers" (array of header strings), "row_labels" (array of row labels), and "expected_data" (2D array of correct values). The student sees the headers and row labels and fills in the values.
+- For data_table questions: ALWAYS include "column_headers" (array of header strings), "row_labels" (array of row labels), and "expected_data" (2D array with ALL correct numeric/text values — NEVER leave cells empty or use placeholders). For calculation tables where some columns are GIVEN and others are for the student to CALCULATE, include "editable_columns" (array of 0-based column indices the student fills in). Given columns will be pre-filled for the student.
 - CRITICAL: NEVER put table data as plain text or markdown pipes (| x | y |) inside the "question" string. If a question involves a table, use question_type "data_table" with structured data fields. Tables rendered as text are unreadable.
 - For Math: Use REAL numbers and actual problems (e.g., "Solve: 3/4 + 1/2 = ?"), not placeholders
 - All questions must be answerable based on the lesson content
@@ -2925,9 +3130,9 @@ QUESTION TYPE GUIDANCE:
 - Write geometry dimensions clearly in question text: "Find the area of a triangle with base 8 cm and height 5 cm"
 - Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
 - For multiple choice, include "options" array. For matching, include "terms" and "definitions".
-- For data_table: ONLY use when students must FILL IN values. Include "column_headers", "row_labels", "expected_data". NEVER use for analysis-type questions.
+- For data_table: ONLY use when students must FILL IN values. Include "column_headers", "row_labels", "expected_data" (2D array with ALL correct values — NEVER leave cells empty). For calculation tables where some columns are GIVEN data and others are for the student to CALCULATE, also include "editable_columns" (array of column indices the student fills in). Columns NOT in editable_columns will be pre-filled for the student.
 - ONLY set question_type explicitly for these complex types that need structured data:
-  data_table (include headers, row_labels, expected_data),
+  data_table (include headers, row_labels, expected_data, editable_columns),
   box_plot (include data array), dot_plot (include data),
   stem_and_leaf (include data), bar_chart (include chart_data),
   transformations (include original_vertices, transformation_type, transform_params),
@@ -2960,7 +3165,8 @@ Return JSON with this structure:
                     "question_type": "short_answer",  // or "math_equation", "data_table", "coordinates"
                     "options": ["A) ...", "B) ...", "C) ...", "D) ..."],  // for multiple choice
                     "answer": "The correct answer",  // for most types
-                    "expected_data": [[1, 2], [3, 4]],  // for data_table type
+                    "expected_data": [[1, 2], [3, 4]],  // for data_table type — ALL cells must have real values
+                    "editable_columns": [1],  // for data_table calculation tables — column indices students fill in
                     "tolerance": 0.05,  // for data_table (optional, default 5%)
                     "tolerance_km": 50,  // for coordinates (optional, default 50km)
                     "points": 2
@@ -3001,7 +3207,8 @@ The portal has interactive visual components — use them instead of referencing
 NEVER say "refer to the diagram" or "look at the figure." Use structured data fields and the system renders the visual.
 
 - DATA TABLE (question_type: "data_table") — for lab data, measurements, classification, calculations:
-  {{"question": "A student measured the time for a ball to roll down ramps of different heights. Complete the data table by calculating average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "answer": "speed = distance / time", "dok": 2, "points": 3}}
+  Calculation table (some columns given, student calculates others):
+  {{"question": "A student measured the time for a ball to roll down ramps of different heights. Complete the data table by calculating average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "editable_columns": [3], "answer": "speed = distance / time", "dok": 2, "points": 3}}
 
   Classification table:
   {{"question": "Classify each substance as an element, compound, or mixture.", "question_type": "data_table", "column_headers": ["Substance", "Classification", "Reasoning"], "row_labels": ["Oxygen (O₂)", "Water (H₂O)", "Salt water", "Iron (Fe)"], "expected_data": [["Oxygen (O₂)", "Element", "Single type of atom"], ["Water (H₂O)", "Compound", "Two elements chemically bonded"], ["Salt water", "Mixture", "Separable by evaporation"], ["Iron (Fe)", "Element", "Single type of atom"]], "answer": "See expected_data", "dok": 2, "points": 3}}
@@ -3077,7 +3284,9 @@ Make the questions specific to the lesson content. Include a variety of question
         content = completion.choices[0].message.content
         assignment = json.loads(content)
         target_q = config.get('totalQuestions', 10)
-        assignment, extra_usage = _post_process_assignment(assignment, target_q, target_total_points=100)
+        assignment, extra_usage = _post_process_assignment(
+            assignment, target_q, target_total_points=100,
+            subject=config.get('subject'), grade=config.get('grade'))
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
         assignment['subject'] = config.get('subject', 'General')
@@ -4229,6 +4438,13 @@ def generate_assessment():
     if not standards:
         return jsonify({"error": "No standards provided"})
 
+    _subject = config.get('subject', '').strip()
+    _grade = config.get('grade', '').strip()
+    if not _subject or not _grade:
+        from flask import current_app
+        current_app.logger.warning(
+            f"Assessment requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
+
     try:
         from openai import OpenAI
         from dotenv import load_dotenv
@@ -4381,7 +4597,7 @@ QUESTION TYPE GUIDANCE:
 - Write geometry dimensions clearly in text: "Find the area of a triangle with base 8 cm and height 5 cm"
 - Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
 - ONLY set question_type explicitly for complex types needing structured data:
-  data_table (include column_headers, row_labels, expected_data),
+  data_table (include column_headers, row_labels, expected_data with ALL values, editable_columns for calculation tables),
   box_plot (include data), dot_plot (include data), stem_and_leaf (include data),
   bar_chart (include chart_data), transformations, fraction_model, probability_tree,
   tape_diagram, venn_diagram, protractor,
@@ -4424,8 +4640,8 @@ NEVER reference a figure, diagram, or image that isn't provided as structured da
 Use for: lab data, experiment results, classification, measurements, calculations.
 Students see headers and row labels and fill in the values.
 
-Lab data collection:
-{"question": "A student measured the time it takes for a ball to roll down ramps of different heights. Complete the data table by calculating the average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "answer": "Students calculate speed = distance / time for each trial", "dok": 2, "points": 3}
+Lab data collection (calculation table — given columns pre-filled, student calculates others):
+{"question": "A student measured the time it takes for a ball to roll down ramps of different heights. Complete the data table by calculating the average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "editable_columns": [3], "answer": "Students calculate speed = distance / time for each trial", "dok": 2, "points": 3}
 
 Classification table:
 {"question": "Classify each substance as an element, compound, or mixture by completing the table.", "question_type": "data_table", "column_headers": ["Substance", "Classification", "Reasoning"], "row_labels": ["Oxygen (O₂)", "Water (H₂O)", "Salt water", "Iron (Fe)", "Carbon dioxide (CO₂)"], "expected_data": [["Oxygen (O₂)", "Element", "Single type of atom"], ["Water (H₂O)", "Compound", "Two elements chemically bonded"], ["Salt water", "Mixture", "Can be separated by evaporation"], ["Iron (Fe)", "Element", "Single type of atom"], ["Carbon dioxide (CO₂)", "Compound", "Two elements chemically bonded"]], "answer": "See expected_data", "dok": 2, "points": 3}
@@ -4526,8 +4742,12 @@ CRITICAL: Include real geographic data and coordinates. Use the portal's interac
 """
         # For math or unrecognized subjects, no extra examples needed (math already has them in question_type_instructions)
 
-        prompt = f"""You are an expert assessment developer creating a standards-aligned {assessment_type} for grade {config.get('grade', '8')} {config.get('subject', 'students')}.
+        input_standard_codes = [s.get('code', '') for s in standards if s.get('code')]
+        subject_boundary = _build_subject_boundary_prompt(
+            config.get('subject', ''), config.get('grade', ''), input_standard_codes)
 
+        prompt = f"""You are an expert assessment developer creating a standards-aligned {assessment_type} for grade {config.get('grade', '8')} {config.get('subject', 'students')}.
+{subject_boundary}
 {dok_descriptions}
 {source_content}
 STANDARDS TO ASSESS:
@@ -4624,7 +4844,10 @@ Generate a complete assessment in this JSON format:
 
         content = completion.choices[0].message.content
         assessment = json.loads(content)
-        assessment, _ = _post_process_assignment(assessment, target_total_points=total_points)
+        assessment, _ = _post_process_assignment(
+            assessment, target_total_points=total_points,
+            subject=config.get('subject'), grade=config.get('grade'),
+            valid_standard_codes=input_standard_codes)
 
         # Collect any quality warnings attached to questions
         quality_warnings = []
@@ -5490,6 +5713,13 @@ def regenerate_questions():
     if not questions_to_replace:
         return jsonify({"error": "No questions specified for regeneration"}), 400
 
+    _subject = config.get('subject', '').strip()
+    _grade = config.get('grade', config.get('grade_level', '')).strip()
+    if not _subject or not _grade:
+        from flask import current_app
+        current_app.logger.warning(
+            f"Regenerate requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
+
     try:
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -5512,8 +5742,13 @@ def regenerate_questions():
 
         existing_list = "\n".join(f"- {q}" for q in existing_questions[:50]) if existing_questions else "None"
 
-        prompt = f"""Generate {len(questions_to_replace)} replacement question(s) for a grade {grade} {subject} assessment.
+        regen_standard_codes = list(set(
+            q.get('standard', '') for q in questions_to_replace if q.get('standard')
+        ))
+        subject_boundary = _build_subject_boundary_prompt(subject, grade, regen_standard_codes)
 
+        prompt = f"""Generate {len(questions_to_replace)} replacement question(s) for a grade {grade} {subject} assessment.
+{subject_boundary}
 Each replacement must match the specified type, DOK level, and point value exactly.
 DO NOT duplicate any of these existing questions:
 {existing_list}

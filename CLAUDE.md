@@ -360,4 +360,53 @@ python graider_app.py
 
 ---
 
-*Last updated: January 2025*
+## Development Principles
+
+### 1. Read Before Write
+Understand context before changing code. Read the function, its callers, and related tests before modifying anything. Never propose changes to code you haven't read. For data-flow bugs, trace the full pipeline (generation → hydration → rendering) before patching one layer.
+
+### 2. Simplicity First
+Make every change as simple as possible. Minimum viable change, not minimum effort. Don't add features, refactor code, or make "improvements" beyond what was asked. Three similar lines of code is better than a premature abstraction. If a fix touches more than 3 files, pause and ask if there's a simpler way.
+
+### 3. Programmatic Over Probabilistic
+Fix bugs in code, not prompts. If the AI can generate bad data, write deterministic post-processing that catches and corrects it — don't rely on prompt wording to prevent it. Prompt improvements are layer 1; code validation is the safety net that actually matters.
+
+### 4. Verify the User Flow
+Unit tests aren't enough — test what the user actually sees. `npm run build` succeeding doesn't mean the feature works. After backend changes, generate a real assessment/assignment and verify the output. After frontend changes, check the rendered UI. "Build passes" is necessary but not sufficient.
+
+### 5. Minimal Blast Radius
+Understand what you're touching before you touch it. A one-object fix (domainNameMap) and a cross-cutting pipeline change (_infer_editable_columns) require different levels of caution. For multi-file changes, map the affected callers first. Never change a shared utility without checking all consumers.
+
+### 6. Root Cause, Not Patch
+Find and fix the actual problem. Empty data tables? Fix the hydration logic that blanks all cells, don't just tell the AI to try harder in the prompt. "N" and "P" buttons? The map is missing entries, not a CSS issue. Ask "why is this happening?" before "how do I hide it?"
+
+### 7. Don't Flag What You Fix
+If a deterministic pipeline phase corrects a problem (e.g., `_normalize_points` fixes point totals), don't also flag it as a warning in a separate validation phase. The user sees a confusing warning about a value that's already been corrected. Either fix silently or warn without fixing — never both.
+
+### 8. Plan for Non-Trivial Tasks
+Enter plan mode for any task requiring 3+ steps or architectural decisions. If something goes sideways, STOP and re-plan — don't keep pushing down a broken path. Write detailed specs upfront to reduce ambiguity. Use plan mode for verification steps, not just building.
+
+### 9. Autonomous Bug Fixing
+When given a bug report with a screenshot or clear description: just fix it. Read the relevant code, identify the root cause, implement the fix, test it. Don't ask "what would you like me to do?" when the answer is obviously "fix it." Zero context-switching required from the user.
+
+### 10. Subagent Discipline
+Use subagents when the task requires 3+ searches, parallel research across multiple files, or would pollute the main context with large outputs. Don't use them for simple greps or reading one file. One task per subagent for focused execution. Prefer direct Glob/Grep/Read for targeted lookups.
+
+---
+
+## Post-Processing Pipeline (planner_routes.py)
+
+The assessment/assignment generation pipeline has 6 phases in `_post_process_assignment()`. Changes to any phase must consider ordering and side effects:
+
+1. **Phase 1**: `_classify_question_type` — assigns question_type from text/structure
+2. **Phase 2**: `_hydrate_question` — populates fields (geometry dims, data_table initial_data, etc.)
+3. **Phase 3**: `_validate_question` — structural validation (options present, terms present)
+4. **Phase 3c**: `_validate_question_quality` — 14 deterministic quality checks + AI auto-fix
+5. **Phase 4**: `_enforce_question_count` — trim/pad to target count (if specified)
+6. **Phase 5**: `_normalize_points` — ensure points sum to target total (always runs)
+
+Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn about point values that normalization will correct.
+
+---
+
+*Last updated: February 2025*
