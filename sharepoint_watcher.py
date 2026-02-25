@@ -45,32 +45,38 @@ class SharePointWatcher:
                 return json.load(f)
         return {}
     
-    def save_config(self, sharepoint_url: str, email: str, password: str, 
+    def save_config(self, sharepoint_url: str, email: str, password: str,
                     download_folder: str, check_interval: int = 300):
         """
         Save watcher configuration.
-        
+
         Args:
             sharepoint_url: URL to the SharePoint/OneNote folder
             email: Microsoft 365 email
-            password: Password (will be stored - consider keychain in production)
+            password: Password (stored in OS keyring)
             download_folder: Local folder to save downloaded files
             check_interval: Seconds between checks (default 5 minutes)
         """
+        # Store password in OS keyring (macOS Keychain / Windows Credential Manager)
+        try:
+            import keyring
+            keyring.set_password("graider-sharepoint", email, password)
+        except Exception as e:
+            print(f"Warning: Could not store password in keyring: {e}")
+
         self.config = {
             "sharepoint_url": sharepoint_url,
             "email": email,
-            "password": password,  # TODO: Use keychain for production
             "download_folder": download_folder,
             "check_interval": check_interval
         }
-        
+
         # Create config directory if needed
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-        
+
         with open(self.config_path, 'w') as f:
             json.dump(self.config, f, indent=2)
-        
+
         # Secure the file (owner read/write only)
         os.chmod(self.config_path, 0o600)
         
@@ -137,8 +143,18 @@ class SharePointWatcher:
             True if login successful, False otherwise
         """
         email = self.config.get('email')
-        password = self.config.get('password')
         url = self.config.get('sharepoint_url')
+
+        # Retrieve password from OS keyring; fall back to config for migration
+        password = None
+        if email:
+            try:
+                import keyring
+                password = keyring.get_password("graider-sharepoint", email)
+            except Exception:
+                pass
+        if not password:
+            password = self.config.get('password')
         
         if not all([email, password, url]):
             print("❌ Missing configuration. Run save_config() first.")

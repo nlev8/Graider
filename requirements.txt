@@ -36,6 +36,9 @@ supabase>=2.0.0
 # Auth (JWT validation)
 PyJWT>=2.8.0
 
+# Secure credential storage (SharePoint password)
+keyring>=25.0.0
+
 # Stripe (Billing)
 stripe>=7.0.0
 

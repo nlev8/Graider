@@ -2291,7 +2291,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Assignment name (used in output files and emails)
-ASSIGNMENT_NAME = "Cornell Notes - Political Parties"  # UPDATE FOR EACH ASSIGNMENT
+ASSIGNMENT_NAME = ""  # Set dynamically from assignment config; empty = use filename
 
 # Marker phrase(s) that indicate where student work begins
 # Only content within the section (until next header) will be graded

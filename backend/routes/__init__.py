@@ -22,14 +22,15 @@ from .assistant_routes import assistant_bp
 from .stripe_routes import stripe_bp
 from .auth_routes import auth_bp
 from .automation_routes import automation_bp
+from .student_account_routes import student_account_bp
 
 
-def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None):
+def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None, grading_lock=None):
     """Register all route blueprints with the Flask app."""
 
     # Initialize grading routes with state references if provided
     if grading_state is not None:
-        init_grading_routes(grading_state, run_grading_fn, reset_fn)
+        init_grading_routes(grading_state, run_grading_fn, reset_fn, grading_lock)
 
     # Register all blueprints
     app.register_blueprint(settings_bp)
@@ -46,6 +47,7 @@ def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None)
     app.register_blueprint(stripe_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(automation_bp)
+    app.register_blueprint(student_account_bp)
 
 
 __all__ = [
@@ -63,4 +65,5 @@ __all__ = [
     'stripe_bp',
     'auth_bp',
     'automation_bp',
+    'student_account_bp',
 ]

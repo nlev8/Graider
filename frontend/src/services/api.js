@@ -643,6 +643,45 @@ export async function submitStudentAssessment(joinCode, studentName, answers, ti
   })
 }
 
+// ============ Student Account Portal ============
+
+export async function createClass(name, subject, gradeLevel) {
+  return fetchApi('/api/classes', {
+    method: 'POST',
+    body: JSON.stringify({ name, subject, grade_level: gradeLevel }),
+  })
+}
+
+export async function listClasses() {
+  return fetchApi('/api/classes')
+}
+
+export async function listClassStudents(classId) {
+  return fetchApi('/api/classes/' + classId + '/students')
+}
+
+export async function publishToClass(classId, content, contentType, title, settings, dueDate) {
+  return fetchApi('/api/publish-to-class', {
+    method: 'POST',
+    body: JSON.stringify({
+      class_id: classId,
+      content, content_type: contentType,
+      title, settings, due_date: dueDate,
+    }),
+  })
+}
+
+export async function getPortalSubmissions() {
+  return fetchApi('/api/portal-submissions')
+}
+
+export async function gradePortalSubmission(submissionId) {
+  return fetchApi('/api/grade-portal-submission', {
+    method: 'POST',
+    body: JSON.stringify({ submission_id: submissionId }),
+  })
+}
+
 // ============ Saved Assessments (Local) ============
 
 export async function saveAssessmentLocally(assessment, name) {

@@ -250,23 +250,27 @@ grading_state = {
     "cost_warning_sent": False,
 }
 
+# Lock for thread-safe access to grading_state (mutated by grading thread + Flask request threads)
+grading_lock = threading.Lock()
+
 
 def reset_state(clear_results=False):
     global grading_state
-    grading_state.update({
-        "is_running": False,
-        "stop_requested": False,
-        "progress": 0,
-        "total": 0,
-        "current_file": "",
-        "log": [],
-        "results": [] if clear_results else grading_state.get("results", []),
-        "complete": False,
-        "error": None,
-        "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
-        "cost_limit": 0,
-        "cost_warning_pct": 80,
-        "cost_limit_hit": False,
+    with grading_lock:
+        grading_state.update({
+            "is_running": False,
+            "stop_requested": False,
+            "progress": 0,
+            "total": 0,
+            "current_file": "",
+            "log": [],
+            "results": [] if clear_results else grading_state.get("results", []),
+            "complete": False,
+            "error": None,
+            "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
+            "cost_limit": 0,
+            "cost_warning_pct": 80,
+            "cost_limit_hit": False,
         "cost_warning_sent": False,
     })
 
@@ -1711,7 +1715,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
 # ══════════════════════════════════════════════════════════════
 
 from routes import register_routes
-register_routes(app, grading_state, run_grading_thread, reset_state)
+register_routes(app, grading_state, run_grading_thread, reset_state, grading_lock)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1728,9 +1732,9 @@ def start_grading():
         return jsonify({"error": "Grading already in progress"}), 400
 
     data = request.json
-    assignments_folder = data.get('assignments_folder', '/Users/alexc/Library/CloudStorage/OneDrive-VolusiaCountySchools/Assignments')
-    output_folder = data.get('output_folder', '/Users/alexc/Downloads/Graider/Results')
-    roster_file = data.get('roster_file', '/Users/alexc/Downloads/Graider/all_students_updated.xlsx')
+    assignments_folder = data.get('assignments_folder', os.path.expanduser('~/Downloads/Graider/Assignments'))
+    output_folder = data.get('output_folder', os.path.expanduser('~/Downloads/Graider/Results'))
+    roster_file = data.get('roster_file', os.path.expanduser('~/Downloads/Graider/all_students_updated.xlsx'))
     grading_period = data.get('grading_period', 'Q3')
     grade_level = data.get('grade_level', '7')
     subject = data.get('subject', 'US History')
@@ -2518,7 +2522,7 @@ def add_student_to_roster():
         student_name = f"{last_name}; {full_first}"
 
         # Find the period CSV file
-        periods_dir = "/Users/alexc/Downloads/Graider/Period CSVs"
+        periods_dir = os.path.expanduser("~/.graider_data/periods")
         period_file = None
 
         for f in os.listdir(periods_dir):
@@ -2568,7 +2572,7 @@ def add_student_to_roster():
 def list_periods():
     """List available period CSV files."""
     try:
-        periods_dir = "/Users/alexc/Downloads/Graider/Period CSVs"
+        periods_dir = os.path.expanduser("~/.graider_data/periods")
         periods = []
 
         if os.path.exists(periods_dir):

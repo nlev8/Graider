@@ -28,14 +28,16 @@ for _dir in [EXPORTS_DIR, FOCUS_EXPORTS_DIR, OUTLOOK_EXPORTS_DIR]:
 grading_state = None
 run_grading_thread = None
 reset_state = None
+grading_lock = None
 
 
-def init_grading_routes(state_ref, thread_fn, reset_fn):
+def init_grading_routes(state_ref, thread_fn, reset_fn, lock_ref=None):
     """Initialize grading routes with references from main app."""
-    global grading_state, run_grading_thread, reset_state
+    global grading_state, run_grading_thread, reset_state, grading_lock
     grading_state = state_ref
     run_grading_thread = thread_fn
     reset_state = reset_fn
+    grading_lock = lock_ref
 
 
 @grading_bp.route('/api/status')
@@ -43,6 +45,10 @@ def get_status():
     """Get current grading status."""
     if grading_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
+    if grading_lock:
+        with grading_lock:
+            snapshot = dict(grading_state)
+        return jsonify(snapshot)
     return jsonify(grading_state)
 
 
@@ -98,11 +104,19 @@ def stop_grading():
     if grading_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
 
-    if grading_state["is_running"]:
-        grading_state["stop_requested"] = True
-        grading_state["log"].append("")
-        grading_state["log"].append("Stop requested... saving progress...")
-        return jsonify({"stopped": True, "message": "Stop requested, saving progress..."})
+    if grading_lock:
+        with grading_lock:
+            if grading_state["is_running"]:
+                grading_state["stop_requested"] = True
+                grading_state["log"].append("")
+                grading_state["log"].append("Stop requested... saving progress...")
+                return jsonify({"stopped": True, "message": "Stop requested, saving progress..."})
+    else:
+        if grading_state["is_running"]:
+            grading_state["stop_requested"] = True
+            grading_state["log"].append("")
+            grading_state["log"].append("Stop requested... saving progress...")
+            return jsonify({"stopped": True, "message": "Stop requested, saving progress..."})
 
     return jsonify({"stopped": False, "message": "Grading not running"})
 
@@ -113,8 +127,14 @@ def clear_results():
     if grading_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
 
-    if grading_state["is_running"]:
-        return jsonify({"error": "Cannot clear results while grading is in progress"}), 400
+    if grading_lock:
+        grading_lock.acquire()
+    try:
+        if grading_state["is_running"]:
+            return jsonify({"error": "Cannot clear results while grading is in progress"}), 400
+    finally:
+        if grading_lock:
+            grading_lock.release()
 
     data = request.get_json() or {}
     filenames_filter = data.get("filenames")  # Optional: only clear specific filenames
@@ -128,13 +148,21 @@ def clear_results():
     if filenames_filter and isinstance(filenames_filter, list):
         # Clear only results matching specific filenames
         filenames_set = set(filenames_filter)
-        original_count = len(grading_state.get("results", []))
-
-        grading_state["results"] = [
-            r for r in grading_state.get("results", [])
-            if r.get("filename") not in filenames_set
-        ]
-        cleared_count = original_count - len(grading_state["results"])
+        if grading_lock:
+            with grading_lock:
+                original_count = len(grading_state.get("results", []))
+                grading_state["results"] = [
+                    r for r in grading_state.get("results", [])
+                    if r.get("filename") not in filenames_set
+                ]
+                cleared_count = original_count - len(grading_state["results"])
+        else:
+            original_count = len(grading_state.get("results", []))
+            grading_state["results"] = [
+                r for r in grading_state.get("results", [])
+                if r.get("filename") not in filenames_set
+            ]
+            cleared_count = original_count - len(grading_state["results"])
 
         # Also update the saved JSON file
         if os.path.exists(results_file):
@@ -169,10 +197,17 @@ def clear_results():
         return jsonify({"status": "cleared", "cleared_count": cleared_count})
     else:
         # Clear all results
-        cleared_count = len(grading_state.get("results", []))
-        grading_state["results"] = []
-        grading_state["log"] = []
-        grading_state["complete"] = False
+        if grading_lock:
+            with grading_lock:
+                cleared_count = len(grading_state.get("results", []))
+                grading_state["results"] = []
+                grading_state["log"] = []
+                grading_state["complete"] = False
+        else:
+            cleared_count = len(grading_state.get("results", []))
+            grading_state["results"] = []
+            grading_state["log"] = []
+            grading_state["complete"] = False
 
         # Clear saved results file
         if os.path.exists(results_file):
@@ -279,42 +314,58 @@ def update_result():
     if not filename:
         return jsonify({"error": "Filename is required"}), 400
 
-    # Find the result to update
-    result_index = None
-    for i, r in enumerate(grading_state["results"]):
-        if r.get('filename', '') == filename:
-            result_index = i
-            break
+    # Find and update the result under lock
+    def _do_update():
+        result_index = None
+        for i, r in enumerate(grading_state["results"]):
+            if r.get('filename', '') == filename:
+                result_index = i
+                break
 
-    if result_index is None:
-        return jsonify({"error": "Result not found"}), 404
+        if result_index is None:
+            return None, ("Result not found", 404)
 
-    # Update allowed fields
-    allowed_fields = ['score', 'letter_grade', 'feedback', 'verified']
-    for field in allowed_fields:
-        if field in data:
-            grading_state["results"][result_index][field] = data[field]
+        # Update allowed fields
+        allowed_fields = ['score', 'letter_grade', 'feedback', 'verified']
+        for field in allowed_fields:
+            if field in data:
+                grading_state["results"][result_index][field] = data[field]
 
-    # Recalculate letter grade if score changed
-    if 'score' in data:
-        score = int(data['score'])
-        grading_state["results"][result_index]['letter_grade'] = (
-            'A' if score >= 90 else
-            'B' if score >= 80 else
-            'C' if score >= 70 else
-            'D' if score >= 60 else 'F'
-        )
+        # Recalculate letter grade if score changed
+        if 'score' in data:
+            score = int(data['score'])
+            grading_state["results"][result_index]['letter_grade'] = (
+                'A' if score >= 90 else
+                'B' if score >= 80 else
+                'C' if score >= 70 else
+                'D' if score >= 60 else 'F'
+            )
 
-    # Save to results JSON
+        return dict(grading_state["results"][result_index]), None
+
+    if grading_lock:
+        with grading_lock:
+            updated_result, err = _do_update()
+    else:
+        updated_result, err = _do_update()
+
+    if err:
+        return jsonify({"error": err[0]}), err[1]
+
+    # Save to results JSON (outside lock — file I/O is slow)
     results_file = os.path.expanduser("~/.graider_results.json")
     try:
+        if grading_lock:
+            with grading_lock:
+                results_copy = list(grading_state["results"])
+        else:
+            results_copy = list(grading_state["results"])
         with open(results_file, 'w', encoding='utf-8') as f:
-            json.dump(grading_state["results"], f, indent=2)
+            json.dump(results_copy, f, indent=2)
     except Exception:
         pass
 
     # Sync updated fields to master_grades.csv so the Assistant sees fresh data
-    updated_result = grading_state["results"][result_index]
     _sync_result_to_master_csv(updated_result)
 
     return jsonify({

@@ -28,6 +28,7 @@ import { AssignmentPlayer } from "./components";
 import QuestionEditToolbar from "./components/QuestionEditToolbar";
 import QuestionEditOverlay from "./components/QuestionEditOverlay";
 import StudentPortal from "./components/StudentPortal";
+import StudentApp from "./components/StudentApp";
 import * as api from "./services/api";
 import { getAuthHeaders } from "./services/api";
 import { supabase } from "./services/supabase";
@@ -654,6 +655,9 @@ function PasswordResetScreen({ onDone }) {
 
 function App() {
   // Check if this is the student portal route
+  if (window.location.pathname.startsWith("/student")) {
+    return <StudentApp />;
+  }
   if (window.location.pathname.startsWith("/join")) {
     return <StudentPortal />;
   }
@@ -1166,6 +1170,7 @@ function App() {
     document.body.style.userSelect = "none";
   }
 
+  const [portalSubmissions, setPortalSubmissions] = useState([]);
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
   const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
   const [resultsAssignmentFilter, setResultsAssignmentFilter] = useState(""); // Filter results by assignment
@@ -1189,6 +1194,22 @@ function App() {
     lastCheck: null,
     newFiles: 0,
   });
+
+  // Fetch portal submissions for Results tab
+  useEffect(() => {
+    if (!user) return;
+    const loadPortalSubmissions = async () => {
+      try {
+        const data = await api.fetchApi('/api/portal-submissions');
+        if (data.submissions) setPortalSubmissions(data.submissions);
+      } catch (e) {
+        // Silently fail - portal submissions are supplementary
+      }
+    };
+    loadPortalSubmissions();
+    const interval = setInterval(loadPortalSubmissions, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Toast notifications
   const [toasts, setToasts] = useState([]);
@@ -8901,7 +8922,12 @@ ${signature}`;
                             <option value="verified">Verified Only</option>
                             <option value="unverified">Unverified Only</option>
                             <option value="mismatched">⚠️ Config Mismatch</option>
-                            <option value="resubmission">🔄 Resubmissions</option>
+                            <option value="resubmission">Resubmissions</option>
+                            {portalSubmissions.length > 0 && (
+                              <option value="portal_pending">
+                                Portal Pending ({portalSubmissions.filter(s => s.status === "submitted").length})
+                              </option>
+                            )}
                           </select>
                           {/* Period Filter Dropdown */}
                           {sortedPeriods.length > 0 && (
@@ -9730,7 +9756,59 @@ ${signature}`;
                       </div>
                     )}
 
-                    {status.results.length === 0 ? (
+                    {/* Portal Submissions Section */}
+                    {portalSubmissions.length > 0 && (resultsFilter === "all" || resultsFilter === "portal_pending") && (
+                      <div style={{
+                        background: "rgba(30,41,59,0.5)", borderRadius: "12px",
+                        border: "1px solid rgba(234,179,8,0.15)", padding: "16px", marginBottom: "20px",
+                      }}>
+                        <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "12px", color: "#fbbf24", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Icon name="Inbox" size={18} /> Portal Submissions
+                          <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--text-muted)" }}>
+                            ({portalSubmissions.filter(s => s.status === "submitted").length} pending)
+                          </span>
+                        </h3>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {portalSubmissions
+                            .filter(s => resultsFilter === "all" || s.status === "submitted")
+                            .map((sub) => (
+                            <div key={sub.submission_id} style={{
+                              display: "flex", justifyContent: "space-between", alignItems: "center",
+                              padding: "10px 14px", borderRadius: "8px",
+                              background: sub.status === "graded" ? "rgba(34,197,94,0.08)" : "rgba(234,179,8,0.08)",
+                              border: "1px solid " + (sub.status === "graded" ? "rgba(34,197,94,0.2)" : "rgba(234,179,8,0.2)"),
+                            }}>
+                              <div>
+                                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{sub.student_name}</span>
+                                <span style={{ color: "var(--text-muted)", marginLeft: "8px", fontSize: "0.85rem" }}>
+                                  {sub.assignment}{sub.period ? " \u2022 " + sub.period : ""}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                {sub.status === "graded" ? (
+                                  <span style={{ color: "#4ade80", fontWeight: 600 }}>
+                                    {sub.percentage != null ? Math.round(sub.percentage) + "%" : sub.score}
+                                    {sub.letter_grade ? " (" + sub.letter_grade + ")" : ""}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    padding: "3px 10px", borderRadius: "12px", fontSize: "0.75rem",
+                                    fontWeight: 600, background: "rgba(234,179,8,0.2)", color: "#fbbf24",
+                                  }}>
+                                    Pending
+                                  </span>
+                                )}
+                                <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                                  {new Date(sub.submitted_at).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {status.results.length === 0 && portalSubmissions.length === 0 ? (
                       <p
                         style={{
                           color: "var(--text-secondary)",
