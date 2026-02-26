@@ -38,6 +38,7 @@ import AutomationBuilder from "./components/AutomationBuilder";
 import OnboardingWizard from "./components/OnboardingWizard";
 import TutorialOverlay, { TUTORIAL_STEPS } from "./components/TutorialOverlay";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
+import { checkRequirementsMismatch } from "./utils/standardsMismatch";
 
 // Tab configuration
 const TABS = [
@@ -4041,6 +4042,8 @@ ${signature}`;
       addToast("Please select at least one standard", "warning");
       return;
     }
+    const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
+    if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
     setBrainstormLoading(true);
     setBrainstormIdeas([]);
     setSelectedIdea(null);
@@ -4067,6 +4070,7 @@ ${signature}`;
           grade: config.grade_level,
           subject: config.subject,
           availableTools: config.availableTools || [],
+          requirements: unitConfig.requirements || "",
         },
       });
       if (data.error)
@@ -4094,6 +4098,8 @@ ${signature}`;
       addToast("Please select at least one standard", "warning");
       return;
     }
+    const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
+    if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
     setPlannerLoading(true);
     setLessonVariations([]);
     try {
@@ -4173,6 +4179,8 @@ ${signature}`;
       addToast("Please select at least one standard", "warning");
       return;
     }
+    const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
+    if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
     setAssessmentLoading(true);
     setGeneratedAssessment(null);
     try {
@@ -4192,6 +4200,7 @@ ${signature}`;
           subject: config.subject,
           teacher_name: config.teacher_name,
           globalAINotes: globalAINotes,
+          requirements: unitConfig.requirements || "",
         },
         { ...assessmentConfig, title },
         selectedSources
@@ -4578,6 +4587,10 @@ ${signature}`;
       addToast("Please generate a lesson plan first", "warning");
       return;
     }
+    if (selectedStandards.length > 0) {
+      const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
+      if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
+    }
     setAssignmentLoading(true);
     setGeneratedAssignment(null);
     try {
@@ -4590,6 +4603,7 @@ ${signature}`;
           sectionCategories: assignmentSectionCategories,
           totalQuestions: unitConfig.totalQuestions,
           questionsPerSection: unitConfig.questionsPerSection,
+          requirements: unitConfig.requirements || "",
         },
         assignmentType,
       );
@@ -4747,6 +4761,7 @@ ${signature}`;
           grade: config.grade_level || "",
           subject: config.subject || "",
           globalAINotes: config.globalAINotes || "",
+          requirements: unitConfig.requirements || "",
         }
       );
 
@@ -4814,6 +4829,7 @@ ${signature}`;
           grade: config.grade_level || "",
           subject: config.subject || "",
           globalAINotes: config.globalAINotes || "",
+          requirements: unitConfig.requirements || "",
         }
       );
 

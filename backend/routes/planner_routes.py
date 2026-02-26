@@ -2371,6 +2371,10 @@ STANDARDS TO COVER (every idea MUST directly address these specific standards):
 {standards_text}
 
 IMPORTANT: Read the benchmark text, vocabulary, and learning targets above carefully. Every lesson idea must be DIRECTLY about the specific topic described in the standard(s). Do NOT generate ideas about other topics, time periods, or standards — ONLY the ones listed above.
+
+TEACHER'S ADDITIONAL REQUIREMENTS:
+{config.get('requirements', '').strip() or 'None specified'}
+NOTE: If the teacher specified additional requirements above, EVERY idea must reflect those requirements. For example, if the teacher says "focus on consequences of the Mexican American War", then all 6 ideas must center on consequences specifically — not just mention the topic generally.
 {tools_instruction}
 
 Generate 6 creative and diverse lesson plan ideas that would effectively teach these exact standards. Each idea should represent a DIFFERENT teaching approach.
@@ -3264,6 +3268,10 @@ For GEOGRAPHY subjects:
   {{"question": "What is the capital city located nearest to the coordinates 30.4°N, 84.3°W?", "answer": "Tallahassee, Florida", "dok": 1, "points": 1}}
 - Map analysis with data_table for comparison:
   {{"question": "Complete the table comparing physical features of Florida's five geographic regions.", "question_type": "data_table", "column_headers": ["Region", "Major Landform", "Elevation Range", "Key Water Feature"], "row_labels": ["Northwest", "Northeast", "Central", "Southwest", "Southeast"], "expected_data": [["Northwest", "Rolling hills", "50-100 m", "Apalachicola River"], ["Northeast", "Coastal plains", "0-30 m", "St. Johns River"], ["Central", "Lake region", "20-50 m", "Lake Okeechobee"], ["Southwest", "Low coastal plain", "0-15 m", "Everglades"], ["Southeast", "Coastal ridge", "0-5 m", "Biscayne Bay"]], "answer": "Students identify correct landforms, elevation ranges, and water features for each region", "dok": 2, "points": 3}}
+{f'''
+TEACHER ADDITIONAL REQUIREMENTS (MUST FOLLOW — every question/activity must reflect these):
+{config.get('requirements', '').strip()}
+''' if config.get('requirements', '').strip() else ''}
 {f'''
 TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
 {config.get('globalAINotes', '')}
@@ -4792,6 +4800,7 @@ CRITICAL REQUIREMENTS:
 SECTION CATEGORIES TO INCLUDE:
 {_build_section_categories_prompt(section_categories, config.get('subject', ''))}
 
+{f"TEACHER'S ADDITIONAL REQUIREMENTS (MUST FOLLOW — every question must reflect these):" + chr(10) + config.get('requirements', '').strip() + chr(10) if config.get('requirements', '').strip() else ''}
 {f"TEACHER'S GLOBAL INSTRUCTIONS (MUST FOLLOW):" + chr(10) + global_ai_notes + chr(10) if global_ai_notes else ''}
 {f"TARGET PERIOD FOR THIS ASSESSMENT: {target_period}" + chr(10) + "CRITICAL: You MUST apply any period-specific differentiation rules from the teacher instructions above to this period." + chr(10) + "- If the instructions indicate this period is advanced, use more challenging vocabulary, higher-level thinking, and complex scenarios" + chr(10) + "- If the instructions indicate this period is standard or lower level, use simpler vocabulary, more scaffolding, and clearer examples" + chr(10) + "- Adjust question complexity, reading level, and depth of knowledge based on the period designation" + chr(10) if target_period else ''}
 Generate a complete assessment in this JSON format:
@@ -5754,6 +5763,7 @@ DO NOT duplicate any of these existing questions:
 {existing_list}
 
 {f'Teacher instructions: {global_notes}' if global_notes else ''}
+{f"Teacher's additional requirements (MUST reflect in every question): {config.get('requirements', '').strip()}" if config.get('requirements', '').strip() else ''}
 
 Replacement specifications:
 {chr(10).join(specs)}
