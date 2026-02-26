@@ -211,6 +211,7 @@ def sync_roster_to_class(class_id):
         first_col = _find_col(reader.fieldnames, ['first name', 'first_name', 'firstname', 'first'])
         last_col = _find_col(reader.fieldnames, ['last name', 'last_name', 'lastname', 'last'])
         name_col = _find_col(reader.fieldnames, ['student', 'student name', 'student_name', 'name'])
+        email_col = _find_col(reader.fieldnames, ['email', 'email address', 'student email', 'student_email'])
 
         synced = 0
         errors = []
@@ -246,8 +247,10 @@ def sync_roster_to_class(class_id):
             if not sid:
                 sid = f"{first}_{last}".lower().replace(' ', '_')
 
+            email = row.get(email_col, '').strip().lower() if email_col else ''
+
             try:
-                student_result = db.table('students').upsert({
+                upsert_data = {
                     'teacher_id': teacher_id,
                     'student_id_number': sid,
                     'first_name': first,
@@ -255,7 +258,13 @@ def sync_roster_to_class(class_id):
                     'period': cls.data[0].get('name', ''),
                     'is_active': True,
                     'updated_at': datetime.now(tz=timezone.utc).isoformat(),
-                }, on_conflict='teacher_id,student_id_number').execute()
+                }
+                if email:
+                    upsert_data['email'] = email
+
+                student_result = db.table('students').upsert(
+                    upsert_data, on_conflict='teacher_id,student_id_number'
+                ).execute()
 
                 if student_result.data:
                     student_uuid = student_result.data[0]['id']
@@ -522,21 +531,21 @@ def grade_portal_submission():
 
 @student_account_bp.route('/api/student/login', methods=['POST'])
 def student_login():
-    """Student login with Student ID + class join code.
+    """Student login with email + class join code.
     Returns a session token valid for 8 hours.
-    Rate-limited: 5 attempts per student ID per 10 minutes.
+    Rate-limited: 5 attempts per email per 10 minutes.
     """
     try:
         db = _get_supabase()
         data = request.json
-        student_id_number = data.get('student_id', '').strip()
+        email = data.get('email', '').strip().lower()
         class_code = data.get('class_code', '').strip().upper()
 
-        if not student_id_number or not class_code:
-            return jsonify({"error": "Student ID and class code are required"}), 400
+        if not email or not class_code:
+            return jsonify({"error": "Email and class code are required"}), 400
 
         # Rate limit check
-        if not _check_rate_limit(student_id_number):
+        if not _check_rate_limit(email):
             return jsonify({"error": "Too many login attempts. Try again in 10 minutes."}), 429
 
         # Find the class by join code
@@ -549,15 +558,15 @@ def student_login():
 
         class_data = cls.data[0]
 
-        # Find the student
+        # Find the student by email
         student = db.table('students').select('*').eq(
-            'student_id_number', student_id_number
+            'email', email
         ).eq('teacher_id', class_data['teacher_id']).eq(
             'is_active', True
         ).execute()
 
         if not student.data:
-            return jsonify({"error": "Student ID not found. Ask your teacher for help."}), 404
+            return jsonify({"error": "Email not found. Ask your teacher for help."}), 404
 
         student_data = student.data[0]
 
@@ -587,6 +596,7 @@ def student_login():
             "student": {
                 "first_name": student_data['first_name'],
                 "last_name": student_data['last_name'],
+                "email": student_data.get('email', ''),
                 "student_id": student_data['student_id_number'],
                 "period": student_data.get('period', ''),
             },
@@ -757,7 +767,7 @@ def check_student_session():
     try:
         db = _get_supabase()
         student = db.table('students').select(
-            'first_name, last_name, student_id_number'
+            'first_name, last_name, student_id_number, email'
         ).eq('id', student_id).execute()
 
         if not student.data:
@@ -769,6 +779,7 @@ def check_student_session():
             "student": {
                 "first_name": s['first_name'],
                 "last_name": s['last_name'],
+                "email": s.get('email', ''),
                 "student_id": s['student_id_number'],
             },
         })

@@ -1,15 +1,15 @@
 import React, { useState } from "react";
 
 export default function StudentLogin({ onLogin }) {
-  const [studentId, setStudentId] = useState("");
+  const [email, setEmail] = useState("");
   const [classCode, setClassCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!studentId.trim() || !classCode.trim()) {
-      setError("Please enter both your Student ID and class code");
+    if (!email.trim() || !classCode.trim()) {
+      setError("Please enter both your email and class code");
       return;
     }
 
@@ -21,7 +21,7 @@ export default function StudentLogin({ onLogin }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          student_id: studentId.trim(),
+          email: email.trim().toLowerCase(),
           class_code: classCode.trim().toUpperCase(),
         }),
       });
@@ -57,19 +57,19 @@ export default function StudentLogin({ onLogin }) {
           Graider Student Portal
         </h1>
         <p style={{ color: "#94a3b8", textAlign: "center", marginBottom: "24px", fontSize: "0.9rem" }}>
-          Enter your Student ID and class code to get started
+          Enter your school email and class code to get started
         </p>
 
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: "16px" }}>
             <label style={{ color: "#cbd5e1", fontSize: "0.85rem", display: "block", marginBottom: "6px" }}>
-              Student ID
+              School Email
             </label>
             <input
-              type="text"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="Enter your student ID number"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your.name@school.edu"
               style={{
                 width: "100%", padding: "12px", borderRadius: "8px",
                 background: "rgba(15,23,42,0.8)", border: "1px solid rgba(99,102,241,0.3)",

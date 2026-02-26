@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS students (
     period TEXT,
     class_code TEXT,
     accommodations JSONB DEFAULT '{}',
+    email TEXT,
     ell_language TEXT,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT now(),
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS students (
 
 CREATE INDEX IF NOT EXISTS idx_students_lookup ON students(student_id_number, teacher_id);
 CREATE INDEX IF NOT EXISTS idx_students_teacher ON students(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_students_email ON students(email, teacher_id);
 
 -- Classes table (one per period, holds join code)
 CREATE TABLE IF NOT EXISTS classes (
