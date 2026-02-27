@@ -1187,6 +1187,7 @@ function App() {
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
   const [skipVerified, setSkipVerified] = useState(false); // When true, regrade ALL including verified
   const [excludeGradedStudents, setExcludeGradedStudents] = useState(false); // Exclude students already in results
+  const [excludeApprovedStudents, setExcludeApprovedStudents] = useState(false); // Exclude students already approved
   const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
@@ -3002,6 +3003,52 @@ function App() {
                 const fileName = f.name.toLowerCase().replace(/\s+/g, "");
                 // Check if any graded student name appears in the filename
                 return !gradedStudentNames.some((name) =>
+                  name && fileName.includes(name)
+                );
+              });
+            }
+
+            // Exclude students whose results have been approved
+            if (excludeApprovedStudents && status.results.length > 0) {
+              let relevantResults = status.results;
+              if (gradeFilterAssignment) {
+                const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
+                const importedFilename = (assignmentConfig.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
+                const assignmentNamesToMatch = [
+                  gradeFilterAssignment,
+                  assignmentConfig.title || "",
+                  ...(assignmentConfig.aliases || []),
+                  importedFilename
+                ].filter(Boolean).map(n => n.toLowerCase());
+
+                relevantResults = status.results.filter((r, idx) => {
+                  const resultAssignment = (r.assignment || "").toLowerCase();
+                  const resultFilename = (r.filename || "").toLowerCase();
+                  return assignmentNamesToMatch.some(name =>
+                    resultAssignment.includes(name) ||
+                    resultFilename.includes(name) ||
+                    name.includes(resultAssignment)
+                  );
+                });
+              }
+
+              // Keep only approved results and get their original indices
+              const approvedResults = status.results
+                .map((r, idx) => ({ ...r, _origIdx: idx }))
+                .filter((r) => emailApprovals[r._origIdx] === "approved");
+              // If filtering by assignment, intersect with relevant results
+              let approvedRelevant = approvedResults;
+              if (gradeFilterAssignment) {
+                const relevantNames = new Set(relevantResults.map(r => (r.student_name || "").toLowerCase()));
+                approvedRelevant = approvedResults.filter(r => relevantNames.has((r.student_name || "").toLowerCase()));
+              }
+
+              const approvedStudentNames = approvedRelevant.map((r) =>
+                (r.student_name || "").toLowerCase().replace(/\s+/g, "")
+              );
+              filtered = filtered.filter((f) => {
+                const fileName = f.name.toLowerCase().replace(/\s+/g, "");
+                return !approvedStudentNames.some((name) =>
                   name && fileName.includes(name)
                 );
               });
@@ -8283,6 +8330,79 @@ ${signature}`;
                                 return relevantResults.length;
                               })()} file(s) already graded{gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
                               Only grade new files.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Exclude students already approved */}
+                    {status.results.length > 0 && Object.values(emailApprovals).some((v) => v === "approved") && (
+                      <div
+                        className="glass-card"
+                        style={{
+                          padding: "15px 20px",
+                          marginBottom: "20px",
+                          background: "rgba(34, 197, 94, 0.05)",
+                          border: "1px solid rgba(34, 197, 94, 0.2)",
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={excludeApprovedStudents}
+                            onChange={(e) =>
+                              setExcludeApprovedStudents(e.target.checked)
+                            }
+                            style={{
+                              width: "18px",
+                              height: "18px",
+                              cursor: "pointer",
+                            }}
+                          />
+                          <div>
+                            <span
+                              style={{ fontWeight: 600, color: "#22c55e" }}
+                            >
+                              Exclude Already Approved
+                            </span>
+                            <p
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "var(--text-secondary)",
+                                margin: "4px 0 0 0",
+                              }}
+                            >
+                              Skip {(() => {
+                                // Count approved results, optionally filtered by assignment
+                                let count = 0;
+                                if (gradeFilterAssignment) {
+                                  const cfg = savedAssignmentData[gradeFilterAssignment] || {};
+                                  const importedFn = (cfg.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
+                                  const names = [gradeFilterAssignment, cfg.title || "", ...(cfg.aliases || []), importedFn].filter(Boolean).map(n => n.toLowerCase());
+                                  status.results.forEach((r, idx) => {
+                                    if (emailApprovals[idx] !== "approved") return;
+                                    const rAssign = (r.assignment || "").toLowerCase();
+                                    const rFile = (r.filename || "").toLowerCase();
+                                    if (names.some(n => rAssign.includes(n) || rFile.includes(n) || n.includes(rAssign))) {
+                                      count++;
+                                    }
+                                  });
+                                } else {
+                                  status.results.forEach((r, idx) => {
+                                    if (emailApprovals[idx] === "approved") count++;
+                                  });
+                                }
+                                return count;
+                              })()} approved file(s){gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
+                              Only re-grade unapproved files.
                             </p>
                           </div>
                         </label>
