@@ -1884,7 +1884,9 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
             # Split into lines/paragraphs to find student response
             # Skip instruction lines that start with prompt words
             instruction_starters = [
-                'explain how', 'describe how', 'write a', 'write your', 'answer each',
+                'explain how', 'explain why', 'explain what', 'explain the', 'explain in',
+                'describe how', 'describe why', 'describe what', 'describe the',
+                'write a', 'write your', 'answer each',
                 'complete the', 'using the reading', 'in a few sentences', 'in your own words',
                 'what is', 'what are', 'what was', 'what were', 'how did', 'how do', 'why did', 'why do',
                 'summarize', 'identify', 'list the', 'define the'
@@ -1905,6 +1907,10 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
 
                 # Also check for question marks at the end (likely a prompt, not answer)
                 if para.rstrip().endswith('?'):
+                    is_instruction = True
+
+                # Fallback: use the robust is_question_or_prompt classifier
+                if not is_instruction and is_question_or_prompt(para):
                     is_instruction = True
 
                 if not is_instruction:
