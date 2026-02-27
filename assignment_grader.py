@@ -275,11 +275,14 @@ def is_question_or_prompt(text: str) -> bool:
         score += 3
 
     # --- NEGATIVE SIGNALS (student-response-like) ---
+    # NOTE: When text starts with an imperative verb, past-tense content and proper
+    # nouns are the SUBJECT of the instruction (e.g., "Explain why Americans moved
+    # westward"), not student narrative writing. Penalties are reduced accordingly.
 
     # Counter 1: Contains specific historical dates (1700s-2000s)
     year_matches = re.findall(r'\b(1[5-9]\d{2}|20\d{2})\b', text)
     if year_matches:
-        score -= 2
+        score -= 1 if imperative_starts else 2
 
     # Counter 2: Past tense narrative verbs (student writing about events)
     past_verbs = re.findall(
@@ -290,10 +293,15 @@ def is_question_or_prompt(text: str) -> bool:
         r'escaped|captured|freed|enslaved|governed|ruled|elected|appointed)\b',
         text_lower
     )
-    if len(past_verbs) >= 2:
-        score -= 3
-    elif len(past_verbs) == 1:
-        score -= 1
+    if imperative_starts:
+        # Imperative + past tense = instruction about historical content, mild penalty only
+        if len(past_verbs) >= 3:
+            score -= 1
+    else:
+        if len(past_verbs) >= 2:
+            score -= 3
+        elif len(past_verbs) == 1:
+            score -= 1
 
     # Counter 3: Proper nouns mid-sentence (names of people, places, events)
     # Only a strong signal when combined with past tense verbs (narrative writing)
@@ -302,14 +310,18 @@ def is_question_or_prompt(text: str) -> bool:
     if len(words) > 3:
         proper_nouns = sum(1 for w in words[1:] if w[0:1].isupper() and not w.isupper()
                           and w not in ('I', 'I\'m', 'I\'ll', 'I\'ve', 'I\'d'))
-        if proper_nouns >= 2 and len(past_verbs) >= 1:
+        if imperative_starts:
+            pass  # Don't penalize — instructions naturally reference proper nouns
+        elif proper_nouns >= 2 and len(past_verbs) >= 1:
             score -= 2  # Proper nouns + past tense = strong student response signal
-        elif proper_nouns >= 3 and not imperative_starts:
+        elif proper_nouns >= 3:
             score -= 1  # Many proper nouns without imperative start
 
     # Counter 4: Contains because/since/therefore (reasoning = student work)
     if re.search(r'\b(because|since|therefore|however|although|furthermore|moreover|consequently)\b', text_lower):
-        score -= 2
+        # "Explain why X because..." is unusual for prompts, but
+        # "Explain because..." doesn't happen — the conjunction follows the subject
+        score -= 1 if imperative_starts else 2
 
     # Counter 5: Long text (>150 chars) with no meta-language is likely student content
     if len(text) > 150 and meta_count == 0 and not imperative_starts:
@@ -317,7 +329,8 @@ def is_question_or_prompt(text: str) -> bool:
 
     # Counter 6: Definition patterns ("X means...", "X is defined as...", "X refers to...")
     if re.search(r'\b(means|is defined as|refers to|is when|is the|is a |are the|are a )\b', text_lower):
-        score -= 2
+        # "Explain what X meant to them" has "meant" which is different from "means"
+        score -= 1 if imperative_starts else 2
 
     # === DECISION ===
     # score >= 3 means instruction/prompt
@@ -4372,7 +4385,8 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
                       blank_questions: list = None,
                       missing_sections: list = None,
                       token_tracker: 'TokenTracker' = None,
-                      student_history: str = '') -> dict:
+                      student_history: str = '',
+                      grading_style: str = 'standard') -> dict:
     """Generate encouraging, improvement-focused teacher feedback from per-question grades.
 
     Args:
@@ -4439,6 +4453,24 @@ Paragraph 2: If there is anything the student got partially right, acknowledge i
 Paragraph 3: Provide a clear, specific study plan. What pages to re-read, what questions to retry, what concepts to focus on. Make it feel achievable, not overwhelming.
 Paragraph 4: If history shows a pattern, address it with care and a path forward ("I've noticed the last few assignments have been tough. Let's figure out what's getting in the way — I'm here to help you turn this around").
 BALANCE: ~5% strengths, ~95% improvement guidance. Every sentence should either teach the student something they missed or give them a concrete step to improve. Be encouraging — but the encouragement comes from showing them exactly HOW to do better, not from empty praise."""
+
+    # Adjust tone for grading style
+    if grading_style == 'lenient':
+        tone_instructions += """
+
+LENIENT GRADING STYLE OVERRIDE:
+The teacher has selected LENIENT grading. You MUST adjust your feedback accordingly:
+- Do NOT criticize answers for lacking detail if the student demonstrated basic understanding. Brief answers that show they understood the concept are ACCEPTABLE.
+- Do NOT say "a full-credit answer would include..." or "to earn full credit you needed to mention..." for answers that already received most of their points. The lenient standard accepts general understanding.
+- Focus improvement suggestions on answers that were WRONG or LEFT BLANK, not answers that were correct but brief.
+- Shift the balance toward MORE praise and LESS criticism. Add ~20% more strengths to the balance above.
+- Use warm, encouraging language appropriate for the grade level. These are young students — the tone should feel supportive, not demanding.
+- Only flag genuinely missing or incorrect content, not missing elaboration on otherwise correct answers."""
+    elif grading_style == 'strict':
+        tone_instructions += """
+
+STRICT GRADING STYLE NOTE:
+The teacher has selected STRICT grading. Hold answers to a higher standard in your feedback. Incomplete or shallow answers should be clearly flagged with what was expected."""
 
     # Build rubric performance summary
     rubric_summary = ""
@@ -4936,7 +4968,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         blank_questions=blank_questions,
         missing_sections=missing_sections,
         token_tracker=tracker,
-        student_history=student_history
+        student_history=student_history,
+        grading_style=grading_style
     )
 
     # === BUILD RESULT ===
