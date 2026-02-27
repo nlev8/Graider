@@ -859,6 +859,17 @@ export async function outlookLogin() {
   return fetchApi('/api/outlook-login', { method: 'POST' })
 }
 
+export async function sendSubmissionConfirmations() {
+  return fetchApi('/api/send-submission-confirmations', { method: 'POST' })
+}
+
+export async function markConfirmationsSent(confirmationIds = [], status = 'sent') {
+  return fetchApi('/api/mark-confirmations-sent', {
+    method: 'POST',
+    body: JSON.stringify({ confirmation_ids: confirmationIds, status }),
+  })
+}
+
 // ============ Assistant ============
 
 export async function sendAssistantMessage(messages, sessionId, files = []) {
@@ -1087,6 +1098,9 @@ export default {
   sendOutlookEmails,
   getOutlookSendStatus,
   outlookLogin,
+  // Submission Confirmations
+  sendSubmissionConfirmations,
+  markConfirmationsSent,
   // Assistant
   sendAssistantMessage,
   clearAssistantSession,

@@ -379,7 +379,7 @@ def get_portal_submissions():
         content_map = {c['id']: c for c in content.data}
 
         if not content_ids:
-            return jsonify({"submissions": []})
+            return jsonify({"submissions": [], "pending_confirmations": 0})
 
         subs = db.table('student_submissions').select('*').in_(
             'content_id', content_ids
@@ -408,7 +408,17 @@ def get_portal_submissions():
                 'time_taken_seconds': s.get('time_taken_seconds'),
             })
 
-        return jsonify({"submissions": results})
+        # Piggyback pending confirmations count
+        pending_count = 0
+        try:
+            pending_conf = db.table('submission_confirmations').select(
+                'id', count='exact'
+            ).eq('teacher_id', teacher_id).eq('status', 'pending').execute()
+            pending_count = pending_conf.count or 0
+        except Exception:
+            pass
+
+        return jsonify({"submissions": results, "pending_confirmations": pending_count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -717,7 +727,7 @@ def submit_student_work(content_id):
         time_taken = data.get('time_taken_seconds', 0)
 
         student = db.table('students').select(
-            'first_name, last_name, student_id_number, period'
+            'first_name, last_name, student_id_number, period, email, teacher_id'
         ).eq('id', student_id).execute()
 
         if not student.data:
@@ -746,6 +756,49 @@ def submit_student_work(content_id):
 
         if not result.data:
             return jsonify({"error": "Failed to submit"}), 500
+
+        # Queue confirmation email for batch sending via Outlook
+        student_email = s.get('email')
+        teacher_id = s.get('teacher_id')
+        if student_email and teacher_id:
+            try:
+                # Get assignment title
+                pc = db.table('published_content').select('title').eq(
+                    'id', content_id).execute()
+                assignment_title = pc.data[0]['title'] if pc.data else 'Assignment'
+
+                # Compute missing assignments for this student
+                missing = []
+                all_content = db.table('published_content').select('id, title').eq(
+                    'class_id', class_id).eq('is_active', True).execute()
+                if all_content.data:
+                    all_content_ids = [c['id'] for c in all_content.data]
+                    student_subs = db.table('student_submissions').select(
+                        'content_id'
+                    ).eq('student_id', student_id).in_(
+                        'content_id', all_content_ids
+                    ).execute()
+                    submitted_ids = {sub['content_id'] for sub in student_subs.data}
+                    missing = [
+                        c['title'] for c in all_content.data
+                        if c['id'] not in submitted_ids and c['id'] != content_id
+                    ]
+
+                now_ts = datetime.now(tz=timezone.utc).isoformat()
+                db.table('submission_confirmations').insert({
+                    'submission_id': result.data[0]['id'],
+                    'teacher_id': teacher_id,
+                    'student_email': student_email,
+                    'student_name': student_name,
+                    'assignment_title': assignment_title,
+                    'attempt_number': attempt,
+                    'missing_assignments': missing,
+                    'submitted_at': now_ts,
+                    'status': 'pending',
+                }).execute()
+            except Exception as conf_err:
+                # UNIQUE conflict or other error — skip silently, submission still succeeds
+                print(f"Confirmation queue insert skipped: {conf_err}")
 
         return jsonify({
             "success": True,
@@ -785,3 +838,140 @@ def check_student_session():
         })
     except Exception:
         return jsonify({"valid": False}), 401
+
+
+@student_account_bp.route('/api/send-submission-confirmations', methods=['POST'])
+def send_submission_confirmations():
+    """Batch-send pending submission confirmations via Outlook."""
+    teacher_id = _get_teacher_id()
+    if not teacher_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    try:
+        db = _get_supabase()
+
+        # Recover stale 'processing' rows (stuck > 10 min) back to pending
+        stale_cutoff = (datetime.now(tz=timezone.utc) - timedelta(minutes=10)).isoformat()
+        db.table('submission_confirmations').update({
+            'status': 'pending'
+        }).eq('teacher_id', teacher_id).eq('status', 'processing').lt(
+            'created_at', stale_cutoff
+        ).execute()
+
+        # Fetch all pending for this teacher
+        pending = db.table('submission_confirmations').select('*').eq(
+            'teacher_id', teacher_id
+        ).eq('status', 'pending').execute()
+
+        if not pending.data:
+            return jsonify({"error": "No pending confirmations"}), 400
+
+        # Mark as processing immediately
+        conf_ids = [row['id'] for row in pending.data]
+        db.table('submission_confirmations').update({
+            'status': 'processing'
+        }).eq('teacher_id', teacher_id).eq('status', 'pending').execute()
+
+        # Load teacher name from email config
+        email_config_path = os.path.join(
+            os.path.expanduser('~'), '.graider_data', 'email_config.json'
+        )
+        teacher_name = 'Your Teacher'
+        if os.path.exists(email_config_path):
+            with open(email_config_path, 'r') as f:
+                email_cfg = json.load(f)
+                teacher_name = email_cfg.get('teacher_name', teacher_name)
+
+        # Build Outlook email array
+        emails = []
+        for row in pending.data:
+            first_name = row['student_name'].split()[0] if row['student_name'] else 'Student'
+
+            body = f"Hi {first_name},\n\n"
+            body += f"Your submission for \"{row['assignment_title']}\" was received successfully.\n\n"
+            body += f"Attempt: #{row['attempt_number']}\n"
+
+            sub_time = row.get('submitted_at', '')
+            if sub_time:
+                try:
+                    dt = datetime.fromisoformat(sub_time.replace('Z', '+00:00'))
+                    sub_time = dt.strftime('%B %d, %Y at %I:%M %p')
+                except Exception:
+                    pass
+            body += f"Submitted: {sub_time}\n"
+
+            if row['attempt_number'] > 1:
+                body += f"\nThis is attempt #{row['attempt_number']}. Your previous submission(s) are also on file.\n"
+
+            missing = row.get('missing_assignments') or []
+            if isinstance(missing, str):
+                missing = json.loads(missing)
+            if missing:
+                body += "\nAssignments still due:\n"
+                for title in missing:
+                    body += f"  - {title}\n"
+
+            body += f"\n{teacher_name}"
+
+            emails.append({
+                'to': row['student_email'],
+                'cc': '',
+                'subject': f"Submission Confirmed \u2014 {row['assignment_title']}",
+                'body': body,
+                'student_name': row['student_name'],
+            })
+
+        # Launch Outlook sender
+        from backend.routes.email_routes import launch_outlook_sender
+        result = launch_outlook_sender(emails)
+
+        if 'error' in result:
+            # Revert to pending on launch failure
+            db.table('submission_confirmations').update({
+                'status': 'pending'
+            }).in_('id', conf_ids).execute()
+            return jsonify(result), 500
+
+        return jsonify({
+            "status": "started",
+            "total": len(emails),
+            "confirmation_ids": conf_ids,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@student_account_bp.route('/api/mark-confirmations-sent', methods=['POST'])
+def mark_confirmations_sent():
+    """Mark confirmations as sent after Outlook send completes."""
+    teacher_id = _get_teacher_id()
+    if not teacher_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    try:
+        db = _get_supabase()
+        data = request.json or {}
+        conf_ids = data.get('confirmation_ids', [])
+        status = data.get('status', 'sent')
+
+        if not conf_ids:
+            # Mark all processing as sent for this teacher
+            db.table('submission_confirmations').update({
+                'status': 'sent',
+                'sent_at': datetime.now(tz=timezone.utc).isoformat(),
+            }).eq('teacher_id', teacher_id).eq('status', 'processing').execute()
+        else:
+            if status == 'sent':
+                db.table('submission_confirmations').update({
+                    'status': 'sent',
+                    'sent_at': datetime.now(tz=timezone.utc).isoformat(),
+                }).in_('id', conf_ids).execute()
+            else:
+                # Revert failed ones to pending for retry
+                db.table('submission_confirmations').update({
+                    'status': 'pending',
+                }).in_('id', conf_ids).execute()
+
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
