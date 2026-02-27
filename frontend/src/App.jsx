@@ -836,6 +836,8 @@ function App() {
   const [vportalSaving, setVportalSaving] = useState(false);
   const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
   const [outlookSendPolling, setOutlookSendPolling] = useState(false);
+  const [pendingConfirmations, setPendingConfirmations] = useState(0);
+  const pendingConfirmationIds = useRef([]);
   const [focusCommentsStatus, setFocusCommentsStatus] = useState({ status: "idle", entered: 0, total: 0, failed: 0, message: "" });
   const [focusCommentsPolling, setFocusCommentsPolling] = useState(false);
 
@@ -1202,8 +1204,9 @@ function App() {
     if (!user) return;
     const loadPortalSubmissions = async () => {
       try {
-        const data = await api.fetchApi('/api/portal-submissions');
+        const data = await api.getPortalSubmissions();
         if (data.submissions) setPortalSubmissions(data.submissions);
+        if (data.pending_confirmations != null) setPendingConfirmations(data.pending_confirmations);
       } catch (e) {
         // Silently fail - portal submissions are supplementary
       }
@@ -2434,6 +2437,13 @@ function App() {
           setOutlookSendPolling(false);
           if (data.status === "done") {
             addToast("Outlook: Sent " + data.sent + " of " + data.total + " emails" + (data.failed > 0 ? " (" + data.failed + " failed)" : ""), data.failed > 0 ? "warning" : "success");
+          }
+          // Mark confirmation emails as sent if any were being processed
+          if (pendingConfirmationIds.current.length > 0) {
+            var ids = pendingConfirmationIds.current;
+            pendingConfirmationIds.current = [];
+            api.markConfirmationsSent(ids, data.status === "done" ? "sent" : "failed").catch(function() {});
+            setPendingConfirmations(0);
           }
         }
       } catch (err) {
@@ -9903,6 +9913,32 @@ ${signature}`;
                           <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--text-muted)" }}>
                             ({portalSubmissions.filter(s => s.status === "submitted").length} pending)
                           </span>
+                          {pendingConfirmations > 0 && vportalConfigured && (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm("Send " + pendingConfirmations + " confirmation email(s) via Outlook?")) return;
+                                try {
+                                  var result = await api.sendSubmissionConfirmations();
+                                  if (result.error) { addToast(result.error, "error"); return; }
+                                  pendingConfirmationIds.current = result.confirmation_ids || [];
+                                  setOutlookSendPolling(true);
+                                  setOutlookSendStatus({ status: "running", sent: 0, total: result.total, failed: 0, message: "Starting confirmations..." });
+                                  addToast("Sending " + result.total + " confirmation(s) via Outlook...", "info");
+                                } catch (err) {
+                                  addToast("Failed to start confirmations: " + err.message, "error");
+                                }
+                              }}
+                              disabled={outlookSendStatus.status === "running"}
+                              style={{
+                                marginLeft: "auto", padding: "4px 12px", borderRadius: "6px", border: "1px solid rgba(59,130,246,0.3)",
+                                background: "rgba(59,130,246,0.1)", color: "#60a5fa", fontSize: "0.8rem", fontWeight: 600,
+                                cursor: outlookSendStatus.status === "running" ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "4px",
+                              }}
+                              title="Send confirmation emails to students via Outlook"
+                            >
+                              <Icon name="Mail" size={14} /> Send Confirmations ({pendingConfirmations})
+                            </button>
+                          )}
                         </h3>
                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                           {portalSubmissions
@@ -10506,6 +10542,7 @@ ${signature}`;
                                                     await api.deleteResult(r.filename);
                                                     setStatus(function(prev) { return { ...prev, results: prev.results.filter(function(res) { return res.filename !== r.filename; }) }; });
                                                     var filename = r.original_filename || r.filename;
+                                                    var trustAssignmentCfg = savedAssignmentData[r.assignment] || Object.values(savedAssignmentData).find(function(c) { return c.title === r.assignment; }) || null;
                                                     await api.startGrading({
                                                       assignments_folder: config.assignments_folder,
                                                       output_folder: config.output_folder,
@@ -10523,6 +10560,8 @@ ${signature}`;
                                                       ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
                                                       trustedStudents: newTrusted,
                                                       gradingStyle: rubric.gradingStyle || 'standard',
+                                                      assignmentConfig: trustAssignmentCfg,
+                                                      rubric: rubric,
                                                     });
                                                     var checkInterval = setInterval(async function() {
                                                       var st = await api.getStatus();
@@ -10677,6 +10716,7 @@ ${signature}`;
                                             addToast(`Regrading ${r.student_name}...`, "info");
                                             // Use the original filename to regrade
                                             const filename = r.original_filename || r.filename;
+                                            var regradeAssignmentCfg = savedAssignmentData[r.assignment] || Object.values(savedAssignmentData).find(function(c) { return c.title === r.assignment; }) || null;
                                             await api.startGrading({
                                               assignments_folder: config.assignments_folder,
                                               output_folder: config.output_folder,
@@ -10694,6 +10734,8 @@ ${signature}`;
                                               ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
                                               trustedStudents: config.trustedStudents || [],
                                               gradingStyle: rubric.gradingStyle || 'standard',
+                                              assignmentConfig: regradeAssignmentCfg,
+                                              rubric: rubric,
                                             });
                                             // Poll for completion and update results
                                             const checkStatus = setInterval(async () => {

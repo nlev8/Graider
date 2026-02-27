@@ -367,7 +367,20 @@ def filter_questions_from_response(response_text: str) -> str:
             if after_question and len(after_question) > 2 and not is_question_or_prompt(after_question):
                 filtered_lines.append(after_question)
         elif not is_question_or_prompt(line):
-            filtered_lines.append(line)
+            # Line passed as non-prompt, but check if it starts with a prompt sentence
+            # concatenated with the student answer (e.g., "Explain why X. The answer is Y.")
+            period_pos = line.find('.')
+            if period_pos != -1 and period_pos < len(line) - 10:
+                before_period = line[:period_pos + 1].strip()
+                if len(before_period) > 15 and is_question_or_prompt(before_period):
+                    after_period = line[period_pos + 1:].strip()
+                    if after_period and len(after_period) > 5:
+                        filtered_lines.append(after_period)
+                    # else: only the prompt, no student content — skip entirely
+                else:
+                    filtered_lines.append(line)
+            else:
+                filtered_lines.append(line)
         else:
             # Line IS a prompt/instruction — but check if student content follows
             # the instruction on the same line (after a period)
@@ -1926,6 +1939,12 @@ def extract_student_responses_legacy(document_text: str, custom_markers: list = 
                         break
 
             if student_response:
+                # Filter out any remaining question/prompt text from the response
+                student_response = filter_questions_from_response(student_response)
+                if not student_response or len(student_response.strip()) < 3:
+                    student_response = None
+
+            if student_response:
                 # Check if we already captured this (avoid duplicates)
                 already_captured = any(student_response[:50] in r.get('answer', '')[:50] for r in extracted)
                 if not already_captured:
@@ -2024,7 +2043,9 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
                         cleaned_lines.append(line)
                     # Skip lines that are just "Term:" with no definition (blank vocab)
                 else:
-                    cleaned_lines.append(line)
+                    # Final check: skip lines that are instructions/prompts
+                    if not is_question_or_prompt(line):
+                        cleaned_lines.append(line)
 
             cleaned_answer = '\n'.join(cleaned_lines) if cleaned_lines else answer
 
@@ -4286,6 +4307,7 @@ RULES:
 - Grade the CONTENT, not the writing style
 - If blank/empty, score is 0
 - If the student answer is template/instruction text (e.g., starts with "Summarize", "Define", "Explain", "Write in complete sentences", "Use evidence from the reading"), this is NOT a student response — it is leftover assignment directions. Score it 0.
+- If the student answer BEGINS with assignment prompt/question text followed by their actual response (e.g., "Explain why X happened. The reason X happened was..."), IGNORE the prompt portion entirely. Grade ONLY the student's own response that follows the prompt. Do NOT treat the prompt text as part of their answer or credit them for restating the question.
 
 ---
 TEACHER'S GRADING INSTRUCTIONS — these are the HIGHEST PRIORITY and override the score anchors above.
@@ -4533,6 +4555,7 @@ detailed constructive feedback on all other sections (questions, summary, missin
 
 UNIVERSAL RULES:
 - Quote or paraphrase the student's SPECIFIC answers — never give generic feedback
+- IMPORTANT: If a student's answer text begins with the assignment question/prompt (e.g., "Explain why X happened. The reason was..."), ignore the prompt portion. Only quote and discuss the student's OWN words that follow the prompt. Do not credit or reference the restated question as part of their answer.
 - For every wrong answer you mention, explain what the correct answer is or what was missing
 - MISSING WORK: If there are blank questions or missing sections listed above, you MUST call them out specifically in your feedback. Name the exact questions or sections that were left blank and explain what the student should have written. Example: "You left the SUMMARY section blank — this section asked you to summarize the key events of the Seminole Wars in 4-5 sentences. To complete it, you'd want to cover the three wars (1817-1858), the role of Andrew Jackson, and the eventual forced relocation to Indian Territory."
 - Reference the actual assignment content (topic, questions, vocabulary terms)
@@ -4738,6 +4761,14 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                                effort_points, extraction_mode, grading_style)
 
     responses = extraction_result["extracted_responses"]
+
+    # Filter question/prompt text from extracted answers before grading
+    for resp in responses:
+        answer = resp.get("answer", "")
+        if answer and resp.get("type") != "fitb":
+            cleaned = filter_questions_from_response(answer)
+            if cleaned and len(cleaned.strip()) >= 3:
+                resp["answer"] = cleaned
 
     # Build expected answers lookup from gradingNotes within custom_ai_instructions
     expected_answers = _parse_expected_answers(custom_ai_instructions)
@@ -5564,6 +5595,13 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
 
                 extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
             if extraction_result:
+                # Filter question/prompt text from extracted answers before grading
+                for resp in extraction_result.get("extracted_responses", []):
+                    answer = resp.get("answer", "")
+                    if answer and resp.get("type") != "fitb":
+                        cleaned = filter_questions_from_response(answer)
+                        if cleaned and len(cleaned.strip()) >= 3:
+                            resp["answer"] = cleaned
                 extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config, extraction_mode)
                 answered = extraction_result.get("answered_questions", 0)
                 total = extraction_result.get("total_questions", 0)
