@@ -945,14 +945,14 @@ def send_confirmation_emails():
             if all_confirmed_list:
                 body += "Here are the assignments you've submitted so far:\n\n"
                 for a in all_confirmed_list:
-                    body += "  \u2713 " + a + "\n"
+                    body += "\u2713 " + a + "\n"
             else:
                 body += "No submissions have been received yet.\n"
 
             if outstanding:
                 body += "\nHere are your outstanding assignments that are still due:\n\n"
                 for title in outstanding:
-                    body += "  - " + title + "\n"
+                    body += "- " + title + "\n"
             elif all_confirmed_list:
                 body += "\nAll assignments have been received. Great job!\n"
 
