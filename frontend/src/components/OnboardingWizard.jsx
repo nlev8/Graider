@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Icon from "./Icon";
-import { getAuthHeaders } from "../services/api";
+import { getAuthHeaders, browse as apiBrowse } from "../services/api";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "../data/rubricPresets";
 
 const STEPS = [
@@ -10,6 +10,7 @@ const STEPS = [
   { title: "Grading Style", icon: "ClipboardCheck" },
   { title: "Rubric Setup", icon: "ClipboardList" },
   { title: "AI Connection", icon: "Cpu" },
+  { title: "Assignments Folder", icon: "FolderOpen" },
   { title: "All Set!", icon: "PartyPopper" },
 ];
 
@@ -137,11 +138,12 @@ export default function OnboardingWizard({
     openai_key: "",
     anthropic_key: "",
     gemini_key: "",
+    assignments_folder: config.assignments_folder || "",
   });
   const [showExtraKeys, setShowExtraKeys] = useState(false);
   const [savingKeys, setSavingKeys] = useState(false);
   const [keysSaved, setKeysSaved] = useState(false);
-  const [skipWarning, setSkipWarning] = useState(false);
+  const [skipFolder, setSkipFolder] = useState(false);
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
@@ -166,6 +168,7 @@ export default function OnboardingWizard({
 
   const canContinue = () => {
     if (step === 1) return wizardData.teacher_name.trim().length > 0;
+    if (step === 6) return wizardData.assignments_folder.trim().length > 0 || skipFolder;
     return true;
   };
 
@@ -220,14 +223,12 @@ export default function OnboardingWizard({
   };
 
   const handleBack = () => {
-    setSkipWarning(false);
     setStep((s) => Math.max(s - 1, 0));
   };
 
   const handleComplete = (navigateTo) => {
     // Push wizard data into config
-    setConfig((prev) => ({
-      ...prev,
+    var updates = {
       teacher_name: wizardData.teacher_name,
       teacher_email: wizardData.teacher_email,
       school_name: wizardData.school_name,
@@ -236,7 +237,11 @@ export default function OnboardingWizard({
       state: wizardData.state,
       grading_period: wizardData.grading_period,
       onboarding_completed: true,
-    }));
+    };
+    if (wizardData.assignments_folder.trim()) {
+      updates.assignments_folder = wizardData.assignments_folder.trim();
+    }
+    setConfig((prev) => ({ ...prev, ...updates }));
 
     // Push grading style into rubric, and apply preset categories if selected
     const rubricUpdate = { gradingStyle: wizardData.gradingStyle };
@@ -256,12 +261,11 @@ export default function OnboardingWizard({
 
   const hasAnyApiKey = apiKeys.openaiConfigured || apiKeys.anthropicConfigured || apiKeys.geminiConfigured || keysSaved;
 
-  const nextDisabled = !canContinue() || (step === 5 && !hasAnyApiKey && !skipWarning);
+  const nextDisabled = !canContinue() || (step === 5 && !hasAnyApiKey);
 
   const getNextLabel = () => {
     if (step === 0) return "Let's Get Started";
     if (step === STEPS.length - 1) return "Start Using Graider";
-    if (step === 5 && !hasAnyApiKey && !skipWarning) return "Continue";
     return "Continue";
   };
 
@@ -568,9 +572,40 @@ export default function OnboardingWizard({
   const renderStep5 = () => (
     <div style={{ padding: "10px 0" }}>
       <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>AI Connection</h2>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 24, fontSize: "0.95rem" }}>
-        Graider needs at least one AI provider to grade assignments. OpenAI is recommended.
+      <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.95rem" }}>
+        Graider uses AI to grade assignments. You need at least one API key to continue.
       </p>
+
+      <div style={{
+        background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+        borderRadius: 12, padding: 16, marginBottom: 20,
+      }}>
+        <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--accent-primary)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          How to get an OpenAI API key (2 minutes)
+        </div>
+        {[
+          { num: "1", icon: "ExternalLink", text: <>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-primary)" }}>platform.openai.com</a> and sign up or log in</> },
+          { num: "2", icon: "CreditCard", text: "Add a payment method under Billing (API usage costs ~$0.01-0.03 per assignment)" },
+          { num: "3", icon: "Key", text: "Go to API Keys, click \"Create new secret key\", and copy it" },
+          { num: "4", icon: "ClipboardPaste", text: "Paste the key below" },
+        ].map(function(s) {
+          return (
+            <div key={s.num} style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: 8,
+                background: "rgba(99,102,241,0.15)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, marginTop: 1,
+              }}>
+                <Icon name={s.icon} size={14} style={{ color: "var(--accent-primary)" }} />
+              </div>
+              <span style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                {s.text}
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
       {renderKeyInput(
         "OpenAI API Key (Recommended)",
@@ -602,38 +637,34 @@ export default function OnboardingWizard({
             "https://console.anthropic.com/settings/keys",
             "console.anthropic.com"
           )}
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: -10, marginBottom: 16, paddingLeft: 2 }}>
+            Sign up at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-primary)" }}>console.anthropic.com</a>, add billing, then go to API Keys to create one.
+          </div>
           {renderKeyInput(
-            "Google Gemini API Key",
+            "Google Gemini API Key (Free Tier Available)",
             "gemini_key",
             apiKeys.geminiConfigured,
             "https://aistudio.google.com/apikey",
             "aistudio.google.com"
           )}
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: -10, marginBottom: 8, paddingLeft: 2 }}>
+            Sign in with Google at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-primary)" }}>aistudio.google.com</a> and click "Create API Key." No credit card required.
+          </div>
         </>
       )}
 
-      {!hasAnyApiKey && !skipWarning && (
+      {!hasAnyApiKey && (
         <div style={{
           marginTop: 16, padding: "12px 16px",
-          background: "rgba(245,158,11,0.1)",
-          border: "1px solid rgba(245,158,11,0.3)",
+          background: "rgba(239,68,68,0.1)",
+          border: "1px solid rgba(239,68,68,0.3)",
           borderRadius: 8, fontSize: "0.85rem",
           color: "var(--text-secondary)",
           display: "flex", alignItems: "flex-start", gap: 10,
         }}>
-          <Icon name="AlertTriangle" size={18} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 1 }} />
+          <Icon name="AlertCircle" size={18} style={{ color: "#ef4444", flexShrink: 0, marginTop: 1 }} />
           <div>
-            No API key configured yet. You'll need one to grade assignments.{" "}
-            <button
-              onClick={() => setSkipWarning(true)}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: "var(--accent-primary)", textDecoration: "underline",
-                padding: 0, fontSize: "0.85rem",
-              }}
-            >
-              Skip for now
-            </button>
+            An API key is required to use Graider. Paste at least one key above to continue.
           </div>
         </div>
       )}
@@ -647,6 +678,120 @@ export default function OnboardingWizard({
   );
 
   const renderStep6 = () => {
+    var folderSteps = [
+      { num: "1", icon: "Monitor", text: "Open Microsoft Teams and click OneDrive in the left sidebar" },
+      { num: "2", icon: "FolderPlus", text: "Click My files, then New > Folder. Name it something like \"Student Submissions\"" },
+      { num: "3", icon: "Share2", text: "Right-click the folder and copy the sharing link. Send it to students so they can upload their work" },
+      { num: "4", icon: "RefreshCw", text: "The OneDrive app on your laptop syncs this folder automatically. Look for it under OneDrive in File Explorer (Windows) or Finder (Mac)" },
+      { num: "5", icon: "FolderOpen", text: "Click Browse below to select the synced folder on your computer" },
+    ];
+
+    return (
+      <div style={{ padding: "10px 0" }}>
+        <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>Assignments Folder</h2>
+        <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.95rem" }}>
+          Graider reads student files from a folder on your computer. We recommend using a OneDrive folder synced through Teams so students can submit work directly.
+        </p>
+
+        <div style={{
+          background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+          borderRadius: 12, padding: 16, marginBottom: 20,
+        }}>
+          <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--accent-primary)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Quick Setup via Teams
+          </div>
+          {folderSteps.map(function(s) {
+            return (
+              <div key={s.num} style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  background: "rgba(99,102,241,0.15)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0, marginTop: 1,
+                }}>
+                  <Icon name={s.icon} size={14} style={{ color: "var(--accent-primary)" }} />
+                </div>
+                <span style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  {s.text}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label className="label" style={{ marginBottom: 4 }}>Assignments Folder Path</label>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              placeholder="e.g. /Users/you/OneDrive - School Name/Student Submissions"
+              value={wizardData.assignments_folder}
+              onChange={function(e) { updateField("assignments_folder", e.target.value); setSkipFolder(false); }}
+            />
+            <button
+              onClick={async function() {
+                try {
+                  var result = await apiBrowse("folder");
+                  if (result && result.path) {
+                    updateField("assignments_folder", result.path);
+                    setSkipFolder(false);
+                  }
+                } catch (err) {
+                  if (addToast) addToast("Could not open folder picker: " + err.message, "error");
+                }
+              }}
+              className="btn btn-primary"
+              style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+            >
+              <Icon name="FolderOpen" size={16} />
+              Browse
+            </button>
+          </div>
+        </div>
+
+        {wizardData.assignments_folder && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 12px", borderRadius: 8,
+            background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)",
+            fontSize: "0.85rem", color: "#22c55e",
+          }}>
+            <Icon name="CheckCircle" size={16} />
+            Folder selected
+          </div>
+        )}
+
+        {!wizardData.assignments_folder && !skipFolder && (
+          <div style={{
+            marginTop: 12, padding: "10px 14px",
+            background: "rgba(245,158,11,0.1)",
+            border: "1px solid rgba(245,158,11,0.3)",
+            borderRadius: 8, fontSize: "0.85rem",
+            color: "var(--text-secondary)",
+            display: "flex", alignItems: "flex-start", gap: 10,
+          }}>
+            <Icon name="AlertTriangle" size={18} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 1 }} />
+            <div>
+              You need an assignments folder to grade student work.{" "}
+              <button
+                onClick={function() { setSkipFolder(true); }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--accent-primary)", textDecoration: "underline",
+                  padding: 0, fontSize: "0.85rem",
+                }}
+              >
+                I'll set this up later
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderStep7 = () => {
     const selectedPreset = rubricChoice === "preset"
       ? getPresetForStateSubject(wizardData.state, wizardData.subject)
       : rubricChoice === "standard"
@@ -662,6 +807,7 @@ export default function OnboardingWizard({
       { icon: "ClipboardCheck", label: "Style", value: GRADING_STYLES.find((s) => s.value === wizardData.gradingStyle)?.label || wizardData.gradingStyle },
       { icon: "ClipboardList", label: "Rubric", value: selectedPreset ? selectedPreset.name : "Custom (unchanged)" },
       { icon: "Cpu", label: "AI Provider", value: hasAnyApiKey ? "Connected" : "Not configured" },
+      { icon: "FolderOpen", label: "Folder", value: wizardData.assignments_folder ? wizardData.assignments_folder.split("/").pop() || wizardData.assignments_folder : "Not set" },
     ];
 
     return (
@@ -727,6 +873,7 @@ export default function OnboardingWizard({
       case 4: return renderStep4();
       case 5: return renderStep5();
       case 6: return renderStep6();
+      case 7: return renderStep7();
       default: return null;
     }
   };

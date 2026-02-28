@@ -10966,6 +10966,35 @@ ${signature}`;
                     </div>
                   </div>
 
+                  {/* Report a Bug Card */}
+                  <div className="glass-card" style={{
+                    padding: "24px",
+                    background: "linear-gradient(135deg, rgba(239,68,68,0.08), rgba(245,158,11,0.06))",
+                    border: "1px solid rgba(239,68,68,0.2)",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+                      <div>
+                        <h3 style={{ margin: "0 0 4px", fontSize: "1.1rem", color: "var(--text-primary)" }}>
+                          <Icon name="Bug" size={18} style={{ marginRight: 8, verticalAlign: "middle", color: "#ef4444" }} />
+                          Found a Bug?
+                        </h3>
+                        <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                          Help us improve Graider by reporting issues, unexpected behavior, or suggestions
+                        </p>
+                      </div>
+                      <a
+                        href="https://forms.gle/placeholder"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-secondary"
+                        style={{ padding: "10px 24px", fontWeight: 600, fontSize: "0.9rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                      >
+                        <Icon name="ExternalLink" size={16} />
+                        Report Bug
+                      </a>
+                    </div>
+                  </div>
+
                   {/* Search Bar */}
                   <div style={{ position: "relative" }}>
                     <Icon name="Search" size={16} style={{
