@@ -603,6 +603,68 @@ def _unique_roster_students(roster, period_filter=''):
             yield student_name, val
 
 
+def _normalize_assignment_name(raw_name):
+    """Normalize a filename-derived assignment name for dedup and matching.
+
+    Strips version suffixes like (1), (2), trailing numbers,
+    replaces underscores with spaces, and cleans up punctuation.
+    """
+    import re
+    name = raw_name.strip()
+    # Replace underscores with spaces
+    name = name.replace('_', ' ')
+    # Strip trailing version suffixes: " (1)", " (2)", " 1", " 2" at end
+    name = re.sub(r'\s*\(\d+\)\s*$', '', name)
+    name = re.sub(r'\s+\d+\s*$', '', name)
+    # Collapse multiple spaces
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
+
+
+def _match_to_config_title(normalized_name, config_titles):
+    """Find the best matching config title for a normalized assignment name.
+
+    Returns the config title if matched, otherwise the normalized name itself.
+    """
+    import re
+    if not config_titles:
+        return normalized_name
+
+    n_lower = normalized_name.lower()
+
+    # Try exact match first
+    for title in config_titles:
+        if title.lower() == n_lower:
+            return title
+
+    # Try substring: config title contains the name or vice versa
+    for title in config_titles:
+        t_lower = title.lower()
+        if n_lower in t_lower or t_lower in n_lower:
+            return title
+
+    # Word overlap: normalize both sides and compare
+    def _words(s):
+        return set(re.sub(r'[^\w\s]', ' ', s.lower()).split())
+
+    n_words = _words(normalized_name)
+    if len(n_words) < 2:
+        return normalized_name
+
+    best_title = None
+    best_overlap = 0
+    for title in config_titles:
+        t_words = _words(title)
+        overlap = len(n_words & t_words)
+        # Require at least 60% of the shorter set's words to match
+        min_len = min(len(n_words), len(t_words))
+        if overlap >= max(2, min_len * 0.6) and overlap > best_overlap:
+            best_overlap = overlap
+            best_title = title
+
+    return best_title or normalized_name
+
+
 def _find_in_roster(roster, parsed):
     """Find a student in the roster using multiple matching strategies.
 
@@ -756,8 +818,10 @@ def send_confirmation_emails():
         for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
             all_files.extend(assignment_path.glob(ext))
 
-        # Load all saved assignment config titles for "missing" list
+        # Load all saved assignment config titles (and aliases) for matching.
+        # alias_to_title maps every name (title + aliases) back to the canonical title.
         all_assignment_titles = set()
+        alias_to_title = {}
         if os.path.exists(ASSIGNMENTS_DIR):
             for f in os.listdir(ASSIGNMENTS_DIR):
                 if f.endswith('.json'):
@@ -767,8 +831,13 @@ def send_confirmation_emails():
                             cfg = json.load(fh)
                         title = cfg.get('title') or f.replace('.json', '')
                         all_assignment_titles.add(title)
+                        alias_to_title[title] = title
+                        for alias in cfg.get('aliases', []):
+                            if alias:
+                                alias_to_title[alias] = title
                     except Exception:
                         pass
+        all_config_names = set(alias_to_title.keys())
 
         # Track which assignments each student has submitted (by file presence)
         student_submitted = defaultdict(set)
@@ -797,17 +866,20 @@ def send_confirmation_emails():
             if student_filter and student_name_check != student_filter:
                 continue
 
-            assignment_part = parsed.get('assignment_part', '') or 'Assignment'
+            raw_part = parsed.get('assignment_part', '') or 'Assignment'
+            normalized = _normalize_assignment_name(raw_part)
+            matched = _match_to_config_title(normalized, all_config_names)
+            canonical = alias_to_title.get(matched, matched)
 
             eligible_files.append({
                 'filename': filename,
                 'student_name': student_info.get('student_name', 'Student'),
                 'first_name': student_info.get('first_name', 'Student'),
                 'email': email,
-                'assignment': assignment_part,
+                'assignment': canonical,
             })
 
-            student_submitted[student_info.get('student_name', '')].add(assignment_part)
+            student_submitted[student_info.get('student_name', '')].add(canonical)
 
         # Group eligible files by student for one email per student
         students_map = {}
@@ -832,9 +904,12 @@ def send_confirmation_emails():
             student_info = _find_in_roster(roster, parsed)
             if student_info:
                 sname = student_info.get('student_name', '')
-                apart = parsed.get('assignment_part', '') or 'Assignment'
+                raw_part = parsed.get('assignment_part', '') or 'Assignment'
                 if sname:
-                    all_student_submitted[sname].add(apart)
+                    normalized = _normalize_assignment_name(raw_part)
+                    matched = _match_to_config_title(normalized, all_config_names)
+                    canonical = alias_to_title.get(matched, matched)
+                    all_student_submitted[sname].add(canonical)
 
         # Add ALL roster students not already in students_map — includes
         # students with zero files AND those whose files are all confirmed
@@ -855,28 +930,30 @@ def send_confirmation_emails():
         # Build one confirmation email per student
         emails = []
         for name, info in students_map.items():
-            submitted = sorted(info['assignments'])
+            submitted = sorted(set(info['assignments']))
             # Outstanding = all assignment configs minus everything this student submitted
             all_submitted = all_student_submitted.get(name, set())
             outstanding = sorted(all_assignment_titles - all_submitted)
 
             subject = "Submission Confirmation \u2014 " + name
 
-            body = "Hi " + info['first_name'] + ",\n\n"
-            if submitted:
-                body += "This is to confirm receipt of the following assignment(s):\n"
-                for a in submitted:
+            first_name_only = info['first_name'].split()[0] if info.get('first_name') else 'Student'
+            # Always show the full submitted list (new + previously confirmed)
+            all_confirmed_list = sorted(all_submitted)
+
+            body = "Hi " + first_name_only + ",\n\n"
+            if all_confirmed_list:
+                body += "Here are the assignments you've submitted so far:\n\n"
+                for a in all_confirmed_list:
                     body += "  \u2713 " + a + "\n"
-            elif all_submitted:
-                body += "All submissions have been previously confirmed.\n"
             else:
                 body += "No submissions have been received yet.\n"
 
             if outstanding:
-                body += "\nOutstanding assignments still due:\n"
+                body += "\nHere are your outstanding assignments that are still due:\n\n"
                 for title in outstanding:
                     body += "  - " + title + "\n"
-            elif submitted or all_submitted:
+            elif all_confirmed_list:
                 body += "\nAll assignments have been received. Great job!\n"
 
             body += "\n" + teacher_name
