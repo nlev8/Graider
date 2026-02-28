@@ -58,6 +58,7 @@ load_dotenv(os.path.join(_root_dir, '.env'), override=True)
 sys.path.insert(0, _root_dir)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 CORS(app)
 
 # ══════════════════════════════════════════════════════════════

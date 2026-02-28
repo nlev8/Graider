@@ -11,6 +11,7 @@ Review fixes applied:
 5. Rate-limited login — 5 attempts per student per 10 minutes
 """
 import csv
+import functools
 import hashlib
 import io
 import json
@@ -49,6 +50,20 @@ def _get_teacher_id():
     if not teacher_id:
         return None
     return teacher_id
+
+
+def require_teacher(f):
+    """Decorator that enforces teacher authentication.
+    Sets g.teacher_id for use in the wrapped route handler.
+    Returns 401 if no authenticated teacher session exists."""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        teacher_id = getattr(g, 'user_id', None)
+        if not teacher_id:
+            return jsonify({"error": "Authentication required"}), 401
+        g.teacher_id = teacher_id
+        return f(*args, **kwargs)
+    return wrapper
 
 
 def _generate_class_code():
@@ -109,11 +124,10 @@ def _validate_student_session():
 # ============ Teacher Endpoints (require teacher JWT) ============
 
 @student_account_bp.route('/api/classes', methods=['POST'])
+@require_teacher
 def create_class():
     """Create a class. Generates join code."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -149,11 +163,10 @@ def create_class():
 
 
 @student_account_bp.route('/api/classes', methods=['GET'])
+@require_teacher
 def list_classes():
     """List teacher's classes with student counts."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -167,14 +180,13 @@ def list_classes():
 
 
 @student_account_bp.route('/api/classes/<class_id>/sync-roster', methods=['POST'])
+@require_teacher
 def sync_roster_to_class(class_id):
     """Sync students from an uploaded CSV into the class.
     Accepts multipart/form-data with a 'file' field containing the CSV.
     CSV must have columns for student identification (Student ID, First Name, Last Name).
     """
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -287,11 +299,10 @@ def sync_roster_to_class(class_id):
 
 
 @student_account_bp.route('/api/classes/<class_id>/students', methods=['GET'])
+@require_teacher
 def list_class_students(class_id):
     """List students enrolled in a class."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -313,11 +324,10 @@ def list_class_students(class_id):
 
 
 @student_account_bp.route('/api/publish-to-class', methods=['POST'])
+@require_teacher
 def publish_to_class():
     """Publish an assessment or assignment to a class."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -363,11 +373,10 @@ def publish_to_class():
 
 
 @student_account_bp.route('/api/portal-submissions', methods=['GET'])
+@require_teacher
 def get_portal_submissions():
     """Get all student submissions for the Results tab."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -424,13 +433,12 @@ def get_portal_submissions():
 
 
 @student_account_bp.route('/api/grade-portal-submission', methods=['POST'])
+@require_teacher
 def grade_portal_submission():
     """Grade a portal submission using the existing grading pipeline.
     Takes a submission_id and runs it through the assessment auto-grader.
     """
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -841,11 +849,10 @@ def check_student_session():
 
 
 @student_account_bp.route('/api/send-submission-confirmations', methods=['POST'])
+@require_teacher
 def send_submission_confirmations():
     """Batch-send pending submission confirmations via Outlook."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
@@ -942,11 +949,10 @@ def send_submission_confirmations():
 
 
 @student_account_bp.route('/api/mark-confirmations-sent', methods=['POST'])
+@require_teacher
 def mark_confirmations_sent():
     """Mark confirmations as sent after Outlook send completes."""
-    teacher_id = _get_teacher_id()
-    if not teacher_id:
-        return jsonify({"error": "Authentication required"}), 401
+    teacher_id = g.teacher_id
 
     try:
         db = _get_supabase()
