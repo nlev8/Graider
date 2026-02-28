@@ -870,6 +870,29 @@ export async function markConfirmationsSent(confirmationIds = [], status = 'sent
   })
 }
 
+// ============ File-Based Confirmation Emails ============
+
+export async function sendFileConfirmations(data = {}) {
+  return fetchApi('/api/send-confirmation-emails', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function markFileConfirmationsSent(filenames = []) {
+  return fetchApi('/api/mark-confirmations-sent-file', {
+    method: 'POST',
+    body: JSON.stringify({ filenames }),
+  })
+}
+
+export async function getPendingConfirmations(data = {}) {
+  return fetchApi('/api/pending-confirmations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 // ============ Assistant ============
 
 export async function sendAssistantMessage(messages, sessionId, files = []) {
@@ -1101,6 +1124,10 @@ export default {
   // Submission Confirmations
   sendSubmissionConfirmations,
   markConfirmationsSent,
+  // File-Based Confirmations
+  sendFileConfirmations,
+  markFileConfirmationsSent,
+  getPendingConfirmations,
   // Assistant
   sendAssistantMessage,
   clearAssistantSession,

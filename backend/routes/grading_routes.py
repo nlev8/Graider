@@ -48,8 +48,20 @@ def get_status():
     if grading_lock:
         with grading_lock:
             snapshot = dict(grading_state)
-        return jsonify(snapshot)
-    return jsonify(grading_state)
+    else:
+        snapshot = dict(grading_state)
+
+    # Add pending confirmation count for file-based results
+    results = snapshot.get("results", [])
+    pending = sum(
+        1 for r in results
+        if (r.get('student_email') or r.get('email', ''))
+        and '@' in (r.get('student_email') or r.get('email', ''))
+        and not r.get('confirmation_sent')
+    )
+    snapshot["pending_confirmations"] = pending
+
+    return jsonify(snapshot)
 
 
 @grading_bp.route('/api/check-new-files', methods=['POST'])

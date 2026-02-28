@@ -837,7 +837,10 @@ function App() {
   const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
   const [outlookSendPolling, setOutlookSendPolling] = useState(false);
   const [pendingConfirmations, setPendingConfirmations] = useState(0);
+  const [pendingConfirmationStudents, setPendingConfirmationStudents] = useState([]);
+  const [confirmationStudentFilter, setConfirmationStudentFilter] = useState("");
   const pendingConfirmationIds = useRef([]);
+  const pendingConfirmationFilenames = useRef([]);
   const [focusCommentsStatus, setFocusCommentsStatus] = useState({ status: "idle", entered: 0, total: 0, failed: 0, message: "" });
   const [focusCommentsPolling, setFocusCommentsPolling] = useState(false);
 
@@ -2077,6 +2080,25 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch pending confirmation count and student list (scans assignments folder + roster)
+  const fetchPendingConfirmations = async (studentOverride) => {
+    if (!config.assignments_folder) return;
+    try {
+      var data = await api.getPendingConfirmations({
+        assignments_folder: config.assignments_folder,
+        period_filter: resultsPeriodFilter,
+        student_filter: studentOverride !== undefined ? studentOverride : confirmationStudentFilter,
+      });
+      setPendingConfirmations(data.count || 0);
+      if (data.students) setPendingConfirmationStudents(data.students);
+    } catch (e) { /* ignore */ }
+  };
+
+  // Refresh count when Results tab opens, period filter changes, or grading stops
+  useEffect(() => {
+    if (activeTab === "results") fetchPendingConfirmations();
+  }, [activeTab, resultsPeriodFilter, confirmationStudentFilter, config.assignments_folder, status.is_running]);
+
   // Persistent grading toast
   const gradingToastId = useRef(null);
   const wasGrading = useRef(false);
@@ -2438,12 +2460,20 @@ function App() {
           if (data.status === "done") {
             addToast("Outlook: Sent " + data.sent + " of " + data.total + " emails" + (data.failed > 0 ? " (" + data.failed + " failed)" : ""), data.failed > 0 ? "warning" : "success");
           }
-          // Mark confirmation emails as sent if any were being processed
+          // Mark portal confirmation emails as sent if any were being processed
           if (pendingConfirmationIds.current.length > 0) {
             var ids = pendingConfirmationIds.current;
             pendingConfirmationIds.current = [];
             api.markConfirmationsSent(ids, data.status === "done" ? "sent" : "failed").catch(function() {});
             setPendingConfirmations(0);
+          }
+          // Mark file-based confirmations as sent and refresh count
+          if (pendingConfirmationFilenames.current.length > 0) {
+            var fnames = pendingConfirmationFilenames.current;
+            pendingConfirmationFilenames.current = [];
+            api.markFileConfirmationsSent(fnames).then(function() {
+              fetchPendingConfirmations();
+            }).catch(function() {});
           }
         }
       } catch (err) {
@@ -9416,114 +9446,67 @@ ${signature}`;
                               : "Send via Outlook"}
                           </button>
                           </div>
-                          {/* Send by Period Dropdown */}
-                          {sortedPeriods.length > 0 && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                          {/* Confirmation Emails Group */}
+                          {config.assignments_folder && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.2)", background: "rgba(59,130,246,0.06)" }}>
+                            {sortedPeriods.length > 0 && (
                               <select
                                 className="input"
                                 style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
-                                defaultValue=""
-                                onChange={async (e) => {
-                                  const period = e.target.value;
-                                  if (!period) return;
-                                  const periodResults = status.results.filter((r) => r.period === period && r.student_email);
-                                  if (periodResults.length === 0) {
-                                    addToast(`No students with emails in ${period}`, "warning");
-                                    e.target.value = "";
-                                    return;
-                                  }
-                                  if (!confirm(`Send emails to ${periodResults.length} students in ${period}?`)) {
-                                    e.target.value = "";
-                                    return;
-                                  }
-                                  setEmailStatus({ sending: true, sent: 0, failed: 0, message: `Sending to ${period}...` });
-                                  try {
-                                    const resultsWithEmail = periodResults.map((r) => {
-                                      const idx = status.results.findIndex((sr) => sr.filename === r.filename);
-                                      const edited = editedEmails[idx];
-                                      return {
-                                        ...r,
-                                        student_email: edited?.email || r.student_email,
-                                        custom_email_subject: edited?.subject || `Grade Report: ${r.assignment}`,
-                                        custom_email_body: edited?.body || getDefaultEmailBody(idx),
-                                      };
-                                    });
-                                    const response = await api.sendEmails(resultsWithEmail, config.teacher_email, config.teacher_name, config.email_signature);
-                                    setEmailStatus({
-                                      sending: false,
-                                      sent: response.sent || 0,
-                                      failed: response.failed || 0,
-                                      message: `${period}: Sent ${response.sent}${response.failed > 0 ? `, ${response.failed} failed` : ""}`,
-                                    });
-                                  } catch (err) {
-                                    setEmailStatus({ sending: false, sent: 0, failed: 0, message: `Error: ${err.message}` });
-                                  }
-                                  e.target.value = "";
-                                }}
-                                disabled={emailStatus.sending}
+                                value={resultsPeriodFilter}
+                                onChange={(e) => { setResultsPeriodFilter(e.target.value); setConfirmationStudentFilter(""); }}
                               >
-                                <option value="">Send by Period...</option>
-                                {sortedPeriods.map((p) => {
-                                  const count = status.results.filter((r) => r.period === p.period_name && r.student_email).length;
-                                  return (
-                                    <option key={p.filename} value={p.period_name}>
-                                      {p.period_name} ({count} emails)
-                                    </option>
-                                  );
-                                })}
+                                <option value="">All Periods</option>
+                                {sortedPeriods.map((p) => (
+                                  <option key={p.filename} value={p.period_name}>
+                                    {p.period_name}
+                                  </option>
+                                ))}
                               </select>
+                            )}
+                            {pendingConfirmationStudents.length > 0 && (
+                              <select
+                                className="input"
+                                style={{ width: "auto", padding: "8px 12px", fontSize: "0.85rem" }}
+                                value={confirmationStudentFilter}
+                                onChange={(e) => setConfirmationStudentFilter(e.target.value)}
+                              >
+                                <option value="">All Students ({pendingConfirmationStudents.length})</option>
+                                {pendingConfirmationStudents.map((name) => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
+                            )}
+                            <button
+                              onClick={async () => {
+                                var filterLabel = confirmationStudentFilter || resultsPeriodFilter || "";
+                                var label = pendingConfirmations + " confirmation email(s)" + (filterLabel ? " for " + filterLabel : "");
+                                if (!window.confirm("Send " + label + " via Outlook?")) return;
+                                try {
+                                  var result = await api.sendFileConfirmations({
+                                    assignments_folder: config.assignments_folder,
+                                    teacher_name: config.teacher_name || "Your Teacher",
+                                    period_filter: resultsPeriodFilter,
+                                    student_filter: confirmationStudentFilter,
+                                  });
+                                  if (result.error) { addToast(result.error, "error"); return; }
+                                  pendingConfirmationFilenames.current = result.sent_filenames || [];
+                                  setOutlookSendPolling(true);
+                                  setOutlookSendStatus({ status: "running", sent: 0, total: result.total, failed: 0, message: "Starting confirmations..." });
+                                  addToast("Sending " + result.total + " confirmation(s) via Outlook...", "info");
+                                } catch (err) {
+                                  addToast("Failed to send confirmations: " + err.message, "error");
+                                }
+                              }}
+                              className="btn btn-secondary"
+                              disabled={outlookSendStatus.status === "running" || pendingConfirmations === 0}
+                              title={pendingConfirmations === 0 ? "No pending confirmations" : "Send submission confirmation emails to students via Outlook"}
+                            >
+                              <Icon name="Mail" size={18} />
+                              {"Send Confirmations (" + pendingConfirmations + ")"}
+                            </button>
                             </div>
                           )}
-                          <button
-                            onClick={async () => {
-                              // Include results with original email OR manually entered email
-                              const withEmail = status.results.filter((r, idx) => r.student_email || editedEmails[idx]?.email);
-                              if (withEmail.length === 0) {
-                                addToast("No students have email addresses", "warning");
-                                return;
-                              }
-                              // Count unique students (by email), not total results
-                              const uniqueEmails = [...new Set(withEmail.map((r, idx) => {
-                                const globalIdx = status.results.findIndex((sr) => sr.filename === r.filename);
-                                return editedEmails[globalIdx]?.email || r.student_email;
-                              }))];
-                              const msg = uniqueEmails.length === 1
-                                ? `Send 1 email to ${withEmail[0].student_name?.split(' ')[0] || 'student'} with ${withEmail.length} assignment${withEmail.length > 1 ? 's' : ''}?`
-                                : `Send emails to ${uniqueEmails.length} students (${withEmail.length} total assignments)?`;
-                              if (!confirm(msg)) return;
-                              setEmailStatus({ sending: true, sent: 0, failed: 0, message: `Sending to ${uniqueEmails.length} student${uniqueEmails.length > 1 ? 's' : ''}...` });
-                              try {
-                                const resultsWithEmail = withEmail.map((r) => {
-                                  const idx = status.results.findIndex((sr) => sr.filename === r.filename);
-                                  const edited = editedEmails[idx];
-                                  return {
-                                    ...r,
-                                    student_email: edited?.email || r.student_email,
-                                    custom_email_subject: edited?.subject || `Grade Report: ${r.assignment}`,
-                                    custom_email_body: edited?.body || getDefaultEmailBody(idx),
-                                  };
-                                });
-                                const response = await api.sendEmails(resultsWithEmail, config.teacher_email, config.teacher_name, config.email_signature);
-                                setEmailStatus({
-                                  sending: false,
-                                  sent: response.sent || 0,
-                                  failed: response.failed || 0,
-                                  message: `Sent ${response.sent} emails${response.failed > 0 ? `, ${response.failed} failed` : ""}`,
-                                });
-                              } catch (e) {
-                                setEmailStatus({ sending: false, sent: 0, failed: 0, message: `Error: ${e.message}` });
-                              }
-                            }}
-                            className="btn btn-primary"
-                            disabled={emailStatus.sending}
-                            style={{
-                              background: "linear-gradient(135deg, #22c55e, #16a34a)",
-                            }}
-                            title="Send emails to all students"
-                          >
-                            <Icon name="Send" size={18} />
-                            {emailStatus.sending ? "Sending..." : "Send All Emails"}
-                          </button>
                         </div>
                       )}
                     </div>
