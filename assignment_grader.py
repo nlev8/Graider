@@ -2596,6 +2596,11 @@ def load_roster(roster_path: str) -> dict:
             last_name = parts[0].strip()
             first_name = parts[1].strip() if len(parts) > 1 else ""
             first_name_simple = first_name.split()[0] if first_name else ""
+        elif ',' in str(student_name):
+            parts = str(student_name).split(',', 1)
+            last_name = parts[0].strip()
+            first_name = parts[1].strip() if len(parts) > 1 else ""
+            first_name_simple = first_name.split()[0] if first_name else ""
         else:
             last_name = str(student_name)
             first_name = ""
@@ -2616,6 +2621,18 @@ def load_roster(roster_path: str) -> dict:
         reverse_key = f"{last_name} {first_name_simple}".lower().strip()
         roster[reverse_key] = entry
 
+        # Apostrophe-stripped key (e.g., "andre'a chavarria" → "andrea chavarria")
+        import re as _re
+        stripped_first = _re.sub(r"'", '', first_name_simple)
+        stripped_last = _re.sub(r"'", '', last_name)
+        if stripped_first != first_name_simple or stripped_last != last_name:
+            apo_key = f"{stripped_first} {stripped_last}".lower().strip()
+            if apo_key not in roster:
+                roster[apo_key] = entry
+            apo_rev = f"{stripped_last} {stripped_first}".lower().strip()
+            if apo_rev not in roster:
+                roster[apo_rev] = entry
+
         # For compound last names, add short key with just first part of last name
         last_parts = last_name.split()
         if len(last_parts) > 1:
@@ -2625,6 +2642,21 @@ def load_roster(roster_path: str) -> dict:
             reverse_short = f"{last_parts[0]} {first_name_simple}".lower().strip()
             if reverse_short not in roster:
                 roster[reverse_short] = entry
+
+        # For hyphenated last names (e.g., "Barnhart-Hunter" → also add "Barnhart")
+        if '-' in last_name:
+            hyph_parts = last_name.split('-')
+            hyph_short = f"{first_name_simple} {hyph_parts[0]}".lower().strip()
+            if hyph_short not in roster:
+                roster[hyph_short] = entry
+            hyph_rev = f"{hyph_parts[0]} {first_name_simple}".lower().strip()
+            if hyph_rev not in roster:
+                roster[hyph_rev] = entry
+            # Also add space-separated variant ("Salvador-Guzman" → "Salvador Guzman")
+            space_last = last_name.replace('-', ' ')
+            space_key = f"{first_name_simple} {space_last}".lower().strip()
+            if space_key not in roster:
+                roster[space_key] = entry
 
     print(f"📋 Loaded {len(set(id(v) for v in roster.values()))} students from Excel roster")
 
@@ -2671,8 +2703,10 @@ def load_roster(roster_path: str) -> dict:
                         first_name_simple = first_name.split()[0] if first_name else ''
                         lookup_key = f"{first_name_simple} {last_name}".lower().strip()
 
-                        # Only add if not already in roster (don't overwrite Excel data)
+                        # If already in roster from Excel, just fill in period if missing
                         if lookup_key in roster:
+                            if not roster[lookup_key].get('period'):
+                                roster[lookup_key]['period'] = period_name
                             continue
 
                         email = f"{local_id}@vcs2go.net" if local_id else ""
@@ -2700,6 +2734,119 @@ def load_roster(roster_path: str) -> dict:
         if added:
             print(f"📋 Supplemented with {added} students from period CSVs")
 
+    return roster
+
+
+def build_roster_from_periods() -> dict:
+    """Build a roster dict exclusively from period CSVs in ~/.graider_data/periods/.
+
+    Returns the same dict format as load_roster():
+      "firstname lastname" (lowercase) -> {student_id, student_name, first_name, last_name, email, period}
+
+    Email is derived as {local_id}@vcs2go.net.
+    """
+    import csv as csv_mod
+    import re as _re
+
+    roster = {}
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+    if not os.path.exists(periods_dir):
+        print("⚠️  No period CSVs found at ~/.graider_data/periods/")
+        return {}
+
+    for period_file in sorted(os.listdir(periods_dir)):
+        if not period_file.endswith('.csv'):
+            continue
+        period_name = period_file.replace('.csv', '').replace('_', ' ')
+        # Try to get period name from metadata
+        meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, 'r') as mf:
+                    meta = json.load(mf)
+                    period_name = meta.get('period_name', period_name)
+            except Exception:
+                pass
+
+        filepath = os.path.join(periods_dir, period_file)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as fh:
+                reader = csv_mod.DictReader(fh)
+                for row in reader:
+                    student_col = row.get('Student', row.get('Name', '')).strip().strip('"')
+                    student_id = row.get('Student ID', '').strip().strip('"')
+                    local_id = row.get('Local ID', '').strip().strip('"')
+
+                    # Parse "Last, First" or "Last; First" format
+                    first_name = ''
+                    last_name = ''
+                    for sep in [';', ',']:
+                        if sep in student_col:
+                            parts = student_col.split(sep, 1)
+                            last_name = parts[0].strip()
+                            first_name = parts[1].strip() if len(parts) > 1 else ''
+                            break
+                    if not first_name and not last_name:
+                        continue
+
+                    first_name_simple = first_name.split()[0] if first_name else ''
+                    lookup_key = f"{first_name_simple} {last_name}".lower().strip()
+
+                    email = f"{local_id}@vcs2go.net" if local_id else ""
+                    entry = {
+                        "student_id": str(student_id),
+                        "student_name": f"{first_name} {last_name}".strip(),
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "email": email,
+                        "period": period_name
+                    }
+                    roster[lookup_key] = entry
+
+                    # Reverse key
+                    reverse_key = f"{last_name} {first_name_simple}".lower().strip()
+                    if reverse_key not in roster:
+                        roster[reverse_key] = entry
+
+                    # Apostrophe-stripped key
+                    stripped_first = _re.sub(r"'", '', first_name_simple)
+                    stripped_last = _re.sub(r"'", '', last_name)
+                    if stripped_first != first_name_simple or stripped_last != last_name:
+                        apo_key = f"{stripped_first} {stripped_last}".lower().strip()
+                        if apo_key not in roster:
+                            roster[apo_key] = entry
+                        apo_rev = f"{stripped_last} {stripped_first}".lower().strip()
+                        if apo_rev not in roster:
+                            roster[apo_rev] = entry
+
+                    # Compound last name short keys
+                    last_parts = last_name.split()
+                    if len(last_parts) > 1:
+                        short_key = f"{first_name_simple} {last_parts[0]}".lower().strip()
+                        if short_key not in roster:
+                            roster[short_key] = entry
+                        reverse_short = f"{last_parts[0]} {first_name_simple}".lower().strip()
+                        if reverse_short not in roster:
+                            roster[reverse_short] = entry
+
+                    # Hyphenated last name keys
+                    if '-' in last_name:
+                        hyph_parts = last_name.split('-')
+                        hyph_short = f"{first_name_simple} {hyph_parts[0]}".lower().strip()
+                        if hyph_short not in roster:
+                            roster[hyph_short] = entry
+                        hyph_rev = f"{hyph_parts[0]} {first_name_simple}".lower().strip()
+                        if hyph_rev not in roster:
+                            roster[hyph_rev] = entry
+                        space_last = last_name.replace('-', ' ')
+                        space_key = f"{first_name_simple} {space_last}".lower().strip()
+                        if space_key not in roster:
+                            roster[space_key] = entry
+        except Exception:
+            pass
+
+    unique_count = len(set(id(v) for v in roster.values()))
+    print(f"📋 Built roster with {unique_count} students from period CSVs")
     return roster
 
 

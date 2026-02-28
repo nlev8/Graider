@@ -864,7 +864,12 @@ COMMUNICATION & REPORTING:
 STUDENT INFO:
 - get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
 - get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators.
-- remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed."""
+- remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed.
+
+BEHAVIOR TRACKING:
+- get_behavior_summary: Get behavior correction and praise counts for a student or class period. Shows daily breakdown, notes, and trends. Use when the teacher asks "how has [student] behaved?" or "show behavior for Period 3".
+- generate_behavior_email: Generate a professional behavior email to a student's parents. Includes correction counts, dates, notes, and constructive tone. Returns a draft for review. Use when asked to "write a behavior email for [student]'s parents".
+- send_behavior_email: Send a reviewed behavior email via Resend (direct email) or Focus portal automation. Always show the draft first and get teacher approval before sending."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:
