@@ -103,6 +103,14 @@ const TUTORIAL_STEPS = [
     description:
       "Generate and send parent feedback emails. 'Parent Emails' creates personalized email drafts with each student's score, grade, and AI-generated feedback. 'Send via Outlook' opens a browser window that logs into your school Outlook account and sends the emails automatically. Parent contact emails are pulled from your class roster in Settings > Classroom.",
   },
+  {
+    target: "results-confirmations",
+    tab: "results",
+    icon: "MailCheck",
+    title: "Submission Confirmations",
+    description:
+      "Send students a confirmation email listing which assignments they've submitted and which are still outstanding. Graider scans your assignments folder, matches each file to a student via the roster, and compares against your saved assignment configs to build a personalized checklist. Filter by period or individual student using the dropdowns. The 'CC Parents' checkbox adds the student's primary parent/guardian email (from your uploaded parent contacts) to the CC field, so parents stay informed about submission status. Only files matching a saved assignment config are counted — random or misnamed uploads won't appear in the list.",
+  },
 
   // ── Grading Setup (Builder) Tab ───────────────────────────────────
   {

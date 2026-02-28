@@ -175,10 +175,19 @@ def send_email(page, eml, index, total):
 
     # Fill CC if present
     if eml.get("cc"):
+        # Expand CC field if hidden (Outlook Web hides it by default)
+        try:
+            expand_btn = page.locator('[aria-label="Show Cc & Bcc"]')
+            if expand_btn.is_visible(timeout=2000):
+                expand_btn.click()
+                page.wait_for_timeout(500)
+        except Exception:
+            pass  # CC field may already be visible
         page.locator('[aria-label="Cc"]').last.click()
         page.keyboard.type(eml["cc"])
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(1000)
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(1000)
 
     # Fill Subject — try placeholder first, then text, then aria-label
     subject_filled = False

@@ -367,6 +367,34 @@ Graider includes ready-to-use accommodation profiles that adjust AI grading and 
 - Auto-detects new submissions
 - Perfect for digital assignment collection
 
+### Submission Confirmation Emails
+
+Automatically send every student a personalized confirmation showing what they've turned in and what's still missing — no more "Did you get my assignment?" emails.
+
+| Feature | What It Does |
+|---------|-------------|
+| **Auto-Scan** | Scans assignments folder, matches files to students via roster |
+| **Smart Matching** | Only counts files that match saved assignment configs — random uploads ignored |
+| **Personalized Checklist** | Each student sees their submitted assignments (✓) and outstanding ones (•) |
+| **CC Parents** | One checkbox to CC the primary parent/guardian on every confirmation |
+| **Period & Student Filters** | Send to one period, one student, or the whole class |
+| **Outlook Automation** | Sends via Playwright browser automation through your school Outlook |
+
+**Sample Confirmation Email:**
+> *Hi Alyssa,*
+>
+> *Here are the assignments you've submitted so far:*
+>
+> *✓ Cornell Notes Ch. 19*
+> *✓ Louisiana Purchase DBQ*
+>
+> *Here are your outstanding assignments that are still due:*
+>
+> *• Vocabulary Quiz 4*
+> *• Chapter 20 Summary*
+
+**Why It Matters:** Teachers spend hours tracking down missing work. Students claim they turned things in. Parents don't know what's due. One click sends proof to everyone — student, parent, and teacher records all aligned.
+
 ---
 
 # Lesson Planning Bonus
@@ -772,6 +800,7 @@ Teachers spend **hours per week** on repetitive portal tasks — logging in, nav
 | Auto-Grade Mode | ✅ Complete |
 | AI Assistant (Claude) | ✅ Complete |
 | Focus SIS Automation | ✅ Complete |
+| Submission Confirmations (+ CC Parents) | ✅ Complete |
 | Script Builder | ✅ Complete |
 | Supabase Teacher Auth | ✅ Complete |
 
@@ -1162,6 +1191,7 @@ Other platforms are isolated tools. Graider is an **integrated teaching assistan
 | AI Assistant (data queries) | ❌ | ✅ |
 | Progress tracking | Basic | ✅ Advanced |
 | Academic integrity | ❌ | ✅ |
+| Submission confirmations + CC parents | ❌ | ✅ |
 | No installation needed | ❌ (app required) | ✅ Web app |
 | No third-party data sharing | ❌ | ✅ |
 

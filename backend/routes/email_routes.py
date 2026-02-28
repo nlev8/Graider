@@ -785,6 +785,7 @@ def send_confirmation_emails():
         teacher_name = data.get('teacher_name', 'Your Teacher')
         period_filter = data.get('period_filter', '')
         student_filter = data.get('student_filter', '')
+        cc_parents = data.get('cc_parents', False)
 
         if not assignments_folder or not os.path.exists(assignments_folder):
             return jsonify({"error": "Assignments folder not found: " + assignments_folder}), 400
@@ -871,11 +872,16 @@ def send_confirmation_emails():
             matched = _match_to_config_title(normalized, all_config_names)
             canonical = alias_to_title.get(matched, matched)
 
+            # Skip files that don't match any saved assignment config
+            if canonical not in all_assignment_titles:
+                continue
+
             eligible_files.append({
                 'filename': filename,
                 'student_name': student_info.get('student_name', 'Student'),
                 'first_name': student_info.get('first_name', 'Student'),
                 'email': email,
+                'student_id': student_info.get('student_id', ''),
                 'assignment': canonical,
             })
 
@@ -890,6 +896,7 @@ def send_confirmation_emails():
                 students_map[name] = {
                     'first_name': f['first_name'],
                     'email': f['email'],
+                    'student_id': f.get('student_id', ''),
                     'assignments': [],
                     'filenames': [],
                 }
@@ -909,7 +916,9 @@ def send_confirmation_emails():
                     normalized = _normalize_assignment_name(raw_part)
                     matched = _match_to_config_title(normalized, all_config_names)
                     canonical = alias_to_title.get(matched, matched)
-                    all_student_submitted[sname].add(canonical)
+                    # Only count files that match a saved assignment config
+                    if canonical in all_assignment_titles:
+                        all_student_submitted[sname].add(canonical)
 
         # Add ALL roster students not already in students_map — includes
         # students with zero files AND those whose files are all confirmed
@@ -920,12 +929,24 @@ def send_confirmation_emails():
                 students_map[name] = {
                     'first_name': val.get('first_name', 'Student'),
                     'email': val.get('email', ''),
+                    'student_id': val.get('student_id', ''),
                     'assignments': [],
                     'filenames': [],
                 }
 
         if not students_map:
             return jsonify({"error": "No pending confirmations"}), 400
+
+        # Load parent contacts if CC parents requested
+        parent_contacts = {}
+        if cc_parents:
+            contacts_path = os.path.expanduser("~/.graider_data/parent_contacts.json")
+            if os.path.exists(contacts_path):
+                try:
+                    with open(contacts_path, 'r') as fh:
+                        parent_contacts = json.load(fh)
+                except Exception:
+                    pass
 
         # Build one confirmation email per student
         emails = []
@@ -952,15 +973,22 @@ def send_confirmation_emails():
             if outstanding:
                 body += "\nHere are your outstanding assignments that are still due:\n\n"
                 for title in outstanding:
-                    body += "- " + title + "\n"
+                    body += "\u2022 " + title + "\n"
             elif all_confirmed_list:
                 body += "\nAll assignments have been received. Great job!\n"
 
-            body += "\n" + teacher_name
+            body += ""
+
+            cc_email = ""
+            if cc_parents and info.get('student_id'):
+                contact = parent_contacts.get(str(info['student_id']), {})
+                parent_emails = contact.get('parent_emails', [])
+                if parent_emails:
+                    cc_email = parent_emails[0]
 
             emails.append({
                 "to": info['email'],
-                "cc": "",
+                "cc": cc_email,
                 "subject": subject,
                 "body": body,
                 "student_name": name,

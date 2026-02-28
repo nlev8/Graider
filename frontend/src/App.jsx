@@ -839,6 +839,7 @@ function App() {
   const [pendingConfirmations, setPendingConfirmations] = useState(0);
   const [pendingConfirmationStudents, setPendingConfirmationStudents] = useState([]);
   const [confirmationStudentFilter, setConfirmationStudentFilter] = useState("");
+  const [ccParents, setCcParents] = useState(false);
   const pendingConfirmationIds = useRef([]);
   const pendingConfirmationFilenames = useRef([]);
   const [focusCommentsStatus, setFocusCommentsStatus] = useState({ status: "idle", entered: 0, total: 0, failed: 0, message: "" });
@@ -1204,7 +1205,7 @@ function App() {
 
   // Fetch portal submissions for Results tab
   useEffect(() => {
-    if (!user) return;
+    if (!user || showTutorial) return;
     const loadPortalSubmissions = async () => {
       try {
         const data = await api.getPortalSubmissions();
@@ -1217,7 +1218,7 @@ function App() {
     loadPortalSubmissions();
     const interval = setInterval(loadPortalSubmissions, 30000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, showTutorial]);
 
   // Toast notifications
   const [toasts, setToasts] = useState([]);
@@ -9448,7 +9449,7 @@ ${signature}`;
                           </div>
                           {/* Confirmation Emails Group */}
                           {config.assignments_folder && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.2)", background: "rgba(59,130,246,0.06)" }}>
+                            <div data-tutorial="results-confirmations" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.2)", background: "rgba(59,130,246,0.06)" }}>
                             {sortedPeriods.length > 0 && (
                               <select
                                 className="input"
@@ -9477,6 +9478,10 @@ ${signature}`;
                                 ))}
                               </select>
                             )}
+                            <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.82rem", cursor: "pointer", whiteSpace: "nowrap" }}>
+                              <input type="checkbox" checked={ccParents} onChange={(e) => setCcParents(e.target.checked)} />
+                              CC Parents
+                            </label>
                             <button
                               onClick={async () => {
                                 var filterLabel = confirmationStudentFilter || resultsPeriodFilter || "";
@@ -9488,6 +9493,7 @@ ${signature}`;
                                     teacher_name: config.teacher_name || "Your Teacher",
                                     period_filter: resultsPeriodFilter,
                                     student_filter: confirmationStudentFilter,
+                                    cc_parents: ccParents,
                                   });
                                   if (result.error) { addToast(result.error, "error"); return; }
                                   pendingConfirmationFilenames.current = result.sent_filenames || [];
