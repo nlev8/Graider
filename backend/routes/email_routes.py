@@ -575,3 +575,484 @@ def outlook_login():
         return jsonify({"status": "started", "message": "Browser opening..."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# FILE-BASED CONFIRMATION EMAILS
+# ══════════════════════════════════════════════════════════════
+
+ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
+RESULTS_FILE = os.path.expanduser("~/.graider_results.json")
+
+
+def _unique_roster_students(roster, period_filter=''):
+    """Yield deduplicated (student_name, info) from roster, filtered by period and valid email."""
+    seen_ids = set()
+    for key, val in roster.items():
+        vid = id(val)
+        if vid in seen_ids:
+            continue
+        seen_ids.add(vid)
+        email = val.get('email', '')
+        if not email or '@' not in email:
+            continue
+        if period_filter and val.get('period', '') != period_filter:
+            continue
+        student_name = val.get('student_name', '')
+        if student_name:
+            yield student_name, val
+
+
+def _find_in_roster(roster, parsed):
+    """Find a student in the roster using multiple matching strategies.
+
+    parse_filename() returns a single lookup_key like 'firstname lastname',
+    but the roster may store names differently.  Try several fallbacks before
+    giving up.
+    """
+    import re
+
+    lookup_key = parsed.get('lookup_key', '')
+
+    # Strategy 1: direct lookup
+    info = roster.get(lookup_key)
+    if info:
+        return info
+
+    first = parsed.get('first_name', '').strip()
+    last = parsed.get('last_name', '').strip()
+
+    # Strategy 2: reverse name order
+    if first and last:
+        reverse_key = f"{last} {first}".lower()
+        info = roster.get(reverse_key)
+        if info:
+            return info
+
+    # Strategy 3: strip punctuation / middle initials and retry
+    clean_first = re.sub(r'[^\w\s]', '', first).strip().split()[0] if first else ''
+    clean_last = re.sub(r'[^\w\s]', '', last).strip()
+    if clean_first or clean_last:
+        clean_key = f"{clean_first} {clean_last}".lower().strip()
+        if clean_key != lookup_key:
+            info = roster.get(clean_key)
+            if info:
+                return info
+            # also reversed
+            clean_rev = f"{clean_last} {clean_first}".lower().strip()
+            info = roster.get(clean_rev)
+            if info:
+                return info
+
+    # Strategy 4: prefix match — handles last-initial-only filenames
+    # e.g., "Serenity P" should match "Serenity Petite"
+    if first and last and len(last) <= 2:
+        first_lower = clean_first.lower() if clean_first else first.lower()
+        last_lower = last.lower()
+        seen_ids = set()
+        for key, val in roster.items():
+            vid = id(val)
+            if vid in seen_ids:
+                continue
+            seen_ids.add(vid)
+            r_first = val.get('first_name', '').split()[0].lower() if val.get('first_name') else ''
+            r_last = val.get('last_name', '').lower()
+            if r_first == first_lower and r_last.startswith(last_lower):
+                return val
+
+    # Strategy 5: fuzzy match — handles typos and nicknames
+    # Match when one name is exact and the other is within edit distance 2
+    if first and last:
+        first_lower = (clean_first or first).lower()
+        last_lower = (clean_last or last).lower()
+        best = None
+        best_dist = 3  # max acceptable distance
+        seen_ids = set()
+        for key, val in roster.items():
+            vid = id(val)
+            if vid in seen_ids:
+                continue
+            seen_ids.add(vid)
+            r_first = val.get('first_name', '').split()[0].lower() if val.get('first_name') else ''
+            r_last = val.get('last_name', '').lower()
+            if not r_first or not r_last:
+                continue
+            # Exact last + fuzzy first, or exact first + fuzzy last
+            if r_last == last_lower:
+                d = _edit_distance(first_lower, r_first)
+                if d < best_dist:
+                    best, best_dist = val, d
+            elif r_first == first_lower:
+                d = _edit_distance(last_lower, r_last)
+                if d < best_dist:
+                    best, best_dist = val, d
+        if best:
+            return best
+
+    return None
+
+
+def _edit_distance(a, b):
+    """Levenshtein distance between two strings."""
+    if len(a) < len(b):
+        return _edit_distance(b, a)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (0 if ca == cb else 1)))
+        prev = curr
+    return prev[-1]
+
+
+@email_bp.route('/api/send-confirmation-emails', methods=['POST'])
+def send_confirmation_emails():
+    """Send submission-received confirmations for ALL files in the assignments folder.
+
+    Scans the assignments folder (SharePoint sync), matches each file to a
+    student via the roster, and sends confirmation emails for every file
+    that hasn't already been confirmed — graded or not.
+    """
+    try:
+        from pathlib import Path
+
+        data = request.json or {}
+        assignments_folder = data.get('assignments_folder', '')
+        teacher_name = data.get('teacher_name', 'Your Teacher')
+        period_filter = data.get('period_filter', '')
+        student_filter = data.get('student_filter', '')
+
+        if not assignments_folder or not os.path.exists(assignments_folder):
+            return jsonify({"error": "Assignments folder not found: " + assignments_folder}), 400
+
+        # Load roster from period CSVs (no Excel roster needed)
+        try:
+            from assignment_grader import build_roster_from_periods, parse_filename
+        except ImportError:
+            from backend.assignment_grader import build_roster_from_periods, parse_filename
+
+        roster = build_roster_from_periods()
+        if not roster:
+            return jsonify({"error": "No students found in period CSVs (~/.graider_data/periods/)"}), 400
+
+        # Load already-confirmed filenames from confirmations file + grading_state
+        confirmed_filenames = _load_confirmed_filenames()
+        from backend.routes.grading_routes import grading_state, grading_lock
+        if grading_state and grading_state.get("results"):
+            lock = grading_lock
+            results = grading_state["results"] if not lock else None
+            if lock:
+                with lock:
+                    results = list(grading_state["results"])
+            for r in (results or []):
+                if r.get('confirmation_sent'):
+                    confirmed_filenames.add(r.get('filename', ''))
+
+        # Scan assignments folder for all submitted files
+        assignment_path = Path(assignments_folder)
+        all_files = []
+        for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
+            all_files.extend(assignment_path.glob(ext))
+
+        # Load all saved assignment config titles for "missing" list
+        all_assignment_titles = set()
+        if os.path.exists(ASSIGNMENTS_DIR):
+            for f in os.listdir(ASSIGNMENTS_DIR):
+                if f.endswith('.json'):
+                    try:
+                        filepath = os.path.join(ASSIGNMENTS_DIR, f)
+                        with open(filepath, 'r') as fh:
+                            cfg = json.load(fh)
+                        title = cfg.get('title') or f.replace('.json', '')
+                        all_assignment_titles.add(title)
+                    except Exception:
+                        pass
+
+        # Track which assignments each student has submitted (by file presence)
+        student_submitted = defaultdict(set)
+        # Build list of eligible files
+        eligible_files = []
+
+        for filepath in all_files:
+            filename = filepath.name
+            if filename in confirmed_filenames:
+                continue
+
+            parsed = parse_filename(filename)
+            student_info = _find_in_roster(roster, parsed)
+            if not student_info:
+                continue
+
+            email = student_info.get('email', '')
+            if not email or '@' not in email:
+                continue
+
+            student_period = student_info.get('period', '')
+            if period_filter and student_period != period_filter:
+                continue
+
+            student_name_check = student_info.get('student_name', '')
+            if student_filter and student_name_check != student_filter:
+                continue
+
+            assignment_part = parsed.get('assignment_part', '') or 'Assignment'
+
+            eligible_files.append({
+                'filename': filename,
+                'student_name': student_info.get('student_name', 'Student'),
+                'first_name': student_info.get('first_name', 'Student'),
+                'email': email,
+                'assignment': assignment_part,
+            })
+
+            student_submitted[student_info.get('student_name', '')].add(assignment_part)
+
+        # Group eligible files by student for one email per student
+        students_map = {}
+        sent_filenames = []
+        for f in eligible_files:
+            name = f['student_name']
+            if name not in students_map:
+                students_map[name] = {
+                    'first_name': f['first_name'],
+                    'email': f['email'],
+                    'assignments': [],
+                    'filenames': [],
+                }
+            students_map[name]['assignments'].append(f['assignment'])
+            students_map[name]['filenames'].append(f['filename'])
+
+        # Scan ALL files (including already confirmed) to build
+        # all_student_submitted for the "outstanding" calculation
+        all_student_submitted = defaultdict(set)
+        for filepath in all_files:
+            parsed = parse_filename(filepath.name)
+            student_info = _find_in_roster(roster, parsed)
+            if student_info:
+                sname = student_info.get('student_name', '')
+                apart = parsed.get('assignment_part', '') or 'Assignment'
+                if sname:
+                    all_student_submitted[sname].add(apart)
+
+        # Add ALL roster students not already in students_map — includes
+        # students with zero files AND those whose files are all confirmed
+        for name, val in _unique_roster_students(roster, period_filter):
+            if student_filter and name != student_filter:
+                continue
+            if name not in students_map:
+                students_map[name] = {
+                    'first_name': val.get('first_name', 'Student'),
+                    'email': val.get('email', ''),
+                    'assignments': [],
+                    'filenames': [],
+                }
+
+        if not students_map:
+            return jsonify({"error": "No pending confirmations"}), 400
+
+        # Build one confirmation email per student
+        emails = []
+        for name, info in students_map.items():
+            submitted = sorted(info['assignments'])
+            # Outstanding = all assignment configs minus everything this student submitted
+            all_submitted = all_student_submitted.get(name, set())
+            outstanding = sorted(all_assignment_titles - all_submitted)
+
+            subject = "Submission Confirmation \u2014 " + name
+
+            body = "Hi " + info['first_name'] + ",\n\n"
+            if submitted:
+                body += "This is to confirm receipt of the following assignment(s):\n"
+                for a in submitted:
+                    body += "  \u2713 " + a + "\n"
+            elif all_submitted:
+                body += "All submissions have been previously confirmed.\n"
+            else:
+                body += "No submissions have been received yet.\n"
+
+            if outstanding:
+                body += "\nOutstanding assignments still due:\n"
+                for title in outstanding:
+                    body += "  - " + title + "\n"
+            elif submitted or all_submitted:
+                body += "\nAll assignments have been received. Great job!\n"
+
+            body += "\n" + teacher_name
+
+            emails.append({
+                "to": info['email'],
+                "cc": "",
+                "subject": subject,
+                "body": body,
+                "student_name": name,
+            })
+            sent_filenames.extend(info['filenames'])
+
+        if not emails:
+            return jsonify({"error": "No emails to send"}), 400
+
+        result = launch_outlook_sender(emails)
+        if "error" in result:
+            return jsonify(result), 409
+
+        result["sent_filenames"] = sent_filenames
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+CONFIRMATIONS_FILE = os.path.expanduser("~/.graider_data/confirmations_sent.json")
+
+
+@email_bp.route('/api/pending-confirmations', methods=['POST'])
+def pending_confirmations():
+    """Count how many files in the assignments folder need confirmation emails.
+
+    Scans the folder, matches to roster, excludes already-confirmed files.
+    Called on-demand (not polled) since it requires folder scan + roster load.
+    """
+    try:
+        from pathlib import Path
+
+        data = request.json or {}
+        assignments_folder = data.get('assignments_folder', '')
+        period_filter = data.get('period_filter', '')
+        student_filter = data.get('student_filter', '')
+
+        if not assignments_folder or not os.path.exists(assignments_folder):
+            return jsonify({"count": 0, "students": []})
+
+        try:
+            from assignment_grader import build_roster_from_periods, parse_filename
+        except ImportError:
+            from backend.assignment_grader import build_roster_from_periods, parse_filename
+
+        roster = build_roster_from_periods()
+        if not roster:
+            return jsonify({"count": 0, "students": []})
+
+        # Load confirmed filenames
+        confirmed_filenames = _load_confirmed_filenames()
+        from backend.routes.grading_routes import grading_state, grading_lock
+        if grading_state and grading_state.get("results"):
+            lock = grading_lock
+            results = grading_state["results"] if not lock else None
+            if lock:
+                with lock:
+                    results = list(grading_state["results"])
+            for r in (results or []):
+                if r.get('confirmation_sent'):
+                    confirmed_filenames.add(r.get('filename', ''))
+
+        # Scan folder — count unique students with pending (unconfirmed) files
+        assignment_path = Path(assignments_folder)
+        pending_students = set()
+        students_with_files = set()
+        for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
+            for filepath in assignment_path.glob(ext):
+                filename = filepath.name
+                parsed = parse_filename(filename)
+                student_info = _find_in_roster(roster, parsed)
+                if not student_info:
+                    continue
+                email = student_info.get('email', '')
+                if not email or '@' not in email:
+                    continue
+                if period_filter and student_info.get('period', '') != period_filter:
+                    continue
+                student_name = student_info.get('student_name', '')
+                students_with_files.add(student_name)
+                if filename not in confirmed_filenames:
+                    pending_students.add(student_name)
+
+        # Include ALL roster students — those with no files, and those
+        # whose files are all confirmed, so the full class list appears
+        for name, val in _unique_roster_students(roster, period_filter):
+            pending_students.add(name)
+
+        # Apply student filter for count only (student list always shows all)
+        if student_filter:
+            count = 1 if student_filter in pending_students else 0
+        else:
+            count = len(pending_students)
+
+        return jsonify({"count": count, "students": sorted(pending_students)})
+
+    except Exception as e:
+        return jsonify({"count": 0, "students": [], "error": str(e)})
+
+
+def _load_confirmed_filenames():
+    """Load set of filenames that have had confirmations sent."""
+    if os.path.exists(CONFIRMATIONS_FILE):
+        try:
+            with open(CONFIRMATIONS_FILE, 'r') as f:
+                return set(json.load(f))
+        except Exception:
+            pass
+    return set()
+
+
+def _save_confirmed_filenames(filenames_set):
+    """Persist confirmed filenames to disk."""
+    os.makedirs(os.path.dirname(CONFIRMATIONS_FILE), exist_ok=True)
+    try:
+        with open(CONFIRMATIONS_FILE, 'w') as f:
+            json.dump(sorted(filenames_set), f, indent=2)
+    except Exception as e:
+        print(f"Error saving confirmations file: {e}")
+
+
+@email_bp.route('/api/mark-confirmations-sent-file', methods=['POST'])
+def mark_confirmations_sent_file():
+    """Mark files as confirmation_sent after Outlook send completes.
+
+    Takes filenames array, marks them in:
+    1. grading_state results (for graded files) + persists to results.json
+    2. confirmations_sent.json (for all files, graded or not)
+    """
+    try:
+        data = request.json or {}
+        filenames = set(data.get('filenames', []))
+
+        if not filenames:
+            return jsonify({"error": "No filenames provided"}), 400
+
+        # Update grading_state for graded results
+        from backend.routes.grading_routes import grading_state, grading_lock
+
+        updated = 0
+        if grading_state and grading_state.get("results"):
+            lock = grading_lock
+            results = grading_state["results"]
+            if lock:
+                with lock:
+                    for r in results:
+                        if r.get('filename') in filenames:
+                            r['confirmation_sent'] = True
+                            updated += 1
+            else:
+                for r in results:
+                    if r.get('filename') in filenames:
+                        r['confirmation_sent'] = True
+                        updated += 1
+
+            # Persist grading results
+            try:
+                with open(RESULTS_FILE, 'w') as f:
+                    json.dump(results, f, indent=2)
+            except Exception as e:
+                print(f"Error saving results after marking confirmations: {e}")
+
+        # Also persist to dedicated confirmations file (covers ungraded files)
+        confirmed = _load_confirmed_filenames()
+        confirmed.update(filenames)
+        _save_confirmed_filenames(confirmed)
+
+        return jsonify({"status": "ok", "updated": updated, "total_confirmed": len(confirmed)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
