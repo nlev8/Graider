@@ -17,7 +17,7 @@ def _get_supabase():
     if _supabase is None:
         from supabase import create_client
         url = os.getenv('SUPABASE_URL')
-        key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        key = os.getenv('SUPABASE_SERVICE_KEY')
         if url and key:
             _supabase = create_client(url, key)
     return _supabase
