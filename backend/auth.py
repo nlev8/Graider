@@ -3,8 +3,24 @@ Supabase JWT Authentication for Graider.
 Validates Bearer tokens on all /api/ routes except public endpoints.
 """
 import os
+import logging
 import jwt
 from flask import request, jsonify, g
+
+logger = logging.getLogger(__name__)
+
+_supabase = None
+
+def _get_supabase():
+    """Lazy-init Supabase admin client for approval checks."""
+    global _supabase
+    if _supabase is None:
+        from supabase import create_client
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        if url and key:
+            _supabase = create_client(url, key)
+    return _supabase
 
 
 # Routes that don't require authentication
@@ -97,6 +113,19 @@ def init_auth(app):
         if request.path != '/api/auth/approval-status':
             user_meta = payload.get('user_metadata', {})
             if not user_meta.get('approved'):
+                # JWT metadata may be stale — check Supabase admin API as fallback
+                try:
+                    sb = _get_supabase()
+                    if sb:
+                        res = sb.auth.admin.get_user_by_id(g.user_id)
+                        fresh_meta = (res.user.user_metadata or {}) if res and res.user else {}
+                        if fresh_meta.get('approved'):
+                            # User is actually approved, JWT is just stale
+                            logger.info("User %s approved via admin API fallback (stale JWT)", g.user_email)
+                            return None  # Allow request
+                except Exception as e:
+                    logger.warning("Admin API approval fallback failed: %s", str(e))
+
                 return jsonify({
                     'error': 'Account pending approval',
                     'code': 'NOT_APPROVED',
