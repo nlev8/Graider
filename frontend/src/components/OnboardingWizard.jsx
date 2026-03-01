@@ -20,10 +20,8 @@ const GRADE_LEVELS = [
 ];
 
 const SUBJECTS = [
-  "US History", "World History", "English Language Arts", "Mathematics",
-  "Science", "Biology", "Chemistry", "Physics", "Social Studies",
-  "Government", "Economics", "Geography", "Spanish", "French",
-  "Art", "Music", "Physical Education", "Health", "Computer Science",
+  "English/ELA", "Math", "Science", "US History", "World History",
+  "Social Studies", "Civics", "Geography", "Other",
 ];
 
 const STATES = [

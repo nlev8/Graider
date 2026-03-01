@@ -64,7 +64,9 @@ export const RUBRIC_PRESETS = {
 /** Maps subject display names to B.E.S.T. category keys. */
 export const SUBJECT_TO_CATEGORY = {
   "English Language Arts": "ELA",
+  "English/ELA": "ELA",
   "Mathematics": "Math",
+  "Math": "Math",
   "Science": "Science",
   "Biology": "Science",
   "Chemistry": "Science",
@@ -75,6 +77,7 @@ export const SUBJECT_TO_CATEGORY = {
   "Government": "History",
   "Economics": "History",
   "Geography": "History",
+  "Civics": "History",
 };
 
 /**
