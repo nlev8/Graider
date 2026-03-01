@@ -1193,65 +1193,6 @@ async function composeEmail(page, subject, body, ccEmails) {
 }
 
 /**
- * Close the Email tab by clicking its ✕ button.
- * Used for SMS-only messages so Focus doesn't send a blank email.
- */
-async function closeEmailTab(page) {
-  emit('status', { message: 'Closing Email tab (SMS-only)...' });
-  try {
-    const closed = await page.evaluate(() => {
-      // Find the Email tab button/element and its ✕ close button
-      var allEls = document.querySelectorAll('*');
-      for (var i = 0; i < allEls.length; i++) {
-        var el = allEls[i];
-        var text = (el.textContent || '').trim();
-        // Look for the ✕ character near "Email" text
-        if (text === '\u2715' || text === '×' || text === '\u2717' || text === 'x') {
-          var rect = el.getBoundingClientRect();
-          // Must be in the tab row area (y ~240-270) and small
-          if (rect.top > 230 && rect.top < 280 && rect.width < 25 && rect.height < 25) {
-            // Check if a sibling/parent contains "Email"
-            var parent = el.parentElement;
-            var parentText = parent ? (parent.textContent || '') : '';
-            if (parentText.toLowerCase().includes('email') && !parentText.toLowerCase().includes('sms')) {
-              el.click();
-              return { closed: true, x: Math.round(rect.left), y: Math.round(rect.top) };
-            }
-          }
-        }
-      }
-      // Fallback: find an element that looks like "Email ✕" and click the ✕ part
-      var buttons = document.querySelectorAll('button, span, a');
-      for (var j = 0; j < buttons.length; j++) {
-        var btn = buttons[j];
-        var btnText = (btn.textContent || '').trim();
-        if (/^Email\s*[✕×✗xX]$/i.test(btnText) || btnText === 'Email ✕') {
-          // Click the ✕ which is usually the last child
-          var closeEl = btn.querySelector('span, i, svg') || btn.lastElementChild;
-          if (closeEl) {
-            closeEl.click();
-            return { closed: true, method: 'child' };
-          }
-          btn.click();
-          return { closed: true, method: 'button' };
-        }
-      }
-      return { closed: false };
-    });
-    if (closed && closed.closed) {
-      emit('status', { message: 'Email tab closed' });
-      await page.waitForTimeout(500);
-    } else {
-      emit('warning', { message: 'Could not close Email tab — SMS may also trigger email' });
-    }
-  } catch (e) {
-    emit('warning', { message: 'Error closing Email tab: ' + e.message });
-  }
-  await screenshot(page, 'email_tab_closed');
-}
-
-
-/**
  * Switch to SMS tab and fill SMS body.
  */
 async function composeSMS(page, smsBody, smsOnly) {
@@ -1518,21 +1459,17 @@ async function sendOneMessage(page, entry, dryRun, currentPeriod) {
     return { success: false, error: 'Could not select student in dropdown' };
   }
 
-  // Step 4: Compose email OR close Email tab for SMS-only
-  const smsOnly = !msg.email_body && msg.sms_body;
+  // Step 4: Compose email (skip for SMS-only)
   if (msg.email_body) {
     const emailOk = await composeEmail(page, msg.subject, msg.email_body, msg.cc_emails);
     if (!emailOk) {
       return { success: false, error: 'Failed to compose email' };
     }
-  } else if (smsOnly) {
-    // Close the Email tab so Focus doesn't send a blank email
-    await closeEmailTab(page);
   }
 
   // Step 5: Compose SMS (if provided)
   if (msg.sms_body) {
-    await composeSMS(page, msg.sms_body, smsOnly);
+    await composeSMS(page, msg.sms_body, !msg.email_body);
   }
 
   // Step 6: Send (or skip in dry-run / send-disabled mode)
