@@ -729,7 +729,13 @@ function App() {
         });
         if (res.ok) {
           const data = await res.json();
-          setUserApproved(data.approved === true);
+          if (data.approved === true) {
+            setUserApproved(true);
+            // Refresh Supabase session so JWT gets updated metadata
+            supabase.auth.refreshSession();
+          } else {
+            setUserApproved(false);
+          }
         } else {
           setUserApproved(false);
         }
@@ -740,7 +746,8 @@ function App() {
     checkApproval();
 
     function handleNotApproved() {
-      setUserApproved(false);
+      // Re-verify before kicking out — avoids race with stale JWT requests
+      checkApproval();
     }
     window.addEventListener('account-not-approved', handleNotApproved);
     return () => window.removeEventListener('account-not-approved', handleNotApproved);
@@ -1205,7 +1212,7 @@ function App() {
 
   // Fetch portal submissions for Results tab
   useEffect(() => {
-    if (!user || showTutorial) return;
+    if (!user || showTutorial || userApproved !== true) return;
     const loadPortalSubmissions = async () => {
       try {
         const data = await api.getPortalSubmissions();
@@ -1218,7 +1225,7 @@ function App() {
     loadPortalSubmissions();
     const interval = setInterval(loadPortalSubmissions, 30000);
     return () => clearInterval(interval);
-  }, [user, showTutorial]);
+  }, [user, showTutorial, userApproved]);
 
   // Toast notifications
   const [toasts, setToasts] = useState([]);
@@ -1826,8 +1833,9 @@ function App() {
   // Track if initial load is complete (to avoid saving on first render)
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Load saved settings on startup
+  // Load saved settings on startup (wait for approval gate)
   useEffect(() => {
+    if (userApproved !== true) return;
     Promise.all([
       api
         .loadGlobalSettings()
@@ -1923,7 +1931,7 @@ function App() {
         }));
       })
       .catch(console.error);
-  }, []);
+  }, [userApproved]);
 
   // Refresh saved assignments when switching to Builder tab
   useEffect(() => {
