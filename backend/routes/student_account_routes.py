@@ -378,6 +378,10 @@ def get_portal_submissions():
     """Get all student submissions for the Results tab."""
     teacher_id = g.teacher_id
 
+    # Local dev has no real Supabase teacher record
+    if teacher_id == 'local-dev':
+        return jsonify({"submissions": [], "pending_confirmations": 0})
+
     try:
         db = _get_supabase()
 
