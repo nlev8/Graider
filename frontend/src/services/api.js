@@ -19,6 +19,20 @@ export async function getAuthHeaders() {
 }
 
 /**
+ * Deduplicated session refresh — prevents thundering herd when multiple
+ * concurrent API calls all get 401 and try to refresh at the same time.
+ * Only one refresh happens; all callers share the same promise.
+ */
+let _refreshPromise = null
+
+async function refreshSessionOnce() {
+  if (_refreshPromise) return _refreshPromise
+  _refreshPromise = supabase.auth.refreshSession()
+    .finally(() => { _refreshPromise = null })
+  return _refreshPromise
+}
+
+/**
  * Generic fetch wrapper with error handling and auth
  */
 async function fetchApi(endpoint, options = {}) {
@@ -34,8 +48,8 @@ async function fetchApi(endpoint, options = {}) {
     })
 
     if (response.status === 401) {
-      // Try refreshing the session once before giving up
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+      // Try refreshing the session once before giving up (deduplicated)
+      const { data: refreshData, error: refreshError } = await refreshSessionOnce()
       if (!refreshError && refreshData?.session) {
         const retryResponse = await fetch(API_BASE + endpoint, {
           ...options,
@@ -69,6 +83,13 @@ async function fetchApi(endpoint, options = {}) {
     console.error('API Error (' + endpoint + '):', error)
     throw error
   }
+}
+
+/**
+ * Check API keys status — exported so App.jsx can use fetchApi instead of raw fetch
+ */
+export async function checkApiKeys() {
+  return fetchApi('/api/check-api-keys')
 }
 
 // ============ Status & Grading ============
@@ -1154,4 +1175,5 @@ export default {
   startElementPicker,
   getPickerEvents,
   stopElementPicker,
+  checkApiKeys,
 }

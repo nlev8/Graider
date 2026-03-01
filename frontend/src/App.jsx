@@ -699,7 +699,14 @@ function App() {
       }
     });
 
-    function handleAuthExpired() {
+    async function handleAuthExpired() {
+      // Verify session is truly gone before signing out — prevents
+      // false positives from transient 401s during concurrent API calls
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        console.warn('auth-expired fired but session still valid, ignoring');
+        return;
+      }
       supabase.auth.signOut();
       setUser(null);
     }
@@ -749,11 +756,15 @@ function App() {
           } else {
             setUserApproved(false);
           }
-        } else {
+        } else if (res.status === 403) {
+          // Explicitly denied — user is not approved
           setUserApproved(false);
         }
+        // On 500/network errors, leave userApproved as null (loading)
+        // so the user sees a spinner instead of being kicked out
       } catch {
-        setUserApproved(false);
+        // Network error — don't kick user out, keep showing loading
+        console.warn('Approval check failed (network error), will retry');
       }
     }
     checkApproval();
@@ -1935,8 +1946,8 @@ function App() {
       .catch(console.error);
 
     // Check API keys status
-    fetch("/api/check-api-keys")
-      .then((res) => res.json())
+    api
+      .checkApiKeys()
       .then((data) => {
         setApiKeys((prev) => ({
           ...prev,
@@ -5280,6 +5291,24 @@ ${signature}`;
 
   if (showPasswordReset) {
     return <PasswordResetScreen onDone={() => { setShowPasswordReset(false); window.history.replaceState(null, '', window.location.pathname); }} />;
+  }
+
+  if (userApproved === null) {
+    // Still checking approval — show spinner instead of briefly flashing the app
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: 16,
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+      }}>
+        <div className="spin" style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#6366f1', borderRadius: '50%' }} />
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Checking account status...</p>
+      </div>
+    );
   }
 
   if (userApproved === false) {
