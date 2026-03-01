@@ -55,6 +55,26 @@ async function fetchApi(endpoint, options = {}) {
     if (response.status === 403) {
       const errData = await response.json().catch(() => ({}))
       if (errData.code === 'NOT_APPROVED') {
+        // JWT may have stale metadata — refresh session to pick up approval
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+        if (!refreshError && refreshData?.session) {
+          // Retry with fresh token (which now has approved: true if admin approved)
+          const retryResponse = await fetch(API_BASE + endpoint, {
+            ...options,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + refreshData.session.access_token,
+              ...options.headers,
+            },
+          })
+          if (retryResponse.ok) return await retryResponse.json()
+          // Still 403 after refresh — user genuinely not approved
+          const retryData = await retryResponse.json().catch(() => ({}))
+          if (retryResponse.status === 403 && retryData.code === 'NOT_APPROVED') {
+            window.dispatchEvent(new Event('account-not-approved'))
+          }
+          throw new Error(retryData.error || 'Access denied')
+        }
         window.dispatchEvent(new Event('account-not-approved'))
       }
       throw new Error(errData.error || 'Access denied')
@@ -842,6 +862,23 @@ export async function exportOutlookEmails(data = {}) {
   })
 }
 
+// ============ Focus SIS Communications ============
+
+export async function sendFocusComms(data = {}) {
+  return fetchApi('/api/send-focus-comms', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getFocusCommsStatus() {
+  return fetchApi('/api/focus-comms/status')
+}
+
+export async function stopFocusComms() {
+  return fetchApi('/api/focus-comms/stop', { method: 'POST' })
+}
+
 // ============ Outlook Playwright Sending ============
 
 export async function sendOutlookEmails(data = {}) {
@@ -1117,6 +1154,10 @@ export default {
   uploadFocusComments,
   getFocusCommentsStatus,
   exportOutlookEmails,
+  // Focus SIS Communications
+  sendFocusComms,
+  getFocusCommsStatus,
+  stopFocusComms,
   // Outlook Sending
   sendOutlookEmails,
   getOutlookSendStatus,

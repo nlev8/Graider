@@ -949,6 +949,41 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "send_focus_comms",
+        "description": "Send email and SMS messages to parents via Focus SIS Communications. This is the DEFAULT and PREFERRED method for contacting parents — use this instead of send_parent_emails unless the teacher specifically asks for Outlook. Composes and sends messages through the school's Focus portal, which sends from the teacher's official school account. Requires VPortal credentials and Focus roster imported in Settings. Supports template placeholders: {student_first_name}, {student_last_name}, {student_name}. IMPORTANT: Always do a dry_run first to show the teacher a preview before actually sending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "email_subject": {
+                    "type": "string",
+                    "description": "Email subject line. Supports {student_first_name}, {student_last_name}, {student_name} placeholders."
+                },
+                "email_body": {
+                    "type": "string",
+                    "description": "Email body text. Supports template placeholders. Use newlines for paragraphs."
+                },
+                "sms_body": {
+                    "type": "string",
+                    "description": "SMS text (max 500 chars). If omitted, only email is sent."
+                },
+                "student_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of student names (Last, First format) to message parents of."
+                },
+                "period": {
+                    "type": "string",
+                    "description": "Send to all parents in this period."
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "If true, preview messages without sending. ALWAYS use dry_run first."
+                }
+            },
+            "required": ["email_subject", "email_body"]
+        }
+    },
+    {
         "name": "save_assignment_config",
         "description": "Save or update an assignment config in Grading Setup. Use when teacher asks to save an assignment, update point values, rename, change rubric type, or modify grading notes for an existing assignment. Can update individual fields without overwriting the entire config. IMPORTANT: If the teacher uploaded a document, always include document_text so the editor can display and mark it.",
         "input_schema": {
@@ -3830,6 +3865,116 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
         return {"error": "Failed to launch Outlook sender: " + str(e)}
 
 
+def send_focus_comms(email_subject, email_body, sms_body=None, student_names=None,
+                     period=None, dry_run=True):
+    """Send email + SMS to parents via Focus SIS Communications.
+
+    Resolves target students from the Focus roster, fills template placeholders,
+    and either previews (dry_run) or triggers the focus-comms.js script.
+    """
+    FOCUS_ROSTER_FILE = os.path.expanduser("~/.graider_data/focus_roster_import.json")
+
+    if not os.path.exists(FOCUS_ROSTER_FILE):
+        return {"error": "No Focus roster imported. Import roster from Focus in Settings first."}
+
+    try:
+        with open(FOCUS_ROSTER_FILE, 'r', encoding='utf-8') as f:
+            roster = json.load(f)
+    except Exception as e:
+        return {"error": "Failed to load Focus roster: " + str(e)}
+
+    # Build flat list of all students from roster periods
+    all_students = []  # list of (student_name, period_name)
+    periods = roster.get("periods", {})
+    for period_name, period_data in periods.items():
+        for student in period_data.get("students", []):
+            all_students.append((student.get("name", ""), period_name))
+
+    if not all_students:
+        return {"error": "Focus roster is empty."}
+
+    # Resolve target students
+    target_students = []  # list of (student_name, period_name)
+
+    if student_names:
+        for search_name in student_names:
+            matched = False
+            for sname, pname in all_students:
+                if _fuzzy_name_match(search_name, sname):
+                    target_students.append((sname, pname))
+                    matched = True
+                    break
+            if not matched:
+                target_students.append((search_name, ""))
+    elif period:
+        target_period = _normalize_period(period)
+        for sname, pname in all_students:
+            if _normalize_period(pname) == target_period:
+                target_students.append((sname, pname))
+    else:
+        return {"error": "Provide student_names or period to target students."}
+
+    if not target_students:
+        return {"error": "No matching students found in Focus roster."}
+
+    # Build messages in focus-comms.js format
+    messages = []
+    skipped = []
+
+    for sname, pname in target_students:
+        parsed = _parse_student_name(sname)
+
+        replacements = {
+            "student_first_name": parsed["first_name"],
+            "student_last_name": parsed["last_name"],
+            "student_name": parsed["full_name"],
+        }
+
+        filled_subject = _fill_email_template(email_subject, replacements)
+        filled_body = _fill_email_template(email_body, replacements)
+        filled_sms = _fill_email_template(sms_body, replacements) if sms_body else ""
+
+        messages.append({
+            "student_name": sname,
+            "subject": filled_subject,
+            "email_body": filled_body,
+            "sms_body": filled_sms,
+            "cc_emails": [],
+        })
+
+    if not messages:
+        return {"error": "No messages to send."}
+
+    # Dry run: return preview
+    if dry_run:
+        previews = []
+        for m in messages[:3]:
+            previews.append({
+                "student_name": m["student_name"],
+                "subject": m["subject"],
+                "email_body": m["email_body"][:500] + ("..." if len(m["email_body"]) > 500 else ""),
+                "sms_body": m["sms_body"][:200] if m["sms_body"] else "(no SMS)",
+            })
+        return {
+            "dry_run": True,
+            "preview_count": len(previews),
+            "total_messages": len(messages),
+            "previews": previews,
+            "message": "Preview of " + str(len(messages)) + " Focus message(s). Confirm to send.",
+        }
+
+    # Actually send via focus-comms.js
+    try:
+        from backend.routes.email_routes import launch_focus_comms
+        result = launch_focus_comms(messages)
+        result["total_messages"] = len(messages)
+        return result
+    except ImportError:
+        return {"error": "Focus Comms route not available. Check backend installation."}
+    except Exception as e:
+        return {"error": "Failed to launch Focus Comms: " + str(e)}
+
+
 # ═══════════════════════════════════════════════════════
 # TOOL DISPATCH
 # ═══════════════════════════════════════════════════════
@@ -3863,6 +4008,7 @@ TOOL_HANDLERS = {
     "list_resources": list_resources_tool,
     "read_resource": read_resource_tool,
     "send_parent_emails": send_parent_emails,
+    "send_focus_comms": send_focus_comms,
     "save_assignment_config": save_assignment_config,
 }
 

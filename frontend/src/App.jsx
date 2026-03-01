@@ -836,6 +836,8 @@ function App() {
   const [vportalSaving, setVportalSaving] = useState(false);
   const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
   const [outlookSendPolling, setOutlookSendPolling] = useState(false);
+  const [focusCommsStatus, setFocusCommsStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, skipped: 0, message: "" });
+  const [focusCommsPolling, setFocusCommsPolling] = useState(false);
   const [pendingConfirmations, setPendingConfirmations] = useState(0);
   const [pendingConfirmationStudents, setPendingConfirmationStudents] = useState([]);
   const [confirmationStudentFilter, setConfirmationStudentFilter] = useState("");
@@ -2483,6 +2485,26 @@ function App() {
     }, 2000);
     return function() { clearInterval(interval); };
   }, [outlookSendPolling]);
+
+  // Focus comms polling
+  useEffect(() => {
+    if (!focusCommsPolling) return;
+    var interval = setInterval(async function() {
+      try {
+        var data = await api.getFocusCommsStatus();
+        setFocusCommsStatus(data);
+        if (data.status === "done" || data.status === "error" || data.status === "idle") {
+          setFocusCommsPolling(false);
+          if (data.status === "done") {
+            addToast("Focus: Sent " + data.sent + " of " + data.total + " messages" + (data.failed > 0 ? " (" + data.failed + " failed)" : ""), data.failed > 0 ? "warning" : "success");
+          }
+        }
+      } catch (err) {
+        // ignore polling errors
+      }
+    }, 2000);
+    return function() { clearInterval(interval); };
+  }, [focusCommsPolling]);
 
   // Focus comments upload polling
   useEffect(() => {
@@ -9422,6 +9444,57 @@ ${signature}`;
                               var resultsToSend = resultsAssignmentFilter
                                 ? status.results.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
                                 : status.results;
+                              if (!confirm("Send " + resultsToSend.length + " parent messages via Focus SIS?" + String.fromCharCode(10) + String.fromCharCode(10) + "Email + SMS will be sent through your school Focus account.")) return;
+                              try {
+                                var exportResult = await api.exportOutlookEmails({
+                                  results: resultsToSend,
+                                  assignment: assignment,
+                                });
+                                if (exportResult.error) {
+                                  addToast(exportResult.error, "error");
+                                  return;
+                                }
+                                var focusMessages = (exportResult.emails || []).map(function(e) {
+                                  return {
+                                    student_name: e.student_name || "",
+                                    subject: e.subject || "",
+                                    email_body: e.body || "",
+                                    sms_body: "",
+                                    cc_emails: e.cc ? e.cc.split(",").map(function(s) { return s.trim(); }).filter(Boolean) : [],
+                                  };
+                                });
+                                if (focusMessages.length === 0) {
+                                  addToast("No messages to send", "warning");
+                                  return;
+                                }
+                                var result = await api.sendFocusComms({ messages: focusMessages });
+                                if (result.error) {
+                                  addToast(result.error, "error");
+                                } else {
+                                  setFocusCommsPolling(true);
+                                  setFocusCommsStatus({ status: "running", sent: 0, total: result.total, failed: 0, skipped: 0, message: "Starting..." });
+                                  addToast("Focus sending started (" + result.total + " messages)", "info");
+                                }
+                              } catch (err) {
+                                addToast("Focus send error: " + err.message, "error");
+                              }
+                            }}
+                            className="btn btn-primary"
+                            disabled={!gradesApproved || focusCommsStatus.status === "running" || status.results.length === 0 || !vportalConfigured}
+                            style={{ opacity: gradesApproved ? 1 : 0.5 }}
+                            title={!gradesApproved ? "Approve grades first" : vportalConfigured ? "Send parent emails + SMS via Focus SIS" : "Configure VPortal credentials in Settings first"}
+                          >
+                            <Icon name="Send" size={18} />
+                            {focusCommsStatus.status === "running"
+                              ? "Sending " + focusCommsStatus.sent + "/" + focusCommsStatus.total + "..."
+                              : "Send via Focus"}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              var assignment = resultsAssignmentFilter || (status.results[0] && status.results[0].assignment) || 'Assignment';
+                              var resultsToSend = resultsAssignmentFilter
+                                ? status.results.filter(function(r) { return r.assignment === resultsAssignmentFilter; })
+                                : status.results;
                               if (!confirm("Send " + resultsToSend.length + " parent emails via Outlook?" + String.fromCharCode(10) + String.fromCharCode(10) + "A browser window will open to send from your school account.")) return;
                               try {
                                 var result = await api.sendOutlookEmails({
@@ -9443,7 +9516,7 @@ ${signature}`;
                                 addToast("Outlook send error: " + err.message, "error");
                               }
                             }}
-                            className="btn btn-primary"
+                            className="btn btn-secondary"
                             disabled={!gradesApproved || outlookSendStatus.status === "running" || status.results.length === 0 || !vportalConfigured}
                             style={{ opacity: gradesApproved ? 1 : 0.5 }}
                             title={!gradesApproved ? "Approve grades first" : vportalConfigured ? "Send parent emails from your Outlook account" : "Configure VPortal credentials in Settings first"}
@@ -9554,6 +9627,40 @@ ${signature}`;
                             {outlookSendStatus.failed > 0 ? " (" + outlookSendStatus.failed + " failed)" : ""}
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Focus Comms Send Progress */}
+                    {focusCommsStatus.status === "running" && (
+                      <div style={{
+                        padding: "12px 16px",
+                        background: "var(--input-bg)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--glass-border)",
+                        marginTop: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "0.85rem", marginBottom: "6px", color: "var(--text-secondary)" }}>
+                            {"Focus: " + focusCommsStatus.message}
+                          </div>
+                          <div style={{ height: "6px", background: "var(--glass-border)", borderRadius: "3px", overflow: "hidden" }}>
+                            <div style={{
+                              height: "100%",
+                              width: (focusCommsStatus.total > 0 ? (focusCommsStatus.sent / focusCommsStatus.total * 100) : 0) + "%",
+                              background: "#10b981",
+                              borderRadius: "3px",
+                              transition: "width 0.3s ease",
+                            }} />
+                          </div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                            {focusCommsStatus.sent + " of " + focusCommsStatus.total + " sent"}
+                            {focusCommsStatus.failed > 0 ? " (" + focusCommsStatus.failed + " failed)" : ""}
+                          </div>
+                        </div>
+                        <button onClick={() => { api.stopFocusComms(); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>Stop</button>
                       </div>
                     )}
 

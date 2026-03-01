@@ -1161,3 +1161,150 @@ def mark_confirmations_sent_file():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# FOCUS SIS COMMUNICATIONS (Email + SMS via browser automation)
+# ══════════════════════════════════════════════════════════════
+
+FOCUS_COMMS_SCRIPT = os.path.join(
+    os.path.expanduser("~/Downloads/Graider-Focus-Comms"),
+    "focus-comms.js",
+)
+
+_focus_comms_state = {
+    "process": None,
+    "status": "idle",      # idle | running | done | error
+    "sent": 0,
+    "failed": 0,
+    "skipped": 0,
+    "total": 0,
+    "message": "",
+    "log": [],
+}
+
+
+def launch_focus_comms(messages):
+    """Write messages to temp file and spawn the Focus Communications script.
+
+    Args:
+        messages: list of dicts with keys: student_name, subject, email_body, sms_body, cc_emails
+
+    Returns:
+        dict with status and total count, or error
+    """
+    if _focus_comms_state.get("status") == "running":
+        return {"error": "Focus Comms already running. Check status or wait."}
+
+    if not messages:
+        return {"error": "No messages to send"}
+
+    if not os.path.exists(FOCUS_COMMS_SCRIPT):
+        return {"error": "focus-comms.js not found at " + FOCUS_COMMS_SCRIPT}
+
+    tmp_file = os.path.join(GRAIDER_DATA_DIR, "tmp_focus_comms.json")
+    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
+    with open(tmp_file, 'w') as f:
+        json.dump({"messages": messages}, f)
+
+    _focus_comms_state.update({
+        "status": "running",
+        "sent": 0,
+        "failed": 0,
+        "skipped": 0,
+        "total": len(messages),
+        "message": "Starting Focus Communications...",
+        "log": [],
+    })
+
+    proc = subprocess.Popen(
+        ["node", FOCUS_COMMS_SCRIPT, "--screenshot", tmp_file],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    _focus_comms_state["process"] = proc
+
+    thread = threading.Thread(target=_read_focus_comms_output, args=(proc,), daemon=True)
+    thread.start()
+
+    return {"status": "started", "total": len(messages)}
+
+
+def _read_focus_comms_output(proc):
+    """Background thread: read focus-comms.js NDJSON stdout and update state."""
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+            etype = event.get("type", "")
+            if etype == "progress":
+                _focus_comms_state["sent"] = event.get("current", 0)
+                _focus_comms_state["total"] = event.get("total", _focus_comms_state["total"])
+                _focus_comms_state["message"] = event.get("message", "")
+            elif etype == "status":
+                _focus_comms_state["message"] = event.get("message", "")
+            elif etype == "done":
+                _focus_comms_state["status"] = "done"
+                _focus_comms_state["sent"] = event.get("sent", 0)
+                _focus_comms_state["failed"] = event.get("failed", 0)
+                _focus_comms_state["skipped"] = event.get("skipped", 0)
+                _focus_comms_state["message"] = "Complete"
+            elif etype == "error":
+                _focus_comms_state["failed"] += 1
+                _focus_comms_state["message"] = event.get("message", "")
+            _focus_comms_state["log"].append(event)
+            if len(_focus_comms_state["log"]) > 100:
+                _focus_comms_state["log"] = _focus_comms_state["log"][-50:]
+        except json.JSONDecodeError:
+            pass
+
+    if _focus_comms_state["status"] == "running":
+        _focus_comms_state["status"] = "done"
+
+
+@email_bp.route('/api/send-focus-comms', methods=['POST'])
+def send_focus_comms():
+    """Start sending messages via Focus SIS Communications."""
+    try:
+        data = request.json or {}
+        messages = data.get("messages", [])
+
+        if not messages:
+            return jsonify({"error": "No messages provided"}), 400
+
+        result = launch_focus_comms(messages)
+        if "error" in result:
+            return jsonify(result), 400
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@email_bp.route('/api/focus-comms/status')
+def focus_comms_status():
+    """Get current Focus Communications sending progress."""
+    return jsonify({
+        "status": _focus_comms_state.get("status", "idle"),
+        "sent": _focus_comms_state.get("sent", 0),
+        "failed": _focus_comms_state.get("failed", 0),
+        "skipped": _focus_comms_state.get("skipped", 0),
+        "total": _focus_comms_state.get("total", 0),
+        "message": _focus_comms_state.get("message", ""),
+    })
+
+
+@email_bp.route('/api/focus-comms/stop', methods=['POST'])
+def focus_comms_stop():
+    """Kill the Focus Communications subprocess if running."""
+    proc = _focus_comms_state.get("process")
+    if proc and proc.poll() is None:
+        proc.kill()
+        _focus_comms_state["status"] = "done"
+        _focus_comms_state["message"] = "Stopped by user"
+        return jsonify({"status": "stopped"})
+    return jsonify({"status": "not_running"})
