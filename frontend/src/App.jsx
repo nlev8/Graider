@@ -675,6 +675,9 @@ function App() {
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+  // Login timestamp to prevent false auth-expired during initial load
+  const loginTimestampRef = useRef(0);
+
   // Check for existing session on mount
   useEffect(() => {
     if (isLocalhost) {
@@ -683,15 +686,27 @@ function App() {
       return;
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loginTimestampRef.current = Date.now();
+      }
       setUser(session?.user ?? null);
       setAuthLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        // Only honor SIGNED_OUT if it's been more than 15 seconds since login
+        // or if we never logged in. Prevents Supabase internal sign-out from
+        // kicking users during initial load.
+        var timeSinceLogin = Date.now() - loginTimestampRef.current;
+        if (loginTimestampRef.current > 0 && timeSinceLogin < 15000) {
+          console.warn('Ignoring SIGNED_OUT event ' + timeSinceLogin + 'ms after login');
+          return;
+        }
         setUser(null);
         approvalConfirmedRef.current = false;
       } else if (session?.user) {
+        loginTimestampRef.current = Date.now();
         setUser(session.user);
       }
       if (event === 'PASSWORD_RECOVERY') {
@@ -699,12 +714,12 @@ function App() {
       }
     });
 
-    async function handleAuthExpired() {
-      // Verify session is truly gone before signing out — prevents
-      // false positives from transient 401s during concurrent API calls
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        console.warn('auth-expired fired but session still valid, ignoring');
+    function handleAuthExpired() {
+      // Ignore auth-expired within 15 seconds of login — a fresh JWT
+      // cannot possibly be expired, so this is a false positive
+      var timeSinceLogin = Date.now() - loginTimestampRef.current;
+      if (timeSinceLogin < 15000) {
+        console.warn('Ignoring auth-expired ' + timeSinceLogin + 'ms after login');
         return;
       }
       supabase.auth.signOut();
@@ -5286,7 +5301,7 @@ ${signature}`;
   }
 
   if (!user) {
-    return <LoginScreen onLogin={setUser} theme={theme} toggleTheme={toggleTheme} />;
+    return <LoginScreen onLogin={function(u) { loginTimestampRef.current = Date.now(); setUser(u); }} theme={theme} toggleTheme={toggleTheme} />;
   }
 
   if (showPasswordReset) {

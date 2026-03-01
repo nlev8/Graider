@@ -19,20 +19,6 @@ export async function getAuthHeaders() {
 }
 
 /**
- * Deduplicated session refresh — prevents thundering herd when multiple
- * concurrent API calls all get 401 and try to refresh at the same time.
- * Only one refresh happens; all callers share the same promise.
- */
-let _refreshPromise = null
-
-async function refreshSessionOnce() {
-  if (_refreshPromise) return _refreshPromise
-  _refreshPromise = supabase.auth.refreshSession()
-    .finally(() => { _refreshPromise = null })
-  return _refreshPromise
-}
-
-/**
  * Generic fetch wrapper with error handling and auth
  */
 async function fetchApi(endpoint, options = {}) {
@@ -48,20 +34,28 @@ async function fetchApi(endpoint, options = {}) {
     })
 
     if (response.status === 401) {
-      // Try refreshing the session once before giving up (deduplicated)
-      const { data: refreshData, error: refreshError } = await refreshSessionOnce()
-      if (!refreshError && refreshData?.session) {
-        const retryResponse = await fetch(API_BASE + endpoint, {
+      // The 401 is likely from a timing issue where getSession() returned null
+      // briefly. Wait for the session to stabilize and retry with fresh headers.
+      // Do NOT call refreshSession() — it can cause Supabase to internally
+      // fire SIGNED_OUT if it fails, kicking the user out.
+      await new Promise(function(r) { setTimeout(r, 500) })
+      var retryHeaders = await getAuthHeaders()
+      if (retryHeaders.Authorization) {
+        var retryResponse = await fetch(API_BASE + endpoint, {
           ...options,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + refreshData.session.access_token,
+            ...retryHeaders,
             ...options.headers,
           },
         })
         if (retryResponse.ok) return await retryResponse.json()
+        if (retryResponse.status !== 401) {
+          // Non-auth error on retry — don't treat as auth failure
+          throw new Error('API error: ' + retryResponse.status)
+        }
       }
-      // Refresh failed or retry still 401 — truly expired
+      // Still no valid session after waiting — truly expired
       window.dispatchEvent(new Event('auth-expired'))
       throw new Error('Session expired. Please log in again.')
     }
