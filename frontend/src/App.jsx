@@ -663,10 +663,25 @@ function App() {
     return <StudentPortal />;
   }
 
-  // Auth state
-  const [user, setUser] = useState(null);
+  // Auth state — user is "sticky": once logged in, can ONLY be cleared
+  // by explicit handleLogout(). This prevents all spurious sign-out events
+  // from kicking the user out (Supabase internal auto-refresh failures,
+  // race conditions, etc.).
+  const [user, _setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userApproved, setUserApproved] = useState(null); // null=loading, true/false
+  const logoutIntentRef = useRef(false);
+
+  function setUser(u) {
+    if (u == null && !logoutIntentRef.current) {
+      // Block all automatic setUser(null) — only explicit logout can clear
+      console.warn('Blocked automatic setUser(null)');
+      return;
+    }
+    logoutIntentRef.current = false;
+    _setUser(u);
+  }
+
   // Check URL hash for recovery token BEFORE Supabase consumes it
   const [showPasswordReset, setShowPasswordReset] = useState(() => {
     const hash = window.location.hash;
@@ -675,55 +690,37 @@ function App() {
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-  // Login timestamp to prevent false auth-expired during initial load
-  const loginTimestampRef = useRef(0);
-
   // Check for existing session on mount
   useEffect(() => {
     if (isLocalhost) {
-      setUser({ id: 'local-dev', email: 'dev@localhost' });
+      _setUser({ id: 'local-dev', email: 'dev@localhost' });
       setAuthLoading(false);
       return;
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loginTimestampRef.current = Date.now();
-      }
-      setUser(session?.user ?? null);
+      _setUser(session?.user ?? null);
       setAuthLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        // Only honor SIGNED_OUT if it's been more than 15 seconds since login
-        // or if we never logged in. Prevents Supabase internal sign-out from
-        // kicking users during initial load.
-        var timeSinceLogin = Date.now() - loginTimestampRef.current;
-        if (loginTimestampRef.current > 0 && timeSinceLogin < 15000) {
-          console.warn('Ignoring SIGNED_OUT event ' + timeSinceLogin + 'ms after login');
-          return;
+        // Only clear user if explicit logout was requested
+        if (logoutIntentRef.current) {
+          _setUser(null);
+          approvalConfirmedRef.current = false;
+          logoutIntentRef.current = false;
         }
-        setUser(null);
-        approvalConfirmedRef.current = false;
       } else if (session?.user) {
-        loginTimestampRef.current = Date.now();
-        setUser(session.user);
+        _setUser(session.user);
       }
       if (event === 'PASSWORD_RECOVERY') {
         setShowPasswordReset(true);
       }
     });
 
+    // auth-expired is only honored for explicit logout flow
     function handleAuthExpired() {
-      // Ignore auth-expired within 15 seconds of login — a fresh JWT
-      // cannot possibly be expired, so this is a false positive
-      var timeSinceLogin = Date.now() - loginTimestampRef.current;
-      if (timeSinceLogin < 15000) {
-        console.warn('Ignoring auth-expired ' + timeSinceLogin + 'ms after login');
-        return;
-      }
-      supabase.auth.signOut();
-      setUser(null);
+      console.warn('auth-expired event received, ignoring (use Sign Out button)');
     }
     window.addEventListener('auth-expired', handleAuthExpired);
 
@@ -795,8 +792,10 @@ function App() {
   }, [user, isLocalhost]);
 
   async function handleLogout() {
+    logoutIntentRef.current = true;
+    approvalConfirmedRef.current = false;
     await supabase.auth.signOut();
-    setUser(null);
+    _setUser(null);
   }
 
   // Theme state with localStorage persistence
@@ -5301,7 +5300,7 @@ ${signature}`;
   }
 
   if (!user) {
-    return <LoginScreen onLogin={function(u) { loginTimestampRef.current = Date.now(); setUser(u); }} theme={theme} toggleTheme={toggleTheme} />;
+    return <LoginScreen onLogin={function(u) { _setUser(u); }} theme={theme} toggleTheme={toggleTheme} />;
   }
 
   if (showPasswordReset) {
