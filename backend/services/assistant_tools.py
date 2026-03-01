@@ -950,21 +950,21 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "send_focus_comms",
-        "description": "Send email and SMS messages to parents via Focus SIS Communications. This is the DEFAULT and PREFERRED method for contacting parents — use this instead of send_parent_emails unless the teacher specifically asks for Outlook. Composes and sends messages through the school's Focus portal, which sends from the teacher's official school account. Requires VPortal credentials and Focus roster imported in Settings. Supports template placeholders: {student_first_name}, {student_last_name}, {student_name}. IMPORTANT: Always do a dry_run first to show the teacher a preview before actually sending.",
+        "description": "Send email and/or SMS messages to parents via Focus SIS Communications. This is the DEFAULT and PREFERRED method for contacting parents — use this instead of send_parent_emails unless the teacher specifically asks for Outlook. Composes and sends messages through the school's Focus portal, which sends from the teacher's official school account. Requires VPortal credentials and Focus roster imported in Settings. Supports template placeholders: {student_first_name}, {student_last_name}, {student_name}. IMPORTANT: Always do a dry_run first. When sending both email AND SMS, the SMS should be a short notification like 'Please check your email for a message regarding {subject}.' When sending SMS-only, omit email_body.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "email_subject": {
                     "type": "string",
-                    "description": "Email subject line. Supports {student_first_name}, {student_last_name}, {student_name} placeholders."
+                    "description": "Subject line for the email. Also used as the topic reference in SMS-only messages. Supports {student_first_name}, {student_last_name}, {student_name} placeholders."
                 },
                 "email_body": {
                     "type": "string",
-                    "description": "Email body text. Supports template placeholders. Use newlines for paragraphs."
+                    "description": "Email body text. Omit to send SMS only. Supports template placeholders. Use newlines for paragraphs."
                 },
                 "sms_body": {
                     "type": "string",
-                    "description": "SMS text (max 500 chars). If omitted, only email is sent."
+                    "description": "SMS text (max 500 chars). If sending both email and SMS, use a short notification like 'Please check your email for a message about [topic] from [teacher].' If omitted, only email is sent."
                 },
                 "student_names": {
                     "type": "array",
@@ -980,7 +980,7 @@ TOOL_DEFINITIONS = [
                     "description": "If true, preview messages without sending. ALWAYS use dry_run first."
                 }
             },
-            "required": ["email_subject", "email_body"]
+            "required": ["email_subject"]
         }
     },
     {
@@ -3865,13 +3865,16 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
         return {"error": "Failed to launch Outlook sender: " + str(e)}
 
 
-def send_focus_comms(email_subject, email_body, sms_body=None, student_names=None,
+def send_focus_comms(email_subject, email_body=None, sms_body=None, student_names=None,
                      period=None, dry_run=True):
-    """Send email + SMS to parents via Focus SIS Communications.
+    """Send email and/or SMS to parents via Focus SIS Communications.
 
     Resolves target students from the Focus roster, fills template placeholders,
     and either previews (dry_run) or triggers the focus-comms.js script.
+    Supports email-only, SMS-only, or both.
     """
+    if not email_body and not sms_body:
+        return {"error": "Provide email_body, sms_body, or both."}
     FOCUS_ROSTER_FILE = os.path.expanduser("~/.graider_data/focus_roster_import.json")
 
     if not os.path.exists(FOCUS_ROSTER_FILE):
@@ -3931,7 +3934,7 @@ def send_focus_comms(email_subject, email_body, sms_body=None, student_names=Non
         }
 
         filled_subject = _fill_email_template(email_subject, replacements)
-        filled_body = _fill_email_template(email_body, replacements)
+        filled_body = _fill_email_template(email_body, replacements) if email_body else ""
         filled_sms = _fill_email_template(sms_body, replacements) if sms_body else ""
 
         messages.append({

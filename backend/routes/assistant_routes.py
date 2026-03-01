@@ -867,7 +867,11 @@ STUDENT INFO:
 - remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed.
 
 COMMUNICATIONS:
-- send_focus_comms: DEFAULT method for contacting parents. Sends email + SMS through Focus SIS using the teacher's school account. Always use dry_run=true first to preview messages. Only fall back to send_parent_emails (Outlook) if the teacher explicitly requests Outlook.
+- send_focus_comms: DEFAULT method for contacting parents. Sends email and/or SMS through Focus SIS using the teacher's school account. Always use dry_run=true first to preview messages. Only fall back to send_parent_emails (Outlook) if the teacher explicitly requests Outlook.
+  - Email only: provide email_subject + email_body, omit sms_body
+  - SMS only: provide email_subject + sms_body, omit email_body
+  - Email + SMS: provide all three. The sms_body should be a SHORT notification (e.g. "Please check your email for a message regarding [subject]. -Mr./Ms. [Teacher]") pointing parents to the full email.
+  - When the teacher says "send a message" or "contact parents", default to email + SMS with the SMS as a check-your-email notification.
 - send_parent_emails: Send emails to parents via Outlook automation. Use ONLY if the teacher specifically asks for Outlook. Always use dry_run=true first."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
