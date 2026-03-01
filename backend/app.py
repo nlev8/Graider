@@ -1511,6 +1511,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "student_info": student_info,
                     "filepath": filepath,
                     "matched_title": matched_title,
+                    "matched_config": matched_config,
                     "student_period": student_period,
                     "is_completion_only": False,
                     "grade_result": grade_result,
@@ -1635,6 +1636,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     new_score = int(float(grade_result.get('score', 0) or 0))
 
                     # Late penalty calculation
+                    matched_config = result.get("matched_config")
                     late_info = calculate_late_penalty(filepath, matched_config) if matched_config else None
                     original_score = new_score
                     if late_info and late_info.get('is_late'):
