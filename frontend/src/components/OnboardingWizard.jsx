@@ -11,6 +11,7 @@ const STEPS = [
   { title: "Rubric Setup", icon: "ClipboardList" },
   { title: "AI Connection", icon: "Cpu" },
   { title: "Assignments Folder", icon: "FolderOpen" },
+  { title: "Import Roster", icon: "Users" },
   { title: "All Set!", icon: "PartyPopper" },
 ];
 
@@ -169,6 +170,7 @@ export default function OnboardingWizard({
   const canContinue = () => {
     if (step === 1) return wizardData.teacher_name.trim().length > 0;
     if (step === 6) return wizardData.assignments_folder.trim().length > 0 || skipFolder;
+    if (step === 7) return true; // Import Roster is informational
     return true;
   };
 
@@ -791,7 +793,70 @@ export default function OnboardingWizard({
     );
   };
 
-  const renderStep7 = () => {
+  const renderStep7 = () => (
+    <div style={{ padding: "10px 0" }}>
+      <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>Import Your Class Roster</h2>
+      <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.95rem" }}>
+        Export your class roster from Focus SIS so Graider can match students to their submissions.
+      </p>
+
+      <div style={{
+        background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+        borderRadius: 12, padding: 16, marginBottom: 20,
+      }}>
+        <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--accent-primary)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          Export from Focus SIS
+        </div>
+        {[
+          { num: "1", icon: "Monitor", text: "In Focus, go to Reports > Student Listings > Class Roster (or Grades > Export)" },
+          { num: "2", icon: "Users", text: "Select the class or period you want to export" },
+          { num: "3", icon: "FileSpreadsheet", text: "Include columns: Student ID, First Name, Last Name, Email" },
+          { num: "4", icon: "Download", text: "Export as CSV and save to your computer" },
+          { num: "5", icon: "Upload", text: "Upload to Graider in Settings > Classroom > Upload CSV/Excel" },
+        ].map(function(s) {
+          return (
+            <div key={s.num} style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: 8,
+                background: "rgba(99,102,241,0.15)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, marginTop: 1,
+              }}>
+                <Icon name={s.icon} size={14} style={{ color: "var(--accent-primary)" }} />
+              </div>
+              <span style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                {s.text}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+        borderRadius: 12, padding: 16,
+      }}>
+        <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>
+          Example CSV format
+        </div>
+        <div style={{
+          fontFamily: "monospace", fontSize: "0.8rem",
+          background: "var(--input-bg)", borderRadius: 8, padding: 12,
+          color: "var(--text-primary)", lineHeight: 1.6,
+          overflow: "auto",
+        }}>
+          Student ID, First Name, Last Name, Email<br />
+          12345, Maria, Santos, maria.santos@school.edu<br />
+          12346, James, Wilson, james.wilson@school.edu
+        </div>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 10, marginBottom: 0 }}>
+          Column names are detected automatically. Combined name columns like "Student Name" with "Last, First" format also work. You can skip this step and upload rosters later in Settings.
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderStep8 = () => {
     const selectedPreset = rubricChoice === "preset"
       ? getPresetForStateSubject(wizardData.state, wizardData.subject)
       : rubricChoice === "standard"
@@ -874,6 +939,7 @@ export default function OnboardingWizard({
       case 5: return renderStep5();
       case 6: return renderStep6();
       case 7: return renderStep7();
+      case 8: return renderStep8();
       default: return null;
     }
   };

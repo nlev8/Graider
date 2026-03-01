@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import csv
+import math
 import threading
 import concurrent.futures
 from pathlib import Path
@@ -617,6 +618,71 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             grading_state["log"].append(f"Auto-matched via {match_reason}")
 
         return best_match
+
+    def calculate_late_penalty(filepath, matched_config):
+        """Calculate late penalty based on file modification time and assignment config.
+
+        Returns dict with penalty info or None if no penalty applies.
+        """
+        if not matched_config:
+            return None
+
+        due_date_str = matched_config.get('dueDate', '')
+        late_penalty_cfg = matched_config.get('latePenalty', {})
+
+        if not due_date_str or not late_penalty_cfg.get('enabled'):
+            return None
+
+        try:
+            due_date = datetime.fromisoformat(due_date_str)
+        except (ValueError, TypeError):
+            return None
+
+        # Get file modification time
+        try:
+            file_mtime = datetime.fromtimestamp(Path(filepath).stat().st_mtime)
+        except (OSError, TypeError):
+            return None
+
+        # Apply grace period
+        grace_hours = late_penalty_cfg.get('gracePeriodHours', 0) or 0
+        from datetime import timedelta
+        effective_due = due_date + timedelta(hours=grace_hours)
+
+        if file_mtime <= effective_due:
+            return {"is_late": False, "days_late": 0, "penalty_percent": 0, "penalty_points": 0}
+
+        # Calculate days late (partial days round up)
+        delta = file_mtime - effective_due
+        days_late = math.ceil(delta.total_seconds() / 86400)
+
+        penalty_type = late_penalty_cfg.get('type', 'points_per_day')
+        amount = late_penalty_cfg.get('amount', 10) or 10
+        max_penalty = late_penalty_cfg.get('maxPenalty', 50) or 50
+        tiers = late_penalty_cfg.get('tiers', [])
+
+        penalty_percent = 0
+        penalty_points = 0
+
+        if penalty_type == 'points_per_day':
+            penalty_points = min(days_late * amount, max_penalty)
+        elif penalty_type == 'percent_per_day':
+            penalty_percent = min(days_late * amount, max_penalty)
+        elif penalty_type == 'tiered':
+            # Sort tiers by daysLate descending and find the matching bracket
+            sorted_tiers = sorted(tiers, key=lambda t: t.get('daysLate', 0), reverse=True)
+            for tier in sorted_tiers:
+                if days_late >= tier.get('daysLate', 0):
+                    penalty_percent = min(tier.get('penalty', 0), max_penalty)
+                    break
+
+        return {
+            "is_late": True,
+            "days_late": days_late,
+            "penalty_type": penalty_type,
+            "penalty_percent": penalty_percent,
+            "penalty_points": penalty_points,
+        }
 
     # Extract custom markers, notes, and response sections from selected config (fallback)
     fallback_markers = []
@@ -1567,6 +1633,21 @@ STANDARD CLASS GRADING EXPECTATIONS:
 
                     # Resubmission handling: only replace if new score >= old score
                     new_score = int(float(grade_result.get('score', 0) or 0))
+
+                    # Late penalty calculation
+                    late_info = calculate_late_penalty(filepath, matched_config) if matched_config else None
+                    original_score = new_score
+                    if late_info and late_info.get('is_late'):
+                        penalty_type = late_info.get('penalty_type', 'points_per_day')
+                        if penalty_type == 'points_per_day':
+                            new_score = max(0, new_score - late_info['penalty_points'])
+                        else:
+                            new_score = max(0, new_score - round(original_score * late_info['penalty_percent'] / 100))
+                        penalty_applied = original_score - new_score
+                        grading_state["log"].append(
+                            f"  Late penalty: -{penalty_applied} pts ({late_info['days_late']} day{'s' if late_info['days_late'] != 1 else ''} late)"
+                        )
+
                     is_resub = filepath.name in resubmissions
                     previous_result = None
                     previous_score = None
@@ -1626,7 +1707,9 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
                         "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
                         "token_usage": grade_result.get('token_usage', {}),
-                        "email_approval": "pending"
+                        "email_approval": "pending",
+                        "original_score": original_score if (late_info and late_info.get('is_late')) else None,
+                        "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
                     })
 
                     # Accumulate session cost

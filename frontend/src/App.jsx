@@ -1262,6 +1262,19 @@ function App() {
     useSectionPoints: false,     // Toggle for section-based point system
     sectionTemplate: "Custom",   // Track which template is applied
     effortPoints: 15,            // Points for effort/engagement category
+    dueDate: "",                 // ISO datetime string e.g. "2026-03-15T23:59"
+    latePenalty: {
+      enabled: false,
+      type: "points_per_day",    // "points_per_day" | "percent_per_day" | "tiered"
+      amount: 10,
+      tiers: [
+        { daysLate: 1, penalty: 10 },
+        { daysLate: 3, penalty: 25 },
+        { daysLate: 7, penalty: 50 },
+      ],
+      maxPenalty: 50,
+      gracePeriodHours: 0,
+    },
   });
   const [savedAssignments, setSavedAssignments] = useState([]);
   const [savedAssignmentData, setSavedAssignmentData] = useState({}); // Map of name -> {aliases: [], title: ""}
@@ -4017,6 +4030,20 @@ ${signature}`;
           useSectionPoints: useSectionPts,
           sectionTemplate: data.assignment.sectionTemplate || "Custom",
           effortPoints: effortPts,
+          dueDate: data.assignment.dueDate || "",
+          latePenalty: {
+            enabled: false,
+            type: "points_per_day",
+            amount: 10,
+            tiers: [
+              { daysLate: 1, penalty: 10 },
+              { daysLate: 3, penalty: 25 },
+              { daysLate: 7, penalty: 50 },
+            ],
+            maxPenalty: 50,
+            gracePeriodHours: 0,
+            ...(data.assignment.latePenalty || {}),
+          },
         });
         setLoadedAssignmentName(name);
       }
@@ -4052,6 +4079,19 @@ ${signature}`;
           useSectionPoints: false,
           sectionTemplate: "Custom",
           effortPoints: 15,
+          dueDate: "",
+          latePenalty: {
+            enabled: false,
+            type: "points_per_day",
+            amount: 10,
+            tiers: [
+              { daysLate: 1, penalty: 10 },
+              { daysLate: 3, penalty: 25 },
+              { daysLate: 7, penalty: 50 },
+            ],
+            maxPenalty: 50,
+            gracePeriodHours: 0,
+          },
         });
         setLoadedAssignmentName("");
       }
@@ -5999,6 +6039,36 @@ ${signature}`;
                           </div>
                         </div>
 
+                        {/* Late Penalty Info */}
+                        {r.late_penalty && (
+                          <div style={{ padding: "12px 16px", background: "rgba(245,158,11,0.12)", borderRadius: "10px", border: "1px solid rgba(245,158,11,0.3)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                              <Icon name="Clock" size={16} style={{ color: "#f59e0b" }} />
+                              <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "#f59e0b" }}>Late Submission</span>
+                            </div>
+                            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>
+                              <span>{r.late_penalty.days_late} day{r.late_penalty.days_late !== 1 ? "s" : ""} late</span>
+                              <span style={{ margin: "0 8px", color: "var(--text-muted)" }}>|</span>
+                              <span>Original score: <strong>{r.original_score}</strong></span>
+                              <span style={{ margin: "0 8px", color: "var(--text-muted)" }}>|</span>
+                              <span>Penalty: <strong style={{ color: "#f87171" }}>-{r.late_penalty.penalty_applied}</strong></span>
+                            </div>
+                            <button
+                              className="btn"
+                              onClick={() => {
+                                updateGrade(reviewModal.index, "score", r.original_score);
+                                updateGrade(reviewModal.index, "late_penalty", null);
+                                updateGrade(reviewModal.index, "penalty_overridden", true);
+                                addToast("Late penalty removed", "success");
+                              }}
+                              style={{ fontSize: "0.8rem", padding: "5px 12px", background: "rgba(245,158,11,0.2)", border: "1px solid rgba(245,158,11,0.4)", color: "#f59e0b" }}
+                            >
+                              <Icon name="Undo2" size={14} style={{ marginRight: "6px" }} />
+                              Remove Penalty
+                            </button>
+                          </div>
+                        )}
+
                         {/* Section Scores (if available) */}
                         {r.section_scores && Object.keys(r.section_scores).length > 0 && (
                           <div style={{ marginBottom: "8px" }}>
@@ -7497,6 +7567,29 @@ ${signature}`;
                                     <Icon name={isCompletionOnly ? "CheckCircle" : "Sparkles"} size={14} style={{ marginRight: "6px" }} />
                                     {isCompletionOnly ? "Completion Only" : "AI Grading"}
                                   </button>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <Icon name="Clock" size={14} style={{ color: (() => { const dd = savedAssignmentData[name]?.dueDate; if (!dd) return "var(--text-muted)"; return new Date(dd) < new Date() ? "#f87171" : "#fbbf24"; })() }} />
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={(savedAssignmentData[name]?.dueDate || "").slice(0, 10)}
+                                      onChange={async (e) => {
+                                        const dateVal = e.target.value ? e.target.value + "T23:59" : "";
+                                        setSavedAssignmentData(prev => ({ ...prev, [name]: { ...prev[name], dueDate: dateVal } }));
+                                        try {
+                                          const fullData = await api.loadAssignment(name);
+                                          if (fullData.assignment) {
+                                            await api.saveAssignmentConfig({ ...fullData.assignment, dueDate: dateVal });
+                                          }
+                                          addToast(dateVal ? "Due date set for " + name : "Due date cleared for " + name, "success");
+                                        } catch (err) {
+                                          addToast("Error saving due date: " + err.message, "error");
+                                        }
+                                      }}
+                                      style={{ width: "130px", fontSize: "0.75rem", padding: "4px 6px", height: "30px" }}
+                                      title={savedAssignmentData[name]?.dueDate ? "Due: " + new Date(savedAssignmentData[name].dueDate).toLocaleDateString() : "Set due date"}
+                                    />
+                                  </div>
                                 </div>
                               );
                             })}
@@ -10345,7 +10438,15 @@ ${signature}`;
                                     >
                                       {r.graded_at ? r.graded_at.replace(/^20(\d{2})/, "$1") : "-"}
                                     </td>
-                                    <td style={{ textAlign: "center" }}>{r.score}</td>
+                                    <td style={{ textAlign: "center" }} title={r.late_penalty ? "Original: " + r.original_score + " | -" + r.late_penalty.penalty_applied + " pts (" + r.late_penalty.days_late + " day" + (r.late_penalty.days_late !== 1 ? "s" : "") + " late)" : undefined}>
+                                      {r.late_penalty ? (
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                          <span style={{ textDecoration: "line-through", color: "var(--text-muted)", fontSize: "0.75rem" }}>{r.original_score}</span>
+                                          <span>{r.score}</span>
+                                          <Icon name="Clock" size={12} style={{ color: "#f59e0b" }} />
+                                        </span>
+                                      ) : r.score}
+                                    </td>
                                     <td style={{ textAlign: "center" }}>
                                       <span
                                         style={{
@@ -13376,6 +13477,32 @@ ${signature}`;
                             ? "Uploading..."
                             : "Upload CSV/Excel"}
                         </button>
+                        <div style={{ position: "relative" }}>
+                          <button
+                            className="btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const el = e.currentTarget.nextElementSibling;
+                              if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+                            }}
+                            style={{ padding: "8px", minWidth: 0, borderRadius: "50%", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                            title="How to export roster from Focus"
+                          >
+                            <Icon name="HelpCircle" size={18} style={{ color: "var(--accent-primary)" }} />
+                          </button>
+                          <div style={{ display: "none", position: "absolute", top: "42px", right: 0, zIndex: 100, width: "320px", background: "var(--modal-content-bg)", border: "1px solid var(--glass-border)", borderRadius: "12px", padding: "16px", boxShadow: "0 8px 30px rgba(0,0,0,0.3)" }}>
+                            <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <Icon name="FileSpreadsheet" size={16} style={{ color: "var(--accent-primary)" }} />
+                              Export from Focus SIS
+                            </div>
+                            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                              <p style={{ margin: "0 0 6px" }}><strong>Reports {'>'} Student Listings {'>'} CSV</strong></p>
+                              <p style={{ margin: "0 0 6px" }}>Required columns: Student ID, First Name, Last Name, Email</p>
+                              <p style={{ margin: "0 0 6px", color: "var(--text-muted)" }}>Column names are detected automatically (e.g. "student_id", "StudentID", or "Student ID" all work).</p>
+                              <p style={{ margin: 0, color: "var(--text-muted)" }}>Combined "Student Name" columns with "Last, First" format are also supported.</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "15px" }}>
                         {!newPeriodName.trim() && (
@@ -17132,6 +17259,161 @@ ${signature}`;
                           }
                         />
                       </div>
+                    </div>
+
+                    {/* Due Date & Late Policy */}
+                    <div style={{ marginBottom: "25px", padding: "20px", background: "var(--glass-bg)", borderRadius: "12px", border: "1px solid var(--glass-border)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+                        <Icon name="Clock" size={20} style={{ color: "var(--accent-primary)" }} />
+                        <h3 style={{ fontSize: "1rem", fontWeight: 600, margin: 0 }}>Due Date & Late Policy</h3>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", alignItems: "end", marginBottom: "16px" }}>
+                        <div>
+                          <label className="label">Due Date</label>
+                          <input
+                            type="datetime-local"
+                            className="input"
+                            value={assignment.dueDate}
+                            onChange={(e) => setAssignment({ ...assignment, dueDate: e.target.value })}
+                          />
+                        </div>
+                        {assignment.dueDate && (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => setAssignment({ ...assignment, dueDate: "" })}
+                            style={{ height: "42px" }}
+                            title="Clear due date"
+                          >
+                            <Icon name="X" size={16} />
+                          </button>
+                        )}
+                      </div>
+                      {assignment.dueDate && (
+                        <>
+                          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: assignment.latePenalty.enabled ? "16px" : 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={assignment.latePenalty.enabled}
+                              onChange={(e) => setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, enabled: e.target.checked } })}
+                            />
+                            <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Enable late penalty</span>
+                          </label>
+                          {assignment.latePenalty.enabled && (
+                            <div style={{ padding: "16px", background: "rgba(245,158,11,0.08)", borderRadius: "10px", border: "1px solid rgba(245,158,11,0.2)" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                                <div>
+                                  <label className="label">Penalty Type</label>
+                                  <select
+                                    className="input"
+                                    value={assignment.latePenalty.type}
+                                    onChange={(e) => setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, type: e.target.value } })}
+                                  >
+                                    <option value="points_per_day">Points per day</option>
+                                    <option value="percent_per_day">Percent per day</option>
+                                    <option value="tiered">Tiered brackets</option>
+                                  </select>
+                                </div>
+                                {assignment.latePenalty.type !== "tiered" && (
+                                  <div>
+                                    <label className="label">
+                                      {assignment.latePenalty.type === "points_per_day" ? "Points / day" : "% / day"}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      className="input"
+                                      min="0"
+                                      value={assignment.latePenalty.amount}
+                                      onChange={(e) => setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, amount: parseInt(e.target.value) || 0 } })}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: assignment.latePenalty.type === "tiered" ? "12px" : 0 }}>
+                                <div>
+                                  <label className="label">Max Penalty {assignment.latePenalty.type === "points_per_day" ? "(pts)" : "(%)"}</label>
+                                  <input
+                                    type="number"
+                                    className="input"
+                                    min="0"
+                                    value={assignment.latePenalty.maxPenalty}
+                                    onChange={(e) => setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, maxPenalty: parseInt(e.target.value) || 0 } })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="label">Grace Period (hours)</label>
+                                  <input
+                                    type="number"
+                                    className="input"
+                                    min="0"
+                                    value={assignment.latePenalty.gracePeriodHours}
+                                    onChange={(e) => setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, gracePeriodHours: parseInt(e.target.value) || 0 } })}
+                                  />
+                                </div>
+                              </div>
+                              {assignment.latePenalty.type === "tiered" && (
+                                <div>
+                                  <label className="label">Tier Brackets</label>
+                                  {(assignment.latePenalty.tiers || []).map((tier, ti) => (
+                                    <div key={ti} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+                                      <input
+                                        type="number"
+                                        className="input"
+                                        min="1"
+                                        value={tier.daysLate}
+                                        onChange={(e) => {
+                                          const newTiers = [...assignment.latePenalty.tiers];
+                                          newTiers[ti] = { ...tier, daysLate: parseInt(e.target.value) || 1 };
+                                          setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, tiers: newTiers } });
+                                        }}
+                                        style={{ width: "80px" }}
+                                        title="Days late"
+                                      />
+                                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>days =</span>
+                                      <input
+                                        type="number"
+                                        className="input"
+                                        min="0"
+                                        value={tier.penalty}
+                                        onChange={(e) => {
+                                          const newTiers = [...assignment.latePenalty.tiers];
+                                          newTiers[ti] = { ...tier, penalty: parseInt(e.target.value) || 0 };
+                                          setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, tiers: newTiers } });
+                                        }}
+                                        style={{ width: "80px" }}
+                                        title="Penalty percent"
+                                      />
+                                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>%</span>
+                                      <button
+                                        className="btn"
+                                        onClick={() => {
+                                          const newTiers = assignment.latePenalty.tiers.filter((_, i) => i !== ti);
+                                          setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, tiers: newTiers } });
+                                        }}
+                                        style={{ padding: "4px 8px", minWidth: 0, color: "#f87171" }}
+                                        title="Remove tier"
+                                      >
+                                        <Icon name="Trash2" size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    className="btn btn-secondary"
+                                    onClick={() => {
+                                      const lastTier = assignment.latePenalty.tiers[assignment.latePenalty.tiers.length - 1];
+                                      const newDay = lastTier ? lastTier.daysLate + 2 : 1;
+                                      const newPenalty = lastTier ? Math.min(lastTier.penalty + 15, 100) : 10;
+                                      setAssignment({ ...assignment, latePenalty: { ...assignment.latePenalty, tiers: [...assignment.latePenalty.tiers, { daysLate: newDay, penalty: newPenalty }] } });
+                                    }}
+                                    style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                                  >
+                                    <Icon name="Plus" size={14} /> Add Tier
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
 
                     {/* Import Document */}

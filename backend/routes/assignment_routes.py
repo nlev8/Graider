@@ -74,9 +74,11 @@ def list_assignments():
                         "rubricType": data.get("rubricType") or "standard",
                         "countsTowardsGrade": data.get("countsTowardsGrade", True),  # Default to True
                         "importedFilename": imported_doc.get("filename", ""),  # Original filename for matching
+                        "dueDate": data.get("dueDate", ""),
+                        "latePenalty": data.get("latePenalty", {}),
                     }
             except:
-                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": ""}
+                assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": "", "dueDate": "", "latePenalty": {}}
 
     # Sort newest first by file modification time
     files_with_mtime.sort(key=lambda x: x[1], reverse=True)
