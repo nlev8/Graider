@@ -177,7 +177,7 @@ def notify_signup():
                     'background:#6366f1;color:#ffffff;text-decoration:none;'
                     'padding:14px 36px;border-radius:12px;font-weight:600;'
                     'font-size:1rem">Approve ' + first_name + '</a></p>'
-                    '<p style="color:#6b7280;font-size:0.8rem">'
+                    '<p style="color:#cbd5e1;font-size:0.8rem">'
                     'This link is single-use and tied to this account.</p>'
                 )
             else:
@@ -208,12 +208,12 @@ def notify_signup():
                     '<div style="background:#1a1a2e;border-radius:16px;padding:40px 32px;text-align:center">'
                     '<h1 style="color:#a5b4fc;font-size:2rem;font-weight:800;margin:0 0 24px">Graider</h1>'
                     '<h2 style="color:#ffffff;font-size:1.25rem;margin:0 0 16px">New Signup</h2>'
-                    '<p style="color:#9ca3af;font-size:0.95rem;line-height:1.6;margin:0 0 8px">'
+                    '<p style="color:#e2e8f0;font-size:0.95rem;line-height:1.6;margin:0 0 8px">'
                     '<strong style="color:#ffffff">' + full_name + '</strong></p>'
-                    '<p style="color:#9ca3af;font-size:0.95rem;margin:0 0 24px">' + email + '</p>'
+                    '<p style="color:#e2e8f0;font-size:0.95rem;margin:0 0 24px">' + email + '</p>'
                     + approve_html +
                     '<p style="margin:16px 0 0"><a href="' + dashboard_link + '" '
-                    'style="color:#6b7280;font-size:0.85rem;text-decoration:underline">'
+                    'style="color:#a5b4fc;font-size:0.85rem;text-decoration:underline">'
                     'View in Supabase Dashboard</a></p>'
                     '</div></div>'
                 ),
