@@ -3910,7 +3910,8 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                         assignment_template: str = None, rubric_prompt: str = None,
                         custom_markers: list = None, exclude_markers: list = None,
                         marker_config: list = None, effort_points: int = 15,
-                        extraction_mode: str = 'structured', grading_style: str = 'standard') -> dict:
+                        extraction_mode: str = 'structured', grading_style: str = 'standard',
+                        rubric_weights: list = None) -> dict:
     """
     Grade assignment using multiple AI models and combine results.
 
@@ -3932,7 +3933,8 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
         return grade_with_parallel_detection(student_name, assignment_data, custom_ai_instructions,
                                              grade_level, subject, model, student_id,
                                              assignment_template, rubric_prompt, custom_markers, exclude_markers,
-                                             marker_config, effort_points, extraction_mode, grading_style)
+                                             marker_config, effort_points, extraction_mode, grading_style,
+                                             rubric_weights=rubric_weights)
 
     print(f"  🎯 Ensemble grading with {len(ensemble_models)} models: {', '.join(ensemble_models)}")
 
@@ -3945,7 +3947,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                 grade_assignment, student_name, assignment_data, custom_ai_instructions,
                 grade_level, subject, model, student_id, assignment_template, rubric_prompt,
                 custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
-                grading_style
+                grading_style, rubric_weights=rubric_weights
             )
             futures[future] = model
 
@@ -4023,7 +4025,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    custom_markers: list = None, exclude_markers: list = None,
                                    marker_config: list = None, effort_points: int = 15,
                                    extraction_mode: str = 'structured', grading_style: str = 'standard',
-                                   student_history: str = '') -> dict:
+                                   student_history: str = '', rubric_weights: list = None) -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
@@ -4098,13 +4100,14 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
                                              extraction_mode, grading_style, token_tracker=tracker,
-                                             student_history=student_history)
+                                             student_history=student_history, rubric_weights=rubric_weights)
         else:
             grading_future = executor.submit(grade_assignment, student_name, assignment_data,
                                              custom_ai_instructions, grade_level, subject,
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
-                                             extraction_mode, grading_style, token_tracker=tracker)
+                                             extraction_mode, grading_style, token_tracker=tracker,
+                                             rubric_weights=rubric_weights)
 
         # Wait for both to complete
         detection_result = detection_future.result()
@@ -4831,7 +4834,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                     marker_config: list = None, effort_points: int = 15,
                     extraction_mode: str = 'structured', grading_style: str = 'standard',
                     token_tracker: 'TokenTracker' = None,
-                    student_history: str = '') -> dict:
+                    student_history: str = '', rubric_weights: list = None) -> dict:
     """Multi-pass grading pipeline for consistent, robust scoring.
 
     Pass 1: Extract responses (reuses existing extraction logic)
@@ -5126,6 +5129,33 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         "writing_quality": {"score": writing_pts, "possible": 20},
         "effort_engagement": {"score": effort_earned, "possible": effort_points},
     }
+
+    # === APPLY CUSTOM RUBRIC WEIGHTS ===
+    # rubric_weights is a list of 4 weights [content, completeness, writing, effort]
+    if rubric_weights and len(rubric_weights) == 4:
+        cat_pcts = [
+            content_pts / 40,                          # content_accuracy normalized
+            completeness_pts / 25,                     # completeness normalized
+            writing_pts / 20,                          # writing_quality normalized
+            effort_earned / max(effort_points, 1),     # effort_engagement normalized
+        ]
+        total_weight = sum(rubric_weights) or 100
+        weighted_score = sum(
+            pct * (w / total_weight)
+            for pct, w in zip(cat_pcts, rubric_weights)
+        )
+        final_score = int(round(weighted_score * 100))
+        final_score = max(0, min(100, final_score))
+        # Still apply completeness cap if there are blanks
+        if blank_count > 0:
+            final_score = min(final_score, cap)
+        # Recalculate letter grade
+        if final_score >= 90: letter_grade = "A"
+        elif final_score >= 80: letter_grade = "B"
+        elif final_score >= 70: letter_grade = "C"
+        elif final_score >= 60: letter_grade = "D"
+        else: letter_grade = "F"
+        print(f"  📊 Rubric-weighted score: {final_score} ({letter_grade}) [weights: {rubric_weights}]")
 
     # Collect blank/missing info for feedback
     blank_questions = extraction_result.get("blank_questions", [])
@@ -5446,7 +5476,7 @@ def _try_parse_json_fallback(text: str) -> dict:
 # AI GRADING WITH CLAUDE
 # =============================================================================
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -6424,6 +6454,27 @@ Provide your response in the following JSON format ONLY (no other text):
                 print(f"  ✅ Bilingual feedback added ({ell_language})")
             else:
                 print(f"  ⚠️  Translation failed, feedback remains English only")
+
+        # === APPLY CUSTOM RUBRIC WEIGHTS (single-pass) ===
+        # rubric_weights is a list of 4 weights [content, completeness, writing, effort]
+        if rubric_weights and len(rubric_weights) == 4:
+            breakdown = result.get("breakdown", {})
+            cat_pcts = [
+                breakdown.get("content_accuracy", 0) / 40,
+                breakdown.get("completeness", 0) / 25,
+                breakdown.get("writing_quality", 0) / 20,
+                breakdown.get("effort_engagement", 0) / 15,
+            ]
+            total_weight = sum(rubric_weights) or 100
+            weighted_score = sum(
+                pct * (w / total_weight)
+                for pct, w in zip(cat_pcts, rubric_weights)
+            )
+            result["score"] = int(round(weighted_score * 100))
+            result["score"] = max(0, min(100, result["score"]))
+            s = result["score"]
+            result["letter_grade"] = "A" if s >= 90 else "B" if s >= 80 else "C" if s >= 70 else "D" if s >= 60 else "F"
+            print(f"  📊 Rubric-weighted score: {result['score']} ({result['letter_grade']}) [weights: {rubric_weights}]")
 
         # Update student's writing profile (only if not flagged as AI)
         # This builds their baseline for future AI detection

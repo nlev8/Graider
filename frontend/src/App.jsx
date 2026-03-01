@@ -5142,11 +5142,18 @@ ${signature}`;
         custom_email_subject: edited?.subject || `Grade Report: ${result.assignment}`,
         custom_email_body: edited?.body || getDefaultEmailBody(index),
       };
-      const response = await api.sendEmails([emailResult], config.teacher_email, config.teacher_name, config.email_signature);
-      if (response.sent > 0) {
-        addToast(`Email sent to ${result.student_name}`, "success");
+      const response = await api.sendOutlookEmails({
+        results: [emailResult],
+        type: "student",
+        teacher_name: config.teacher_name,
+        email_signature: config.email_signature,
+      });
+      if (response.error) {
+        addToast(response.error, "error");
       } else {
-        addToast(`Failed to send email to ${result.student_name}`, "error");
+        setOutlookSendPolling(true);
+        setOutlookSendStatus({ status: "running", sent: 0, total: response.total || 1, failed: 0, message: "Sending..." });
+        addToast("Sending via Outlook to " + result.student_name, "info");
       }
     } catch (e) {
       addToast("Error sending email: " + e.message, "error");
@@ -10768,12 +10775,12 @@ ${signature}`;
                                           background: "none",
                                           border: "none",
                                           color: r.student_email ? "#4ade80" : "#6b7280",
-                                          cursor: r.student_email ? "pointer" : "not-allowed",
+                                          cursor: r.student_email && outlookSendStatus.status !== "running" ? "pointer" : "not-allowed",
                                           padding: "4px",
-                                          opacity: r.student_email ? 1 : 0.5,
+                                          opacity: r.student_email && outlookSendStatus.status !== "running" ? 1 : 0.5,
                                         }}
-                                        title={r.student_email ? `Send email to ${r.student_email}` : "No email address"}
-                                        disabled={!r.student_email}
+                                        title={r.student_email ? `Send via Outlook to ${r.student_email}` : "No email address"}
+                                        disabled={!r.student_email || outlookSendStatus.status === "running"}
                                       >
                                         <Icon name="Mail" size={16} />
                                       </button>
@@ -11689,6 +11696,19 @@ ${signature}`;
                         >
                           <Icon name="Plus" size={16} />
                           Add Category
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRubric((prev) => ({
+                              ...prev,
+                              categories: RUBRIC_PRESETS.default.categories.map((c) => ({ ...c })),
+                            }));
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          <Icon name="RotateCcw" size={16} />
+                          Reset to Default
                         </button>
                         <span
                           style={{
@@ -17690,6 +17710,7 @@ ${signature}`;
                               </button>
                             </div>
                           ))}
+                          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
                           <button
                             onClick={() => {
                               const newRubric = [...(assignment.customRubric || [
@@ -17701,10 +17722,25 @@ ${signature}`;
                               setAssignment({ ...assignment, customRubric: newRubric });
                             }}
                             className="btn btn-secondary"
-                            style={{ marginTop: "8px", fontSize: "0.85rem" }}
+                            style={{ fontSize: "0.85rem" }}
                           >
                             <Icon name="Plus" size={14} /> Add Category
                           </button>
+                          <button
+                            onClick={() => {
+                              setAssignment({ ...assignment, customRubric: [
+                                { name: "Content Accuracy", weight: 40 },
+                                { name: "Completeness", weight: 25 },
+                                { name: "Writing Quality", weight: 20 },
+                                { name: "Effort", weight: 15 },
+                              ]});
+                            }}
+                            className="btn btn-secondary"
+                            style={{ fontSize: "0.85rem" }}
+                          >
+                            <Icon name="RotateCcw" size={14} /> Reset to Default
+                          </button>
+                          </div>
                           <div style={{ marginTop: "10px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
                             Total: {(assignment.customRubric || [
                               { name: "Content Accuracy", weight: 40 },

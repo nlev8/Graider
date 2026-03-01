@@ -3450,7 +3450,7 @@ def list_resources_tool():
     return {"documents": documents, "total": len(documents)}
 
 
-MAX_RESOURCE_TEXT = 50000
+MAX_RESOURCE_TEXT = 120000
 
 
 def read_resource_tool(filename):

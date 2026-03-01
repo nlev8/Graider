@@ -2,28 +2,32 @@
 
 ## Table of Contents
 1. [Getting Started](#getting-started)
-2. [Grade Tab - Grading Assignments](#grade-tab---grading-assignments)
-3. [Results Tab](#results-tab)
-4. [Exports](#exports)
-5. [Resubmissions](#resubmissions)
-6. [Authenticity Detection](#authenticity-detection)
-7. [Bilingual Feedback (ELL Support)](#bilingual-feedback-ell-support)
-8. [Assignment Builder](#assignment-builder)
-9. [Analytics Tab](#analytics-tab)
-10. [Lesson Planner](#lesson-planner)
-11. [Assessment Generator](#assessment-generator)
-12. [Student Portal](#student-portal)
-13. [Teacher Dashboard](#teacher-dashboard)
-14. [Resources Tab](#resources-tab)
-15. [Script Builder (Browser Automation)](#script-builder-browser-automation)
-16. [Assistant Tab](#assistant-tab)
-17. [Settings](#settings)
-18. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
-19. [Student Progress Tracking](#student-progress-tracking)
-20. [Troubleshooting](#troubleshooting)
-21. [Tips for Best Results](#tips-for-best-results)
-22. [Keyboard Shortcuts](#keyboard-shortcuts)
-23. [Support](#support)
+2. [Interactive Tutorial](#interactive-tutorial)
+3. [Grade Tab - Grading Assignments](#grade-tab---grading-assignments)
+4. [Results Tab](#results-tab)
+5. [Exports](#exports)
+6. [Submission Confirmation Emails](#submission-confirmation-emails)
+7. [Outlook Email Sending](#outlook-email-sending)
+8. [Resubmissions](#resubmissions)
+9. [Authenticity Detection](#authenticity-detection)
+10. [Bilingual Feedback (ELL Support)](#bilingual-feedback-ell-support)
+11. [Assignment Builder](#assignment-builder)
+12. [Analytics Tab](#analytics-tab)
+13. [Lesson Planner](#lesson-planner)
+14. [Assessment Generator](#assessment-generator)
+15. [Student Portal](#student-portal)
+16. [Teacher Dashboard](#teacher-dashboard)
+17. [Resources Tab](#resources-tab)
+18. [Script Builder (Browser Automation)](#script-builder-browser-automation)
+19. [Assistant Tab](#assistant-tab)
+20. [Settings](#settings)
+21. [Privacy & FERPA Compliance](#privacy--ferpa-compliance)
+22. [Student Progress Tracking](#student-progress-tracking)
+23. [Dark/Light Theme](#darklight-theme)
+24. [Troubleshooting](#troubleshooting)
+25. [Tips for Best Results](#tips-for-best-results)
+26. [Keyboard Shortcuts](#keyboard-shortcuts)
+27. [Support](#support)
 
 ---
 
@@ -43,12 +47,86 @@ Access Graider at **[app.graider.live](https://app.graider.live)**
    - Grade Level
    - Subject
 
-3. **Rubric Selection** (Onboarding Wizard):
-   - After setting your state, grade level, and subject, the onboarding wizard prompts you to choose a grading rubric
-   - **Florida teachers**: If your state is set to Florida, you'll see a B.E.S.T. rubric preset matched to your subject (e.g., ELA, Math, Science, Social Studies) with pre-configured category weights
-   - **All other teachers**: You'll see the Standard rubric preset
-   - Options: **Use B.E.S.T. Rubric** / **Use Standard Rubric** / **Customize Later**
-   - The final onboarding step shows a **"Create Your First Assignment"** button to get started immediately
+### Onboarding Wizard
+
+The onboarding wizard runs automatically on first launch and walks you through 8 setup steps:
+
+| Step | Title | What You Do |
+|------|-------|-------------|
+| 1 | **Welcome to Graider!** | Overview of the app |
+| 2 | **About You** | Enter teacher name, email, and school name |
+| 3 | **Your Classroom** | Select grade level, subject, state, and grading period |
+| 4 | **Grading Style** | Choose Lenient, Standard, or Strict (see below) |
+| 5 | **Rubric Setup** | Choose a rubric preset or customize later |
+| 6 | **AI Connection** | Enter API keys for OpenAI, Anthropic, and/or Gemini |
+| 7 | **Assignments Folder** | Set the folder path where student submissions are stored (optional) |
+| 8 | **All Set!** | Completion screen with a "Create Your First Assignment" button |
+
+**Grading Style** (Step 4):
+
+| Style | Description |
+|-------|-------------|
+| **Lenient** | Focus on effort and growth. Best for younger students or building confidence. |
+| **Standard** | Balanced feedback with fair expectations. Good for most classroom settings. |
+| **Strict** | High expectations with detailed corrections. Best for advanced or honors classes. |
+
+You can change your grading style later in **Settings > Grading > Grading Style**.
+
+**Rubric Selection** (Step 5):
+- **Florida teachers**: If your state is set to Florida, you'll see a B.E.S.T. rubric preset matched to your subject (e.g., ELA, Math, Science, Social Studies) with pre-configured category weights
+- **All other teachers**: You'll see the Standard rubric preset
+- Options: **Use B.E.S.T. Rubric** / **Use Standard Rubric** / **Customize Later**
+
+**AI Connection** (Step 6):
+- Enter API keys for one or more providers:
+  - **OpenAI**: Get a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+  - **Anthropic**: Get a key at [console.anthropic.com](https://console.anthropic.com)
+  - **Google Gemini**: Get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- You need at least one key. Multiple keys enable ensemble grading.
+
+**Assignments Folder** (Step 7):
+- Point Graider to the folder where student work is stored
+- **OneDrive/Teams users**: Use the locally synced OneDrive folder (e.g., `~/OneDrive/Class Assignments/`)
+- This can also be configured later in Settings
+
+> **Note:** The onboarding wizard runs once on first launch. To reconfigure these settings later, use the Settings tab. The Interactive Tutorial (see next section) covers the same features with guided walkthroughs.
+
+---
+
+## Interactive Tutorial
+
+Graider includes a 46-step interactive walkthrough that guides you through every tab and feature in the app.
+
+### How to Start
+
+- **First launch**: The tutorial runs automatically after the onboarding wizard completes
+- **Replay anytime**: Go to **Settings > Help** and click the **"Replay Tutorial"** button
+
+### Navigation
+
+| Control | Action |
+|---------|--------|
+| **Next** button | Advance to the next step |
+| **Back** button | Return to the previous step |
+| **Right arrow** key | Advance to the next step |
+| **Left arrow** key | Return to the previous step |
+| **Escape** key | Skip the tutorial |
+
+### What It Covers
+
+The tutorial walks through each tab with highlighted elements and explanatory tooltips:
+
+- **Navigation**: Sidebar layout and tab switching
+- **Grade Tab**: Start grading, file selection, period filtering, auto-grade mode
+- **Results Tab**: Viewing results, search, sorting, filtering, confirmation emails
+- **Grading Setup/Builder Tab**: Importing documents, setting markers, saving configs
+- **Analytics Tab**: Grade distribution, rubric breakdowns, performance trends
+- **Planner Tab**: Lesson planning and standards alignment
+- **Script Builder Tab**: Browser automation scripts
+- **Assistant Tab**: AI assistant features and tools
+- **Settings Tab**: Folders, rubric, AI model, notifications, class periods
+
+Each step highlights the relevant UI element with a pulsing border and displays a tooltip explaining its purpose. The app automatically navigates to the correct tab for each step.
 
 ---
 
@@ -362,6 +440,89 @@ Text files ready to copy/paste or import:
 - **Location:** `{Output Folder}/emails/`
 - **One file per student** with all their assignments combined
 - **Format:** TO, SUBJECT, then email body
+
+---
+
+## Submission Confirmation Emails
+
+Send each student a "submission received" email listing which assignments they have submitted and which are still outstanding.
+
+### Where to Find It
+
+In the **Results tab**, scroll down to the **Confirmation Emails** section (blue-bordered box below the results table).
+
+### Controls
+
+| Control | Description |
+|---------|-------------|
+| **Period Filter** | Filter students by class period |
+| **Student Filter** | Send to all students or select an individual student |
+| **CC Parents** checkbox | When enabled, adds parent/guardian email to the CC field (from your roster's parent contact data) |
+| **Send Confirmations** button | Sends confirmation emails to students with pending confirmations. Shows the count of pending emails. |
+
+### How It Works
+
+1. Graider scans your **assignments folder** and matches filenames to student names from your roster and assignment configs
+2. For each student, it builds a list of:
+   - **Submitted assignments** (files found in the folder matching the student's name)
+   - **Outstanding assignments** (assignment configs with no matching file for that student)
+3. Click **Send Confirmations** to send the emails via Outlook (see [Outlook Email Sending](#outlook-email-sending))
+
+### Email Format
+
+Each confirmation email includes:
+- A greeting with the student's name
+- A checkmarked list of submitted assignments
+- A bulleted list of outstanding/missing assignments
+
+### Tracking
+
+Graider tracks which confirmation emails have been sent in `confirmations_sent.json` to avoid sending duplicates. The **Send Confirmations** button shows only the count of pending (unsent) confirmations.
+
+---
+
+## Outlook Email Sending
+
+Graider sends emails (feedback, confirmation emails, parent communications) through your district Outlook account using browser automation.
+
+### How It Works
+
+Graider uses Playwright (browser automation) to log into your district's Outlook web interface via SSO and send emails automatically. This means emails come from your real district email address, not a third-party service.
+
+### Setup
+
+1. Go to **Settings > Tools > District Portal (VPortal)**
+2. Enter your district email and password
+3. Click **Save Credentials**
+4. A green "Configured" indicator confirms they are saved
+
+Credentials are stored locally at `~/.graider_data/portal_credentials.json` and never leave your machine.
+
+### Sending Flow
+
+1. Click **"Send via Outlook"** (feedback emails) or **"Send Confirmations"** (confirmation emails)
+2. A browser window opens automatically
+3. Graider logs into your district portal via SSO/ADFS
+4. If your district uses 2FA, approve the login on your phone when prompted
+5. Graider navigates to Outlook and sends each email
+6. Progress is tracked with sent/failed counts and toast notifications
+
+### Progress Tracking
+
+While emails are sending:
+- A progress indicator shows how many emails have been sent
+- Toast notifications appear for each successful send
+- Failed sends are tracked and reported at the end
+- You can monitor the browser window to see the automation in action
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| **2FA timeout** | Approve the login on your phone within 60 seconds of the prompt appearing |
+| **Login failure** | Verify your credentials in Settings > Tools > District Portal. Re-save if your password changed. |
+| **Browser not found** | Run `npx playwright install chromium` from the project root |
+| **Emails not sending** | Check that your Outlook session is active and not blocked by your district's security policies |
 
 ---
 
@@ -1627,6 +1788,38 @@ Models run in parallel, so total time ≈ slowest model (not sum of all).
 - Assignments you'll manually verify anyway
 - Clear-cut right/wrong work (fill-in-the-blank, matching)
 
+### Cost Tracking & Limits
+
+Track and limit your AI API spending per grading session and monthly.
+
+**Where to configure:** Settings > AI section
+
+| Setting | Description |
+|---------|-------------|
+| **Cost limit per session ($)** | Auto-stops grading when the session cost reaches this amount. Set to 0 for no limit. |
+| **Monthly API budget ($)** | Advisory monthly spending target. Set to 0 for no limit. |
+
+**How session limits work:**
+- Before grading starts, Graider estimates the cost based on the number of files and selected AI model
+- During grading, costs are tracked in real time
+- At **80%** of the session limit, a warning notification appears
+- At **100%**, grading automatically stops to prevent overspending
+- All progress up to that point is saved
+
+**Cost per model (approximate):**
+
+| Model | Cost per Assignment |
+|-------|---------------------|
+| GPT-4o-mini | ~$0.01 |
+| GPT-4o | ~$0.03 |
+| Claude 3.5 Haiku | ~$0.01 |
+| Claude 3.5 Sonnet | ~$0.02 |
+| Gemini 2.0 Flash | ~$0.01 |
+| Gemini 2.0 Pro | ~$0.05 |
+| Ensemble (3 models) | ~$0.03-0.09 |
+
+**Session cost display:** During grading, the current session cost is shown in the Grade tab alongside the progress indicator.
+
 ### Global AI Instructions
 
 Add instructions that apply to ALL AI operations:
@@ -1881,6 +2074,18 @@ See `GRAIDER_FERPA_IMPLEMENTATION.md` for:
 
 ---
 
+## Dark/Light Theme
+
+Graider supports dark and light themes. Toggle between them by clicking the **Sun/Moon icon** button in the top-right corner of the header.
+
+- **Sun icon** = currently in dark mode (click to switch to light)
+- **Moon icon** = currently in light mode (click to switch to dark)
+- Default theme is **dark mode**
+- Your preference is saved in your browser's localStorage and persists between sessions
+- All UI elements (sidebar, cards, tables, modals, charts) adjust automatically
+
+---
+
 ## Troubleshooting
 
 ### API Errors During Grading
@@ -1962,6 +2167,10 @@ Or use **Settings > Privacy & Data > Delete All Data**
 ## Support
 
 Report issues at: https://github.com/acrionas/Graider/issues
+
+### Report Bug
+
+Beta testers can submit bug reports using the **Report Bug** button located in **Settings > Help**. This opens a Google Form in a new tab where you can describe the issue, attach screenshots, and provide steps to reproduce the problem.
 
 ---
 
@@ -2073,6 +2282,13 @@ Each student's file contains:
 - **Token Cost Tracking**: Track API costs across all AI providers (OpenAI, Anthropic, Google) per grading session. Costs are logged to CSV for long-term tracking and visible in the cost analytics panel.
 - **GPT-4o Feedback Generation**: Final feedback generation upgraded to GPT-4o for higher-quality, more specific student feedback.
 
+### Onboarding & Setup
+
+- **8-Step Onboarding Wizard**: Guided setup for new users covering teacher info, classroom config, grading style, rubric, API keys, and assignments folder
+- **Grading Style Selection**: Choose Lenient, Standard, or Strict grading during onboarding (changeable later in Settings)
+- **Submission Confirmation Emails**: Send students a "submission received" email listing submitted and outstanding assignments, with CC Parents option and period/student filtering
+- **Interactive Tutorial**: 46-step guided walkthrough covering every tab and feature, with keyboard navigation and highlighted UI elements
+
 ### Other
 
 - **Ensemble Grading**: Run assignments through multiple AI models simultaneously and use the median score for more reliable grading
@@ -2080,5 +2296,7 @@ Each student's file contains:
 - **Student Portal**: Publish assessments with join codes for students to take online, with accommodation support and makeup exam mode
 - **Focus SIS Automation**: Create assignments in Focus gradebook via browser automation from the Assistant
 - **Outlook Email Integration**: Send feedback emails through your district Outlook account with SSO login support
+- **Report Bug Button**: Submit issues via Google Form from Settings > Help
+- **Dark/Light Theme**: Toggle between dark and light modes with the sun/moon icon in the header
 
-*Last updated: February 16, 2026*
+*Last updated: February 28, 2026*

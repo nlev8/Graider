@@ -400,6 +400,20 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     else:
         print("[GRADING] No custom rubric - using default")
 
+    # Build rubric_weights list for score aggregation
+    # The breakdown always has 4 categories in order: content_accuracy, completeness, writing_quality, effort_engagement
+    # Rubric categories map positionally to these (1st=content, 2nd=completeness, 3rd=writing, 4th=effort)
+    rubric_weights = None
+    if rubric and rubric.get('categories'):
+        cats = rubric['categories']
+        weights = [cat.get('weight', 0) for cat in cats]
+        # Only use custom weights if they differ from the default 40/25/20/15
+        default_weights = [40, 25, 20, 15]
+        if len(weights) == 4 and weights != default_weights:
+            rubric_weights = weights
+            cat_names = [cat.get('name', '') for cat in cats]
+            print(f"[GRADING] Custom rubric weights: {list(zip(cat_names, weights))}")
+
     # Load ALL saved assignment configs for auto-matching
     all_configs = {}
     assignments_dir = os.path.expanduser("~/.graider_assignments")
@@ -1337,12 +1351,22 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Skip detection for trusted students or FITB assignments
                 skip_detection = is_trusted or is_fitb
 
+                # Per-assignment custom rubric overrides global rubric weights
+                file_rubric_weights = rubric_weights
+                if rubric_type == 'custom' and custom_rubric and len(custom_rubric) == 4:
+                    file_rubric_weights = [cat.get('weight', 0) for cat in custom_rubric]
+                    if file_rubric_weights != [40, 25, 20, 15]:
+                        print(f"  📊 Using per-assignment custom rubric weights: {file_rubric_weights}")
+                    else:
+                        file_rubric_weights = None  # Default weights, no override needed
+
                 if ensemble_models and len(ensemble_models) >= 2:
                     grade_result = grade_with_ensemble(
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ensemble_models, student_info.get('student_id'),
                         assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style
+                        marker_config, effort_points, extraction_mode, grading_style,
+                        rubric_weights=file_rubric_weights
                     )
                 elif skip_detection:
                     # Trusted student or FITB: Use direct grading without detection
@@ -1350,7 +1374,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style=grading_style
+                        marker_config, effort_points, extraction_mode, grading_style=grading_style,
+                        rubric_weights=file_rubric_weights
                     )
                     # Set detection to "none"
                     if is_trusted:
@@ -1365,7 +1390,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
                         marker_config, effort_points, extraction_mode, grading_style,
-                        student_history=history_context
+                        student_history=history_context,
+                        rubric_weights=file_rubric_weights
                     )
 
                 # Check for errors

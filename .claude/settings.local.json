@@ -59,7 +59,8 @@
       "WebFetch(domain:techxplore.com)",
       "Bash(gh api:*)",
       "Bash(pdftoppm -v)",
-      "Bash(pdftotext:*)"
+      "Bash(pdftotext:*)",
+      "Bash(awk:*)"
     ]
   }
 }
