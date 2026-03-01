@@ -688,7 +688,12 @@ function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        approvalConfirmedRef.current = false;
+      } else if (session?.user) {
+        setUser(session.user);
+      }
       if (event === 'PASSWORD_RECOVERY') {
         setShowPasswordReset(true);
       }
@@ -707,8 +712,16 @@ function App() {
   }, []);
 
   // Approval gate check
+  const approvalConfirmedRef = useRef(false);
   useEffect(() => {
     if (!user || isLocalhost) {
+      setUserApproved(true);
+      approvalConfirmedRef.current = true;
+      return;
+    }
+
+    // Once confirmed, don't re-check on token refreshes
+    if (approvalConfirmedRef.current) {
       setUserApproved(true);
       return;
     }
@@ -716,6 +729,7 @@ function App() {
     // Check local JWT metadata first (instant, no API call)
     if (user.user_metadata && user.user_metadata.approved) {
       setUserApproved(true);
+      approvalConfirmedRef.current = true;
       return;
     }
 
@@ -730,9 +744,8 @@ function App() {
         if (res.ok) {
           const data = await res.json();
           if (data.approved === true) {
+            approvalConfirmedRef.current = true;
             setUserApproved(true);
-            // Refresh Supabase session so JWT gets updated metadata
-            supabase.auth.refreshSession();
           } else {
             setUserApproved(false);
           }
@@ -746,8 +759,10 @@ function App() {
     checkApproval();
 
     function handleNotApproved() {
-      // Re-verify before kicking out — avoids race with stale JWT requests
-      checkApproval();
+      // Only kick out if we never confirmed approval in this session
+      if (!approvalConfirmedRef.current) {
+        checkApproval();
+      }
     }
     window.addEventListener('account-not-approved', handleNotApproved);
     return () => window.removeEventListener('account-not-approved', handleNotApproved);
