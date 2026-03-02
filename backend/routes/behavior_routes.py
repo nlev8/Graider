@@ -2,38 +2,37 @@
 Behavior Tracking Routes
 ========================
 REST endpoints for persisting classroom behavior data.
-Data stored at ~/.graider_data/behavior_tracking.json — cumulative + per-session.
+Data stored in Supabase (behavior_sessions + behavior_events tables).
+Syncs with both the Graider web app and iOS companion app.
 """
-import csv
-import json
 import os
+from collections import defaultdict
 from datetime import datetime
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 behavior_bp = Blueprint('behavior', __name__)
 
-GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
-BEHAVIOR_FILE = os.path.join(GRAIDER_DATA_DIR, "behavior_tracking.json")
-PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
+# ── Supabase client (lazy init, same pattern as other routes) ──
+
+_supabase = None
 
 
-def _load_behavior_data():
-    """Load behavior tracking data from disk."""
-    if not os.path.exists(BEHAVIOR_FILE):
-        return {"version": 1, "students": {}}
-    try:
-        with open(BEHAVIOR_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {"version": 1, "students": {}}
+def _get_supabase():
+    global _supabase
+    if _supabase is None:
+        from supabase import create_client
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+        if not url or not key:
+            raise Exception("Supabase credentials not configured")
+        _supabase = create_client(url, key)
+    return _supabase
 
 
-def _save_behavior_data(data):
-    """Save behavior tracking data to disk."""
-    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
-    with open(BEHAVIOR_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+def _get_teacher_id():
+    """Get current teacher's UUID from auth middleware."""
+    return getattr(g, 'user_id', None)
 
 
 @behavior_bp.route('/api/behavior/session', methods=['POST'])
@@ -55,61 +54,62 @@ def save_behavior_session():
         "period": "Period 3",
         "date": "2026-02-27"
     }
-
-    Merges into cumulative data per student.
     """
     try:
+        teacher_id = _get_teacher_id()
+        if not teacher_id:
+            return jsonify({"error": "Not authenticated"}), 401
+
         data = request.json
         events = data.get('events', [])
         period = data.get('period', '')
-        date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        date_str = data.get('date', datetime.now().strftime('%Y-%m-%d'))
 
         if not events:
             return jsonify({"error": "No events to save"})
 
-        behavior = _load_behavior_data()
-        students = behavior.setdefault("students", {})
+        sb = _get_supabase()
 
+        # Create a session record
+        session_res = sb.table('behavior_sessions').insert({
+            "teacher_id": teacher_id,
+            "period": period,
+            "date": date_str,
+            "device": "web",
+            "is_active": False,
+        }).execute()
+
+        session_id = session_res.data[0]['id'] if session_res.data else None
+        if not session_id:
+            return jsonify({"error": "Failed to create session"})
+
+        # Insert individual events
+        event_rows = []
         for evt in events:
-            sid = evt.get('student_id', evt.get('student_name', '').lower().replace(' ', '_'))
             name = evt.get('student_name', '')
-            evt_type = evt.get('type', 'correction')
-            note = evt.get('note', '')
-            timestamp = evt.get('timestamp', '')
-            evt_period = evt.get('period', period)
-
             if not name:
                 continue
 
-            student = students.setdefault(sid, {"name": name, "entries": []})
-            # Update name in case of casing differences
-            student["name"] = name
+            timestamp_str = evt.get('timestamp', '')
+            # Build event_time from date + timestamp (e.g. "09:15")
+            event_time = date_str
+            if timestamp_str:
+                event_time = f"{date_str}T{timestamp_str}:00"
 
-            # Find or create today's entry for this period + type
-            existing = None
-            for entry in student["entries"]:
-                if entry.get("date") == date and entry.get("period") == evt_period and entry.get("type") == evt_type:
-                    existing = entry
-                    break
+            event_rows.append({
+                "session_id": session_id,
+                "teacher_id": teacher_id,
+                "student_name": name,
+                "type": evt.get('type', 'correction'),
+                "note": evt.get('note', '') or None,
+                "source": "manual",
+                "event_time": event_time,
+            })
 
-            if existing:
-                existing["count"] = existing.get("count", 0) + 1
-                if note and note not in existing.get("notes", []):
-                    existing.setdefault("notes", []).append(note)
-                if timestamp:
-                    existing.setdefault("timestamps", []).append(timestamp)
-            else:
-                student["entries"].append({
-                    "date": date,
-                    "period": evt_period,
-                    "type": evt_type,
-                    "count": 1,
-                    "notes": [note] if note else [],
-                    "timestamps": [timestamp] if timestamp else [],
-                })
+        if event_rows:
+            sb.table('behavior_events').insert(event_rows).execute()
 
-        _save_behavior_data(behavior)
-        return jsonify({"status": "success", "message": f"Saved {len(events)} events"})
+        return jsonify({"status": "success", "message": f"Saved {len(event_rows)} events"})
 
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -124,42 +124,107 @@ def get_behavior_data():
     - period: filter to a specific period (optional)
     - date_from: start date filter YYYY-MM-DD (optional)
     - date_to: end date filter YYYY-MM-DD (optional)
+
+    Returns the same response shape as the old JSON-based API for frontend
+    compatibility:
+    {
+        "status": "success",
+        "data": {
+            "student_key": {
+                "name": "...",
+                "entries": [ { date, period, type, count, notes, timestamps } ],
+                "total_corrections": N,
+                "total_praise": N
+            }
+        }
+    }
     """
     try:
-        behavior = _load_behavior_data()
+        teacher_id = _get_teacher_id()
+        if not teacher_id:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        sb = _get_supabase()
         student_filter = request.args.get('student_name', '').strip().lower()
         period_filter = request.args.get('period', '').strip()
         date_from = request.args.get('date_from', '')
         date_to = request.args.get('date_to', '')
 
-        result = {}
-        for sid, student in behavior.get("students", {}).items():
-            name = student.get("name", "")
+        # Query events for this teacher, joined with session for period/date
+        query = sb.table('behavior_events').select(
+            'student_name, type, note, event_time, '
+            'behavior_sessions!inner(period, date)'
+        ).eq('teacher_id', teacher_id)
 
-            # Student name filter (case-insensitive substring)
-            if student_filter and student_filter not in name.lower():
-                continue
+        if date_from:
+            query = query.gte('behavior_sessions.date', date_from)
+        if date_to:
+            query = query.lte('behavior_sessions.date', date_to)
+        if period_filter:
+            query = query.eq('behavior_sessions.period', period_filter)
 
-            filtered_entries = []
-            for entry in student.get("entries", []):
-                # Period filter
-                if period_filter and entry.get("period", "") != period_filter:
-                    continue
-                # Date filters
-                entry_date = entry.get("date", "")
-                if date_from and entry_date < date_from:
-                    continue
-                if date_to and entry_date > date_to:
-                    continue
-                filtered_entries.append(entry)
+        res = query.execute()
+        rows = res.data or []
 
-            if filtered_entries:
-                result[sid] = {
-                    "name": name,
-                    "entries": filtered_entries,
-                    "total_corrections": sum(e.get("count", 0) for e in filtered_entries if e.get("type") == "correction"),
-                    "total_praise": sum(e.get("count", 0) for e in filtered_entries if e.get("type") == "praise"),
+        # Filter by student name (case-insensitive substring) in Python
+        # since Supabase doesn't have great ILIKE on non-indexed text
+        if student_filter:
+            rows = [r for r in rows if student_filter in r.get('student_name', '').lower()]
+
+        # Aggregate into the legacy response shape:
+        # group by student → by (date, period, type) → count + notes + timestamps
+        students = defaultdict(lambda: {"name": "", "entries_map": {}})
+
+        for row in rows:
+            name = row.get('student_name', '')
+            sid = name.lower().replace(' ', '_')
+            evt_type = row.get('type', 'correction')
+            note = row.get('note', '')
+            session = row.get('behavior_sessions', {})
+            date_val = session.get('date', '')
+            period_val = session.get('period', '')
+
+            # Parse event_time for HH:MM timestamp
+            event_time_str = row.get('event_time', '')
+            timestamp = ''
+            if event_time_str:
+                try:
+                    dt = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
+                    timestamp = dt.strftime('%H:%M')
+                except Exception:
+                    pass
+
+            student = students[sid]
+            student["name"] = name
+
+            entry_key = (date_val, period_val, evt_type)
+            if entry_key not in student["entries_map"]:
+                student["entries_map"][entry_key] = {
+                    "date": date_val,
+                    "period": period_val,
+                    "type": evt_type,
+                    "count": 0,
+                    "notes": [],
+                    "timestamps": [],
                 }
+
+            entry = student["entries_map"][entry_key]
+            entry["count"] += 1
+            if note and note not in entry["notes"]:
+                entry["notes"].append(note)
+            if timestamp:
+                entry["timestamps"].append(timestamp)
+
+        # Build final result
+        result = {}
+        for sid, sdata in students.items():
+            entries = list(sdata["entries_map"].values())
+            result[sid] = {
+                "name": sdata["name"],
+                "entries": entries,
+                "total_corrections": sum(e["count"] for e in entries if e["type"] == "correction"),
+                "total_praise": sum(e["count"] for e in entries if e["type"] == "praise"),
+            }
 
         return jsonify({"status": "success", "data": result})
 
@@ -172,24 +237,34 @@ def delete_behavior_data():
     """Delete behavior data.
 
     Query params:
-    - student_id: delete data for a specific student (optional)
+    - student_id: delete data for a specific student name-key (optional)
     - all: set to "true" to clear all data
     """
     try:
+        teacher_id = _get_teacher_id()
+        if not teacher_id:
+            return jsonify({"error": "Not authenticated"}), 401
+
         student_id = request.args.get('student_id', '')
         clear_all = request.args.get('all', '').lower() == 'true'
 
+        sb = _get_supabase()
+
         if clear_all:
-            _save_behavior_data({"version": 1, "students": {}})
+            # Delete all sessions (cascade deletes events)
+            sb.table('behavior_sessions').delete().eq(
+                'teacher_id', teacher_id
+            ).execute()
             return jsonify({"status": "success", "message": "All behavior data cleared"})
 
         if student_id:
-            behavior = _load_behavior_data()
-            if student_id in behavior.get("students", {}):
-                del behavior["students"][student_id]
-                _save_behavior_data(behavior)
-                return jsonify({"status": "success", "message": f"Cleared data for {student_id}"})
-            return jsonify({"error": f"Student {student_id} not found"})
+            # student_id is name-based key like "john_smith" — convert to name
+            student_name_guess = student_id.replace('_', ' ')
+            # Delete events matching this student name (case-insensitive)
+            sb.table('behavior_events').delete().eq(
+                'teacher_id', teacher_id
+            ).ilike('student_name', student_name_guess).execute()
+            return jsonify({"status": "success", "message": f"Cleared data for {student_id}"})
 
         return jsonify({"error": "Specify student_id or all=true"})
 

@@ -3,11 +3,15 @@ Behavior Tracking Tools
 ========================
 Assistant tools for querying behavior data, generating behavior emails,
 and sending them via Resend or Focus portal automation.
+
+Data source: Supabase (behavior_sessions + behavior_events tables).
 """
 import json
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
+
+from flask import g
 
 from backend.services.assistant_tools import (
     _load_roster, _fuzzy_name_match, _normalize_period,
@@ -15,22 +19,111 @@ from backend.services.assistant_tools import (
 )
 
 # ═══════════════════════════════════════════════════════
-# PATHS
+# SUPABASE CLIENT (lazy, same pattern as routes)
 # ═══════════════════════════════════════════════════════
 
-GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
-BEHAVIOR_FILE = os.path.join(GRAIDER_DATA_DIR, "behavior_tracking.json")
+_supabase = None
 SETTINGS_FILE = os.path.expanduser("~/.graider_global_settings.json")
 
 
-def _load_behavior_data():
-    if not os.path.exists(BEHAVIOR_FILE):
-        return {"version": 1, "students": {}}
-    try:
-        with open(BEHAVIOR_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {"version": 1, "students": {}}
+def _get_supabase():
+    global _supabase
+    if _supabase is None:
+        from supabase import create_client
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+        if not url or not key:
+            raise Exception("Supabase credentials not configured")
+        _supabase = create_client(url, key)
+    return _supabase
+
+
+def _get_teacher_id():
+    """Get current teacher's UUID from Flask request context."""
+    return getattr(g, 'user_id', None)
+
+
+def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_name=None):
+    """Query behavior events from Supabase and return them grouped by student.
+
+    Returns dict shaped like the old JSON format for compatibility:
+    {
+        "student_key": {
+            "name": "...",
+            "entries": [ { date, period, type, count, notes, timestamps } ]
+        }
+    }
+    """
+    sb = _get_supabase()
+
+    query = sb.table('behavior_events').select(
+        'student_name, type, note, event_time, '
+        'behavior_sessions!inner(period, date)'
+    ).eq('teacher_id', teacher_id)
+
+    if cutoff_date:
+        query = query.gte('behavior_sessions.date', cutoff_date)
+    if period:
+        query = query.eq('behavior_sessions.period', period)
+
+    res = query.execute()
+    rows = res.data or []
+
+    # Filter by student name in Python (fuzzy match)
+    if student_name:
+        rows = [r for r in rows if _fuzzy_name_match(student_name, r.get('student_name', ''))]
+
+    # Aggregate into legacy shape
+    students = defaultdict(lambda: {"name": "", "entries_map": {}})
+
+    for row in rows:
+        name = row.get('student_name', '')
+        sid = name.lower().replace(' ', '_')
+        evt_type = row.get('type', 'correction')
+        note = row.get('note', '')
+        session = row.get('behavior_sessions', {})
+        date_val = session.get('date', '')
+        period_val = session.get('period', '')
+
+        # Parse event_time for HH:MM
+        event_time_str = row.get('event_time', '')
+        timestamp = ''
+        if event_time_str:
+            try:
+                dt = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
+                timestamp = dt.strftime('%H:%M')
+            except Exception:
+                pass
+
+        student = students[sid]
+        student["name"] = name
+
+        entry_key = (date_val, period_val, evt_type)
+        if entry_key not in student["entries_map"]:
+            student["entries_map"][entry_key] = {
+                "date": date_val,
+                "period": period_val,
+                "type": evt_type,
+                "count": 0,
+                "notes": [],
+                "timestamps": [],
+            }
+
+        entry = student["entries_map"][entry_key]
+        entry["count"] += 1
+        if note and note not in entry["notes"]:
+            entry["notes"].append(note)
+        if timestamp:
+            entry["timestamps"].append(timestamp)
+
+    # Convert entries_map to entries list
+    result = {}
+    for sid, sdata in students.items():
+        result[sid] = {
+            "name": sdata["name"],
+            "entries": list(sdata["entries_map"].values()),
+        }
+    return result
 
 
 def _load_settings():
@@ -138,46 +231,46 @@ BEHAVIOR_TOOL_DEFINITIONS = [
 
 def get_behavior_summary(student_name=None, period=None, days=7):
     """Get behavior summary for a student or period."""
-    behavior = _load_behavior_data()
-    students_data = behavior.get("students", {})
-
-    if not students_data:
-        return {"status": "success", "data": "No behavior data recorded yet. Start a behavior tracking session in the Assistant tab to begin logging."}
+    teacher_id = _get_teacher_id()
+    if not teacher_id:
+        return {"error": "Not authenticated"}
 
     days = min(max(days or 7, 1), 90)
     cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
     period_filter = _normalize_period(period) if period else None
 
-    # If student name provided, find matching student(s)
-    if student_name:
-        matches = []
-        for sid, sdata in students_data.items():
-            if _fuzzy_name_match(student_name, sdata.get("name", "")):
-                matches.append((sid, sdata))
+    # Query from Supabase
+    students_data = _load_behavior_events(
+        teacher_id=teacher_id,
+        cutoff_date=cutoff,
+        period=period_filter,
+        student_name=student_name if student_name else None,
+    )
 
-        if not matches:
+    if not students_data:
+        if student_name:
             return {"error": f"No behavior data found for '{student_name}'. Check the name or start tracking."}
+        return {"status": "success", "data": "No behavior data recorded yet. Start a behavior tracking session in the Assistant tab to begin logging."}
 
+    # If student name provided, return detailed view
+    if student_name:
         results = []
-        for sid, sdata in matches:
+        for sid, sdata in students_data.items():
             entries = sdata.get("entries", [])
-            filtered = [e for e in entries if e.get("date", "") >= cutoff]
-            if period_filter:
-                filtered = [e for e in filtered if _normalize_period(e.get("period", "")) == period_filter]
 
-            corrections = sum(e.get("count", 0) for e in filtered if e.get("type") == "correction")
-            praise = sum(e.get("count", 0) for e in filtered if e.get("type") == "praise")
+            corrections = sum(e.get("count", 0) for e in entries if e.get("type") == "correction")
+            praise = sum(e.get("count", 0) for e in entries if e.get("type") == "praise")
 
             # Collect all notes
             all_notes = []
-            for e in filtered:
+            for e in entries:
                 for note in e.get("notes", []):
                     if note:
                         all_notes.append({"date": e.get("date", ""), "note": note, "type": e.get("type", "")})
 
             # Day-by-day breakdown
             daily = defaultdict(lambda: {"corrections": 0, "praise": 0})
-            for e in filtered:
+            for e in entries:
                 d = e.get("date", "unknown")
                 if e.get("type") == "correction":
                     daily[d]["corrections"] += e.get("count", 0)
@@ -189,7 +282,7 @@ def get_behavior_summary(student_name=None, period=None, days=7):
                 "period_range": f"Last {days} days",
                 "total_corrections": corrections,
                 "total_praise": praise,
-                "notes": all_notes[-10:],  # Last 10 notes
+                "notes": all_notes[-10:],
                 "daily_breakdown": dict(sorted(daily.items())),
             })
 
@@ -199,24 +292,19 @@ def get_behavior_summary(student_name=None, period=None, days=7):
     overview = []
     for sid, sdata in students_data.items():
         entries = sdata.get("entries", [])
-        filtered = [e for e in entries if e.get("date", "") >= cutoff]
-        if period_filter:
-            filtered = [e for e in filtered if _normalize_period(e.get("period", "")) == period_filter]
-
-        if not filtered:
+        if not entries:
             continue
 
-        corrections = sum(e.get("count", 0) for e in filtered if e.get("type") == "correction")
-        praise = sum(e.get("count", 0) for e in filtered if e.get("type") == "praise")
+        corrections = sum(e.get("count", 0) for e in entries if e.get("type") == "correction")
+        praise = sum(e.get("count", 0) for e in entries if e.get("type") == "praise")
 
         overview.append({
             "name": sdata.get("name", ""),
             "corrections": corrections,
             "praise": praise,
-            "last_date": max(e.get("date", "") for e in filtered),
+            "last_date": max(e.get("date", "") for e in entries),
         })
 
-    # Sort by most corrections first
     overview.sort(key=lambda x: -x["corrections"])
 
     return {
@@ -232,18 +320,24 @@ def get_behavior_summary(student_name=None, period=None, days=7):
 
 def generate_behavior_email(student_name, tone=None, custom_note=None):
     """Generate a professional behavior email draft."""
-    behavior = _load_behavior_data()
-    students_data = behavior.get("students", {})
+    teacher_id = _get_teacher_id()
+    if not teacher_id:
+        return {"error": "Not authenticated"}
 
-    # Find student
-    match = None
-    for sid, sdata in students_data.items():
-        if _fuzzy_name_match(student_name, sdata.get("name", "")):
-            match = sdata
-            break
+    cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
 
-    if not match:
+    # Query from Supabase (last 14 days, fuzzy-matched student)
+    students_data = _load_behavior_events(
+        teacher_id=teacher_id,
+        cutoff_date=cutoff,
+        student_name=student_name,
+    )
+
+    if not students_data:
         return {"error": f"No behavior data found for '{student_name}'."}
+
+    # Take first matching student
+    match = next(iter(students_data.values()))
 
     # Load teacher settings for signature
     settings = _load_settings()
@@ -257,17 +351,13 @@ def generate_behavior_email(student_name, tone=None, custom_note=None):
     first_name = _extract_first_name(name)
     entries = match.get("entries", [])
 
-    # Recent entries (last 14 days)
-    cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
-    recent = [e for e in entries if e.get("date", "") >= cutoff]
-
-    corrections = sum(e.get("count", 0) for e in recent if e.get("type") == "correction")
-    praise = sum(e.get("count", 0) for e in recent if e.get("type") == "praise")
+    corrections = sum(e.get("count", 0) for e in entries if e.get("type") == "correction")
+    praise = sum(e.get("count", 0) for e in entries if e.get("type") == "praise")
 
     # Collect notes
     correction_notes = []
     praise_notes = []
-    for e in recent:
+    for e in entries:
         for note in e.get("notes", []):
             if note:
                 if e.get("type") == "correction":
@@ -276,7 +366,7 @@ def generate_behavior_email(student_name, tone=None, custom_note=None):
                     praise_notes.append(note)
 
     # Get dates of corrections
-    correction_dates = sorted(set(e.get("date", "") for e in recent if e.get("type") == "correction"))
+    correction_dates = sorted(set(e.get("date", "") for e in entries if e.get("type") == "correction"))
 
     # Auto-detect tone
     if not tone:
