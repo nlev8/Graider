@@ -3541,9 +3541,324 @@ def export_lesson_plan():
         return jsonify({"error": str(e)})
 
 
+def _save_grading_config_for_export(assignment):
+    """Auto-save a grading config so the Graider extraction pipeline can find expected answers.
+
+    Builds gradingNotes from the answer key and saves to ~/.graider_assignments/.
+    """
+    try:
+        title = assignment.get('title', 'Untitled')
+        safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
+        if not safe_title:
+            return
+
+        config_dir = os.path.expanduser("~/.graider_assignments")
+        os.makedirs(config_dir, exist_ok=True)
+
+        # Build grading notes from answers
+        grading_lines = []
+        sections = assignment.get('sections', [])
+        answer_key = assignment.get('answer_key', {})
+
+        # Try answer_key dict first (assessment format)
+        if answer_key:
+            for q_num, answer_data in sorted(answer_key.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 0):
+                if isinstance(answer_data, dict):
+                    ans = answer_data.get('answer', '')
+                else:
+                    ans = str(answer_data)
+                grading_lines.append(f"Q{q_num}: {ans}")
+        else:
+            # Fall back to extracting from sections (assignment format)
+            q_idx = 1
+            for section in sections:
+                for q in section.get('questions', []):
+                    answer = q.get('answer', '')
+                    if answer:
+                        grading_lines.append(f"Q{q.get('number', q_idx)}: {answer}")
+                    q_idx += 1
+
+        config = {
+            "title": title,
+            "gradingNotes": "\n".join(grading_lines),
+            "tableStructured": True,
+            "tableVersion": "v1",
+            "totalPoints": assignment.get('total_points', 100),
+            "subject": assignment.get('subject', ''),
+            "grade": assignment.get('grade', ''),
+        }
+
+        config_path = os.path.join(config_dir, f"{safe_title}.json")
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+
+        print(f"Saved grading config: {config_path}")
+    except Exception as e:
+        print(f"Warning: Could not save grading config: {e}")
+
+
+def _question_to_visual_dict(q):
+    """Convert a planner question dict to the visual dict format expected by _embed_visual().
+
+    Maps planner question fields (visual_type, question_type, etc.) to the
+    {type, ...params} format used by worksheet_generator._embed_visual().
+    Returns None if the question has no visual element.
+    """
+    q_type = q.get('question_type', q.get('visual_type', ''))
+    if not q_type:
+        return None
+
+    # Direct type mappings — these map to _embed_visual 'type' values
+    type_map = {
+        'number_line': 'number_line',
+        'coordinate_plane': 'coordinate_plane',
+        'box_plot': 'box_plot',
+        'function_graph': 'function_graph',
+        'dot_plot': 'dot_plot',
+        'stem_and_leaf': 'stem_and_leaf',
+        'venn_diagram': 'venn_diagram',
+        'histogram': 'histogram',
+        'pie_chart': 'pie_chart',
+        'bar_chart': 'graph',
+        'protractor': 'protractor',
+        'angle_protractor': 'protractor',
+    }
+
+    # Shape types map to 'shape' with shape_type sub-key
+    shape_types = {'triangle', 'rectangle', 'geometry', 'pythagorean',
+                   'trig', 'angles', 'similarity'}
+
+    # Circle maps to 'circle'
+    circle_types = {'circle'}
+
+    # Polygon maps to 'polygon'
+    polygon_types = {'regular_polygon'}
+
+    if q_type in type_map:
+        visual = dict(q)  # copy all params
+        visual['type'] = type_map[q_type]
+        if q_type == 'bar_chart':
+            visual['graph_type'] = 'bar'
+        visual['blank'] = True  # Student version — don't show answers
+        return visual
+    elif q_type in shape_types:
+        visual = dict(q)
+        visual['type'] = 'shape'
+        visual['shape_type'] = 'triangle' if q_type in ('triangle', 'geometry', 'pythagorean', 'trig', 'angles', 'similarity') else 'rectangle'
+        visual['blank'] = True
+        return visual
+    elif q_type in circle_types:
+        visual = dict(q)
+        visual['type'] = 'circle'
+        visual['blank'] = True
+        return visual
+    elif q_type in polygon_types:
+        visual = dict(q)
+        visual['type'] = 'polygon'
+        visual['blank'] = True
+        return visual
+
+    return None
+
+
+def _export_assignment_docx_graider(assignment, output_folder, safe_title):
+    """Export a generated assignment as a .docx with Graider table extraction tags.
+
+    Creates a Word document with the same structure as the PDF export but using
+    Graider tables for structured student response extraction.
+
+    Returns the file path of the saved .docx.
+    """
+    from docx import Document
+    from docx.shared import Inches, Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker, _embed_visual
+
+    doc = Document()
+
+    graider_style = {
+        "table_header_bg": "#4472C4",
+        "table_header_text_color": "#FFFFFF",
+    }
+
+    title = assignment.get('title', 'Assignment')
+    instructions = assignment.get('instructions', '')
+    sections = assignment.get('sections', [])
+    total_points = assignment.get('total_points', 100)
+    time_estimate = assignment.get('time_estimate', '')
+
+    # Title
+    heading = doc.add_heading(title, 0)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Student info line
+    info_para = doc.add_paragraph()
+    info_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    info_para.add_run("Name: _______________________  Date: _______________  Period: _____")
+
+    # Meta info
+    if time_estimate or total_points:
+        meta_para = doc.add_paragraph()
+        meta_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        meta_parts = []
+        if time_estimate:
+            meta_parts.append(f"Time: {time_estimate}")
+        if total_points:
+            meta_parts.append(f"Total Points: {total_points}")
+        meta_para.add_run("    ".join(meta_parts))
+
+    # Instructions
+    if instructions:
+        inst_para = doc.add_paragraph()
+        inst_para.add_run("Instructions: ").bold = True
+        inst_para.add_run(instructions)
+
+    doc.add_paragraph()  # Space
+
+    question_num = 1
+
+    for section in sections:
+        section_name = section.get('name', 'Section')
+        section_points = section.get('points', 0)
+        section_type = section.get('type', 'short_answer')
+        questions = section.get('questions', [])
+
+        # Section header
+        pts_text = f" ({section_points} points)" if section_points else ""
+        doc.add_heading(f"{section_name}{pts_text}", level=1)
+
+        for q in questions:
+            q_number = q.get('number', question_num)
+            q_text = q.get('question', '')
+            q_points = q.get('points', 0)
+            q_options = q.get('options', [])
+            q_type = q.get('question_type', section_type)
+            q_visual = q.get('visual_type', None)
+
+            # Embed visual element if present
+            visual_dict = _question_to_visual_dict(q)
+            if visual_dict:
+                try:
+                    # Render question text above the visual
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_number}. ").bold = True
+                    q_para.add_run(q_text)
+                    if q_points:
+                        run = q_para.add_run(f" ({q_points} pts)")
+                        run.italic = True
+
+                    _embed_visual(doc, visual_dict)
+                except Exception as e:
+                    print(f"Warning: Could not embed visual for Q{q_number}: {e}")
+
+            if q_options:
+                # MC/TF: question + options as paragraphs, then small Graider table
+                if not visual_dict:
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_number}. ").bold = True
+                    q_para.add_run(q_text)
+                    if q_points:
+                        run = q_para.add_run(f" ({q_points} pts)")
+                        run.italic = True
+
+                for opt in q_options:
+                    doc.add_paragraph(f"    {opt}")
+
+                _add_graider_table(doc, f"Answer for Question {q_number}",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, 720)  # 0.5 inch
+
+            elif q_type == 'data_table':
+                # Data table: render table headers above, then Graider table for answers
+                if not visual_dict:
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_number}. ").bold = True
+                    q_para.add_run(q_text)
+                    if q_points:
+                        run = q_para.add_run(f" ({q_points} pts)")
+                        run.italic = True
+
+                # Render visible data table if headers present
+                headers = q.get('headers', q.get('column_headers', []))
+                row_labels = q.get('row_labels', [])
+                expected = q.get('expected_data', [])
+                num_rows = q.get('num_rows', len(expected) if expected else 5)
+                if headers:
+                    from docx.shared import Inches as DocxInches
+                    if row_labels:
+                        table_data_headers = [''] + headers
+                    else:
+                        table_data_headers = headers
+                    col_count = len(table_data_headers)
+                    tbl = doc.add_table(rows=1 + num_rows, cols=col_count)
+                    tbl.style = 'Table Grid'
+                    for ci, h in enumerate(table_data_headers):
+                        tbl.rows[0].cells[ci].text = str(h)
+                    for ri in range(num_rows):
+                        if row_labels and ri < len(row_labels):
+                            tbl.rows[ri + 1].cells[0].text = str(row_labels[ri])
+                    doc.add_paragraph()  # space after table
+
+                _add_graider_table(doc, f"Data Analysis for Question {q_number}",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, 2160)  # 1.5 inch
+
+            elif q_type == 'math_equation':
+                _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts) — Show your work",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, 3600)  # 2.5 inches
+
+            elif q_type in ('essay', 'extended_response'):
+                if not visual_dict:
+                    _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts)",
+                                       f"GRAIDER:QUESTION:{q_number}", q_points,
+                                       graider_style, 4320)  # 3 inches
+                else:
+                    _add_graider_table(doc, f"Response for Question {q_number}",
+                                       f"GRAIDER:QUESTION:{q_number}", q_points,
+                                       graider_style, 4320)
+
+            elif q_type == 'coordinates':
+                if not visual_dict:
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_number}. ").bold = True
+                    q_para.add_run(q_text)
+                    if q_points:
+                        run = q_para.add_run(f" ({q_points} pts)")
+                        run.italic = True
+
+                _add_graider_table(doc, f"Coordinates for Question {q_number}",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, 720)  # 0.5 inch
+
+            else:
+                # Short answer / default
+                height = 2160  # 1.5 inches
+                if visual_dict:
+                    _add_graider_table(doc, f"Response for Question {q_number}",
+                                       f"GRAIDER:QUESTION:{q_number}", q_points,
+                                       graider_style, height)
+                else:
+                    _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts)",
+                                       f"GRAIDER:QUESTION:{q_number}", q_points,
+                                       graider_style, height)
+
+            question_num += 1
+
+    # Add Graider marker at end
+    _add_graider_marker(doc)
+
+    # Save
+    filename = f"{safe_title}_Student.docx"
+    filepath = os.path.join(output_folder, filename)
+    doc.save(filepath)
+
+    return filepath
+
+
 @planner_bp.route('/api/export-generated-assignment', methods=['POST'])
 def export_generated_assignment():
-    """Export a generated assignment to PDF format with visual elements."""
+    """Export a generated assignment to PDF or DOCX (with Graider tables) format."""
     data = request.json
     assignment = data.get('assignment', {})
     format_type = data.get('format', 'pdf')  # Default to PDF now
@@ -3555,6 +3870,23 @@ def export_generated_assignment():
     total_points = assignment.get('total_points', 100)
     time_estimate = assignment.get('time_estimate', '')
 
+    # DOCX with Graider tables for student worksheets
+    if format_type == 'docx' and not include_answers:
+        try:
+            safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
+            output_folder = os.path.expanduser("~/Downloads/Graider/Assignments")
+            os.makedirs(output_folder, exist_ok=True)
+            filepath = _export_assignment_docx_graider(assignment, output_folder, safe_title)
+            _save_grading_config_for_export(assignment)
+            subprocess.run(['open', filepath])
+            return jsonify({"status": "success", "path": filepath})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error exporting DOCX assignment: {e}")
+            return jsonify({"error": str(e)})
+
+    # PDF path (answer keys and fallback)
     try:
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.units import inch
@@ -4891,10 +5223,7 @@ Generate a complete assessment in this JSON format:
 
 @planner_bp.route('/api/export-assessment', methods=['POST'])
 def export_assessment():
-    """Export assessment to Word document."""
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.units import inch
-
+    """Export assessment to Word document with Graider table extraction tags."""
     data = request.json
     assessment = data.get('assessment', {})
     include_answer_key = data.get('includeAnswerKey', False)
@@ -4906,10 +5235,17 @@ def export_assessment():
         from docx import Document
         from docx.shared import Inches, Pt
         from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker
         import tempfile
         import base64
 
         doc = Document()
+
+        # Graider table style dict (blue header, white text)
+        graider_style = {
+            "table_header_bg": "#4472C4",
+            "table_header_text_color": "#FFFFFF",
+        }
 
         # Title
         title = doc.add_heading(assessment.get('title', 'Assessment'), 0)
@@ -4944,44 +5280,62 @@ def export_assessment():
 
             # Questions
             for q in section.get('questions', []):
-                q_para = doc.add_paragraph()
                 q_num = q.get('number', '')
                 q_text = q.get('question', '')
                 q_points = q.get('points', 1)
-                q_dok = q.get('dok', '')
+                q_type = q.get('type', section.get('type', ''))
 
-                # Question number and text
-                q_para.add_run(f"{q_num}. ").bold = True
-                q_para.add_run(f"{q_text} ")
-                q_para.add_run(f"({q_points} pt{'s' if q_points > 1 else ''})").italic = True
-
-                # Multiple choice options
                 if q.get('options'):
+                    # MC/TF: render question + options as paragraphs, then small Graider table
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_num}. ").bold = True
+                    q_para.add_run(f"{q_text} ")
+                    q_para.add_run(f"({q_points} pt{'s' if q_points > 1 else ''})").italic = True
+
                     for opt in q.get('options', []):
                         opt_para = doc.add_paragraph(f"    {opt}")
                         opt_para.paragraph_format.space_before = Pt(2)
                         opt_para.paragraph_format.space_after = Pt(2)
 
-                # Matching terms and definitions
-                if q.get('terms') and q.get('definitions'):
+                    _add_graider_table(doc, f"Answer for Question {q_num}",
+                                       f"GRAIDER:QUESTION:{q_num}", q_points,
+                                       graider_style, 720)  # 0.5 inch
+
+                elif q.get('terms') and q.get('definitions'):
+                    # Matching: render terms/defs as paragraphs, then Graider table
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_num}. ").bold = True
+                    q_para.add_run(f"{q_text} ")
+                    q_para.add_run(f"({q_points} pt{'s' if q_points > 1 else ''})").italic = True
+
                     doc.add_paragraph("Terms:")
                     for i, term in enumerate(q.get('terms', []), 1):
                         doc.add_paragraph(f"    {i}. {term}")
                     doc.add_paragraph("Definitions:")
                     for letter_idx, defn in enumerate(q.get('definitions', [])):
-                        letter = chr(65 + letter_idx)  # A, B, C...
-                        doc.add_paragraph(f"    {letter}. {defn}")
+                        letter_char = chr(65 + letter_idx)  # A, B, C...
+                        doc.add_paragraph(f"    {letter_char}. {defn}")
 
-                # Answer lines for short answer/extended response
-                q_type = q.get('type', section.get('type', ''))
-                if q_type in ['short_answer', 'extended_response']:
-                    lines = 3 if q_type == 'short_answer' else 8
-                    for _ in range(lines):
-                        doc.add_paragraph("_" * 70)
+                    _add_graider_table(doc, f"Matching Answers for Question {q_num}",
+                                       f"GRAIDER:QUESTION:{q_num}", q_points,
+                                       graider_style, 1440)  # 1 inch
 
-                doc.add_paragraph()  # Space between questions
+                elif q_type == 'extended_response':
+                    # Extended response: Graider table with 3" height
+                    _add_graider_table(doc, f"{q_num}. {q_text} ({q_points} pts)",
+                                       f"GRAIDER:QUESTION:{q_num}", q_points,
+                                       graider_style, 4320)  # 3 inches
 
-        # Answer Key (separate page)
+                else:
+                    # Short answer / default: Graider table with 1.5" height
+                    _add_graider_table(doc, f"{q_num}. {q_text} ({q_points} pts)",
+                                       f"GRAIDER:QUESTION:{q_num}", q_points,
+                                       graider_style, 2160)  # 1.5 inches
+
+        # Add Graider marker before answer key
+        _add_graider_marker(doc)
+
+        # Answer Key (separate page) — no Graider tables
         if include_answer_key:
             doc.add_page_break()
             doc.add_heading("Answer Key", 0)
@@ -4997,6 +5351,9 @@ def export_assessment():
                         ans_para.add_run(f" - {answer_data.get('explanation')}")
                 else:
                     ans_para.add_run(str(answer_data))
+
+        # Auto-save grading config for structured extraction
+        _save_grading_config_for_export(assessment)
 
         # Save to temp file and encode
         with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp:
@@ -5019,6 +5376,8 @@ def export_assessment():
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Export error: {e}")
         return jsonify({"error": str(e)}), 500
 

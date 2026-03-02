@@ -2599,20 +2599,43 @@ function App() {
     }
   }, [status.error]);
 
-  // Load email approvals from persisted results
+  // Load email approvals from persisted results AND re-index when results change.
+  // emailApprovals is keyed by array index. When re-grading, the backend removes
+  // the old result and appends the new one at the end, shifting all indices.
+  // This effect rebuilds the index mapping by matching filenames so approvals
+  // follow the correct results even when indices change.
+  const prevResultsRef = useRef([]);
   useEffect(() => {
     if (status.results.length > 0) {
+      const prevResults = prevResultsRef.current;
       const loadedApprovals = {};
       status.results.forEach((r, idx) => {
         if (r.email_approval) {
           loadedApprovals[idx] = r.email_approval;
         }
       });
-      if (Object.keys(loadedApprovals).length > 0) {
-        setEmailApprovals((prev) => ({ ...loadedApprovals, ...prev }));
-      }
+      setEmailApprovals((prev) => {
+        // Build filename → approval from previous state + previous results
+        var fileApprovals = {};
+        prevResults.forEach(function(r, oldIdx) {
+          if (prev[oldIdx]) fileApprovals[r.filename] = prev[oldIdx];
+        });
+        // Rebuild index-based mapping for current results
+        var reindexed = {};
+        status.results.forEach(function(r, newIdx) {
+          if (loadedApprovals[newIdx]) {
+            // Persisted approval on the result itself takes priority
+            reindexed[newIdx] = loadedApprovals[newIdx];
+          } else if (fileApprovals[r.filename]) {
+            // Carry over approval from previous state by filename
+            reindexed[newIdx] = fileApprovals[r.filename];
+          }
+        });
+        return reindexed;
+      });
     }
-  }, [status.results.length]); // Only run when results count changes
+    prevResultsRef.current = status.results.map(function(r) { return { filename: r.filename }; });
+  }, [status.results]); // Run on every results change, not just length
 
   // Reset approval gate when new results come in
   useEffect(() => {
@@ -2741,41 +2764,49 @@ function App() {
   };
 
   // Check if a filename matches any student in the period
+  // Strips apostrophes/hyphens so "Da'juan" matches "Dajuan", "Mary-Jane" matches "MaryJane", etc.
+  var stripNamePunctuation = function(s) { return s.replace(/['\u2018\u2019\-]/g, ''); };
   const fileMatchesPeriodStudent = (filename, students) => {
     if (!students || students.length === 0) return true; // No filter
     const lowerFilename = filename.toLowerCase();
+    const normFilename = stripNamePunctuation(lowerFilename);
     return students.some((student) => {
       const first = (student.first || "").toLowerCase().trim();
       const last = (student.last || "").toLowerCase().trim();
       const lastInitial = last.charAt(0);
+      const normFirst = stripNamePunctuation(first);
+      const normLast = stripNamePunctuation(last);
 
       // Match patterns:
       // "First, Last" or "First, L" (common format)
       // "Last, First"
       // "First Last" or "First_Last"
       // Just first name + last initial
+      // All checks run against both original and punctuation-stripped versions
       return (
         // "First, Last" - e.g., "John, Smith"
-        (first && last && lowerFilename.includes(`${first}, ${last}`)) ||
+        (first && last && (lowerFilename.includes(first + ', ' + last) || normFilename.includes(normFirst + ', ' + normLast))) ||
         // "First, L" - e.g., "John, S" (last initial only)
         (first &&
           lastInitial &&
-          lowerFilename.includes(`${first}, ${lastInitial}`)) ||
+          (lowerFilename.includes(first + ', ' + lastInitial) || normFilename.includes(normFirst + ', ' + lastInitial))) ||
         // "First L" - e.g., "John S" (no comma, last initial)
         (first &&
           lastInitial &&
-          lowerFilename.match(
-            new RegExp(`${first}\\s+${lastInitial}[^a-z]`, "i"),
-          )) ||
+          (lowerFilename.match(
+            new RegExp(first + '\\s+' + lastInitial + '[^a-z]', 'i'),
+          ) || normFilename.match(
+            new RegExp(normFirst + '\\s+' + lastInitial + '[^a-z]', 'i'),
+          ))) ||
         // "Last, First" - e.g., "Smith, John"
-        (first && last && lowerFilename.includes(`${last}, ${first}`)) ||
+        (first && last && (lowerFilename.includes(last + ', ' + first) || normFilename.includes(normLast + ', ' + normFirst))) ||
         // "First Last" - e.g., "John Smith"
-        (first && last && lowerFilename.includes(`${first} ${last}`)) ||
+        (first && last && (lowerFilename.includes(first + ' ' + last) || normFilename.includes(normFirst + ' ' + normLast))) ||
         // "First_Last" - e.g., "John_Smith"
-        (first && last && lowerFilename.includes(`${first}_${last}`)) ||
+        (first && last && (lowerFilename.includes(first + '_' + last) || normFilename.includes(normFirst + '_' + normLast))) ||
         // Just first name at start of filename
-        (first && lowerFilename.startsWith(`${first},`)) ||
-        (first && lowerFilename.startsWith(`${first} `))
+        (first && (lowerFilename.startsWith(first + ',') || normFilename.startsWith(normFirst + ','))) ||
+        (first && (lowerFilename.startsWith(first + ' ') || normFilename.startsWith(normFirst + ' ')))
       );
     });
   };
@@ -2784,10 +2815,11 @@ function App() {
   const studentNameMatchesPeriod = (studentName, students) => {
     if (!students || students.length === 0) return true;
     // Fuzzy word-based matching: all words from student's first/last appear in studentName
-    const nameWords = (studentName || "").toLowerCase().replace(/[,;.]/g, " ").split(/\s+/).filter(Boolean);
+    // Strip apostrophes/hyphens so "Da'juan" matches "Dajuan"
+    const nameWords = stripNamePunctuation((studentName || "").toLowerCase()).replace(/[,;.]/g, " ").split(/\s+/).filter(Boolean);
     return students.some((student) => {
-      const first = (student.first || "").toLowerCase().trim();
-      const last = (student.last || "").toLowerCase().trim();
+      const first = stripNamePunctuation((student.first || "").toLowerCase().trim());
+      const last = stripNamePunctuation((student.last || "").toLowerCase().trim());
       if (!first && !last) return false;
       const searchWords = [first, last].join(" ").split(/\s+/).filter(Boolean);
       // Every search word must match (or prefix-match) a word in the name
@@ -21772,6 +21804,25 @@ ${signature}`;
                                   <button
                                     onClick={async () => {
                                       try {
+                                        const result = await api.exportGeneratedAssignment(lessonPlan, "docx", false);
+                                        if (result.error) {
+                                          addToast("Error: " + result.error, "error");
+                                        } else {
+                                          addToast("Student worksheet exported as DOCX!", "success");
+                                        }
+                                      } catch (e) {
+                                        addToast("Export failed: " + e.message, "error");
+                                      }
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export student version as Word Doc (Graider tables)"
+                                  >
+                                    <Icon name="FileText" size={16} /> Export DOCX
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
                                         const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", false);
                                         if (result.error) {
                                           addToast("Error: " + result.error, "error");
@@ -21782,7 +21833,7 @@ ${signature}`;
                                         addToast("Export failed: " + e.message, "error");
                                       }
                                     }}
-                                    className="btn btn-primary"
+                                    className="btn btn-secondary"
                                     style={{ padding: "8px 14px" }}
                                     title="Export student version as PDF"
                                   >
@@ -21870,6 +21921,22 @@ ${signature}`;
                                   <button
                                     onClick={async () => {
                                       try {
+                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "docx", false);
+                                        if (result.error) addToast("Error: " + result.error, "error");
+                                        else addToast("Assignment exported as DOCX!", "success");
+                                      } catch (e) {
+                                        addToast("Export failed: " + e.message, "error");
+                                      }
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export student version as Word Doc (Graider tables)"
+                                  >
+                                    <Icon name="FileText" size={16} /> Export DOCX
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
                                         const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", false);
                                         if (result.error) addToast("Error: " + result.error, "error");
                                         else addToast("Assignment exported as PDF!", "success");
@@ -21877,7 +21944,7 @@ ${signature}`;
                                         addToast("Export failed: " + e.message, "error");
                                       }
                                     }}
-                                    className="btn btn-primary"
+                                    className="btn btn-secondary"
                                     style={{ padding: "8px 14px" }}
                                     title="Export assignment as PDF with graphics"
                                   >
@@ -22471,6 +22538,40 @@ ${signature}`;
                                         const result =
                                           await api.exportGeneratedAssignment(
                                             generatedAssignment,
+                                            "docx",
+                                            false,
+                                          );
+                                        if (result.error) {
+                                          addToast(
+                                            "Error: " + result.error,
+                                            "error",
+                                          );
+                                        } else {
+                                          addToast(
+                                            "Student worksheet exported as DOCX!",
+                                            "success",
+                                          );
+                                        }
+                                      } catch (e) {
+                                        addToast(
+                                          "Export failed: " + e.message,
+                                          "error",
+                                        );
+                                      }
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ padding: "8px 14px" }}
+                                    title="Export student version as Word Doc (Graider tables)"
+                                  >
+                                    <Icon name="FileText" size={16} />
+                                    Export DOCX
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result =
+                                          await api.exportGeneratedAssignment(
+                                            generatedAssignment,
                                             "pdf",
                                             false,
                                           );
@@ -22492,7 +22593,7 @@ ${signature}`;
                                         );
                                       }
                                     }}
-                                    className="btn btn-primary"
+                                    className="btn btn-secondary"
                                     style={{ padding: "8px 14px" }}
                                     title="Export student version as PDF"
                                   >
