@@ -3497,16 +3497,10 @@ ${signature}`;
 
         if (existingName) {
           const confirmLoad = window.confirm(
-            `An assignment named "${existingName}" already exists.\n\nDo you want to load the existing assignment instead?`,
+            `An assignment named "${existingName}" already exists.\n\nClick OK to load existing settings with this document, or Cancel to skip.`,
           );
           if (confirmLoad) {
-            // Load existing assignment instead
-            setImportedDoc({
-              text: "",
-              html: "",
-              filename: "",
-              loading: false,
-            });
+            // Load existing assignment config but use the NEW document text
             try {
               const existingData = await api.loadAssignment(existingName);
               if (existingData.assignment) {
@@ -3523,9 +3517,26 @@ ${signature}`;
                     existingData.assignment.responseSections || [],
                 });
                 setLoadedAssignmentName(existingName);
-                if (existingData.assignment.importedDoc) {
-                  setImportedDoc(existingData.assignment.importedDoc);
+                // Use the freshly parsed document text, not the (possibly empty) saved one
+                setImportedDoc({
+                  text: data.text || "",
+                  html: data.html || "",
+                  filename: file.name,
+                  loading: false,
+                });
+                // Open doc editor with highlights from existing markers
+                let docHtml = data.html || "";
+                const loadedMarkers = existingData.assignment.customMarkers || [];
+                const loadedExcludes = existingData.assignment.excludeMarkers || [];
+                if (loadedMarkers.length > 0 || loadedExcludes.length > 0) {
+                  let cleanHtml = removeAllHighlightsFromHtml(docHtml);
+                  docHtml = applyAllHighlights(cleanHtml, loadedMarkers, loadedExcludes);
                 }
+                setDocEditorModal({
+                  show: true,
+                  editedHtml: docHtml,
+                  viewMode: "formatted",
+                });
               }
             } catch (loadErr) {
               console.error("Failed to load existing assignment:", loadErr);

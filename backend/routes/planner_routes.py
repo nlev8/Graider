@@ -3578,6 +3578,35 @@ def _save_grading_config_for_export(assignment):
                         grading_lines.append(f"Q{q.get('number', q_idx)}: {answer}")
                     q_idx += 1
 
+        # Build plain-text representation of the document for grading setup display
+        doc_lines = [title, '', 'Name: ' + '_' * 50, 'Date: ' + '_' * 50,
+                     'Period: ' + '_' * 50, '']
+        instructions = assignment.get('instructions', '')
+        if instructions:
+            doc_lines.append(instructions)
+            doc_lines.append('')
+        q_num = 1
+        for section in sections:
+            sec_title = section.get('title', '')
+            if sec_title:
+                doc_lines.append(sec_title.upper())
+            for q in section.get('questions', []):
+                qtype = q.get('question_type', '')
+                if qtype == 'vocab_term':
+                    term = q.get('term', q.get('question', ''))
+                    doc_lines.append(term + ': ' + '_' * 60)
+                elif qtype in ('fill_in_blank', 'fitb'):
+                    doc_lines.append(str(q_num) + ') ' + q.get('question', '') + '  (' + str(q.get('points', 5)) + ' pts)')
+                    doc_lines.append('Answer: ' + '_' * 55)
+                else:
+                    doc_lines.append(str(q_num) + ') ' + q.get('question', '') + '  (' + str(q.get('points', 10)) + ' pts)')
+                    doc_lines.append('Response: ' + '_' * 55)
+                    doc_lines.append('_' * 65)
+                doc_lines.append('')
+                q_num += 1
+
+        doc_text = '\n'.join(doc_lines)
+
         config = {
             "title": title,
             "gradingNotes": "\n".join(grading_lines),
@@ -3586,6 +3615,12 @@ def _save_grading_config_for_export(assignment):
             "totalPoints": assignment.get('total_points', 100),
             "subject": assignment.get('subject', ''),
             "grade": assignment.get('grade', ''),
+            "importedDoc": {
+                "text": doc_text,
+                "html": "",
+                "filename": safe_title + "_Student.docx",
+                "loading": False
+            },
         }
 
         config_path = os.path.join(config_dir, f"{safe_title}.json")
