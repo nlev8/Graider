@@ -22,16 +22,18 @@ from dotenv import load_dotenv
 
 # Import student history for progress tracking
 try:
-    from backend.student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
+    from backend.student_history import add_assignment_to_history, load_student_history, save_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
 except ImportError:
     try:
-        from student_history import add_assignment_to_history, load_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
+        from student_history import add_assignment_to_history, load_student_history, save_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
     except ImportError:
         # Fallback if module not available
         def add_assignment_to_history(student_id, result):
             return None
         def load_student_history(student_id):
             return None
+        def save_student_history(student_id, history):
+            pass
         def detect_baseline_deviation(student_id, result):
             return {"flag": "normal", "reasons": [], "details": {}}
         def get_baseline_summary(student_id):
@@ -41,14 +43,18 @@ except ImportError:
 
 # Import accommodation support for IEP/504 students
 try:
-    from backend.accommodations import build_accommodation_prompt
+    from backend.accommodations import build_accommodation_prompt, load_student_accommodations, save_student_accommodations
 except ImportError:
     try:
-        from accommodations import build_accommodation_prompt
+        from accommodations import build_accommodation_prompt, load_student_accommodations, save_student_accommodations
     except ImportError:
         # Fallback if module not available
         def build_accommodation_prompt(student_id):
             return ""
+        def load_student_accommodations():
+            return {}
+        def save_student_accommodations(mappings):
+            return False
 
 # Load environment variables
 _app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -696,7 +702,7 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     try:
         from assignment_grader import (
             load_roster, parse_filename, read_assignment_file,
-            extract_student_work, grade_assignment, grade_with_parallel_detection,
+            extract_student_work, grade_assignment, grade_multipass, grade_with_parallel_detection,
             grade_with_ensemble, export_focus_csv, export_detailed_report,
             save_emails_to_folder, save_to_master_csv, ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
         )
@@ -1165,8 +1171,20 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
                     file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
                     print(f"  ✓ Applying Assignment-Specific Notes ({len(file_notes)} chars)")
 
+                # Inject model answers from config (if generated)
+                model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
+                if model_answers:
+                    ma_lines = ["\n\nMODEL ANSWERS (compare student responses against these):"]
+                    for section_name, answer_text in model_answers.items():
+                        ma_lines.append(f"- {section_name}: {answer_text}")
+                    file_ai_notes += "\n".join(ma_lines)
+                    print(f"  ✓ Applying Model Answers ({len(model_answers)} sections)")
+
                     # Detect fill-in-the-blank assignments and add special rubric override
-                    if 'fill-in' in file_notes.lower() or 'fill in' in file_notes.lower():
+                    # Use specific phrases to avoid false positives (e.g., "fill in the Cornell Notes")
+                    _fn_lower = file_notes.lower()
+                    if ('fill-in-the-blank' in _fn_lower or 'fill in the blank' in _fn_lower
+                            or 'fill in blank' in _fn_lower or 'fillintheblank' in _fn_lower.replace(' ', '').replace('-', '')):
                         file_ai_notes += """
 
 FILL-IN-THE-BLANK RUBRIC OVERRIDE:
@@ -1434,8 +1452,19 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         marker_config, effort_points, extraction_mode, grading_style,
                         rubric_weights=file_rubric_weights
                     )
+                elif is_trusted:
+                    # Trusted student: Use full multi-pass pipeline, skip detection only
+                    grade_result = grade_multipass(
+                        student_info['student_name'], grade_data, file_ai_notes,
+                        grade_level, subject, ai_model, student_info.get('student_id'),
+                        assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
+                        marker_config, effort_points, extraction_mode, grading_style,
+                        student_history=history_context, rubric_weights=file_rubric_weights
+                    )
+                    grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
+                    grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
                 elif skip_detection:
-                    # Trusted student or FITB: Use direct grading without detection
+                    # FITB only: Use single-pass (genuinely needs it)
                     grade_result = grade_assignment(
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
@@ -1443,13 +1472,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         marker_config, effort_points, extraction_mode, grading_style=grading_style,
                         rubric_weights=file_rubric_weights
                     )
-                    # Set detection to "none"
-                    if is_trusted:
-                        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
-                        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
-                    else:
-                        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
-                        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
+                    grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
+                    grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
                 else:
                     grade_result = grade_with_parallel_detection(
                         student_info['student_name'], grade_data, file_ai_notes,
@@ -2456,6 +2480,475 @@ def export_student_data():
         "export_date": datetime.now().isoformat(),
         "record_count": len(student_results),
         "data": student_results
+    })
+
+
+@app.route('/api/ferpa/export-student', methods=['POST'])
+def export_individual_student_data():
+    """
+    FERPA Compliance: Export all stored data for a specific student.
+    Generates JSON (raw data) + PDF (formatted report) saved to ~/.graider_exports/student/.
+    """
+    import re
+    import subprocess
+
+    data = request.json or {}
+    student_name = data.get('student_name', '').strip()
+    if not student_name:
+        return jsonify({"error": "student_name is required"}), 400
+
+    # --- fuzzy match helper (inline, mirrors assistant_tools) ---
+    def _fuzzy(search, full_name):
+        clean = lambda s: re.sub(r'[,;.\'"]+', ' ', s.lower()).split()
+        sw = clean(search)
+        nw = clean(full_name)
+        if not sw:
+            return False
+        return all(any(n.startswith(s) or s.startswith(n) for n in nw) for s in sw)
+
+    # --- locate student across roster CSVs ---
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+    matched_name = None
+    matched_id = None
+    matched_period = None
+    matched_email = None
+
+    if os.path.isdir(periods_dir):
+        for fname in sorted(os.listdir(periods_dir)):
+            if not fname.endswith('.csv'):
+                continue
+            meta_path = os.path.join(periods_dir, fname + '.meta.json')
+            period_label = fname.replace('.csv', '').replace('_', ' ')
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as mf:
+                        meta = json.load(mf)
+                    period_label = meta.get('period_name', period_label)
+                except Exception:
+                    pass
+            try:
+                with open(os.path.join(periods_dir, fname), 'r', encoding='utf-8') as pf:
+                    reader = csv.DictReader(pf)
+                    for row in reader:
+                        raw = row.get('Student', '').strip().strip('"')
+                        # Parse "Last; First" or "Last, First"
+                        display = raw
+                        if '; ' in raw:
+                            parts = raw.split('; ', 1)
+                            display = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+                        elif ', ' in raw:
+                            parts = raw.split(', ', 1)
+                            display = (parts[1].strip() + ' ' + parts[0].strip()).strip()
+                        if _fuzzy(student_name, display) or _fuzzy(student_name, raw):
+                            matched_name = display
+                            matched_id = row.get('Student ID', row.get('student_id', row.get('ID', '')))
+                            matched_email = row.get('Email', row.get('email', ''))
+                            matched_period = period_label
+                            break
+            except Exception:
+                continue
+            if matched_name:
+                break
+
+    # Also try matching from grading results if roster didn't match
+    if not matched_name:
+        for r in grading_state.get("results", []):
+            rn = r.get("student_name", "")
+            if _fuzzy(student_name, rn):
+                matched_name = rn
+                matched_id = r.get("student_id", "")
+                matched_period = r.get("period", "")
+                matched_email = r.get("student_email", "")
+                break
+
+    if not matched_name:
+        return jsonify({
+            "error": f"No student found matching '{student_name}'.",
+            "hint": "Try the student's full name as it appears on the roster."
+        }), 404
+
+    safe_id = matched_id or re.sub(r'[^\w]', '_', matched_name.lower())
+
+    # --- collect data from all sources ---
+    export = {
+        "export_date": datetime.now().isoformat(),
+        "student_name": matched_name,
+        "student_id": matched_id or "",
+        "period": matched_period or "",
+        "email": matched_email or "",
+    }
+
+    # 1. Grading results
+    student_results = [
+        r for r in grading_state.get("results", [])
+        if _fuzzy(student_name, r.get("student_name", ""))
+    ]
+    export["grading_results"] = student_results
+
+    # 2. Student history
+    history = load_student_history(safe_id) if safe_id else None
+    export["student_history"] = history
+
+    # 3. Accommodations
+    accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
+    student_accommodations = None
+    if os.path.exists(accomm_file):
+        try:
+            with open(accomm_file, 'r') as f:
+                all_acc = json.load(f)
+            student_accommodations = all_acc.get(safe_id) or all_acc.get(matched_id or '')
+        except Exception:
+            pass
+    export["accommodations"] = student_accommodations
+
+    # 4. ELL data
+    ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+    ell_data = None
+    if os.path.exists(ell_file):
+        try:
+            with open(ell_file, 'r') as f:
+                all_ell = json.load(f)
+            ell_data = all_ell.get(safe_id) or all_ell.get(matched_id or '')
+        except Exception:
+            pass
+    export["ell_data"] = ell_data
+
+    # 5. Parent contacts
+    contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+    parent_contacts = None
+    if os.path.exists(contacts_file):
+        try:
+            with open(contacts_file, 'r') as f:
+                all_contacts = json.load(f)
+            parent_contacts = all_contacts.get(safe_id) or all_contacts.get(matched_id or '')
+        except Exception:
+            pass
+    export["parent_contacts"] = parent_contacts
+
+    record_count = len(student_results) + (1 if history else 0) + (1 if student_accommodations else 0) + (1 if ell_data else 0) + (1 if parent_contacts else 0)
+
+    # --- save JSON ---
+    export_dir = os.path.expanduser("~/.graider_exports/student")
+    os.makedirs(export_dir, exist_ok=True)
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    safe_fname = re.sub(r'[^\w\s-]', '', matched_name).strip().replace(' ', '_')
+    json_path = os.path.join(export_dir, f"{safe_fname}_data_{date_str}.json")
+    with open(json_path, 'w') as f:
+        json.dump(export, f, indent=2, default=str)
+
+    # --- generate PDF ---
+    pdf_path = os.path.join(export_dir, f"{safe_fname}_report_{date_str}.pdf")
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors as rl_colors
+
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('ExportTitle', parent=styles['Title'], fontSize=18, spaceAfter=6)
+        subtitle_style = ParagraphStyle('ExportSub', parent=styles['Normal'], fontSize=10, textColor=rl_colors.grey, spaceAfter=12)
+        section_style = ParagraphStyle('ExportSection', parent=styles['Heading2'], fontSize=13, spaceBefore=16, spaceAfter=6)
+        body_style = ParagraphStyle('ExportBody', parent=styles['Normal'], fontSize=9, leading=12)
+
+        elements = []
+
+        # Header
+        elements.append(Paragraph(f"Student Data Report: {matched_name}", title_style))
+        header_parts = [f"Exported {date_str}"]
+        if matched_id:
+            header_parts.append(f"ID: {matched_id}")
+        if matched_period:
+            header_parts.append(f"Period: {matched_period}")
+        elements.append(Paragraph(" | ".join(header_parts), subtitle_style))
+        elements.append(Spacer(1, 12))
+
+        # Scores table
+        if student_results:
+            elements.append(Paragraph("Assignment Scores", section_style))
+            table_data = [["Date", "Assignment", "Score", "Grade"]]
+            for r in sorted(student_results, key=lambda x: x.get('graded_at', '')):
+                table_data.append([
+                    (r.get('graded_at') or '')[:10],
+                    (r.get('assignment') or r.get('filename', ''))[:40],
+                    str(r.get('score', '')),
+                    r.get('letter_grade', ''),
+                ])
+            t = Table(table_data, colWidths=[1*inch, 3.5*inch, 0.8*inch, 0.7*inch])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#4f46e5')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.lightgrey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, rl_colors.HexColor('#f5f5f5')]),
+            ]))
+            elements.append(t)
+
+        # Skill patterns (from history)
+        if history and history.get('skill_scores'):
+            elements.append(Paragraph("Skill Patterns", section_style))
+            skills = history['skill_scores']
+            for skill, val in skills.items():
+                avg = val if isinstance(val, (int, float)) else val.get('average', 'N/A') if isinstance(val, dict) else 'N/A'
+                elements.append(Paragraph(f"<b>{skill.replace('_', ' ').title()}:</b> {avg}", body_style))
+
+        # Accommodations
+        if student_accommodations:
+            elements.append(Paragraph("Accommodations (IEP/504)", section_style))
+            presets = student_accommodations.get('presets', [])
+            if presets:
+                elements.append(Paragraph("Presets: " + ", ".join(p.replace('_', ' ').title() for p in presets), body_style))
+            notes = student_accommodations.get('custom_notes') or student_accommodations.get('notes', '')
+            if notes:
+                elements.append(Paragraph(f"Notes: {notes}", body_style))
+
+        # ELL
+        if ell_data:
+            elements.append(Paragraph("ELL Information", section_style))
+            lang = ell_data.get('language', '') if isinstance(ell_data, dict) else str(ell_data)
+            elements.append(Paragraph(f"Language: {lang}", body_style))
+
+        # Recent feedback (last 3)
+        feedback_results = [r for r in student_results if r.get('feedback')]
+        if feedback_results:
+            elements.append(Paragraph("Recent Feedback", section_style))
+            for r in feedback_results[-3:]:
+                assign = r.get('assignment') or r.get('filename', '')
+                fb = r.get('feedback', '')[:500]
+                elements.append(Paragraph(f"<b>{assign}:</b>", body_style))
+                elements.append(Paragraph(fb, body_style))
+                elements.append(Spacer(1, 6))
+
+        doc.build(elements)
+    except Exception as e:
+        pdf_path = None
+        print(f"PDF generation error: {e}")
+
+    # Open folder
+    try:
+        subprocess.run(['open', export_dir], check=False)
+    except Exception:
+        pass
+
+    audit_log("EXPORT_STUDENT_DATA", f"Exported full data for student (name redacted), {record_count} records")
+
+    return jsonify({
+        "status": "success",
+        "student_name": matched_name,
+        "student_id": matched_id or "",
+        "record_count": record_count,
+        "json_path": json_path,
+        "pdf_path": pdf_path,
+    })
+
+
+@app.route('/api/ferpa/import-student', methods=['POST'])
+def import_individual_student_data():
+    """FERPA-compliant: Import a previously exported student data file."""
+    import re as _re
+
+    preview = request.form.get('preview', 'false').lower() == 'true'
+    period_filename = request.form.get('period_filename', '')
+    student_id_override = request.form.get('student_id', '')
+
+    # Get uploaded file
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    if not file.filename or not file.filename.endswith('.json'):
+        return jsonify({"error": "File must be a .json file"}), 400
+
+    try:
+        data = json.loads(file.read().decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        return jsonify({"error": f"Invalid JSON file: {e}"}), 400
+
+    # Validate required fields
+    student_name = data.get('student_name')
+    if not student_name:
+        return jsonify({"error": "Missing 'student_name' in export file. This may not be a Graider export."}), 400
+
+    has_data = any(data.get(k) for k in ('grading_results', 'student_history', 'accommodations', 'ell_data', 'parent_contacts'))
+    if not has_data:
+        return jsonify({"error": "Export file contains no importable data sections."}), 400
+
+    original_id = data.get('student_id', '')
+    original_period = data.get('period', '')
+    student_id = student_id_override or original_id or _re.sub(r'[^\w]', '_', student_name.lower())
+
+    grading_results = data.get('grading_results') or []
+    student_history = data.get('student_history')
+    accommodations = data.get('accommodations')
+    ell_data = data.get('ell_data')
+    parent_contacts = data.get('parent_contacts')
+
+    # Build preview summary
+    summary = {
+        "student_name": student_name,
+        "original_period": original_period,
+        "original_id": original_id,
+        "sections": {
+            "results": len(grading_results),
+            "history": bool(student_history),
+            "accommodations": bool(accommodations),
+            "ell": bool(ell_data),
+            "contacts": bool(parent_contacts),
+        },
+    }
+
+    # Add human-readable details for preview
+    details = []
+    if grading_results:
+        details.append(f"{len(grading_results)} grades")
+    if student_history:
+        details.append("history")
+    if accommodations:
+        presets = accommodations.get('presets', [])
+        if presets:
+            details.append(f"IEP accommodations ({', '.join(p.replace('_', ' ') for p in presets[:3])})")
+        else:
+            details.append("accommodations")
+    if ell_data:
+        lang = ell_data.get('language', '') if isinstance(ell_data, dict) else str(ell_data)
+        details.append(f"ELL ({lang})" if lang and lang != 'none' else "ELL")
+    if parent_contacts:
+        details.append("parent contacts")
+    summary["detail_text"] = ", ".join(details) if details else "no data"
+
+    if preview:
+        return jsonify({"status": "preview", **summary})
+
+    # ── Import mode ──────────────────────────────────────────
+    imported = {"results": 0, "history": False, "accommodations": False, "ell": False, "contacts": False}
+
+    # 1. Grading results — append, deduplicate by graded_at timestamp
+    if grading_results:
+        existing_timestamps = set()
+        for r in grading_state.get("results", []):
+            ts = r.get("graded_at", "")
+            nm = r.get("student_name", "")
+            if nm.lower() == student_name.lower() and ts:
+                existing_timestamps.add(ts)
+
+        new_results = []
+        for r in grading_results:
+            # Update period/ID if overrides provided
+            if student_id_override:
+                r["student_id"] = student_id_override
+            if period_filename:
+                r["period"] = period_filename.replace('.csv', '').replace('_', ' ')
+            # Deduplicate by timestamp
+            if r.get("graded_at") and r["graded_at"] in existing_timestamps:
+                continue
+            new_results.append(r)
+
+        if new_results:
+            grading_state["results"].extend(new_results)
+            save_results(grading_state["results"])
+            imported["results"] = len(new_results)
+
+    # 2. Student history — merge assignments lists
+    if student_history:
+        existing_history = load_student_history(student_id)
+        if existing_history and existing_history.get("assignments"):
+            # Merge: add assignments not already present (by date + assignment name)
+            existing_keys = set()
+            for a in existing_history.get("assignments", []):
+                existing_keys.add((a.get("date", ""), a.get("assignment", "")))
+            for a in student_history.get("assignments", []):
+                key = (a.get("date", ""), a.get("assignment", ""))
+                if key not in existing_keys:
+                    existing_history["assignments"].append(a)
+            # Merge skill_scores — keep existing, add new
+            for skill, val in student_history.get("skill_scores", {}).items():
+                if skill not in existing_history.get("skill_scores", {}):
+                    existing_history.setdefault("skill_scores", {})[skill] = val
+            save_student_history(student_id, existing_history)
+        else:
+            # No existing history — save the imported one with updated ID
+            student_history["student_id"] = student_id
+            save_student_history(student_id, student_history)
+        imported["history"] = True
+
+    # 3. Accommodations
+    if accommodations:
+        all_acc = load_student_accommodations()
+        all_acc[student_id] = accommodations
+        all_acc[student_id]["updated"] = datetime.now().isoformat()
+        save_student_accommodations(all_acc)
+        imported["accommodations"] = True
+
+    # 4. ELL data
+    if ell_data:
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        all_ell = {}
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, 'r') as f:
+                    all_ell = json.load(f)
+            except Exception:
+                pass
+        all_ell[student_id] = ell_data
+        os.makedirs(os.path.dirname(ell_file), exist_ok=True)
+        with open(ell_file, 'w') as f:
+            json.dump(all_ell, f, indent=2)
+        imported["ell"] = True
+
+    # 5. Parent contacts
+    if parent_contacts:
+        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+        all_contacts = {}
+        if os.path.exists(contacts_file):
+            try:
+                with open(contacts_file, 'r') as f:
+                    all_contacts = json.load(f)
+            except Exception:
+                pass
+        all_contacts[student_id] = parent_contacts
+        os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
+        with open(contacts_file, 'w') as f:
+            json.dump(all_contacts, f, indent=2)
+        imported["contacts"] = True
+
+    # 6. Roster — add student to period CSV if specified
+    if period_filename:
+        try:
+            periods_dir = os.path.expanduser("~/.graider_data/periods")
+            csv_path = os.path.join(periods_dir, period_filename)
+            if os.path.exists(csv_path):
+                # Read existing rows to avoid duplicate
+                existing_names = set()
+                with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    fieldnames = reader.fieldnames or []
+                    rows = list(reader)
+                    for row in rows:
+                        existing_names.add(row.get("student_name", "").lower())
+
+                if student_name.lower() not in existing_names:
+                    new_row = {"student_name": student_name}
+                    if "student_id" in fieldnames:
+                        new_row["student_id"] = student_id
+                    if "email" in fieldnames:
+                        new_row["email"] = data.get("email", "")
+                    rows.append(new_row)
+                    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(rows)
+        except Exception as e:
+            print(f"Warning: Could not add student to roster: {e}")
+
+    audit_log("IMPORT_STUDENT_DATA", f"Imported data for student (name redacted), sections: {imported}")
+
+    return jsonify({
+        "status": "success",
+        "student_name": student_name,
+        "student_id": student_id,
+        "imported_sections": imported,
     })
 
 

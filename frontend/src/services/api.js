@@ -215,6 +215,13 @@ export async function exportAssignment(data) {
   })
 }
 
+export async function generateModelAnswers(data) {
+  return fetchApi('/api/generate-model-answers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 // ============ Documents ============
 
 export async function browse(type = 'folder') {
@@ -1077,6 +1084,7 @@ export default {
   saveGlobalSettings,
   loadGlobalSettings,
   saveAssignmentConfig,
+  generateModelAnswers,
   listAssignments,
   loadAssignment,
   deleteAssignment,

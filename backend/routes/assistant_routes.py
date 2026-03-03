@@ -769,6 +769,7 @@ Available tools:
 - get_class_analytics: Class-wide stats, grade distribution, top/bottom performers
 - get_assignment_stats: Statistics for a specific assignment
 - list_assignments: Show all graded assignments
+- scan_submissions_folder: Scan the assignments folder to see what files have been submitted. Shows top assignments by count, who submitted, graded/ungraded status. Deduplicates multiple uploads. Use when asked about submissions, folder contents, or 'what's been turned in' — this scans actual files, not grading results.
 - analyze_grade_causes: Deep analysis of WHY students got low grades — rubric category breakdowns, unanswered/omitted questions, score impact of omissions, weakest categories. Use this when asked about causes of low grades, common mistakes, or what students struggled with.
 - get_feedback_patterns: Analyze feedback text and skills across an assignment — common strengths, areas for growth, feedback samples from high/low scorers. Use when asked about patterns or common issues.
 - compare_periods: Compare performance across class periods — averages, grade distributions, category breakdowns, omission rates per period.
@@ -865,6 +866,8 @@ STUDENT INFO:
 - get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
 - get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators.
 - remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed.
+- export_student_data: Export all data for a student (grades, history, accommodations) as JSON + PDF. Use for parent requests, transfers, FERPA compliance.
+- import_student_data: Import a student's exported data file (JSON) into Graider. Use when a student transfers in from another Graider teacher.
 
 COMMUNICATIONS:
 - send_focus_comms: DEFAULT method for contacting parents. Sends email and/or SMS through Focus SIS using the teacher's school account. Always use dry_run=true first to preview messages. Only fall back to send_parent_emails (Outlook) if the teacher explicitly requests Outlook.

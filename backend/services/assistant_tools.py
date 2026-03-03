@@ -401,6 +401,23 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "scan_submissions_folder",
+        "description": "Scan the assignments folder to see what files students have submitted. Shows top assignments by submission count, unique students, graded/ungraded counts. Deduplicates multiple uploads per student. Use for 'what's been turned in?', 'most submitted assignments?', or to preview before grading.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_n": {
+                    "type": "integer",
+                    "description": "Top N assignments to return (default 10, max 25)"
+                },
+                "assignment_filter": {
+                    "type": "string",
+                    "description": "Filter to assignments matching this name (partial, case-insensitive)"
+                }
+            }
+        }
+    },
+    {
         "name": "create_focus_assignment",
         "description": "Create an assignment in Focus gradebook via browser automation. Requires VPortal credentials to be configured in Settings. The browser will open for the teacher to complete 2FA and verify before saving.",
         "input_schema": {
@@ -859,6 +876,24 @@ TOOL_DEFINITIONS = [
                 }
             },
             "required": ["date", "lesson_title"]
+        }
+    },
+    {
+        "name": "unschedule_lesson",
+        "description": "Remove a lesson from the teaching calendar. Use when the teacher says 'remove the lesson on Friday', 'clear March 5th', or when correcting a schedule by removing the old entry before adding the new one.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Date to remove lesson(s) from in YYYY-MM-DD format"
+                },
+                "lesson_title": {
+                    "type": "string",
+                    "description": "Title of the specific lesson to remove. If omitted, removes ALL lessons on that date."
+                }
+            },
+            "required": ["date"]
         }
     },
     {
@@ -2621,6 +2656,158 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display):
     return dict(result)
 
 
+def scan_submissions_folder(top_n=None, assignment_filter=None):
+    """Scan the assignments folder for submitted files. Shows top assignments
+    by submission count, unique students, graded/ungraded status.
+    Deduplicates multiple uploads per student (OneDrive duplicates)."""
+    import re
+
+    # Read from ~/.graider_settings.json (where the UI saves config)
+    folder = ''
+    settings_path = os.path.expanduser("~/.graider_settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings_data = json.load(f)
+            folder = settings_data.get('config', {}).get('assignments_folder', '')
+        except Exception:
+            pass
+    if not folder:
+        # Fallback: try _load_settings() (global settings) then default
+        gs = _load_settings()
+        folder = gs.get('config', {}).get('assignments_folder', '')
+    if not folder:
+        folder = os.path.expanduser("~/Downloads/Graider/Assignments")
+    if not os.path.isdir(folder):
+        return {"error": f"Assignments folder not found: {folder}. Configure it in Settings > General."}
+
+    top_n = min(max(int(top_n or 10), 1), 25)
+    supported = {'.docx', '.pdf', '.txt', '.jpg', '.jpeg', '.png'}
+
+    # Phase 1: Scan all files and parse filenames
+    raw_files = []  # list of (filename, first, last, assign_part, mtime)
+    unparseable = []
+
+    for filename in os.listdir(folder):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in supported:
+            continue
+
+        filepath = os.path.join(folder, filename)
+        if not os.path.isfile(filepath):
+            continue
+
+        base = os.path.splitext(filename)[0]
+        parts = base.split('_', 2)
+        if len(parts) < 3 or not parts[0].strip() or not parts[1].strip() or not parts[2].strip():
+            unparseable.append(filename)
+            continue
+
+        first = parts[0].strip()
+        last = parts[1].strip()
+        assign_part = parts[2].strip()
+
+        try:
+            mtime = os.stat(filepath).st_mtime
+        except OSError:
+            mtime = 0
+
+        raw_files.append((filename, first, last, assign_part, mtime))
+
+    total_files = len(raw_files) + len(unparseable)
+
+    # Phase 2: Deduplicate — strip OneDrive suffixes, keep newest per (student, assignment)
+    deduped = {}  # (student_key, assignment_norm) -> (filename, first, last, assign_part, mtime)
+
+    for filename, first, last, assign_part, mtime in raw_files:
+        student_key = f"{first.lower()}_{last.lower()}"
+
+        # Strip OneDrive duplicate suffixes from assignment part
+        clean_assign = assign_part
+        clean_assign = re.sub(r'\s*\(\d+\)\s*$', '', clean_assign)        # "Notes (1)" -> "Notes"
+        clean_assign = re.sub(r'\s+\d{1,2}\s*$', '', clean_assign)        # "Notes 1" -> "Notes"
+        clean_assign = re.sub(r'\s*-\s*[Cc]opy\s*(\d*)\s*$', '', clean_assign)  # "Notes - Copy" -> "Notes"
+
+        assignment_norm = _normalize_assignment_name(clean_assign)
+
+        key = (student_key, assignment_norm)
+        existing = deduped.get(key)
+        if existing is None or mtime > existing[4]:
+            deduped[key] = (filename, first, last, assign_part, mtime)
+
+    duplicates_removed = len(raw_files) - len(deduped)
+
+    # Phase 3: Group deduplicated files by assignment
+    assignment_groups = defaultdict(list)  # assignment_norm -> [(student_display, filename)]
+    for (student_key, assignment_norm), (filename, first, last, assign_part, mtime) in deduped.items():
+        student_display = f"{first} {last[0].upper()}." if last else first
+        assignment_groups[assignment_norm].append((student_display, filename))
+
+    # Phase 4: Cross-reference with graded results
+    results = _load_results()
+    graded_keys = set()
+    for r in results:
+        fname = r.get('filename', r.get('file', ''))
+        if fname:
+            graded_keys.add(fname.lower())
+
+    # Phase 5: Filter by assignment name if requested
+    if assignment_filter:
+        filter_norm = _normalize_assignment_name(assignment_filter)
+        assignment_groups = {
+            k: v for k, v in assignment_groups.items()
+            if filter_norm in k
+        }
+
+    # Phase 6: Build output sorted by submission count
+    # Find display name: use most common raw assignment part for each group
+    all_students = set()
+    top_assignments = []
+    for assignment_norm, entries in sorted(assignment_groups.items(), key=lambda x: len(x[1]), reverse=True)[:top_n]:
+        graded = sum(1 for _, fn in entries if fn.lower() in graded_keys)
+        students = sorted(set(s for s, _ in entries))
+        all_students.update(students)
+
+        # Pick most common raw assignment part for display name
+        raw_parts = []
+        for (sk, an), (fn, first, last, ap, mt) in deduped.items():
+            if an == assignment_norm:
+                raw_parts.append(ap)
+        if raw_parts:
+            from collections import Counter
+            display_name = Counter(raw_parts).most_common(1)[0][0]
+            # Clean up display name
+            display_name = re.sub(r'\s*\(\d+\)\s*$', '', display_name)
+            display_name = re.sub(r'\s+\d{1,2}\s*$', '', display_name)
+            display_name = re.sub(r'\s*-\s*[Cc]opy\s*(\d*)\s*$', '', display_name)
+        else:
+            display_name = assignment_norm
+
+        top_assignments.append({
+            "assignment": display_name,
+            "submissions": len(entries),
+            "graded": graded,
+            "ungraded": len(entries) - graded,
+            "students": students
+        })
+
+    # Count unique students across all groups (not just top N)
+    all_unique_students = set()
+    for entries in assignment_groups.values():
+        for s, _ in entries:
+            all_unique_students.add(s)
+
+    return {
+        "folder": folder,
+        "total_files": total_files,
+        "duplicates_removed": duplicates_removed,
+        "unique_students": len(all_unique_students),
+        "unique_assignments": len(assignment_groups),
+        "top_assignments": top_assignments,
+        "unparseable_files": unparseable[:20]  # Cap at 20 to avoid huge output
+    }
+
+
 def _build_missing_assignments_data():
     """Shared helper: build per-student submission data from master CSV + roster +
     assignments folder. Returns (student_data, saved_norms, saved_display, error)
@@ -3281,10 +3468,45 @@ def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_
         "color": unit_colors[color_idx],
     }
 
+    # Remove existing lesson on same date with same day_number or title to avoid duplicates
+    cal["scheduled_lessons"] = [
+        s for s in cal["scheduled_lessons"]
+        if not (s["date"] == date and (
+            (day_number is not None and s.get("day_number") == day_number) or
+            s.get("lesson_title") == lesson_title
+        ))
+    ]
     cal["scheduled_lessons"].append(entry)
     _save_calendar(cal)
 
     return {"status": "scheduled", "entry": entry}
+
+
+def unschedule_lesson_tool(date, lesson_title=None):
+    """Remove a lesson from the teaching calendar by date and optional title."""
+    if not date:
+        return {"error": "date is required"}
+
+    cal = _load_calendar()
+    before = len(cal["scheduled_lessons"])
+
+    if lesson_title:
+        cal["scheduled_lessons"] = [
+            s for s in cal["scheduled_lessons"]
+            if not (s["date"] == date and s.get("lesson_title") == lesson_title)
+        ]
+    else:
+        cal["scheduled_lessons"] = [
+            s for s in cal["scheduled_lessons"]
+            if s["date"] != date
+        ]
+
+    removed = before - len(cal["scheduled_lessons"])
+    if removed == 0:
+        return {"status": "not_found", "message": f"No lessons found on {date}"}
+
+    _save_calendar(cal)
+    return {"status": "removed", "removed_count": removed}
 
 
 def add_calendar_holiday(date, name, end_date=None):
@@ -4007,12 +4229,14 @@ TOOL_HANDLERS = {
     "get_recent_lessons": get_recent_lessons,
     "get_calendar": get_calendar,
     "schedule_lesson": schedule_lesson_tool,
+    "unschedule_lesson": unschedule_lesson_tool,
     "add_calendar_holiday": add_calendar_holiday,
     "list_resources": list_resources_tool,
     "read_resource": read_resource_tool,
     "send_parent_emails": send_parent_emails,
     "send_focus_comms": send_focus_comms,
     "save_assignment_config": save_assignment_config,
+    "scan_submissions_folder": scan_submissions_folder,
 }
 
 # ═══════════════════════════════════════════════════════

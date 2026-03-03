@@ -47,6 +47,82 @@ def save_assignment_config():
         return jsonify({"error": str(e)})
 
 
+@assignment_bp.route('/api/generate-model-answers', methods=['POST'])
+def generate_model_answers():
+    """Generate AI model answers for each section/marker in an assignment config."""
+    data = request.json
+    markers = data.get('customMarkers', [])
+    doc_text = data.get('documentText', '')
+    title = data.get('title', 'Assignment')
+    grade_level = data.get('grade_level', '7')
+    subject = data.get('subject', 'Social Studies')
+    global_notes = data.get('globalAINotes', '')
+
+    if not markers:
+        return jsonify({"error": "No sections/markers configured"}), 400
+    if not doc_text:
+        return jsonify({"error": "Import the assignment document first."}), 400
+
+    sections_desc = []
+    for i, m in enumerate(markers):
+        if isinstance(m, dict):
+            name = m.get('start', f'Section {i+1}')
+            sec_type = m.get('type', 'written')
+            points = m.get('points', 10)
+            sections_desc.append(f"- {name} (type: {sec_type}, {points} pts)")
+        else:
+            sections_desc.append(f"- {m}")
+
+    prompt = f"""You are a {subject} teacher creating a model answer key for a {grade_level}th grade assignment.
+
+ASSIGNMENT: {title}
+
+DOCUMENT TEXT (the actual assignment students receive):
+{doc_text[:8000]}
+
+SECTIONS TO ANSWER:
+{chr(10).join(sections_desc)}
+
+{f"TEACHER INSTRUCTIONS (follow these for tone/expectations):{chr(10)}{global_notes}" if global_notes else ""}
+
+For EACH section listed above, generate the MODEL ANSWER a strong {grade_level}th grade student would write.
+Use the section type (vocabulary, written, short_answer, math_equation, etc.) and the subject ({subject}) to determine the appropriate format.
+
+RULES:
+- Match the grade level — use age-appropriate vocabulary and complexity for a {grade_level}th grader
+- Match the SUBJECT — a Math model answer needs worked steps/equations, a Science answer needs observations/data/conclusions, an ELA answer needs textual evidence/analysis, a History answer needs facts/context/significance
+- Use the DOCUMENT TEXT to derive correct, specific answers — reference actual content from the assignment
+- For vocabulary/definitions: student-friendly language, not textbook definitions
+- For written/summary sections: demonstrate understanding, not copy the text
+- For math/equations: show work and final answer
+- For fill-in-the-blank: provide the correct word/phrase
+- These model what a GOOD student would write, not a perfect adult answer
+
+Return ONLY valid JSON:
+{{
+    "model_answers": [
+        {{"section": "<exact section/marker name>", "answer": "<model answer text>"}}
+    ]
+}}"""
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=3000,
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        result = json.loads(response.choices[0].message.content.strip())
+        return jsonify(result)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Failed to parse AI response. Try again."}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @assignment_bp.route('/api/list-assignments')
 def list_assignments():
     """List saved assignment configurations with aliases."""

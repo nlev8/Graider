@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import {
   LineChart,
   Line,
@@ -1145,6 +1145,9 @@ function App() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [periodStudents, setPeriodStudents] = useState([]);
+  const [exportStudentSearch, setExportStudentSearch] = useState({ active: false, query: "", results: [], allStudents: [] });
+  const [importStudentData, setImportStudentData] = useState({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
+  const importFileRef = useRef(null);
   const [gradeFilterStudent, setGradeFilterStudent] = useState(""); // Filter by individual student
   const [gradeFilterAssignment, setGradeFilterAssignment] = useState(""); // Filter by saved assignment
 
@@ -1330,6 +1333,7 @@ function App() {
   const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] =
     useState(false);
   const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
+  const [modelAnswersLoading, setModelAnswersLoading] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
   const skipAutoSaveRef = useRef(false); // Skip one auto-save cycle after loading from disk
@@ -3033,9 +3037,11 @@ function App() {
                     studentName = firstName + ' ' + lastName;
                   }
                 }
+                // Strip apostrophes for comparison (Da'Jaun matches Dajaun)
+                studentName = studentName.replace(/['\u2019]/g, "");
                 // Word-based matching: each word in studentName appears in filename
                 const nameWords = studentName.split(/\s+/).filter(Boolean);
-                const fileNameNorm = fileName.replace(/[_\-.,;]/g, " ");
+                const fileNameNorm = fileName.replace(/[_\-.,;''\u2019]/g, " ");
                 const wordMatch = nameWords.every((w) =>
                   fileNameNorm.includes(w)
                 );
@@ -3200,10 +3206,10 @@ function App() {
               }
 
               const approvedStudentNames = approvedRelevant.map((r) =>
-                (r.student_name || "").toLowerCase().replace(/\s+/g, "")
+                (r.student_name || "").toLowerCase().replace(/['\u2019\s]+/g, "")
               );
               filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase().replace(/\s+/g, "");
+                const fileName = f.name.toLowerCase().replace(/['\u2019\s]+/g, "");
                 return !approvedStudentNames.some((name) =>
                   name && fileName.includes(name)
                 );
@@ -3704,6 +3710,43 @@ ${signature}`;
       return { ...marker, points: 10, type: marker.type || 'written' };
     }
     return marker;
+  };
+
+  const handleGenerateModelAnswers = async () => {
+    const docText = importedDoc.text || (importedDoc.html ? importedDoc.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '');
+    if (!importedDoc || !docText) {
+      addToast("Import the assignment document first", "warning");
+      return;
+    }
+    if (!assignment.customMarkers || assignment.customMarkers.length === 0) {
+      addToast("Add section markers first", "warning");
+      return;
+    }
+    setModelAnswersLoading(true);
+    try {
+      var settingsResp = {};
+      try { settingsResp = await api.loadGlobalSettings(); } catch(e) {}
+      var settings = (settingsResp && settingsResp.settings) || {};
+      var data = await api.generateModelAnswers({
+        customMarkers: assignment.customMarkers,
+        documentText: docText,
+        title: assignment.title,
+        grade_level: config.grade_level || "7",
+        subject: config.subject || "Social Studies",
+        globalAINotes: settings.globalAINotes || ""
+      });
+      if (data.error) { addToast(data.error, "error"); return; }
+      var answers = {};
+      (data.model_answers || []).forEach(function(ma) {
+        answers[ma.section] = ma.answer;
+      });
+      setAssignment(function(prev) { return Object.assign({}, prev, { modelAnswers: answers }); });
+      addToast("Model answers generated! Review and edit below.", "success");
+    } catch (err) {
+      addToast("Failed: " + err.message, "error");
+    } finally {
+      setModelAnswersLoading(false);
+    }
   };
 
   const removeMarker = (marker, markerIndex) => {
@@ -6986,9 +7029,11 @@ ${signature}`;
                     gap: "8px",
                   }}
                 >
-                  {(assignment.customMarkers || []).map((marker, i) => (
+                  {(assignment.customMarkers || []).map((marker, i) => {
+                    const markerName = typeof marker === 'string' ? marker : marker.start;
+                    return (
+                    <React.Fragment key={i}>
                     <div
-                      key={i}
                       style={{
                         display: "flex",
                         flexDirection: "column",
@@ -7038,7 +7083,26 @@ ${signature}`;
                         </div>
                       )}
                     </div>
-                  ))}
+                    {/* Model answer preview */}
+                    {assignment.modelAnswers && assignment.modelAnswers[markerName] && (
+                      <div style={{ marginLeft: "24px", marginBottom: "4px" }}>
+                        <label style={{ fontSize: "11px", color: "var(--text-secondary)", display: "block", marginBottom: "2px" }}>
+                          Model Answer:
+                        </label>
+                        <textarea className="input"
+                          value={assignment.modelAnswers[markerName]}
+                          onChange={(e) => {
+                            const updated = Object.assign({}, assignment.modelAnswers);
+                            updated[markerName] = e.target.value;
+                            setAssignment({ ...assignment, modelAnswers: updated });
+                          }}
+                          style={{ fontSize: "12px", minHeight: "60px", backgroundColor: "var(--bg-tertiary)", opacity: 0.9 }}
+                        />
+                      </div>
+                    )}
+                    </React.Fragment>
+                    );
+                  })}
                 </div>
               )}
 
@@ -10432,10 +10496,11 @@ ${signature}`;
                                   return false;
                                 // Apply search filter
                                 if (!resultsSearch.trim()) return true;
-                                const search = resultsSearch.toLowerCase();
+                                const search = resultsSearch.toLowerCase().replace(/['\u2019]/g, "");
                                 return (
                                   (r.student_name || "")
                                     .toLowerCase()
+                                    .replace(/['\u2019]/g, "")
                                     .includes(search) ||
                                   (r.assignment || "")
                                     .toLowerCase()
@@ -14950,6 +15015,255 @@ ${signature}`;
                             Export All Data
                           </button>
 
+                          {/* Export Individual Student Data */}
+                          <div style={{ position: "relative", display: "inline-block" }}>
+                            <button
+                              onClick={async () => {
+                                if (exportStudentSearch.active) {
+                                  setExportStudentSearch({ active: false, query: "", results: [], allStudents: [] });
+                                  return;
+                                }
+                                // Load all students from all periods
+                                let all = [];
+                                try {
+                                  const results = await Promise.all(
+                                    periods.map((p) =>
+                                      api.getPeriodStudents(p.filename)
+                                        .then((d) => (d.students || []).map((s) => ({ ...s, period: p.period_name })))
+                                        .catch(() => [])
+                                    )
+                                  );
+                                  all = results.flat();
+                                } catch (e) { /* ignore */ }
+                                setExportStudentSearch({ active: true, query: "", results: [], allStudents: all });
+                              }}
+                              className="btn btn-secondary"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              <Icon name="UserCheck" size={16} />
+                              Export Student Data
+                            </button>
+                            {exportStudentSearch.active && (
+                              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "6px", zIndex: 100, width: "280px" }}>
+                                <input
+                                  type="text"
+                                  placeholder="Type student name..."
+                                  value={exportStudentSearch.query}
+                                  onChange={(e) => {
+                                    const q = e.target.value;
+                                    const lq = q.toLowerCase().replace(/['"]/g, "");
+                                    const suggestions = lq.length >= 2 ? exportStudentSearch.allStudents.filter((s) => {
+                                      const full = (s.full || "").toLowerCase().replace(/['"]/g, "");
+                                      const first = (s.first || "").toLowerCase();
+                                      const last = (s.last || "").toLowerCase();
+                                      return full.includes(lq) || first.includes(lq) || last.includes(lq);
+                                    }).slice(0, 5) : [];
+                                    setExportStudentSearch(prev => ({ ...prev, query: q, results: suggestions }));
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    borderRadius: "8px",
+                                    border: "1px solid var(--glass-border)",
+                                    background: "var(--modal-content-bg)",
+                                    color: "var(--text-primary)",
+                                    fontSize: "0.85rem",
+                                  }}
+                                  autoFocus
+                                />
+                                {exportStudentSearch.results.length > 0 && (
+                                  <div style={{
+                                    background: "var(--modal-content-bg)",
+                                    border: "1px solid var(--glass-border)",
+                                    borderRadius: "8px",
+                                    marginTop: "4px",
+                                    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                                    maxHeight: "200px",
+                                    overflowY: "auto",
+                                  }}>
+                                    {exportStudentSearch.results.map((student, idx) => (
+                                      <div
+                                        key={idx}
+                                        onClick={async () => {
+                                          const name = student.full || (student.first + " " + student.last);
+                                          setExportStudentSearch({ active: false, query: "", results: [] });
+                                          try {
+                                            const authH = await getAuthHeaders();
+                                            const resp = await fetch("/api/ferpa/export-student", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json", ...authH },
+                                              body: JSON.stringify({ student_name: name }),
+                                            });
+                                            const d = await resp.json();
+                                            if (d.status === "success") {
+                                              addToast("Exported " + d.record_count + " records for " + d.student_name, "success");
+                                            } else {
+                                              addToast("Export failed: " + (d.error || "Unknown error"), "error");
+                                            }
+                                          } catch (err) {
+                                            addToast("Export failed: " + err.message, "error");
+                                          }
+                                        }}
+                                        style={{
+                                          padding: "10px 12px",
+                                          cursor: "pointer",
+                                          borderBottom: idx < exportStudentSearch.results.length - 1 ? "1px solid var(--glass-border)" : "none",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "10px",
+                                        }}
+                                        onMouseEnter={(e) => (e.target.style.background = "var(--glass-bg)")}
+                                        onMouseLeave={(e) => (e.target.style.background = "transparent")}
+                                      >
+                                        <Icon name="User" size={16} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                                        <div>
+                                          <div style={{ fontWeight: 500 }}>
+                                            {student.full || (student.first + " " + student.last)}
+                                          </div>
+                                          {student.period && (
+                                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                              {student.period}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Import Student Data */}
+                          <div style={{ position: "relative", display: "inline-block" }}>
+                            <input
+                              type="file"
+                              accept=".json"
+                              ref={importFileRef}
+                              style={{ display: "none" }}
+                              onChange={async (e) => {
+                                const f = e.target.files[0];
+                                if (!f) return;
+                                e.target.value = "";
+                                try {
+                                  const formData = new FormData();
+                                  formData.append("file", f);
+                                  formData.append("preview", "true");
+                                  const authH = await getAuthHeaders();
+                                  const resp = await fetch("/api/ferpa/import-student", {
+                                    method: "POST",
+                                    headers: { ...authH },
+                                    body: formData,
+                                  });
+                                  const d = await resp.json();
+                                  if (d.status === "preview") {
+                                    setImportStudentData({ active: true, preview: d, file: f, importing: false, selectedPeriod: "" });
+                                  } else {
+                                    addToast("Import failed: " + (d.error || "Unknown error"), "error");
+                                  }
+                                } catch (err) {
+                                  addToast("Import failed: " + err.message, "error");
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => {
+                                if (importStudentData.active) {
+                                  setImportStudentData({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
+                                } else {
+                                  importFileRef.current && importFileRef.current.click();
+                                }
+                              }}
+                              className="btn btn-secondary"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              <Icon name="Upload" size={16} />
+                              Import Student Data
+                            </button>
+                            {importStudentData.active && importStudentData.preview && (
+                              <div style={{
+                                position: "absolute", top: "100%", left: 0, marginTop: "6px", zIndex: 100, width: "320px",
+                                background: "var(--modal-content-bg)", border: "1px solid var(--glass-border)",
+                                borderRadius: "8px", padding: "14px", boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                              }}>
+                                <div style={{ fontWeight: 600, marginBottom: "8px" }}>
+                                  Import {importStudentData.preview.student_name}?
+                                </div>
+                                <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "10px" }}>
+                                  {importStudentData.preview.detail_text}
+                                  {importStudentData.preview.original_period && (
+                                    <span> (from {importStudentData.preview.original_period})</span>
+                                  )}
+                                </div>
+                                {periods.length > 0 && (
+                                  <div style={{ marginBottom: "10px" }}>
+                                    <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
+                                      Add to period:
+                                    </label>
+                                    <select
+                                      value={importStudentData.selectedPeriod}
+                                      onChange={(e) => setImportStudentData(prev => ({ ...prev, selectedPeriod: e.target.value }))}
+                                      style={{
+                                        width: "100%", padding: "6px 8px", borderRadius: "6px",
+                                        border: "1px solid var(--glass-border)", background: "var(--modal-content-bg)",
+                                        color: "var(--text-primary)", fontSize: "0.85rem",
+                                      }}
+                                    >
+                                      <option value="">No period (data only)</option>
+                                      {periods.map((p) => (
+                                        <option key={p.filename} value={p.filename}>{p.period_name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <button
+                                    className="btn btn-primary"
+                                    style={{ fontSize: "0.8rem", flex: 1 }}
+                                    disabled={importStudentData.importing}
+                                    onClick={async () => {
+                                      setImportStudentData(prev => ({ ...prev, importing: true }));
+                                      try {
+                                        const formData = new FormData();
+                                        formData.append("file", importStudentData.file);
+                                        if (importStudentData.selectedPeriod) {
+                                          formData.append("period_filename", importStudentData.selectedPeriod);
+                                        }
+                                        const authH = await getAuthHeaders();
+                                        const resp = await fetch("/api/ferpa/import-student", {
+                                          method: "POST",
+                                          headers: { ...authH },
+                                          body: formData,
+                                        });
+                                        const d = await resp.json();
+                                        if (d.status === "success") {
+                                          const count = (d.imported_sections.results || 0);
+                                          addToast("Imported " + (count ? count + " records" : "data") + " for " + d.student_name, "success");
+                                          setImportStudentData({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
+                                        } else {
+                                          addToast("Import failed: " + (d.error || "Unknown error"), "error");
+                                          setImportStudentData(prev => ({ ...prev, importing: false }));
+                                        }
+                                      } catch (err) {
+                                        addToast("Import failed: " + err.message, "error");
+                                        setImportStudentData(prev => ({ ...prev, importing: false }));
+                                      }
+                                    }}
+                                  >
+                                    {importStudentData.importing ? "Importing..." : "Confirm Import"}
+                                  </button>
+                                  <button
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: "0.8rem" }}
+                                    onClick={() => setImportStudentData({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" })}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
                           <button
                             onClick={async () => {
                               if (
@@ -17105,6 +17419,13 @@ ${signature}`;
                                           .map(line => '<p>' + line.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>')
                                           .join('');
                                       }
+                                      // Re-apply highlights from loaded markers onto the HTML
+                                      const loadedMarkers = data.assignment.customMarkers || [];
+                                      const loadedExcludes = data.assignment.excludeMarkers || [];
+                                      if (loadedMarkers.length > 0 || loadedExcludes.length > 0) {
+                                        let cleanHtml = removeAllHighlightsFromHtml(docHtml);
+                                        docHtml = applyAllHighlights(cleanHtml, loadedMarkers, loadedExcludes);
+                                      }
                                       setDocEditorModal({
                                         show: true,
                                         editedHtml: docHtml,
@@ -17907,8 +18228,11 @@ ${signature}`;
                             </div>
                           ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                              {assignment.customMarkers.map((marker, i) => (
-                                <div key={i} style={{
+                              {assignment.customMarkers.map((marker, i) => {
+                                const markerName = typeof marker === 'string' ? marker : marker.start;
+                                return (
+                                <React.Fragment key={i}>
+                                <div style={{
                                   display: "flex", alignItems: "center", gap: "8px", padding: "10px",
                                   background: "rgba(251,191,36,0.15)", borderRadius: "6px", border: "1px solid rgba(251,191,36,0.3)"
                                 }}>
@@ -17977,7 +18301,26 @@ ${signature}`;
                                     <Icon name="X" size={14} />
                                   </button>
                                 </div>
-                              ))}
+                                {/* Model answer preview */}
+                                {assignment.modelAnswers && assignment.modelAnswers[markerName] && (
+                                  <div style={{ marginLeft: "24px", marginBottom: "4px" }}>
+                                    <label style={{ fontSize: "11px", color: "var(--text-secondary)", display: "block", marginBottom: "2px" }}>
+                                      Model Answer:
+                                    </label>
+                                    <textarea className="input"
+                                      value={assignment.modelAnswers[markerName]}
+                                      onChange={(e) => {
+                                        const updated = Object.assign({}, assignment.modelAnswers);
+                                        updated[markerName] = e.target.value;
+                                        setAssignment({ ...assignment, modelAnswers: updated });
+                                      }}
+                                      style={{ fontSize: "12px", minHeight: "60px", backgroundColor: "var(--bg-tertiary)", opacity: 0.9 }}
+                                    />
+                                  </div>
+                                )}
+                                </React.Fragment>
+                                );
+                              })}
                               {/* Effort Points (always present) */}
                               <div style={{
                                 display: "flex", alignItems: "center", gap: "8px", padding: "10px",
@@ -18242,6 +18585,25 @@ ${signature}`;
                         </div>
                       )}
                     </div>
+
+                    {/* Generate Model Answers */}
+                    {assignment.customMarkers && assignment.customMarkers.length > 0
+                     && importedDoc && (importedDoc.text || importedDoc.html) && (
+                      <div style={{ marginTop: "12px", marginBottom: "12px" }}>
+                        <button className="btn btn-secondary" onClick={handleGenerateModelAnswers}
+                          disabled={modelAnswersLoading}
+                          style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {modelAnswersLoading
+                            ? <><Icon name="Loader2" size={14} className="spinning" /> Generating...</>
+                            : <><Icon name="Sparkles" size={14} /> Generate Model Answers</>}
+                        </button>
+                        {assignment.modelAnswers && Object.keys(assignment.modelAnswers).length > 0 && (
+                          <span style={{ marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px", display: "inline-block" }}>
+                            {Object.keys(assignment.modelAnswers).length + " sections answered"}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Grading Notes */}
                     <div data-tutorial="builder-notes" style={{ marginBottom: "25px" }}>
