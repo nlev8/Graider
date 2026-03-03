@@ -16,7 +16,7 @@ import concurrent.futures
 from pathlib import Path
 from datetime import datetime
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -55,6 +55,16 @@ except ImportError:
             return {}
         def save_student_accommodations(mappings):
             return False
+
+# Import storage abstraction
+try:
+    from backend.storage import load as storage_load, save as storage_save
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save
+    except ImportError:
+        storage_load = None
+        storage_save = None
 
 # Load environment variables
 _app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -218,28 +228,38 @@ def load_support_documents_for_grading(subject: str = None) -> str:
     ])
 
 
-def load_saved_results():
-    """Load results from file on startup."""
+def load_saved_results(teacher_id='local-dev'):
+    """Load results from storage (Supabase in prod, file locally)."""
+    if storage_load:
+        data = storage_load('results', teacher_id)
+        if data and isinstance(data, list):
+            for r in data:
+                if 'graded_at' not in r:
+                    r['graded_at'] = None
+            return data
+    # Fallback to direct file read
     if os.path.exists(RESULTS_FILE):
         try:
             with open(RESULTS_FILE, 'r') as f:
                 results = json.load(f)
-                # Add placeholder timestamp to results that don't have one
                 for r in results:
                     if 'graded_at' not in r:
-                        r['graded_at'] = None  # Will show as '-' in frontend
+                        r['graded_at'] = None
                 return results
         except:
             pass
     return []
 
-def save_results(results):
-    """Save results to file for persistence."""
-    try:
-        with open(RESULTS_FILE, 'w') as f:
-            json.dump(results, f, indent=2)
-    except Exception as e:
-        print(f"Error saving results: {e}")
+def save_results(results, teacher_id='local-dev'):
+    """Save results to storage (dual-write: file + Supabase)."""
+    if storage_save:
+        storage_save('results', results, teacher_id)
+    else:
+        try:
+            with open(RESULTS_FILE, 'w') as f:
+                json.dump(results, f, indent=2)
+        except Exception as e:
+            print(f"Error saving results: {e}")
 
 grading_state = {
     "is_running": False,
@@ -337,7 +357,7 @@ def _check_batch_calibration(results: list) -> dict:
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard'):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard', teacher_id='local-dev'):
     """Run the grading process in a background thread.
 
     Args:
@@ -1769,7 +1789,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
             grading_state["complete"] = True
             grading_state["is_running"] = False
             if grading_state["results"]:
-                save_results(grading_state["results"])
+                save_results(grading_state["results"], teacher_id)
             return
 
         # Export CSVs and emails
@@ -1832,8 +1852,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 grading_state["log"].append(f"⚠️ CALIBRATION: {concern}")
             grading_state["calibration"] = calibration
 
-        # Save results to file for persistence across restarts
-        save_results(grading_state["results"])
+        # Save results to storage for persistence across restarts
+        save_results(grading_state["results"], teacher_id)
 
     except Exception as e:
         grading_state["error"] = str(e)
@@ -1843,7 +1863,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
         grading_state["stop_requested"] = False
         # Also save on stop/error to preserve partial results
         if grading_state["results"]:
-            save_results(grading_state["results"])
+            save_results(grading_state["results"], teacher_id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1915,13 +1935,16 @@ def start_grading():
     grading_state["cost_limit"] = float(data.get('cost_limit_per_session', 0))
     grading_state["cost_warning_pct"] = float(data.get('cost_warning_pct', 80))
 
+    # Capture teacher_id before thread start (g is request-scoped)
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
     # FERPA: Audit log grading session start
     file_count = len(selected_files) if selected_files else "all"
     audit_log("START_GRADING", f"Started grading session for {subject} grade {grade_level} ({file_count} files)")
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id)
     )
     thread.start()
 
@@ -2279,8 +2302,8 @@ def delete_single_result():
     if len(grading_state["results"]) == original_count:
         return jsonify({"status": "already_deleted", "filename": filename})
 
-    # Save updated results to file
-    save_results(grading_state["results"])
+    # Save updated results to storage
+    save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
 
     # Also remove from master_grades.csv so the Assistant sees fresh data
     if deleted_result:
@@ -2310,7 +2333,7 @@ def update_approval():
     for r in grading_state["results"]:
         if r.get('filename') == filename:
             r['email_approval'] = approval
-            save_results(grading_state["results"])
+            save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
             _sync_approval_to_master_csv(r, approval)
             return jsonify({"status": "updated", "filename": filename, "approval": approval})
 
@@ -2335,7 +2358,7 @@ def update_approvals_bulk():
             updated += 1
 
     if updated > 0:
-        save_results(grading_state["results"])
+        save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
 
     return jsonify({"status": "updated", "count": updated})
 
@@ -2847,7 +2870,7 @@ def import_individual_student_data():
 
         if new_results:
             grading_state["results"].extend(new_results)
-            save_results(grading_state["results"])
+            save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
             imported["results"] = len(new_results)
 
     # 2. Student history — merge assignments lists

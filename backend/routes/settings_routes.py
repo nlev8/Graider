@@ -9,7 +9,7 @@ import re
 import subprocess
 import threading
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 
 # Import accommodation module
@@ -31,6 +31,17 @@ except ImportError:
         get_accommodation_stats, export_student_accommodations,
         audit_log_accommodation
     )
+
+# Import storage abstraction
+try:
+    from backend.storage import load as storage_load, save as storage_save, sync_all_to_cloud
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save, sync_all_to_cloud
+    except ImportError:
+        storage_load = None
+        storage_save = None
+        sync_all_to_cloud = None
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -142,13 +153,17 @@ def get_students_from_period_file(filepath):
 
 @settings_bp.route('/api/save-rubric', methods=['POST'])
 def save_rubric():
-    """Save rubric configuration to JSON file."""
+    """Save rubric configuration."""
     data = request.json
-    rubric_path = os.path.expanduser("~/.graider_rubric.json")
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
     try:
-        with open(rubric_path, 'w') as f:
-            json.dump(data, f, indent=2)
+        if storage_save:
+            storage_save('rubric', data, teacher_id)
+        else:
+            rubric_path = os.path.expanduser("~/.graider_rubric.json")
+            with open(rubric_path, 'w') as f:
+                json.dump(data, f, indent=2)
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -156,16 +171,20 @@ def save_rubric():
 
 @settings_bp.route('/api/load-rubric')
 def load_rubric():
-    """Load rubric configuration from JSON file."""
-    rubric_path = os.path.expanduser("~/.graider_rubric.json")
-
-    if not os.path.exists(rubric_path):
-        return jsonify({"rubric": None})
+    """Load rubric configuration."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
     try:
-        with open(rubric_path, 'r') as f:
-            data = json.load(f)
-        return jsonify({"rubric": data})
+        if storage_load:
+            data = storage_load('rubric', teacher_id)
+            return jsonify({"rubric": data})
+        else:
+            rubric_path = os.path.expanduser("~/.graider_rubric.json")
+            if not os.path.exists(rubric_path):
+                return jsonify({"rubric": None})
+            with open(rubric_path, 'r') as f:
+                data = json.load(f)
+            return jsonify({"rubric": data})
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -174,11 +193,15 @@ def load_rubric():
 def save_global_settings():
     """Save global AI notes and settings."""
     data = request.json
-    settings_path = os.path.expanduser("~/.graider_settings.json")
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
     try:
-        with open(settings_path, 'w') as f:
-            json.dump(data, f, indent=2)
+        if storage_save:
+            storage_save('settings', data, teacher_id)
+        else:
+            settings_path = os.path.expanduser("~/.graider_settings.json")
+            with open(settings_path, 'w') as f:
+                json.dump(data, f, indent=2)
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -187,15 +210,19 @@ def save_global_settings():
 @settings_bp.route('/api/load-global-settings')
 def load_global_settings():
     """Load global AI notes and settings."""
-    settings_path = os.path.expanduser("~/.graider_settings.json")
-
-    if not os.path.exists(settings_path):
-        return jsonify({"settings": None})
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
     try:
-        with open(settings_path, 'r') as f:
-            data = json.load(f)
-        return jsonify({"settings": data})
+        if storage_load:
+            data = storage_load('settings', teacher_id)
+            return jsonify({"settings": data})
+        else:
+            settings_path = os.path.expanduser("~/.graider_settings.json")
+            if not os.path.exists(settings_path):
+                return jsonify({"settings": None})
+            with open(settings_path, 'r') as f:
+                data = json.load(f)
+            return jsonify({"settings": data})
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -358,6 +385,21 @@ def upload_period():
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
 
+    # Dual-write period metadata to storage
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    if storage_save:
+        storage_save(f'period_meta:{filename}', metadata, teacher_id)
+        # Also store CSV data as JSON for Railway (no filesystem)
+        try:
+            import csv as csv_mod
+            with open(filepath, 'r', encoding='utf-8') as cf:
+                reader = csv_mod.DictReader(cf)
+                rows = list(reader)
+                headers = reader.fieldnames or []
+            storage_save(f'period:{filename}', {"headers": headers, "rows": rows}, teacher_id)
+        except Exception:
+            pass
+
     return jsonify({
         "status": "uploaded",
         "filename": filename,
@@ -437,6 +479,11 @@ def update_period_level():
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
+
+        # Dual-write to storage
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        if storage_save:
+            storage_save(f'period_meta:{secure_filename(filename)}', metadata, teacher_id)
 
         return jsonify({"status": "updated", "class_level": class_level})
     except Exception as e:
@@ -938,6 +985,11 @@ def save_parent_contact_mapping():
         with open(PARENT_CONTACTS_FILE, 'w') as f:
             json.dump(contacts, f, indent=2)
 
+        # Dual-write to storage
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        if storage_save:
+            storage_save('parent_contacts', contacts, teacher_id)
+
         with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
         without_email = sum(1 for c in contacts.values() if not c.get('parent_emails'))
 
@@ -959,12 +1011,22 @@ def save_parent_contact_mapping():
 @settings_bp.route('/api/parent-contacts')
 def get_parent_contacts():
     """Return stored parent contacts with summary stats."""
-    if not os.path.exists(PARENT_CONTACTS_FILE):
-        return jsonify({"contacts": {}, "count": 0, "with_email": 0})
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    contacts = None
+    if storage_load:
+        contacts = storage_load('parent_contacts', teacher_id)
+
+    if contacts is None:
+        if not os.path.exists(PARENT_CONTACTS_FILE):
+            return jsonify({"contacts": {}, "count": 0, "with_email": 0})
+        try:
+            with open(PARENT_CONTACTS_FILE, 'r') as f:
+                contacts = json.load(f)
+        except Exception as e:
+            return jsonify({"error": str(e)})
 
     try:
-        with open(PARENT_CONTACTS_FILE, 'r') as f:
-            contacts = json.load(f)
 
         with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
 
@@ -1854,5 +1916,29 @@ def update_student():
 
         return jsonify({"status": "updated"})
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# SYNC TO CLOUD
+# ══════════════════════════════════════════════════════════════
+
+@settings_bp.route('/api/sync-to-cloud', methods=['POST'])
+def sync_to_cloud():
+    """Upload all local ~/.graider_* data to Supabase for the logged-in teacher."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    if teacher_id == 'local-dev':
+        return jsonify({"error": "Must be logged in to sync to cloud"}), 401
+
+    if not sync_all_to_cloud:
+        return jsonify({"error": "Storage module not available"}), 500
+
+    try:
+        summary = sync_all_to_cloud(teacher_id)
+        if "error" in summary:
+            return jsonify(summary), 400
+        return jsonify({"status": "synced", "summary": summary})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

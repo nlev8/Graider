@@ -1170,6 +1170,7 @@ function App() {
   const [helpSearch, setHelpSearch] = useState("");
   const [helpExpanded, setHelpExpanded] = useState({});
   const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy, billing
+  const [syncingCloud, setSyncingCloud] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [costSummary, setCostSummary] = useState(null);
@@ -13510,6 +13511,46 @@ ${signature}`;
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Cloud Sync Section */}
+                    <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "20px", marginTop: "20px" }}>
+                      <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon name="Cloud" size={20} />
+                        Cloud Data Sync
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "15px" }}>
+                        Upload all your local settings, rubrics, assignments, grades, and student data to the cloud so they persist across deployments and devices.
+                      </p>
+                      <button
+                        className="btn btn-primary"
+                        disabled={syncingCloud}
+                        onClick={async () => {
+                          setSyncingCloud(true);
+                          try {
+                            const resp = await fetch("/api/sync-to-cloud", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", Authorization: "Bearer " + (window._authToken || "") },
+                            });
+                            const data = await resp.json();
+                            if (data.error) {
+                              showToast(data.error, "error");
+                            } else {
+                              const summary = data.summary || {};
+                              const parts = Object.entries(summary).map(function(e) { return e[0] + ": " + e[1]; });
+                              showToast("Synced to cloud! " + parts.join(", "), "success");
+                            }
+                          } catch (err) {
+                            showToast("Sync failed: " + err.message, "error");
+                          } finally {
+                            setSyncingCloud(false);
+                          }
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                      >
+                        <Icon name={syncingCloud ? "Loader2" : "Upload"} size={16} />
+                        {syncingCloud ? "Syncing..." : "Sync Data to Cloud"}
+                      </button>
                     </div>
                       </div>
                     )}

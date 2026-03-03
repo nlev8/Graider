@@ -13,6 +13,17 @@ import statistics
 from collections import defaultdict
 from datetime import datetime
 
+# Import storage abstraction
+try:
+    from backend.storage import load as storage_load, save as storage_save, list_keys as storage_list_keys
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save, list_keys as storage_list_keys
+    except ImportError:
+        storage_load = None
+        storage_save = None
+        storage_list_keys = None
+
 
 # Paths
 RESULTS_FILE = os.path.expanduser("~/.graider_results.json")
@@ -144,21 +155,22 @@ def _get_period_assignments(rows):
     return period_assigns, assign_display, merge_map
 
 
-def _get_output_folder():
+def _get_output_folder(teacher_id='local-dev'):
     """Get the configured output folder for grading results."""
     output_folder = os.path.expanduser("~/Downloads/Graider/Results")
-    if os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                settings = json.load(f)
-                output_folder = settings.get('output_folder', output_folder)
-        except Exception:
-            pass
+    settings = _load_settings(teacher_id)
+    if settings:
+        output_folder = settings.get('output_folder', output_folder)
     return output_folder
 
 
-def _load_results():
-    """Load grading results from the results JSON file."""
+def _load_results(teacher_id='local-dev'):
+    """Load grading results from storage."""
+    if storage_load:
+        data = storage_load('results', teacher_id)
+        if data is not None:
+            return data
+    # Fallback to file
     if not os.path.exists(RESULTS_FILE):
         return []
     try:
@@ -1787,7 +1799,7 @@ def compare_periods(assignment_name=None):
     }
 
 
-def _load_period_class_levels():
+def _load_period_class_levels(teacher_id='local-dev'):
     """Load class level (advanced/standard/support) for each period from metadata."""
     levels = {}
     if not os.path.exists(PERIODS_DIR):
@@ -1805,8 +1817,13 @@ def _load_period_class_levels():
     return levels
 
 
-def _load_accommodations():
+def _load_accommodations(teacher_id='local-dev'):
     """Load student accommodation data (IEP/504 presets)."""
+    if storage_load:
+        data = storage_load('accommodations', teacher_id)
+        if data is not None:
+            return data
+    # Fallback to file
     accommodations = {}
     if not os.path.exists(ACCOMMODATIONS_DIR):
         return accommodations
@@ -1826,8 +1843,13 @@ def _load_accommodations():
     return accommodations
 
 
-def _load_settings():
+def _load_settings(teacher_id='local-dev'):
     """Load teacher settings (subject, state, grade level, AI notes)."""
+    if storage_load:
+        data = storage_load('settings', teacher_id)
+        if data is not None:
+            return data
+    # Fallback to file
     settings_path = SETTINGS_FILE
     if os.path.exists(settings_path):
         try:
@@ -1876,9 +1898,23 @@ def _load_standards():
     return []
 
 
-def _load_saved_lessons():
+def _load_saved_lessons(teacher_id='local-dev'):
     """Load saved lesson plan titles and topics."""
     lessons = []
+    if storage_list_keys and storage_load:
+        keys = storage_list_keys('lesson:', teacher_id)
+        for key in keys:
+            data = storage_load(key, teacher_id) or {}
+            parts = key.split(':', 2)
+            unit = parts[1] if len(parts) > 1 else ''
+            lessons.append({
+                "title": data.get('title', parts[2] if len(parts) > 2 else ''),
+                "unit": unit,
+                "standards": data.get('standards', []),
+            })
+        if lessons:
+            return lessons
+    # Fallback to file
     if not os.path.exists(LESSONS_DIR):
         return lessons
     for unit_dir in os.listdir(LESSONS_DIR):
@@ -2223,8 +2259,8 @@ def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1):
     }
 
 
-def _load_roster():
-    """Load student roster from ~/.graider_data/periods/. Returns list of dicts with name, id, local_id, grade, period, course_codes."""
+def _load_roster(teacher_id='local-dev'):
+    """Load student roster from periods. Returns list of dicts with name, id, local_id, grade, period, course_codes."""
     roster = []
     if not os.path.exists(PERIODS_DIR):
         return roster
@@ -2282,8 +2318,13 @@ def _load_roster():
     return roster
 
 
-def _load_parent_contacts():
+def _load_parent_contacts(teacher_id='local-dev'):
     """Load parent contacts keyed by student ID."""
+    if storage_load:
+        data = storage_load('parent_contacts', teacher_id)
+        if data is not None:
+            return data
+    # Fallback to file
     if not os.path.exists(PARENT_CONTACTS_FILE):
         return {}
     try:
@@ -2543,10 +2584,22 @@ def list_document_styles_tool():
         return {"error": "Failed to list styles: " + str(e)}
 
 
-def _load_saved_assignments():
-    """Load saved assignment configs from ~/.graider_assignments/.
+def _load_saved_assignments(teacher_id='local-dev'):
+    """Load saved assignment configs.
     Returns list of dicts with normalized name and display title."""
     saved = []
+    if storage_list_keys and storage_load:
+        keys = storage_list_keys('assignment:', teacher_id)
+        for key in keys:
+            data = storage_load(key, teacher_id) or {}
+            title = data.get('title', key[len('assignment:'):])
+            saved.append({
+                "title": title,
+                "norm": _normalize_assignment_name(title),
+            })
+        if saved:
+            return saved
+    # Fallback to file
     if not os.path.exists(ASSIGNMENTS_DIR):
         return saved
     for f in sorted(os.listdir(ASSIGNMENTS_DIR)):
@@ -3145,22 +3198,31 @@ def get_recent_lessons(unit_name=None):
 CALENDAR_FILE = os.path.expanduser("~/.graider_data/teaching_calendar.json")
 
 
-def _load_calendar():
-    """Load calendar data from disk."""
+def _load_calendar(teacher_id='local-dev'):
+    """Load calendar data from storage."""
+    default = {"scheduled_lessons": [], "holidays": [], "school_days": {}}
+    if storage_load:
+        data = storage_load('teaching_calendar', teacher_id)
+        if data is not None:
+            return data
+    # Fallback to file
     if not os.path.exists(CALENDAR_FILE):
-        return {"scheduled_lessons": [], "holidays": [], "school_days": {}}
+        return default
     try:
         with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
-        return {"scheduled_lessons": [], "holidays": [], "school_days": {}}
+        return default
 
 
-def _save_calendar(data):
-    """Persist calendar data to disk."""
-    os.makedirs(os.path.dirname(CALENDAR_FILE), exist_ok=True)
-    with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
+def _save_calendar(data, teacher_id='local-dev'):
+    """Persist calendar data to storage."""
+    if storage_save:
+        storage_save('teaching_calendar', data, teacher_id)
+    else:
+        os.makedirs(os.path.dirname(CALENDAR_FILE), exist_ok=True)
+        with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
 
 
 def _parse_curriculum_map_for_dates(start_date, end_date):
@@ -3533,8 +3595,13 @@ def add_calendar_holiday(date, name, end_date=None):
 # PERSISTENT MEMORY
 # ═══════════════════════════════════════════════════════
 
-def _load_memories():
-    """Load saved memories from disk. Returns list of fact strings."""
+def _load_memories(teacher_id='local-dev'):
+    """Load saved memories from storage. Returns list of fact strings."""
+    if storage_load:
+        data = storage_load('assistant_memory', teacher_id)
+        if data is not None:
+            return data if isinstance(data, list) else []
+    # Fallback to file
     if not os.path.exists(MEMORY_FILE):
         return []
     try:
@@ -3545,11 +3612,14 @@ def _load_memories():
         return []
 
 
-def _save_memories(memories):
-    """Persist memories list to disk."""
-    os.makedirs(os.path.dirname(MEMORY_FILE), exist_ok=True)
-    with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(memories, f, indent=2)
+def _save_memories(memories, teacher_id='local-dev'):
+    """Persist memories list to storage."""
+    if storage_save:
+        storage_save('assistant_memory', memories, teacher_id)
+    else:
+        os.makedirs(os.path.dirname(MEMORY_FILE), exist_ok=True)
+        with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(memories, f, indent=2)
 
 
 def save_memory(fact):
