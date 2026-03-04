@@ -24,6 +24,7 @@ from .auth_routes import auth_bp
 from .automation_routes import automation_bp
 from .student_account_routes import student_account_bp
 from .behavior_routes import behavior_bp
+from .seo_routes import seo_bp
 
 
 def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None, grading_lock=None):
@@ -50,6 +51,7 @@ def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None,
     app.register_blueprint(automation_bp)
     app.register_blueprint(student_account_bp)
     app.register_blueprint(behavior_bp)
+    app.register_blueprint(seo_bp)
 
 
 __all__ = [
@@ -69,4 +71,5 @@ __all__ = [
     'automation_bp',
     'student_account_bp',
     'behavior_bp',
+    'seo_bp',
 ]
