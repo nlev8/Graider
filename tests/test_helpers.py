@@ -67,16 +67,16 @@ class TestSafeIntScore:
 
 class TestNormalizeAssignmentName:
     def test_strips_docx(self):
-        assert _normalize_assignment_name("Chapter 1 Notes.docx") == "Chapter 1 Notes"
+        assert _normalize_assignment_name("Chapter 1 Notes.docx") == "chapter 1 notes"
 
     def test_strips_number_suffix(self):
-        assert _normalize_assignment_name("Quiz 1 (2)") == "Quiz 1"
+        assert _normalize_assignment_name("Quiz 1 (2)") == "quiz 1"
 
     def test_strips_pdf(self):
-        assert _normalize_assignment_name("Essay.pdf") == "Essay"
+        assert _normalize_assignment_name("Essay.pdf") == "essay"
 
     def test_plain_name(self):
-        assert _normalize_assignment_name("Bill of Rights Quiz") == "Bill of Rights Quiz"
+        assert _normalize_assignment_name("Bill of Rights Quiz") == "bill of rights quiz"
 
 
 class TestNormalizePeriod:

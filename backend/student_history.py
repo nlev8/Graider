@@ -11,6 +11,16 @@ from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 
+# Import storage abstraction
+try:
+    from backend.storage import load_student_history as _storage_load_history, save_student_history as _storage_save_history
+except ImportError:
+    try:
+        from storage import load_student_history as _storage_load_history, save_student_history as _storage_save_history
+    except ImportError:
+        _storage_load_history = None
+        _storage_save_history = None
+
 # Import shared rubric config
 try:
     from backend.rubric_config import RUBRIC_MAX_SCORES
@@ -41,7 +51,7 @@ def get_student_history_path(student_id: str) -> str:
     return os.path.join(HISTORY_DIR, f"{safe_id}.json")
 
 
-def load_student_history(student_id: str) -> dict:
+def load_student_history(student_id: str, teacher_id: str = 'local-dev') -> dict:
     """
     Load a student's complete grading history.
 
@@ -54,6 +64,13 @@ def load_student_history(student_id: str) -> dict:
     if not student_id or student_id == "UNKNOWN":
         return None
 
+    # Try storage first
+    if _storage_load_history:
+        data = _storage_load_history(teacher_id=teacher_id, student_id=student_id)
+        if data is not None:
+            return data
+
+    # Fallback to file
     path = get_student_history_path(student_id)
     if os.path.exists(path):
         try:
@@ -72,19 +89,24 @@ def load_student_history(student_id: str) -> dict:
     }
 
 
-def save_student_history(student_id: str, history: dict):
-    """Save student's history to file."""
+def save_student_history(student_id: str, history: dict, teacher_id: str = 'local-dev'):
+    """Save student's history to storage (dual-write)."""
     if not student_id or student_id == "UNKNOWN":
         return
 
     history["last_updated"] = datetime.now().isoformat()
-    path = get_student_history_path(student_id)
 
+    # Always write to local file
+    path = get_student_history_path(student_id)
     try:
         with open(path, 'w') as f:
             json.dump(history, f, indent=2)
     except Exception as e:
         print(f"Error saving student history: {e}")
+
+    # Also write to storage
+    if _storage_save_history:
+        _storage_save_history(teacher_id=teacher_id, student_id=student_id, history=history)
 
 
 def add_assignment_to_history(student_id: str, result: dict) -> dict:

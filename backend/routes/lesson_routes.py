@@ -8,16 +8,28 @@ import json
 import uuid
 import logging
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 try:
     import anthropic
 except ImportError:
     anthropic = None
 
-from backend.services.assistant_tools import _extract_pdf_text, _extract_docx_text
+from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 
 logger = logging.getLogger(__name__)
+
+# Import storage abstraction
+try:
+    from backend.storage import load as storage_load, save as storage_save, delete as storage_delete, list_keys as storage_list_keys
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save, delete as storage_delete, list_keys as storage_list_keys
+    except ImportError:
+        storage_load = None
+        storage_save = None
+        storage_delete = None
+        storage_list_keys = None
 
 lesson_bp = Blueprint('lesson', __name__)
 
@@ -38,38 +50,64 @@ def save_lesson():
     data = request.json
     lesson = data.get('lesson', {})
     unit_name = data.get('unitName', 'General')
-
-    os.makedirs(LESSONS_DIR, exist_ok=True)
-
-    # Create unit subfolder
-    unit_folder = os.path.join(LESSONS_DIR, _safe_filename(unit_name))
-    os.makedirs(unit_folder, exist_ok=True)
-
-    # Use lesson title for filename
-    title = lesson.get('title', 'Untitled Lesson')
-    safe_title = _safe_filename(title)
-    filepath = os.path.join(unit_folder, f"{safe_title}.json")
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
     # Add metadata
+    title = lesson.get('title', 'Untitled Lesson')
+    safe_title = _safe_filename(title)
+    safe_unit = _safe_filename(unit_name)
     lesson['_saved_at'] = datetime.now().isoformat()
     lesson['_unit'] = unit_name
 
-    try:
-        with open(filepath, 'w') as f:
-            json.dump(lesson, f, indent=2)
-        return jsonify({"status": "saved", "path": filepath, "unit": unit_name})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    # Save to storage
+    if storage_save:
+        storage_save(f'lesson:{safe_unit}:{safe_title}', lesson, teacher_id)
+    else:
+        os.makedirs(LESSONS_DIR, exist_ok=True)
+        unit_folder = os.path.join(LESSONS_DIR, safe_unit)
+        os.makedirs(unit_folder, exist_ok=True)
+        filepath = os.path.join(unit_folder, f"{safe_title}.json")
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(lesson, f, indent=2)
+        except Exception as e:
+            return jsonify({"error": str(e)})
+
+    return jsonify({"status": "saved", "unit": unit_name})
 
 
 @lesson_bp.route('/api/list-lessons')
 def list_lessons():
     """List all saved lessons organized by unit."""
-    if not os.path.exists(LESSONS_DIR):
-        return jsonify({"units": {}, "lessons": []})
-
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     units = {}
     all_lessons = []
+
+    if storage_list_keys and storage_load:
+        keys = storage_list_keys('lesson:', teacher_id)
+        for key in keys:
+            data = storage_load(key, teacher_id) or {}
+            parts = key.split(':', 2)
+            unit_name = parts[1] if len(parts) > 1 else 'General'
+            title_part = parts[2] if len(parts) > 2 else ''
+            lesson_info = {
+                "filename": title_part,
+                "title": data.get('title', title_part),
+                "unit": unit_name,
+                "standards": data.get('standards', []),
+                "objectives": data.get('learning_objectives', []),
+                "saved_at": data.get('_saved_at', '')
+            }
+            if unit_name not in units:
+                units[unit_name] = []
+            units[unit_name].append(lesson_info)
+            all_lessons.append(lesson_info)
+        if keys:
+            return jsonify({"units": units, "lessons": all_lessons})
+
+    # Fallback to file
+    if not os.path.exists(LESSONS_DIR):
+        return jsonify({"units": {}, "lessons": []})
 
     for unit_name in os.listdir(LESSONS_DIR):
         unit_path = os.path.join(LESSONS_DIR, unit_name)
@@ -104,12 +142,18 @@ def load_lesson():
     """Load a specific lesson by unit and filename."""
     unit = request.args.get('unit', '')
     filename = request.args.get('filename', '')
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
+    storage_key = f'lesson:{_safe_filename(unit)}:{filename}'
+    if storage_load:
+        data = storage_load(storage_key, teacher_id)
+        if data is not None:
+            return jsonify({"lesson": data})
+
+    # Fallback to file
     filepath = os.path.join(LESSONS_DIR, _safe_filename(unit), f"{filename}.json")
-
     if not os.path.exists(filepath):
         return jsonify({"error": "Lesson not found"})
-
     try:
         with open(filepath, 'r') as f:
             lesson = json.load(f)
@@ -123,22 +167,39 @@ def delete_lesson():
     """Delete a saved lesson."""
     unit = request.args.get('unit', '')
     filename = request.args.get('filename', '')
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
+    storage_key = f'lesson:{_safe_filename(unit)}:{filename}'
+    if storage_delete:
+        storage_delete(storage_key, teacher_id)
+
+    # Also delete local file
     filepath = os.path.join(LESSONS_DIR, _safe_filename(unit), f"{filename}.json")
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except Exception as e:
+            return jsonify({"error": str(e)})
 
-    if not os.path.exists(filepath):
-        return jsonify({"error": "Lesson not found"})
-
-    try:
-        os.remove(filepath)
-        return jsonify({"status": "deleted"})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    return jsonify({"status": "deleted"})
 
 
 @lesson_bp.route('/api/list-units')
 def list_units():
     """List all unit names."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    if storage_list_keys:
+        keys = storage_list_keys('lesson:', teacher_id)
+        unit_set = set()
+        for key in keys:
+            parts = key.split(':', 2)
+            if len(parts) > 1:
+                unit_set.add(parts[1])
+        if unit_set:
+            return jsonify({"units": sorted(unit_set)})
+
+    # Fallback to file
     if not os.path.exists(LESSONS_DIR):
         return jsonify({"units": []})
 
@@ -161,14 +222,21 @@ _DEFAULT_CALENDAR = {
 }
 
 
-def _load_calendar():
-    """Load calendar data from disk."""
+def _load_calendar(teacher_id='local-dev'):
+    """Load calendar data from storage."""
+    if storage_load:
+        data = storage_load('teaching_calendar', teacher_id)
+        if data is not None:
+            for key, default in _DEFAULT_CALENDAR.items():
+                if key not in data:
+                    data[key] = default
+            return data
+    # Fallback to file
     if not os.path.exists(CALENDAR_FILE):
         return dict(_DEFAULT_CALENDAR)
     try:
         with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        # Ensure all keys exist
         for key, default in _DEFAULT_CALENDAR.items():
             if key not in data:
                 data[key] = default
@@ -177,17 +245,22 @@ def _load_calendar():
         return dict(_DEFAULT_CALENDAR)
 
 
-def _save_calendar(data):
-    """Persist calendar data to disk."""
+def _save_calendar(data, teacher_id='local-dev'):
+    """Persist calendar data to storage (dual-write)."""
+    # Always write to local file
     os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
     with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
+    # Also write to storage
+    if storage_save:
+        storage_save('teaching_calendar', data, teacher_id)
 
 
 @lesson_bp.route('/api/calendar', methods=['GET'])
 def get_calendar():
     """Return full calendar data."""
-    return jsonify(_load_calendar())
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    return jsonify(_load_calendar(teacher_id))
 
 
 @lesson_bp.route('/api/calendar/schedule', methods=['PUT'])
@@ -201,7 +274,8 @@ def schedule_lesson():
     if not date:
         return jsonify({"error": "date is required"}), 400
 
-    cal = _load_calendar()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    cal = _load_calendar(teacher_id)
 
     entry_id = data.get('id') or str(uuid.uuid4())
 
@@ -225,19 +299,20 @@ def schedule_lesson():
     else:
         cal["scheduled_lessons"].append(entry)
 
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return jsonify({"status": "scheduled", "entry": entry})
 
 
 @lesson_bp.route('/api/calendar/schedule/<entry_id>', methods=['DELETE'])
 def unschedule_lesson(entry_id):
     """Remove a scheduled lesson from the calendar."""
-    cal = _load_calendar()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    cal = _load_calendar(teacher_id)
     before = len(cal["scheduled_lessons"])
     cal["scheduled_lessons"] = [s for s in cal["scheduled_lessons"] if s["id"] != entry_id]
     if len(cal["scheduled_lessons"]) == before:
         return jsonify({"error": "Entry not found"}), 404
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return jsonify({"status": "removed"})
 
 
@@ -248,7 +323,8 @@ def add_holiday():
     if not data or not data.get('date'):
         return jsonify({"error": "date and name are required"}), 400
 
-    cal = _load_calendar()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    cal = _load_calendar(teacher_id)
 
     holiday = {
         "date": data["date"],
@@ -262,7 +338,7 @@ def add_holiday():
     cal["holidays"].append(holiday)
     cal["holidays"].sort(key=lambda h: h["date"])
 
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return jsonify({"status": "added", "holiday": holiday})
 
 
@@ -273,12 +349,13 @@ def remove_holiday():
     if not date:
         return jsonify({"error": "date parameter required"}), 400
 
-    cal = _load_calendar()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    cal = _load_calendar(teacher_id)
     before = len(cal["holidays"])
     cal["holidays"] = [h for h in cal["holidays"] if h["date"] != date]
     if len(cal["holidays"]) == before:
         return jsonify({"error": "Holiday not found for that date"}), 404
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return jsonify({"status": "removed"})
 
 
@@ -289,11 +366,12 @@ def update_school_days():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    cal = _load_calendar()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    cal = _load_calendar(teacher_id)
     for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
         if day in data:
             cal["school_days"][day] = bool(data[day])
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return jsonify({"status": "updated", "school_days": cal["school_days"]})
 
 
@@ -385,8 +463,9 @@ def import_calendar_events():
     if not data or not isinstance(data.get('events'), list):
         return jsonify({"error": "events array is required"}), 400
 
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     events = data['events']
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
 
     lessons_added = 0
     holidays_added = 0
@@ -419,7 +498,7 @@ def import_calendar_events():
             lessons_added += 1
 
     cal["holidays"].sort(key=lambda h: h["date"])
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
 
     return jsonify({
         "status": "imported",

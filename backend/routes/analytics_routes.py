@@ -8,18 +8,9 @@ import csv
 import json
 from collections import defaultdict
 from flask import Blueprint, request, jsonify
+from backend.services.assistant_tools import _normalize_assignment_name
 
 analytics_bp = Blueprint('analytics', __name__)
-
-
-def _normalize_assignment_name(name):
-    """Normalize assignment name for comparison: lowercase, strip extensions, versions, whitespace."""
-    n = name.strip()
-    n = re.sub(r'\s*\(\d+\)\s*$', '', n)
-    n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)
-    n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)
-    n = n.replace('_', ' ')
-    return n.strip().lower()
 
 
 def _load_valid_assignment_names():

@@ -2,7 +2,7 @@
 Test: Existing query tools — verify they still work with fixture data.
 """
 import pytest
-from backend.services.assistant_tools import (
+from backend.services.assistant_tools_grading import (
     query_grades, get_student_summary, get_class_analytics,
     get_assignment_stats, list_assignments_tool,
 )

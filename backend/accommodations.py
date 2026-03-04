@@ -19,6 +19,16 @@ import json
 from datetime import datetime
 from typing import Optional
 
+# Import storage abstraction
+try:
+    from backend.storage import load as _storage_load, save as _storage_save
+except ImportError:
+    try:
+        from storage import load as _storage_load, save as _storage_save
+    except ImportError:
+        _storage_load = None
+        _storage_save = None
+
 # Local storage directories
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 ELL_STUDENTS_FILE = os.path.join(GRAIDER_DATA_DIR, "ell_students.json")
@@ -250,13 +260,21 @@ def delete_preset(preset_id: str) -> bool:
 # STUDENT ACCOMMODATION MAPPING
 # ══════════════════════════════════════════════════════════════
 
-def load_student_accommodations() -> dict:
+def load_student_accommodations(teacher_id: str = 'local-dev') -> dict:
     """
     Load student-to-accommodation mappings.
     Returns dict: {student_id: {"presets": [...], "custom_notes": "..."}}
 
     FERPA Note: Student IDs are stored locally only and never sent to AI.
     """
+    # Try storage first
+    if _storage_load:
+        data = _storage_load('accommodations', teacher_id)
+        if data is not None:
+            audit_log_accommodation("LOAD_STUDENT_MAPPINGS", f"Loaded {len(data)} student mappings")
+            return data
+
+    # Fallback to file
     if os.path.exists(STUDENT_ACCOMMODATIONS_FILE):
         try:
             with open(STUDENT_ACCOMMODATIONS_FILE, 'r') as f:
@@ -269,11 +287,16 @@ def load_student_accommodations() -> dict:
     return {}
 
 
-def save_student_accommodations(mappings: dict) -> bool:
-    """Save student-to-accommodation mappings."""
+def save_student_accommodations(mappings: dict, teacher_id: str = 'local-dev') -> bool:
+    """Save student-to-accommodation mappings (dual-write)."""
     try:
+        # Always write to local file
         with open(STUDENT_ACCOMMODATIONS_FILE, 'w') as f:
             json.dump(mappings, f, indent=2)
+
+        # Also write to storage
+        if _storage_save:
+            _storage_save('accommodations', mappings, teacher_id)
 
         audit_log_accommodation("SAVE_STUDENT_MAPPINGS", f"Saved {len(mappings)} student mappings")
         return True

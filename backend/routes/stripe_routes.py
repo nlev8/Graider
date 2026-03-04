@@ -9,21 +9,7 @@ from flask import Blueprint, request, jsonify, g
 
 stripe_bp = Blueprint('stripe', __name__)
 
-# Lazy Supabase admin client (same pattern as student_portal_routes.py)
-_supabase = None
-
-
-def _get_supabase():
-    """Get or create Supabase admin client for user metadata access."""
-    global _supabase
-    if _supabase is None:
-        from supabase import create_client
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_KEY")
-        if not url or not key:
-            raise Exception("Supabase credentials not configured")
-        _supabase = create_client(url, key)
-    return _supabase
+from backend.supabase_client import get_supabase_or_raise as _get_supabase
 
 
 def _init_stripe():

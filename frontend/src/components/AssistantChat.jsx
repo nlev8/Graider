@@ -255,6 +255,8 @@ export default function AssistantChat({ addToast, subject }) {
         downloadUrl: m.downloadUrl,
         downloadFilename: m.downloadFilename,
         downloadUrls: m.downloadUrls,
+        pendingSend: m.pendingSend,
+        sendConfirmed: m.sendConfirmed,
         cost: m.cost,
       }))
       localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(toStore))
@@ -467,6 +469,9 @@ export default function AssistantChat({ addToast, subject }) {
                   }
                   if (event.download_urls) {
                     newState.downloadUrls = [...(last.downloadUrls || []), ...event.download_urls]
+                  }
+                  if (event.pending_send) {
+                    newState.pendingSend = true
                   }
                   updated[updated.length - 1] = newState
                 }
@@ -939,6 +944,47 @@ export default function AssistantChat({ addToast, subject }) {
                 <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
               ) : (
                 msg.content
+              )}
+              {/* Send button for email/SMS previews */}
+              {msg.pendingSend && !msg.sendConfirmed && (
+                <div style={{ margin: '8px 0' }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch('/api/confirm-send', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                        })
+                        const data = await resp.json()
+                        if (data.error) {
+                          if (addToast) addToast(data.error, 'error')
+                        } else {
+                          if (addToast) addToast('Sending started via Focus Communications!', 'success')
+                          setMessages(prev => prev.map((m, i) => i === idx ? { ...m, sendConfirmed: true } : m))
+                        }
+                      } catch (err) {
+                        if (addToast) addToast('Failed to send: ' + err.message, 'error')
+                      }
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '8px',
+                      padding: '10px 18px',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: '#fff', border: 'none', borderRadius: '12px',
+                      cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.85' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    <Icon name="Send" size={16} />
+                    Send Now
+                  </button>
+                </div>
+              )}
+              {msg.sendConfirmed && (
+                <div style={{ margin: '8px 0', color: '#10b981', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Icon name="Check" size={16} /> Sending via Focus Communications
+                </div>
               )}
               {msg.role === 'assistant' && !msg.content && isStreaming && idx === messages.length - 1 && (
                 <span style={{ display: 'inline-flex', gap: '3px', opacity: 0.5 }}>

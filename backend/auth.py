@@ -9,18 +9,7 @@ from flask import request, jsonify, g
 
 logger = logging.getLogger(__name__)
 
-_supabase = None
-
-def _get_supabase():
-    """Lazy-init Supabase admin client for approval checks."""
-    global _supabase
-    if _supabase is None:
-        from supabase import create_client
-        url = os.getenv('SUPABASE_URL')
-        key = os.getenv('SUPABASE_SERVICE_KEY')
-        if url and key:
-            _supabase = create_client(url, key)
-    return _supabase
+from backend.supabase_client import get_supabase as _get_supabase
 
 
 # Routes that don't require authentication

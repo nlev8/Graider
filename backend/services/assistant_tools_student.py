@@ -6,7 +6,11 @@ Zero AI API calls — all data from local files.
 """
 import csv
 import io
+import json
 import os
+import re
+import subprocess
+from datetime import datetime
 
 from backend.services.assistant_tools import (
     _load_master_csv, _load_accommodations, _load_roster,
@@ -61,6 +65,42 @@ STUDENT_TOOL_DEFINITIONS = [
                 }
             },
             "required": ["student_name"]
+        }
+    },
+    {
+        "name": "export_student_data",
+        "description": "Export all stored data for a specific student (grades, history, accommodations, etc.) as JSON and PDF files. Use for parent data requests, student transfers, or FERPA compliance.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "student_name": {
+                    "type": "string",
+                    "description": "Student name (fuzzy match)"
+                }
+            },
+            "required": ["student_name"]
+        }
+    },
+    {
+        "name": "import_student_data",
+        "description": "Import a previously exported student data file into Graider. Imports grades, history, accommodations, ELL data, and parent contacts. Use when a student transfers in from another Graider teacher.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the exported student JSON file"
+                },
+                "period": {
+                    "type": "string",
+                    "description": "Optional period CSV filename to add the student to"
+                },
+                "student_id": {
+                    "type": "string",
+                    "description": "Optional student ID override"
+                }
+            },
+            "required": ["file_path"]
         }
     },
 ]
@@ -361,6 +401,407 @@ def remove_student_from_roster(student_name):
     }
 
 
+def export_student_data(student_name):
+    """Export all stored data for a student as JSON + PDF."""
+    if not student_name:
+        return {"error": "student_name is required."}
+
+    # Find student in roster
+    roster = _load_roster()
+    matched_name = None
+    matched_id = None
+    matched_period = None
+    matched_email = None
+
+    for entry in roster:
+        rname = entry.get("student_name", "") or entry.get("name", "")
+        if _fuzzy_name_match(student_name, rname):
+            matched_name = rname
+            matched_id = entry.get("student_id", "")
+            matched_period = entry.get("period", "")
+            matched_email = entry.get("email", "")
+            break
+
+    # Also try from grades data
+    if not matched_name:
+        rows = _load_master_csv(period_filter='all')
+        for row in rows:
+            if _fuzzy_name_match(student_name, row.get("student_name", "")):
+                matched_name = row.get("student_name", "")
+                matched_id = row.get("student_id", "")
+                matched_period = row.get("period", "")
+                break
+
+    if not matched_name:
+        return {"error": f"No student found matching '{student_name}'.", "hint": "Try the full name as it appears on the roster."}
+
+    safe_id = matched_id or re.sub(r'[^\w]', '_', matched_name.lower())
+
+    export = {
+        "export_date": datetime.now().isoformat(),
+        "student_name": matched_name,
+        "student_id": matched_id or "",
+        "period": matched_period or "",
+        "email": matched_email or "",
+    }
+
+    # Grading results (from saved results file)
+    results_file = os.path.expanduser("~/.graider_results.json")
+    student_results = []
+    if os.path.exists(results_file):
+        try:
+            with open(results_file, 'r') as f:
+                all_results = json.load(f)
+            student_results = [r for r in all_results if _fuzzy_name_match(student_name, r.get("student_name", ""))]
+        except Exception:
+            pass
+    export["grading_results"] = student_results
+
+    # Student history
+    history_path = os.path.expanduser(f"~/.graider_data/student_history/{safe_id}.json")
+    history = None
+    if os.path.exists(history_path):
+        try:
+            with open(history_path, 'r') as f:
+                history = json.load(f)
+        except Exception:
+            pass
+    export["student_history"] = history
+
+    # Accommodations
+    accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
+    student_accommodations = None
+    if os.path.exists(accomm_file):
+        try:
+            with open(accomm_file, 'r') as f:
+                all_acc = json.load(f)
+            student_accommodations = all_acc.get(safe_id) or all_acc.get(matched_id or '')
+        except Exception:
+            pass
+    export["accommodations"] = student_accommodations
+
+    # ELL data
+    ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+    ell_data = None
+    if os.path.exists(ell_file):
+        try:
+            with open(ell_file, 'r') as f:
+                all_ell = json.load(f)
+            ell_data = all_ell.get(safe_id) or all_ell.get(matched_id or '')
+        except Exception:
+            pass
+    export["ell_data"] = ell_data
+
+    # Parent contacts
+    contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+    parent_contacts = None
+    if os.path.exists(contacts_file):
+        try:
+            with open(contacts_file, 'r') as f:
+                all_contacts = json.load(f)
+            parent_contacts = all_contacts.get(safe_id) or all_contacts.get(matched_id or '')
+        except Exception:
+            pass
+    export["parent_contacts"] = parent_contacts
+
+    record_count = len(student_results) + (1 if history else 0) + (1 if student_accommodations else 0) + (1 if ell_data else 0) + (1 if parent_contacts else 0)
+
+    # Save JSON
+    export_dir = os.path.expanduser("~/.graider_exports/student")
+    os.makedirs(export_dir, exist_ok=True)
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    safe_fname = re.sub(r'[^\w\s-]', '', matched_name).strip().replace(' ', '_')
+    json_path = os.path.join(export_dir, f"{safe_fname}_data_{date_str}.json")
+    with open(json_path, 'w') as f:
+        json.dump(export, f, indent=2, default=str)
+
+    # Generate PDF
+    pdf_path = os.path.join(export_dir, f"{safe_fname}_report_{date_str}.pdf")
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors as rl_colors
+
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('ExTitle', parent=styles['Title'], fontSize=18, spaceAfter=6)
+        subtitle_style = ParagraphStyle('ExSub', parent=styles['Normal'], fontSize=10, textColor=rl_colors.grey, spaceAfter=12)
+        section_style = ParagraphStyle('ExSec', parent=styles['Heading2'], fontSize=13, spaceBefore=16, spaceAfter=6)
+        body_style = ParagraphStyle('ExBody', parent=styles['Normal'], fontSize=9, leading=12)
+
+        elements = []
+        elements.append(Paragraph(f"Student Data Report: {matched_name}", title_style))
+        header_parts = [f"Exported {date_str}"]
+        if matched_id:
+            header_parts.append(f"ID: {matched_id}")
+        if matched_period:
+            header_parts.append(f"Period: {matched_period}")
+        elements.append(Paragraph(" | ".join(header_parts), subtitle_style))
+        elements.append(Spacer(1, 12))
+
+        if student_results:
+            elements.append(Paragraph("Assignment Scores", section_style))
+            table_data = [["Date", "Assignment", "Score", "Grade"]]
+            for r in sorted(student_results, key=lambda x: x.get('graded_at', '')):
+                table_data.append([
+                    (r.get('graded_at') or '')[:10],
+                    (r.get('assignment') or r.get('filename', ''))[:40],
+                    str(r.get('score', '')),
+                    r.get('letter_grade', ''),
+                ])
+            t = Table(table_data, colWidths=[1*inch, 3.5*inch, 0.8*inch, 0.7*inch])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#4f46e5')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.lightgrey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, rl_colors.HexColor('#f5f5f5')]),
+            ]))
+            elements.append(t)
+
+        if history and history.get('skill_scores'):
+            elements.append(Paragraph("Skill Patterns", section_style))
+            for skill, val in history['skill_scores'].items():
+                avg = val if isinstance(val, (int, float)) else val.get('average', 'N/A') if isinstance(val, dict) else 'N/A'
+                elements.append(Paragraph(f"<b>{skill.replace('_', ' ').title()}:</b> {avg}", body_style))
+
+        if student_accommodations:
+            elements.append(Paragraph("Accommodations (IEP/504)", section_style))
+            presets = student_accommodations.get('presets', [])
+            if presets:
+                elements.append(Paragraph("Presets: " + ", ".join(p.replace('_', ' ').title() for p in presets), body_style))
+            notes = student_accommodations.get('custom_notes') or student_accommodations.get('notes', '')
+            if notes:
+                elements.append(Paragraph(f"Notes: {notes}", body_style))
+
+        if ell_data:
+            elements.append(Paragraph("ELL Information", section_style))
+            lang = ell_data.get('language', '') if isinstance(ell_data, dict) else str(ell_data)
+            elements.append(Paragraph(f"Language: {lang}", body_style))
+
+        feedback_results = [r for r in student_results if r.get('feedback')]
+        if feedback_results:
+            elements.append(Paragraph("Recent Feedback", section_style))
+            for r in feedback_results[-3:]:
+                assign = r.get('assignment') or r.get('filename', '')
+                fb = r.get('feedback', '')[:500]
+                elements.append(Paragraph(f"<b>{assign}:</b>", body_style))
+                elements.append(Paragraph(fb, body_style))
+                elements.append(Spacer(1, 6))
+
+        doc.build(elements)
+    except Exception as e:
+        pdf_path = None
+
+    # Open folder
+    try:
+        subprocess.run(['open', export_dir], check=False)
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "student_name": matched_name,
+        "student_id": matched_id or "",
+        "record_count": record_count,
+        "json_path": json_path,
+        "pdf_path": pdf_path,
+        "message": f"Exported {record_count} records for {matched_name}. Files saved to {export_dir}",
+    }
+
+
+def import_student_data(file_path, period=None, student_id=None):
+    """Import a previously exported student data file into Graider."""
+    if not file_path:
+        return {"error": "file_path is required."}
+
+    file_path = os.path.expanduser(file_path)
+    if not os.path.exists(file_path):
+        return {"error": f"File not found: {file_path}"}
+
+    if not file_path.endswith('.json'):
+        return {"error": "File must be a .json file."}
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        return {"error": f"Invalid JSON file: {e}"}
+
+    student_name = data.get("student_name")
+    if not student_name:
+        return {"error": "Missing 'student_name' in export file. This may not be a Graider export."}
+
+    has_data = any(data.get(k) for k in ('grading_results', 'student_history', 'accommodations', 'ell_data', 'parent_contacts'))
+    if not has_data:
+        return {"error": "Export file contains no importable data sections."}
+
+    original_id = data.get("student_id", "")
+    sid = student_id or original_id or re.sub(r'[^\w]', '_', student_name.lower())
+
+    imported = {"results": 0, "history": False, "accommodations": False, "ell": False, "contacts": False}
+
+    # 1. Grading results — append to saved results file, deduplicate by graded_at
+    grading_results = data.get("grading_results") or []
+    if grading_results:
+        results_file = os.path.expanduser("~/.graider_results.json")
+        all_results = []
+        if os.path.exists(results_file):
+            try:
+                with open(results_file, 'r') as f:
+                    all_results = json.load(f)
+            except Exception:
+                pass
+
+        existing_timestamps = set()
+        for r in all_results:
+            if r.get("student_name", "").lower() == student_name.lower() and r.get("graded_at"):
+                existing_timestamps.add(r["graded_at"])
+
+        new_results = []
+        for r in grading_results:
+            if student_id:
+                r["student_id"] = student_id
+            if r.get("graded_at") and r["graded_at"] in existing_timestamps:
+                continue
+            new_results.append(r)
+
+        if new_results:
+            all_results.extend(new_results)
+            try:
+                with open(results_file, 'w') as f:
+                    json.dump(all_results, f, indent=2)
+            except Exception as e:
+                return {"error": f"Failed to save results: {e}"}
+            imported["results"] = len(new_results)
+
+    # 2. Student history — merge
+    student_history = data.get("student_history")
+    if student_history:
+        history_dir = os.path.expanduser("~/.graider_data/student_history")
+        os.makedirs(history_dir, exist_ok=True)
+        safe_sid = re.sub(r'[^\w]', '_', sid.lower())
+        history_path = os.path.join(history_dir, f"{safe_sid}.json")
+
+        existing_history = None
+        if os.path.exists(history_path):
+            try:
+                with open(history_path, 'r') as f:
+                    existing_history = json.load(f)
+            except Exception:
+                pass
+
+        if existing_history and existing_history.get("assignments"):
+            existing_keys = set()
+            for a in existing_history.get("assignments", []):
+                existing_keys.add((a.get("date", ""), a.get("assignment", "")))
+            for a in student_history.get("assignments", []):
+                key = (a.get("date", ""), a.get("assignment", ""))
+                if key not in existing_keys:
+                    existing_history["assignments"].append(a)
+            for skill, val in student_history.get("skill_scores", {}).items():
+                if skill not in existing_history.get("skill_scores", {}):
+                    existing_history.setdefault("skill_scores", {})[skill] = val
+            existing_history["last_updated"] = datetime.now().isoformat()
+            with open(history_path, 'w') as f:
+                json.dump(existing_history, f, indent=2)
+        else:
+            student_history["student_id"] = sid
+            student_history["last_updated"] = datetime.now().isoformat()
+            with open(history_path, 'w') as f:
+                json.dump(student_history, f, indent=2)
+        imported["history"] = True
+
+    # 3. Accommodations
+    accommodations = data.get("accommodations")
+    if accommodations:
+        accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
+        os.makedirs(os.path.dirname(accomm_file), exist_ok=True)
+        all_acc = {}
+        if os.path.exists(accomm_file):
+            try:
+                with open(accomm_file, 'r') as f:
+                    all_acc = json.load(f)
+            except Exception:
+                pass
+        all_acc[sid] = accommodations
+        all_acc[sid]["updated"] = datetime.now().isoformat()
+        with open(accomm_file, 'w') as f:
+            json.dump(all_acc, f, indent=2)
+        imported["accommodations"] = True
+
+    # 4. ELL data
+    ell_data = data.get("ell_data")
+    if ell_data:
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        os.makedirs(os.path.dirname(ell_file), exist_ok=True)
+        all_ell = {}
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, 'r') as f:
+                    all_ell = json.load(f)
+            except Exception:
+                pass
+        all_ell[sid] = ell_data
+        with open(ell_file, 'w') as f:
+            json.dump(all_ell, f, indent=2)
+        imported["ell"] = True
+
+    # 5. Parent contacts
+    parent_contacts = data.get("parent_contacts")
+    if parent_contacts:
+        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+        os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
+        all_contacts = {}
+        if os.path.exists(contacts_file):
+            try:
+                with open(contacts_file, 'r') as f:
+                    all_contacts = json.load(f)
+            except Exception:
+                pass
+        all_contacts[sid] = parent_contacts
+        with open(contacts_file, 'w') as f:
+            json.dump(all_contacts, f, indent=2)
+        imported["contacts"] = True
+
+    # 6. Add to period roster if specified
+    if period:
+        try:
+            csv_path = os.path.join(PERIODS_DIR, period)
+            if os.path.exists(csv_path):
+                existing_names = set()
+                with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    fieldnames = reader.fieldnames or []
+                    rows = list(reader)
+                    for row in rows:
+                        existing_names.add(row.get("student_name", "").lower())
+                if student_name.lower() not in existing_names:
+                    new_row = {"student_name": student_name}
+                    if "student_id" in fieldnames:
+                        new_row["student_id"] = sid
+                    if "email" in fieldnames:
+                        new_row["email"] = data.get("email", "")
+                    rows.append(new_row)
+                    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(rows)
+        except Exception as e:
+            print(f"Warning: Could not add student to roster: {e}")
+
+    total = imported["results"] + sum(1 for v in [imported["history"], imported["accommodations"], imported["ell"], imported["contacts"]] if v)
+    return {
+        "status": "success",
+        "student_name": student_name,
+        "student_id": sid,
+        "imported_sections": imported,
+        "message": f"Imported {total} data sections for {student_name}.",
+    }
+
+
 # ═══════════════════════════════════════════════════════
 # HANDLER MAP
 # ═══════════════════════════════════════════════════════
@@ -369,4 +810,6 @@ STUDENT_TOOL_HANDLERS = {
     "get_student_accommodations": get_student_accommodations,
     "get_student_streak": get_student_streak,
     "remove_student_from_roster": remove_student_from_roster,
+    "export_student_data": export_student_data,
+    "import_student_data": import_student_data,
 }

@@ -206,9 +206,29 @@ def is_question_or_prompt(text: str) -> bool:
     if re.match(r'^\d+[\.\)]\s*$', text_lower):
         return True
 
+    # Numbered question format: "1. What was...", "2) Why did..."
+    # These are almost certainly assignment prompts, even without a trailing ?
+    # and even with history counter-signals (past tense verbs, proper nouns).
+    if re.match(r'^\d+[\.\)]\s*(what|why|how|who|when|where|which)\b', text_lower):
+        return True
+
     # === SCORING-BASED DETECTION ===
     # Positive score = instruction/prompt, Negative score = student response
     score = 0
+
+    # Strip leading numbered prefix for pattern matching.
+    # "1. Why was..." and "2) Explain..." should be detected the same as
+    # "Why was..." and "Explain..." — the number prefix is just formatting.
+    text_for_patterns = re.sub(r'^\d+[\.\)]\s*', '', text_lower).strip()
+
+    # Strip common label prefixes that appear before imperative verbs.
+    # "Student Task: Explain..." → "Explain..." so the imperative is detected.
+    # "Activity: Write..." → "Write..."
+    text_for_patterns = re.sub(
+        r'^(student\s+task|task|activity|direction[s]?|instruction[s]?|prompt|'
+        r'your\s+task|challenge|exercise|practice|assessment)\s*[:.\-–—]\s*',
+        '', text_for_patterns
+    ).strip()
 
     # --- POSITIVE SIGNALS (instruction-like) ---
 
@@ -223,14 +243,14 @@ def is_question_or_prompt(text: str) -> bool:
         r'paraphrase|restate|cite|mention|address|respond|demonstrate|illustrate|'
         r'show|prove|argue|defend|critique|interpret|apply|connect|relate|'
         r'be sure|make sure|don\'t forget|do not forget)\b',
-        text_lower
+        text_for_patterns
     )
     if imperative_starts:
         score += 3
 
     # Signal 2: Starts with question word (what/how/why/etc.)
     question_start = re.match(
-        r'^(what|how|why|when|where|who|which)\b', text_lower
+        r'^(what|how|why|when|where|who|which)\b', text_for_patterns
     )
     if question_start:
         # Question words WITHOUT ? and long text are often student statements
@@ -271,7 +291,7 @@ def is_question_or_prompt(text: str) -> bool:
         score += 1
 
     # Signal 7: Instruction structure patterns
-    if re.match(r'^(in\s+\d+|after\s+reading|before\s+reading|based\s+on|using\s+the)\b', text_lower):
+    if re.match(r'^(in\s+\d+|after\s+reading|before\s+reading|based\s+on|using\s+the)\b', text_for_patterns):
         score += 3
 
     # --- NEGATIVE SIGNALS (student-response-like) ---
@@ -357,6 +377,19 @@ def filter_questions_from_response(response_text: str) -> str:
     for line in lines:
         line = line.strip()
         if not line:
+            continue
+
+        # Skip quoted text — primary source quotes from the template, not student writing.
+        # Matches lines wrapped in any style of quotation marks (straight or smart).
+        stripped_for_quote = line.strip()
+        if ((stripped_for_quote.startswith('"') and stripped_for_quote.endswith('"'))
+            or (stripped_for_quote.startswith('\u201c') and stripped_for_quote.endswith('\u201d'))
+            or (stripped_for_quote.startswith('"') and stripped_for_quote.endswith('\u201d'))
+            or (stripped_for_quote.startswith('\u201c') and stripped_for_quote.endswith('"'))):
+            continue
+
+        # Skip "Quote from [Person]:" attribution lines
+        if re.match(r'^(?:quote|excerpt|passage)\s+(?:from|by)\s+', line, re.IGNORECASE):
             continue
 
         # If line contains ?, check if there's an answer after it
@@ -1402,6 +1435,19 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     # Skip lines that are just underscores/spaces (blank placeholders)
                     if line.replace('_', '').replace(' ', '') == '':
                         continue
+                    # Skip quoted text — primary source quotes from the template
+                    stripped_q = line.strip()
+                    if ((stripped_q.startswith('"') and stripped_q.endswith('"'))
+                        or (stripped_q.startswith('\u201c') and stripped_q.endswith('\u201d'))
+                        or (stripped_q.startswith('"') and stripped_q.endswith('\u201d'))
+                        or (stripped_q.startswith('\u201c') and stripped_q.endswith('"'))):
+                        continue
+                    # Skip "Quote from [Person]:" attribution lines
+                    if re.match(r'^(?:quote|excerpt|passage)\s+(?:from|by)\s+', line, re.IGNORECASE):
+                        continue
+                    # Skip "Student Task:" / "Task:" instruction lines
+                    if re.match(r'^(?:student\s+task|task|activity|directions?|instructions?)\s*:', line, re.IGNORECASE):
+                        continue
                     # Check if line has 3+ consecutive underscores (fill-in-the-blank format)
                     if re.search(r'_{3,}', line):
                         # Strip all underscores — if meaningful text remains, keep it
@@ -1430,21 +1476,33 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     # Use filtered response
                     response = '\n'.join(student_lines)
 
-            # CRITICAL: Strip template lines from response using original template
+            # CRITICAL: Strip template lines from response using original template.
             # This removes instruction/prompt text that appears between the marker
             # heading and the student's actual response (e.g., "Summarize the key events...")
-            # SKIP for FITB sections: the template lines ARE the questions — the student's
-            # answer is the filled-in version, so stripping would remove their work.
-            if not is_blank and template_text and not is_short_answer:
+            # SKIP when:
+            #   - FITB sections: template lines ARE the questions
+            #   - Teacher explicitly set custom markers: the aggressive 60% word-overlap
+            #     heuristic in _strip_template_lines incorrectly strips valid student
+            #     answers for formats like Cornell Notes where answers share vocabulary
+            #     with the template (history content, proper nouns, etc.)
+            using_teacher_markers = bool(custom_markers and len(custom_markers) > 0)
+            if not is_blank and template_text and not is_short_answer and not using_teacher_markers:
                 response = _strip_template_lines(response, marker_text, template_text, is_short_answer=is_short_answer)
 
-            # CRITICAL: Filter out questions/prompts from response
-            # This prevents detecting "What was the cause?" as a student answer
-            # SKIP for FITB: the prompts are the fill-in sentences themselves
+            # CRITICAL: Filter out questions/prompts from response.
+            # This correctly removes lines ending with '?' and imperative instructions.
+            # KEEP active even with custom markers — questions embedded in extracted
+            # content (e.g., "Why was the Louisiana Purchase important?") must be
+            # removed so they aren't graded as student responses.
+            # SKIP only for FITB: the prompts are the fill-in sentences themselves.
             if not is_blank and not is_short_answer:
+                pre_filter = response
                 response = filter_questions_from_response(response)
                 if not response or len(response.strip()) < 3:
                     is_blank = True
+                    print(f"      🔍 filter_questions_from_response made '{question_label[:50]}' blank")
+                    print(f"         Before: {pre_filter[:120].replace(chr(10), ' ')}")
+                    print(f"         After:  [{response}]")
 
             # Additional blank check: if remaining response is very short and looks like
             # template fragments (sub-prompts, topic lists, page refs), mark as blank.
@@ -1524,6 +1582,47 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
                     resp["answer"] = answer
                     if not answer or len(answer.strip()) < 5:
                         # Answer was entirely excluded content — mark as blank
+                        extracted.remove(resp)
+                        blank_questions.append(resp.get("question", "Unknown"))
+
+        # Post-processing: strip custom marker text that leaked into responses.
+        # This handles cases where multi-line marker forward scan fails to skip
+        # all marker lines, or where marker positions overlap with adjacent content.
+        if custom_markers and extracted:
+            marker_line_texts = []
+            for m in custom_markers:
+                mt = m.get('start', '').strip() if isinstance(m, dict) else str(m).strip()
+                if mt:
+                    for ml in mt.split('\n'):
+                        ml = ml.strip()
+                        if ml and len(ml) >= 10:
+                            marker_line_texts.append(ml.lower())
+
+            for resp in list(extracted):
+                answer = resp.get("answer", "")
+                if not answer:
+                    continue
+                lines = answer.split('\n')
+                filtered = []
+                for line in lines:
+                    line_stripped = line.strip()
+                    line_lower = line_stripped.lower()
+                    # Check if this line matches any custom marker line.
+                    # - mt in line_lower: marker text appears within the line (clear match)
+                    # - line_lower in mt: line is a substring of marker text — only match
+                    #   if the line is substantial (>=30 chars) to avoid removing short
+                    #   student answers like "Jefferson" that happen to be in a long marker
+                    is_marker_line = False
+                    for mt in marker_line_texts:
+                        if mt in line_lower or (len(line_lower) >= 30 and line_lower in mt):
+                            is_marker_line = True
+                            break
+                    if not is_marker_line:
+                        filtered.append(line)
+                new_answer = '\n'.join(filtered).strip()
+                if new_answer != answer:
+                    resp["answer"] = new_answer
+                    if not new_answer or len(new_answer.strip()) < 5:
                         extracted.remove(resp)
                         blank_questions.append(resp.get("question", "Unknown"))
 
@@ -2047,7 +2146,9 @@ def format_extracted_for_grading(extraction_result: dict, marker_config: list = 
                     if not is_question_or_prompt(line):
                         cleaned_lines.append(line)
 
-            cleaned_answer = '\n'.join(cleaned_lines) if cleaned_lines else answer
+            cleaned_answer = '\n'.join(cleaned_lines) if cleaned_lines else ''
+            if not cleaned_answer and answer:
+                print(f"    ⚠️ format_extracted: All content for '{question[:50]}' was template text — sending empty")
 
         # Look up points for this section
         points_str = ""
@@ -2547,6 +2648,17 @@ def load_roster(roster_path: str) -> dict:
                 reverse_key = f"{last_name} {first_name_simple}".lower().strip()
                 roster[reverse_key] = entry
 
+                # Apostrophe-stripped key (e.g., "da'juan liverpool" → "dajuan liverpool")
+                stripped_first = first_name_simple.replace("'", "").replace("\u2019", "")
+                stripped_last = last_name.replace("'", "").replace("\u2019", "")
+                if stripped_first != first_name_simple.lower() or stripped_last != last_name.lower():
+                    apo_key = f"{stripped_first} {stripped_last}".lower().strip()
+                    if apo_key not in roster:
+                        roster[apo_key] = entry
+                    apo_rev = f"{stripped_last} {stripped_first}".lower().strip()
+                    if apo_rev not in roster:
+                        roster[apo_rev] = entry
+
                 # For compound last names ("Wilkins Reels"), also add key with just first part
                 # so "Dicen_Wilkins" filename matches "Dicen Macheil Wilkins Reels"
                 last_parts = last_name.split()
@@ -2623,8 +2735,8 @@ def load_roster(roster_path: str) -> dict:
 
         # Apostrophe-stripped key (e.g., "andre'a chavarria" → "andrea chavarria")
         import re as _re
-        stripped_first = _re.sub(r"'", '', first_name_simple)
-        stripped_last = _re.sub(r"'", '', last_name)
+        stripped_first = _re.sub(r"['\u2019]", '', first_name_simple)
+        stripped_last = _re.sub(r"['\u2019]", '', last_name)
         if stripped_first != first_name_simple or stripped_last != last_name:
             apo_key = f"{stripped_first} {stripped_last}".lower().strip()
             if apo_key not in roster:
@@ -2703,10 +2815,17 @@ def load_roster(roster_path: str) -> dict:
                         first_name_simple = first_name.split()[0] if first_name else ''
                         lookup_key = f"{first_name_simple} {last_name}".lower().strip()
 
+                        # Also check apostrophe-stripped key for existing roster match
+                        apo_lookup = lookup_key.replace("'", "").replace("\u2019", "")
+
                         # If already in roster from Excel, just fill in period if missing
                         if lookup_key in roster:
                             if not roster[lookup_key].get('period'):
                                 roster[lookup_key]['period'] = period_name
+                            continue
+                        if apo_lookup != lookup_key and apo_lookup in roster:
+                            if not roster[apo_lookup].get('period'):
+                                roster[apo_lookup]['period'] = period_name
                             continue
 
                         email = f"{local_id}@vcs2go.net" if local_id else ""
@@ -2722,6 +2841,16 @@ def load_roster(roster_path: str) -> dict:
                         reverse_key = f"{last_name} {first_name_simple}".lower().strip()
                         if reverse_key not in roster:
                             roster[reverse_key] = entry
+                        # Apostrophe-stripped key
+                        stripped_first = first_name_simple.replace("'", "").replace("\u2019", "")
+                        stripped_last = last_name.replace("'", "").replace("\u2019", "")
+                        if stripped_first != first_name_simple.lower() or stripped_last != last_name.lower():
+                            apo_key = f"{stripped_first} {stripped_last}".lower().strip()
+                            if apo_key not in roster:
+                                roster[apo_key] = entry
+                            apo_rev = f"{stripped_last} {stripped_first}".lower().strip()
+                            if apo_rev not in roster:
+                                roster[apo_rev] = entry
                         # Compound last name short keys
                         last_parts = last_name.split()
                         if len(last_parts) > 1:
@@ -2808,9 +2937,9 @@ def build_roster_from_periods() -> dict:
                     if reverse_key not in roster:
                         roster[reverse_key] = entry
 
-                    # Apostrophe-stripped key
-                    stripped_first = _re.sub(r"'", '', first_name_simple)
-                    stripped_last = _re.sub(r"'", '', last_name)
+                    # Apostrophe-stripped key (straight ' and curly \u2019)
+                    stripped_first = _re.sub(r"['\u2019]", '', first_name_simple)
+                    stripped_last = _re.sub(r"['\u2019]", '', last_name)
                     if stripped_first != first_name_simple or stripped_last != last_name:
                         apo_key = f"{stripped_first} {stripped_last}".lower().strip()
                         if apo_key not in roster:
@@ -2882,11 +3011,14 @@ def parse_filename(filename: str) -> dict:
         first_full = comma_parts[1].strip() if len(comma_parts) > 1 else ""
         first_name = first_full.split()[0] if first_full else ""
 
+        # Strip apostrophes/curly quotes so Da'Juan matches Dajuan
+        key = f"{first_name} {last_name}".lower()
+        key = key.replace("'", "").replace("\u2019", "")
         return {
             "first_name": first_name,
             "last_name": last_name,
             "assignment_part": assignment_part,
-            "lookup_key": f"{first_name} {last_name}".lower()
+            "lookup_key": key
         }
 
     # Standard format: FirstName_LastName_AssignmentName
@@ -2897,11 +3029,14 @@ def parse_filename(filename: str) -> dict:
         last_name = parts[1].strip()
         assignment_part = '_'.join(parts[2:]) if len(parts) > 2 else ""
 
+        # Strip apostrophes/curly quotes so Da'Juan matches Dajuan
+        key = f"{first_name} {last_name}".lower()
+        key = key.replace("'", "").replace("\u2019", "")
         return {
             "first_name": first_name,
             "last_name": last_name,
             "assignment_part": assignment_part,
-            "lookup_key": f"{first_name} {last_name}".lower()
+            "lookup_key": key
         }
     else:
         # Can't parse - return filename as-is
@@ -2909,7 +3044,7 @@ def parse_filename(filename: str) -> dict:
             "first_name": name,
             "last_name": "",
             "assignment_part": "",
-            "lookup_key": name.lower()
+            "lookup_key": name.lower().replace("'", "").replace("\u2019", "")
         }
 
 
@@ -4912,13 +5047,33 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
 
     responses = extraction_result["extracted_responses"]
 
-    # Filter question/prompt text from extracted answers before grading
+    # DEBUG: Log extracted responses before filtering
+    print(f"  🔍 Multi-pass: {len(responses)} extracted responses before filtering:")
+    for i, resp in enumerate(responses):
+        q = resp.get("question", "?")[:80]
+        a = resp.get("answer", "")[:120].replace('\n', ' ')
+        t = resp.get("type", "?")
+        print(f"      [{i+1}] Q: {q}")
+        print(f"           A: {a}")
+        print(f"           Type: {t}")
+
+    # Filter question/prompt text from extracted answers before grading.
+    # If filtering empties a response, move it to blank_questions so completeness caps apply.
+    filtered_out = []
     for resp in responses:
         answer = resp.get("answer", "")
         if answer and resp.get("type") != "fitb":
             cleaned = filter_questions_from_response(answer)
             if cleaned and len(cleaned.strip()) >= 3:
                 resp["answer"] = cleaned
+            else:
+                q_label = resp.get("question", "Unknown")
+                print(f"      ⚠️ Response for '{q_label[:50]}' was only template text — marking blank")
+                extraction_result.setdefault("blank_questions", []).append(q_label)
+                filtered_out.append(resp)
+    if filtered_out:
+        responses = [r for r in responses if r not in filtered_out]
+        extraction_result["extracted_responses"] = responses
 
     # Build expected answers lookup from gradingNotes within custom_ai_instructions
     expected_answers = _parse_expected_answers(custom_ai_instructions)
@@ -5729,6 +5884,12 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     # PRE-EXTRACT student responses to prevent AI hallucination
     extraction_result = None
     extracted_responses_text = ''
+    # If teacher set up custom markers, use marker-based extraction even if FITB was detected.
+    # Markers mean the teacher explicitly defined which sections to grade — that takes priority.
+    has_real_markers = custom_markers and len(custom_markers) > 0
+    if is_fitb and has_real_markers:
+        print(f"  📝 FITB detected but custom markers present — using marker extraction instead")
+        is_fitb = False
     if assignment_data.get("type") == "text" and content:
         if is_fitb:
             # FITB assignment — send full content for grading (works with or without markers)
@@ -5772,17 +5933,39 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
 
                 extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
             if extraction_result:
-                # Filter question/prompt text from extracted answers before grading
+                # Filter question/prompt text from extracted answers before grading.
+                # If filtering empties a response, move it to blank_questions so
+                # completeness caps apply (e.g., primary source quotes that survive extraction).
+                filtered_out = []
                 for resp in extraction_result.get("extracted_responses", []):
                     answer = resp.get("answer", "")
                     if answer and resp.get("type") != "fitb":
                         cleaned = filter_questions_from_response(answer)
                         if cleaned and len(cleaned.strip()) >= 3:
                             resp["answer"] = cleaned
+                        else:
+                            # Response was entirely template/prompt text — mark as blank
+                            q_label = resp.get("question", "Unknown")
+                            print(f"      ⚠️ Response for '{q_label[:50]}' was only template text — marking blank")
+                            extraction_result.setdefault("blank_questions", []).append(q_label)
+                            filtered_out.append(resp)
+                # Remove blanked-out responses from extracted list
+                if filtered_out:
+                    extraction_result["extracted_responses"] = [
+                        r for r in extraction_result["extracted_responses"] if r not in filtered_out
+                    ]
+                    extraction_result["answered_questions"] = len(extraction_result["extracted_responses"])
+
                 extracted_responses_text = format_extracted_for_grading(extraction_result, marker_config, extraction_mode)
                 answered = extraction_result.get("answered_questions", 0)
                 total = extraction_result.get("total_questions", 0)
-                print(f"  📋 Pre-extracted {answered}/{total} responses")
+                blank_qs = extraction_result.get("blank_questions", [])
+                missing_secs = extraction_result.get("missing_sections", [])
+                print(f"  📋 Pre-extracted {answered}/{total} responses, {len(blank_qs)} blank, {len(missing_secs)} missing")
+                if blank_qs:
+                    print(f"      Blank questions: {blank_qs}")
+                if missing_secs:
+                    print(f"      Missing sections: {missing_secs}")
 
                 # DEBUG: Show what was extracted
                 for i, resp in enumerate(extraction_result.get("extracted_responses", [])):
@@ -6475,6 +6658,45 @@ Provide your response in the following JSON format ONLY (no other text):
             s = result["score"]
             result["letter_grade"] = "A" if s >= 90 else "B" if s >= 80 else "C" if s >= 70 else "D" if s >= 60 else "F"
             print(f"  📊 Rubric-weighted score: {result['score']} ({result['letter_grade']}) [weights: {rubric_weights}]")
+
+        # === DETERMINISTIC COMPLETENESS CAPS (single-pass) ===
+        # The AI prompt asks it to penalize blank sections, but it doesn't reliably do so.
+        # Apply the same deterministic caps as grade_multipass() based on actual extraction data.
+        if extraction_result:
+            extraction_blanks = extraction_result.get("blank_questions", [])
+            extraction_missing = extraction_result.get("missing_sections", [])
+            blank_count = len(extraction_blanks) + len(extraction_missing)
+
+            # Override AI's unanswered_questions with deterministic extraction data.
+            # The AI often misses blank/missing sections even when told about them.
+            if blank_count > 0:
+                deterministic_unanswered = extraction_blanks + extraction_missing
+                ai_unanswered = result.get("unanswered_questions", [])
+                # Merge: keep AI's list but ensure extraction-detected items are included
+                merged = list(ai_unanswered)
+                for item in deterministic_unanswered:
+                    if not any(item.lower() in existing.lower() or existing.lower() in item.lower() for existing in merged):
+                        merged.append(item)
+                if merged != ai_unanswered:
+                    print(f"  🔧 Overriding unanswered_questions: AI had {len(ai_unanswered)}, extraction found {len(deterministic_unanswered)}, merged to {len(merged)}")
+                result["unanswered_questions"] = merged
+
+            if blank_count > 0:
+                if grading_style == 'strict':
+                    caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35, 7: 25, 8: 15}
+                elif grading_style == 'lenient':
+                    caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49, 7: 39, 8: 29}
+                else:
+                    caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39, 7: 29, 8: 19}
+                cap = caps.get(blank_count, 0) if blank_count < len(caps) else 0
+                old_score = result["score"]
+                if old_score > cap:
+                    result["score"] = cap
+                    s = result["score"]
+                    result["letter_grade"] = "A" if s >= 90 else "B" if s >= 80 else "C" if s >= 70 else "D" if s >= 60 else "F"
+                    blank_names = extraction_blanks + extraction_missing
+                    print(f"  📉 Completeness cap: {blank_count} blank/missing → capped {old_score} to {cap} ({result['letter_grade']})")
+                    print(f"      Blank sections: {blank_names}")
 
         # Update student's writing profile (only if not flagged as AI)
         # This builds their baseline for future AI detection

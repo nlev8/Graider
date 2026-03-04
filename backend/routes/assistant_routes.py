@@ -35,10 +35,11 @@ except ImportError:
     genai_pkg = None
 
 from backend.services.assistant_tools import (
-    TOOL_DEFINITIONS, execute_tool,
-    _load_standards, _extract_pdf_text, _extract_docx_text,
+    TOOL_DEFINITIONS, execute_tool, _merge_submodules,
+    _load_standards,
     DOCUMENTS_DIR,
 )
+from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 
 assistant_bp = Blueprint('assistant', __name__)
 
@@ -754,14 +755,16 @@ def _build_system_prompt():
     prompt = f"""You are a helpful teaching assistant built into Graider, an AI-powered grading tool. You help teachers understand student performance, analyze grades, and manage their gradebook.{teacher_context}
 
 Key guidelines:
-- Be concise and teacher-friendly. Use markdown formatting (bold, lists, tables) when helpful.
+- Be concise and teacher-friendly. Use markdown formatting (bold, lists) when helpful.
 - When asked about grades or students, use the available tools to query actual data — never guess or make up numbers.
 - Respect FERPA: minimize personally identifiable information in your responses. Use first names only when discussing individual students. Never share data outside this conversation.
 - When showing multiple students, use tables for clarity.
+- NEVER truncate, abbreviate, or omit tool results. Always display ALL entries returned by a tool. If a tool returns 10 items, show all 10 with complete data. Never write "[Truncated]" or "please specify for full details".
 - If data is unavailable, say so clearly and suggest what the teacher can do (e.g., "Grade some assignments first").
 - For Focus automation, always confirm what will be created before triggering it.
 - All student data stays local on the teacher's machine. Tool results come from local files only.
 - When drafting emails or communications, use the teacher's name, subject, school, and email signature from the teacher information above. Always sign off with their configured signature.
+- CRITICAL: When the teacher tells you to send a message and provides the facts (e.g., "his assignments are all blank", "she has 5 missing assignments"), trust what the teacher says and compose the message immediately. Do NOT look up or verify the teacher's claims with extra tool calls. The teacher knows their students — just write the email with the information they gave you and send it. Only use lookup tools if the teacher explicitly asks you to find out information (e.g., "check which assignments are missing").
 
 Available tools:
 - query_grades: Search/filter grades by student, assignment, period, score range
@@ -769,6 +772,7 @@ Available tools:
 - get_class_analytics: Class-wide stats, grade distribution, top/bottom performers
 - get_assignment_stats: Statistics for a specific assignment
 - list_assignments: Show all graded assignments
+- scan_submissions_folder: Scan the assignments folder to see what files have been submitted. Shows top assignments by submission count, graded/ungraded counts, and student counts. Deduplicates multiple uploads. Use when asked about submissions, folder contents, or 'what's been turned in' — this scans actual files, not grading results. IMPORTANT: Always display ALL results returned by this tool — NEVER truncate, abbreviate, or omit any entries. Show every assignment with its full name and all numbers. Use a simple numbered list format, not tables.
 - analyze_grade_causes: Deep analysis of WHY students got low grades — rubric category breakdowns, unanswered/omitted questions, score impact of omissions, weakest categories. Use this when asked about causes of low grades, common mistakes, or what students struggled with.
 - get_feedback_patterns: Analyze feedback text and skills across an assignment — common strengths, areas for growth, feedback samples from high/low scorers. Use when asked about patterns or common issues.
 - compare_periods: Compare performance across class periods — averages, grade distributions, category breakdowns, omission rates per period.
@@ -865,14 +869,30 @@ STUDENT INFO:
 - get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
 - get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators.
 - remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed.
+- export_student_data: Export all data for a student (grades, history, accommodations) as JSON + PDF. Use for parent requests, transfers, FERPA compliance.
+- import_student_data: Import a student's exported data file (JSON) into Graider. Use when a student transfers in from another Graider teacher.
 
 COMMUNICATIONS:
-- send_focus_comms: DEFAULT method for contacting parents. Sends email and/or SMS through Focus SIS using the teacher's school account. Always use dry_run=true first to preview messages. Only fall back to send_parent_emails (Outlook) if the teacher explicitly requests Outlook.
+- send_focus_comms: DEFAULT method for contacting parents or students. Sends email and/or SMS through Focus SIS using the teacher's school account. Only fall back to send_parent_emails (Outlook) if the teacher explicitly requests Outlook.
   - Email only: provide email_subject + email_body, omit sms_body
   - SMS only: provide email_subject + sms_body, DO NOT provide email_body (omit it entirely, do not pass empty string)
   - Email + SMS: provide all three. The sms_body should be a SHORT notification (e.g. "Please check your email for a message regarding [subject]. -Mr./Ms. [Teacher]") pointing parents to the full email.
   - When the teacher says "send a message" or "contact parents", default to email + SMS with the SMS as a check-your-email notification.
-- send_parent_emails: Send emails to parents via Outlook automation. Use ONLY if the teacher specifically asks for Outlook. Always use dry_run=true first.
+  - recipient_type: "Primary Contacts" (default) sends to parents/guardians. "Students" sends directly to the student. Use "Students" when the teacher says "send to [student name]" or "email [student name]" without mentioning parents. Use "Primary Contacts" when the teacher says "contact parents" or "send to [student]'s parents".
+- send_parent_emails: Send emails to parents via Outlook automation. Use ONLY if the teacher specifically asks for Outlook.
+
+SENDING FLOW — when the teacher asks you to send a message/email/SMS, follow these steps EXACTLY:
+CRITICAL: You MUST actually call the tools below. NEVER generate a preview from memory or prior conversation context. Every send request requires fresh tool calls, even if you sent to the same student earlier in this conversation.
+RECIPIENT RULE: Determine who the message is FOR:
+- "send an email to [student]" or "message [student]" → recipient_type="Students", address the email to the STUDENT (e.g., "Dear Charles")
+- "contact [student]'s parents" or "send to parents" or "notify parents" → recipient_type="Primary Contacts", address the email to the PARENT by name
+- If unclear, default to "Primary Contacts"
+Step 1: Call lookup_student_info ONLY (to get contact names). Do NOT call query_grades or other research tools to verify what the teacher told you — compose the email using ONLY the facts from the teacher's message. If the teacher says "all assignments are blank", write that — do not look up which specific assignments.
+Step 2: Call send_focus_comms with the email based on the teacher's stated facts. You MUST call this tool — do NOT fabricate a preview. Set recipient_type based on the RECIPIENT RULE above.
+Step 3: Show the preview returned by send_focus_comms and ask "Would you like me to send this?"
+Step 4: When the teacher confirms (e.g., "yes", "send it", "looks good"), call confirm_and_send — this triggers the actual Playwright automation to send the messages.
+Step 5: NEVER claim messages were sent until confirm_and_send returns a success response with status "started".
+- confirm_and_send: Execute the pending send after teacher confirmation. Takes no parameters. Call ONLY after showing a preview and getting teacher approval.
 
 BEHAVIOR TRACKING:
 - get_behavior_summary: Get behavior correction and praise counts for a student or class period. Shows daily breakdown, notes, and trends. Use when the teacher asks "how has [student] behaved?" or "show behavior for Period 3".
@@ -1252,6 +1272,9 @@ def assistant_chat():
                 tool_use_blocks = []
                 deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
 
+                # Ensure all submodule tools are registered before passing to API
+                _merge_submodules()
+
                 # ── ANTHROPIC STREAMING ──
                 if active_provider == "anthropic":
                     client = anthropic.Anthropic(api_key=api_key)
@@ -1525,6 +1548,8 @@ def assistant_chat():
                         dl_urls = result.get('download_urls')
                         if dl_urls:
                             event_data['download_urls'] = dl_urls
+                        if result.get('NOT_SENT'):
+                            event_data['pending_send'] = True
 
                     yield f"data: {json.dumps(event_data)}\n\n"
 

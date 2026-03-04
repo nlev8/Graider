@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "student_name": "Belmosto, Jayden",
+      "subject": "Missing Assignment: Chapter 5 Notes",
+      "email_body": "Dear Parent/Guardian,\n\nThis is a test message from Focus Communications automation. No action needed.\n\nThank you.",
+      "sms_body": "TEST: This is a test message. Please disregard.",
+      "cc_emails": []
+    }
+  ]
+}

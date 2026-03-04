@@ -4,7 +4,19 @@ Handles saving, loading, listing, deleting, and exporting assignments.
 """
 import os
 import json
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, g
+
+# Import storage abstraction
+try:
+    from backend.storage import load as storage_load, save as storage_save, delete as storage_delete, list_keys as storage_list_keys
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save, delete as storage_delete, list_keys as storage_list_keys
+    except ImportError:
+        storage_load = None
+        storage_save = None
+        storage_delete = None
+        storage_list_keys = None
 
 assignment_bp = Blueprint('assignment', __name__)
 
@@ -20,17 +32,21 @@ def save_assignment_config():
     from wiping fields like excludeMarkers, aliases, rubricType, etc.
     """
     data = request.json
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     os.makedirs(ASSIGNMENTS_DIR, exist_ok=True)
 
     # Clean title for filename
     title = data.get('title', 'Untitled')
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
+    storage_key = f'assignment:{safe_title}'
     filepath = os.path.join(ASSIGNMENTS_DIR, f"{safe_title}.json")
 
     try:
         # Load existing config to preserve fields not in the incoming data
         existing = {}
-        if os.path.exists(filepath):
+        if storage_load:
+            existing = storage_load(storage_key, teacher_id) or {}
+        elif os.path.exists(filepath):
             try:
                 with open(filepath, 'r') as f:
                     existing = json.load(f)
@@ -40,21 +56,123 @@ def save_assignment_config():
         # Merge: existing fields are preserved, incoming data overwrites
         merged = {**existing, **data}
 
-        with open(filepath, 'w') as f:
-            json.dump(merged, f, indent=2)
+        if storage_save:
+            storage_save(storage_key, merged, teacher_id)
+        else:
+            with open(filepath, 'w') as f:
+                json.dump(merged, f, indent=2)
         return jsonify({"status": "saved", "path": filepath})
     except Exception as e:
         return jsonify({"error": str(e)})
 
 
+@assignment_bp.route('/api/generate-model-answers', methods=['POST'])
+def generate_model_answers():
+    """Generate AI model answers for each section/marker in an assignment config."""
+    data = request.json
+    markers = data.get('customMarkers', [])
+    doc_text = data.get('documentText', '')
+    title = data.get('title', 'Assignment')
+    grade_level = data.get('grade_level', '7')
+    subject = data.get('subject', 'Social Studies')
+    global_notes = data.get('globalAINotes', '')
+
+    if not markers:
+        return jsonify({"error": "No sections/markers configured"}), 400
+    if not doc_text:
+        return jsonify({"error": "Import the assignment document first."}), 400
+
+    sections_desc = []
+    for i, m in enumerate(markers):
+        if isinstance(m, dict):
+            name = m.get('start', f'Section {i+1}')
+            sec_type = m.get('type', 'written')
+            points = m.get('points', 10)
+            sections_desc.append(f"- {name} (type: {sec_type}, {points} pts)")
+        else:
+            sections_desc.append(f"- {m}")
+
+    prompt = f"""You are a {subject} teacher creating a model answer key for a {grade_level}th grade assignment.
+
+ASSIGNMENT: {title}
+
+DOCUMENT TEXT (the actual assignment students receive):
+{doc_text[:8000]}
+
+SECTIONS TO ANSWER:
+{chr(10).join(sections_desc)}
+
+{f"TEACHER INSTRUCTIONS (follow these for tone/expectations):{chr(10)}{global_notes}" if global_notes else ""}
+
+For EACH section listed above, generate the MODEL ANSWER a strong {grade_level}th grade student would write.
+Use the section type (vocabulary, written, short_answer, math_equation, etc.) and the subject ({subject}) to determine the appropriate format.
+
+RULES:
+- Match the grade level — use age-appropriate vocabulary and complexity for a {grade_level}th grader
+- Match the SUBJECT — a Math model answer needs worked steps/equations, a Science answer needs observations/data/conclusions, an ELA answer needs textual evidence/analysis, a History answer needs facts/context/significance
+- Use the DOCUMENT TEXT to derive correct, specific answers — reference actual content from the assignment
+- For vocabulary/definitions: student-friendly language, not textbook definitions
+- For written/summary sections: demonstrate understanding, not copy the text
+- For math/equations: show work and final answer
+- For fill-in-the-blank: provide the correct word/phrase
+- These model what a GOOD student would write, not a perfect adult answer
+
+Return ONLY valid JSON:
+{{
+    "model_answers": [
+        {{"section": "<exact section/marker name>", "answer": "<model answer text>"}}
+    ]
+}}"""
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=3000,
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        result = json.loads(response.choices[0].message.content.strip())
+        return jsonify(result)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Failed to parse AI response. Try again."}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @assignment_bp.route('/api/list-assignments')
 def list_assignments():
     """List saved assignment configurations with aliases."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    assignment_data = {}
+
+    if storage_list_keys and storage_load:
+        keys = storage_list_keys('assignment:', teacher_id)
+        for key in keys:
+            name = key[len('assignment:'):]
+            data = storage_load(key, teacher_id) or {}
+            imported_doc = data.get("importedDoc") or {}
+            assignment_data[name] = {
+                "aliases": data.get("aliases", []),
+                "title": data.get("title", name),
+                "completionOnly": data.get("completionOnly", False),
+                "rubricType": data.get("rubricType") or "standard",
+                "countsTowardsGrade": data.get("countsTowardsGrade", True),
+                "importedFilename": imported_doc.get("filename", ""),
+                "dueDate": data.get("dueDate", ""),
+                "latePenalty": data.get("latePenalty", {}),
+            }
+        # Sort by title for consistent ordering
+        assignments = sorted(assignment_data.keys())
+        return jsonify({"assignments": assignments, "assignmentData": assignment_data})
+
+    # Fallback: direct file access
     if not os.path.exists(ASSIGNMENTS_DIR):
         return jsonify({"assignments": [], "assignmentData": {}})
 
     files_with_mtime = []
-    assignment_data = {}  # Map of name -> {aliases: [...]}
 
     for f in os.listdir(ASSIGNMENTS_DIR):
         if f.endswith('.json'):
@@ -62,7 +180,6 @@ def list_assignments():
             filepath = os.path.join(ASSIGNMENTS_DIR, f)
             mtime = os.path.getmtime(filepath)
             files_with_mtime.append((name, mtime))
-            # Load assignment to get aliases and completion status
             try:
                 with open(filepath, 'r') as af:
                     data = json.load(af)
@@ -72,15 +189,14 @@ def list_assignments():
                         "title": data.get("title", name),
                         "completionOnly": data.get("completionOnly", False),
                         "rubricType": data.get("rubricType") or "standard",
-                        "countsTowardsGrade": data.get("countsTowardsGrade", True),  # Default to True
-                        "importedFilename": imported_doc.get("filename", ""),  # Original filename for matching
+                        "countsTowardsGrade": data.get("countsTowardsGrade", True),
+                        "importedFilename": imported_doc.get("filename", ""),
                         "dueDate": data.get("dueDate", ""),
                         "latePenalty": data.get("latePenalty", {}),
                     }
             except:
                 assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": "", "dueDate": "", "latePenalty": {}}
 
-    # Sort newest first by file modification time
     files_with_mtime.sort(key=lambda x: x[1], reverse=True)
     assignments = [name for name, _ in files_with_mtime]
 
@@ -91,11 +207,17 @@ def list_assignments():
 def load_assignment():
     """Load a saved assignment configuration."""
     name = request.args.get('name', '')
-    filepath = os.path.join(ASSIGNMENTS_DIR, f"{name}.json")
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
+    if storage_load:
+        data = storage_load(f'assignment:{name}', teacher_id)
+        if data is not None:
+            return jsonify({"assignment": data})
+
+    # Fallback to file
+    filepath = os.path.join(ASSIGNMENTS_DIR, f"{name}.json")
     if not os.path.exists(filepath):
         return jsonify({"error": "Assignment not found"})
-
     try:
         with open(filepath, 'r') as f:
             data = json.load(f)
@@ -108,16 +230,20 @@ def load_assignment():
 def delete_assignment():
     """Delete a saved assignment configuration."""
     name = request.args.get('name', '')
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    if storage_delete:
+        storage_delete(f'assignment:{name}', teacher_id)
+
+    # Also delete local file
     filepath = os.path.join(ASSIGNMENTS_DIR, f"{name}.json")
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except Exception as e:
+            return jsonify({"error": str(e)})
 
-    if not os.path.exists(filepath):
-        return jsonify({"error": "Assignment not found"})
-
-    try:
-        os.remove(filepath)
-        return jsonify({"status": "deleted"})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    return jsonify({"status": "deleted"})
 
 
 @assignment_bp.route('/api/export-assignment', methods=['POST'])
