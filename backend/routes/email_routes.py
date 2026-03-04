@@ -603,7 +603,7 @@ def _unique_roster_students(roster, period_filter=''):
             yield student_name, val
 
 
-def _normalize_assignment_name(raw_name):
+def _normalize_submission_name(raw_name):
     """Normalize a filename-derived assignment name for dedup and matching.
 
     Strips version suffixes like (1), (2), trailing numbers,
@@ -868,7 +868,7 @@ def send_confirmation_emails():
                 continue
 
             raw_part = parsed.get('assignment_part', '') or 'Assignment'
-            normalized = _normalize_assignment_name(raw_part)
+            normalized = _normalize_submission_name(raw_part)
             matched = _match_to_config_title(normalized, all_config_names)
             canonical = alias_to_title.get(matched, matched)
 
@@ -913,7 +913,7 @@ def send_confirmation_emails():
                 sname = student_info.get('student_name', '')
                 raw_part = parsed.get('assignment_part', '') or 'Assignment'
                 if sname:
-                    normalized = _normalize_assignment_name(raw_part)
+                    normalized = _normalize_submission_name(raw_part)
                     matched = _match_to_config_title(normalized, all_config_names)
                     canonical = alias_to_title.get(matched, matched)
                     # Only count files that match a saved assignment config
@@ -1262,8 +1262,23 @@ def _read_focus_comms_output(proc):
         except json.JSONDecodeError:
             pass
 
+    # Read stderr for crash diagnostics
+    stderr_output = ""
+    try:
+        stderr_output = proc.stderr.read().strip()
+    except Exception:
+        pass
+
+    proc.wait()
+
     if _focus_comms_state["status"] == "running":
-        _focus_comms_state["status"] = "done"
+        _focus_comms_state["status"] = "error" if stderr_output else "done"
+        if stderr_output:
+            # Extract the key error line (e.g. "browserType.launchPersistentContext: ...")
+            err_lines = [l for l in stderr_output.split('\n') if l.strip() and not l.strip().startswith('at ')]
+            err_msg = err_lines[0] if err_lines else stderr_output[:200]
+            _focus_comms_state["message"] = "Script error: " + err_msg
+            _focus_comms_state["log"].append({"type": "error", "message": err_msg})
 
 
 @email_bp.route('/api/send-focus-comms', methods=['POST'])
@@ -1308,3 +1323,41 @@ def focus_comms_stop():
         _focus_comms_state["message"] = "Stopped by user"
         return jsonify({"status": "stopped"})
     return jsonify({"status": "not_running"})
+
+
+@email_bp.route('/api/confirm-send', methods=['POST'])
+def confirm_send():
+    """Execute a confirmed send action from the assistant preview.
+
+    Reads the pending payload saved by send_focus_comms or send_parent_emails.
+    Called by the frontend 'Send Now' button or by the confirm_and_send tool.
+    """
+    pending_path = os.path.join(GRAIDER_DATA_DIR, "pending_send.json")
+    if not os.path.exists(pending_path):
+        return jsonify({"error": "No pending send. Generate a preview first."})
+
+    try:
+        with open(pending_path, 'r') as f:
+            pending = json.load(f)
+        os.remove(pending_path)  # Remove so it can't be sent twice
+    except Exception as e:
+        return jsonify({"error": "Failed to read pending send: " + str(e)})
+
+    action = pending.get("action")
+
+    if action == "send_focus_comms":
+        messages = pending.get("messages", [])
+        if not messages:
+            return jsonify({"error": "No messages in pending payload"})
+        result = launch_focus_comms(messages)
+        return jsonify(result)
+
+    elif action == "send_parent_emails":
+        emails = pending.get("emails", [])
+        if not emails:
+            return jsonify({"error": "No emails in pending payload"})
+        result = launch_outlook_sender(emails)
+        return jsonify(result)
+
+    else:
+        return jsonify({"error": f"Unknown pending action: {action}"})

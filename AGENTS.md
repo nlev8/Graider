@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **Graider** (2066 symbols, 5215 relationships, 154 execution flows).
+This project is indexed by GitNexus as **Graider** (2057 symbols, 5193 relationships, 153 execution flows).
 
 ## Always Start Here
 

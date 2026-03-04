@@ -282,6 +282,12 @@ grading_state = {
 grading_lock = threading.Lock()
 
 
+def _update_state(**kwargs):
+    """Thread-safe grading_state update."""
+    with grading_lock:
+        grading_state.update(kwargs)
+
+
 def reset_state(clear_results=False):
     global grading_state
     with grading_lock:
@@ -972,14 +978,13 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
             else:
                 new_files = all_files
 
-        grading_state["total"] = len(new_files)
+        _update_state(total=len(new_files))
         grading_state["log"].append(f"Queued {len(new_files)} files for grading")
 
         if len(new_files) == 0:
             grading_state["log"].append("")
             grading_state["log"].append("All files have already been graded!")
-            grading_state["complete"] = True
-            grading_state["is_running"] = False
+            _update_state(complete=True, is_running=False)
             return
 
         all_grades = []
@@ -1620,8 +1625,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
 
                     # Update progress
                     completed += 1
-                    grading_state["progress"] = completed
-                    grading_state["current_file"] = filepath.name
+                    _update_state(progress=completed, current_file=filepath.name)
 
                     # Handle failed grading
                     if not result.get("success"):
@@ -1638,7 +1642,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                             grading_state["log"].append("=" * 50)
                             grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
                             grading_state["log"].append("=" * 50)
-                            grading_state["error"] = f"API Error: {result.get('error')}"
+                            _update_state(error=f"API Error: {result.get('error')}")
                             for f in future_to_file:
                                 f.cancel()
                             stop_break = True
@@ -1718,14 +1722,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     all_grades.append(grade_record)
 
                     # Add to results for UI (remove any existing result for same file first - for regrading)
-                    grading_state["results"] = [r for r in grading_state["results"] if r.get("filename") != filepath.name]
-                    # If resubmission replacing old student+assignment result, remove that too
-                    if is_resub and previous_result:
-                        sid = student_info.get('student_id', '')
-                        assign = result["matched_title"]
-                        grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
-
-                    grading_state["results"].append({
+                    new_result = {
                         "student_name": student_info['student_name'],
                         "student_id": student_info.get('student_id', ''),
                         "student_email": student_info.get('email', ''),
@@ -1756,28 +1753,35 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         "email_approval": "pending",
                         "original_score": original_score if (late_info and late_info.get('is_late')) else None,
                         "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
-                    })
+                    }
+                    with grading_lock:
+                        grading_state["results"] = [r for r in grading_state["results"] if r.get("filename") != filepath.name]
+                        if is_resub and previous_result:
+                            sid = student_info.get('student_id', '')
+                            assign = result["matched_title"]
+                            grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
+                        grading_state["results"].append(new_result)
 
-                    # Accumulate session cost
+                    # Accumulate session cost (lock for compound read-modify-write)
                     usage = grade_result.get('token_usage', {})
                     if usage:
-                        grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
-                        grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
-                        grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
-                        grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
+                        with grading_lock:
+                            grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
+                            grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
+                            grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
+                            grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
 
                     # Warn when approaching cost limit
                     cost_limit = grading_state.get("cost_limit", 0)
                     if cost_limit > 0 and not grading_state.get("cost_warning_sent"):
                         warning_pct = grading_state.get("cost_warning_pct", 80) / 100
                         if grading_state["session_cost"]["total_cost"] >= cost_limit * warning_pct:
-                            grading_state["cost_warning_sent"] = True
+                            _update_state(cost_warning_sent=True)
                             grading_state["log"].append(f"  ⚠️ Approaching cost limit: ${grading_state['session_cost']['total_cost']:.4f} of ${cost_limit:.2f}")
 
                     # Auto-stop if cost limit exceeded
                     if cost_limit > 0 and grading_state["session_cost"]["total_cost"] >= cost_limit:
-                        grading_state["stop_requested"] = True
-                        grading_state["cost_limit_hit"] = True
+                        _update_state(stop_requested=True, cost_limit_hit=True)
                         grading_state["log"].append("")
                         grading_state["log"].append(f"Cost limit reached (${grading_state['session_cost']['total_cost']:.4f} >= ${cost_limit:.2f}). Auto-stopping...")
 
@@ -1786,10 +1790,11 @@ STANDARD CLASS GRADING EXPECTATIONS:
 
         # Handle API error - stop and save
         if api_error_occurred:
-            grading_state["complete"] = True
-            grading_state["is_running"] = False
-            if grading_state["results"]:
-                save_results(grading_state["results"], teacher_id)
+            _update_state(complete=True, is_running=False)
+            with grading_lock:
+                results_copy = list(grading_state["results"])
+            if results_copy:
+                save_results(results_copy, teacher_id)
             return
 
         # Export CSVs and emails
@@ -1843,27 +1848,30 @@ STANDARD CLASS GRADING EXPECTATIONS:
             grading_state["log"].append("GRADING COMPLETE!")
 
         grading_state["log"].append(f"Results saved to: {output_folder}")
-        grading_state["complete"] = True
+        _update_state(complete=True)
 
         # Post-batch calibration check
-        calibration = _check_batch_calibration(grading_state["results"])
+        with grading_lock:
+            results_snapshot = list(grading_state["results"])
+        calibration = _check_batch_calibration(results_snapshot)
         if not calibration["calibrated"]:
             for concern in calibration["concerns"]:
                 grading_state["log"].append(f"⚠️ CALIBRATION: {concern}")
-            grading_state["calibration"] = calibration
+            _update_state(calibration=calibration)
 
         # Save results to storage for persistence across restarts
-        save_results(grading_state["results"], teacher_id)
+        save_results(results_snapshot, teacher_id)
 
     except Exception as e:
-        grading_state["error"] = str(e)
+        _update_state(error=str(e))
         grading_state["log"].append(f"Error: {str(e)}")
     finally:
-        grading_state["is_running"] = False
-        grading_state["stop_requested"] = False
+        _update_state(is_running=False, stop_requested=False)
         # Also save on stop/error to preserve partial results
-        if grading_state["results"]:
-            save_results(grading_state["results"], teacher_id)
+        with grading_lock:
+            results_copy = list(grading_state["results"])
+        if results_copy:
+            save_results(results_copy, teacher_id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1931,9 +1939,11 @@ def start_grading():
         return jsonify({"error": f"Roster file not found: {roster_file}"}), 400
 
     reset_state()
-    grading_state["is_running"] = True
-    grading_state["cost_limit"] = float(data.get('cost_limit_per_session', 0))
-    grading_state["cost_warning_pct"] = float(data.get('cost_warning_pct', 80))
+    _update_state(
+        is_running=True,
+        cost_limit=float(data.get('cost_limit_per_session', 0)),
+        cost_warning_pct=float(data.get('cost_warning_pct', 80)),
+    )
 
     # Capture teacher_id before thread start (g is request-scoped)
     teacher_id = getattr(g, 'user_id', 'local-dev')

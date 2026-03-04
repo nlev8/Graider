@@ -140,14 +140,14 @@ def _call_haiku(prompt, max_tokens=1500):
 # HANDLERS
 # ═══════════════════════════════════════════════════════
 
-def differentiate_content(args):
+def differentiate_content(text="", levels=None, grade_level="6th", **kwargs):
     """Rewrite text at multiple reading levels."""
-    text = args.get("text", "").strip()
+    text = (text or "").strip()
     if not text:
         return {"error": "text is required"}
 
-    levels = args.get("levels", ["below", "on", "above"])
-    grade = args.get("grade_level", "6th")
+    levels = levels or ["below", "on", "above"]
+    grade = grade_level
 
     prompt = (
         "You are an expert reading specialist. Rewrite the following passage at "
@@ -165,15 +165,14 @@ def differentiate_content(args):
     return _call_haiku(prompt, max_tokens=2000)
 
 
-def generate_questions_from_text(args):
+def generate_questions_from_text(text="", count=5, types=None, grade_level="6th", **kwargs):
     """Generate comprehension questions from a passage."""
-    text = args.get("text", "").strip()
+    text = (text or "").strip()
     if not text:
         return {"error": "text is required"}
 
-    count = args.get("count", 5)
-    types = args.get("types", ["recall", "inference", "analysis", "evaluation"])
-    grade = args.get("grade_level", "6th")
+    types = types or ["recall", "inference", "analysis", "evaluation"]
+    grade = grade_level
 
     prompt = (
         "You are an expert teacher creating assessment questions. Generate "
@@ -191,13 +190,11 @@ def generate_questions_from_text(args):
     return _call_haiku(prompt, max_tokens=2000)
 
 
-def generate_iep_progress_notes(args):
+def generate_iep_progress_notes(student_name="", goal_area="", **kwargs):
     """Synthesize IEP progress notes from student grade data."""
-    student_name = args.get("student_name", "").strip()
+    student_name = (student_name or "").strip()
     if not student_name:
         return {"error": "student_name is required"}
-
-    goal_area = args.get("goal_area", "")
 
     # --- Gather local data ---
     master = _load_master_csv()

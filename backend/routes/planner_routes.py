@@ -16,6 +16,15 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from assignment_grader import MODEL_PRICING
 
+# Import storage abstraction for saving grading configs to Supabase
+try:
+    from backend.storage import save as storage_save
+except ImportError:
+    try:
+        from storage import save as storage_save
+    except ImportError:
+        storage_save = None
+
 
 def _extract_usage(completion, model="gpt-4o"):
     """Extract token usage and cost from an OpenAI completion response."""
@@ -3578,34 +3587,66 @@ def _save_grading_config_for_export(assignment):
                         grading_lines.append(f"Q{q.get('number', q_idx)}: {answer}")
                     q_idx += 1
 
-        # Build plain-text representation of the document for grading setup display
+        # Build plain-text and HTML representations for grading setup display
         doc_lines = [title, '', 'Name: ' + '_' * 50, 'Date: ' + '_' * 50,
                      'Period: ' + '_' * 50, '']
+        html_parts = [
+            '<style>',
+            'body { font-family: Georgia, serif; line-height: 1.6; }',
+            'table { border-collapse: collapse; width: 100%; margin: 15px 0; }',
+            'td, th { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }',
+            'th { background: #f5f5f5; font-weight: bold; }',
+            'p { margin: 10px 0; }',
+            'h1, h2, h3 { margin: 20px 0 10px 0; }',
+            '</style>',
+            '<h1><strong>' + title + '</strong></h1>',
+            '<p><strong>Name: </strong>' + '_' * 50 + '</p>',
+            '<p><strong>Date: </strong>' + '_' * 50 + '</p>',
+            '<p><strong>Period: </strong>' + '_' * 50 + '</p>',
+        ]
         instructions = assignment.get('instructions', '')
         if instructions:
             doc_lines.append(instructions)
             doc_lines.append('')
+            html_parts.append('<p><em>' + instructions + '</em></p>')
         q_num = 1
         for section in sections:
             sec_title = section.get('title', '')
             if sec_title:
                 doc_lines.append(sec_title.upper())
+                html_parts.append('<h2><strong>' + sec_title.upper() + '</strong></h2>')
             for q in section.get('questions', []):
                 qtype = q.get('question_type', '')
                 if qtype == 'vocab_term':
                     term = q.get('term', q.get('question', ''))
                     doc_lines.append(term + ': ' + '_' * 60)
+                    html_parts.append('<table><tr><td><p><strong>' + term + ':</strong> ' + '_' * 60 + '</p></td></tr></table>')
                 elif qtype in ('fill_in_blank', 'fitb'):
-                    doc_lines.append(str(q_num) + ') ' + q.get('question', '') + '  (' + str(q.get('points', 5)) + ' pts)')
+                    pts = str(q.get('points', 5))
+                    qtxt = q.get('question', '')
+                    doc_lines.append(str(q_num) + ') ' + qtxt + '  (' + pts + ' pts)')
                     doc_lines.append('Answer: ' + '_' * 55)
+                    html_parts.append(
+                        '<table><tr><td><p>[GRAIDER:QUESTION:' + str(q_num) + ']<strong>  '
+                        + str(q_num) + ') ' + qtxt + '</strong>  (' + pts + ' pts)</p></td></tr>'
+                        + '<tr><td><p><strong>Answer:</strong></p><p><em>Type your answer here...</em></p></td></tr></table>'
+                    )
                 else:
-                    doc_lines.append(str(q_num) + ') ' + q.get('question', '') + '  (' + str(q.get('points', 10)) + ' pts)')
+                    pts = str(q.get('points', 10))
+                    qtxt = q.get('question', '')
+                    doc_lines.append(str(q_num) + ') ' + qtxt + '  (' + pts + ' pts)')
                     doc_lines.append('Response: ' + '_' * 55)
                     doc_lines.append('_' * 65)
+                    html_parts.append(
+                        '<table><tr><td><p>[GRAIDER:QUESTION:' + str(q_num) + ']<strong>  '
+                        + str(q_num) + ') ' + qtxt + '</strong>  (' + pts + ' pts)</p></td></tr>'
+                        + '<tr><td><p><strong>Your Answer:</strong></p><p><em>Type your answer here...</em></p></td></tr></table>'
+                    )
                 doc_lines.append('')
                 q_num += 1
 
         doc_text = '\n'.join(doc_lines)
+        doc_html = '\n'.join(html_parts)
 
         config = {
             "title": title,
@@ -3617,7 +3658,7 @@ def _save_grading_config_for_export(assignment):
             "grade": assignment.get('grade', ''),
             "importedDoc": {
                 "text": doc_text,
-                "html": "",
+                "html": doc_html,
                 "filename": safe_title + "_Student.docx",
                 "loading": False
             },
@@ -3626,6 +3667,15 @@ def _save_grading_config_for_export(assignment):
         config_path = os.path.join(config_dir, f"{safe_title}.json")
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)
+
+        # Also save to Supabase storage if available
+        if storage_save:
+            try:
+                from flask import g
+                teacher_id = getattr(g, 'user_id', 'local-dev')
+                storage_save(f'assignment:{safe_title}', config, teacher_id)
+            except Exception:
+                pass  # Local save succeeded, Supabase is best-effort
 
         print(f"Saved grading config: {config_path}")
     except Exception as e:

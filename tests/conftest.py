@@ -47,6 +47,11 @@ def patch_paths(monkeypatch, mock_data_dir):
     This is the primary fixture for tool handler tests."""
     import backend.services.assistant_tools as at
 
+    # Disable storage layer so all functions fall back to fixture files
+    monkeypatch.setattr(at, "storage_load", None)
+    monkeypatch.setattr(at, "storage_save", None)
+    monkeypatch.setattr(at, "storage_list_keys", None)
+
     results_file = os.path.join(mock_data_dir, "results.json")
     settings_file = os.path.join(mock_data_dir, "settings.json")
     master_dir = os.path.join(mock_data_dir, "output")

@@ -20,20 +20,8 @@ logger = logging.getLogger(__name__)
 # ── Environment detection ─────────────────────────────────────
 USE_SUPABASE = bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY'))
 
-# ── Supabase client (lazy init) ──────────────────────────────
-_supabase = None
-
-
-def _get_supabase():
-    """Lazy-init Supabase admin client."""
-    global _supabase
-    if _supabase is None:
-        from supabase import create_client
-        url = os.getenv('SUPABASE_URL')
-        key = os.getenv('SUPABASE_SERVICE_KEY')
-        if url and key:
-            _supabase = create_client(url, key)
-    return _supabase
+# ── Supabase client (canonical import) ────────────────────────
+from backend.supabase_client import get_supabase as _get_supabase
 
 
 # ── File path mapping ─────────────────────────────────────────

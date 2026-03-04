@@ -175,68 +175,63 @@ STEM_TOOL_DEFINITIONS = [
 # HANDLERS
 # ═══════════════════════════════════════════════════════
 
-def handle_check_math_equivalence(args):
+def handle_check_math_equivalence(student_answer="", correct_answer="", tolerance=0.001, **kwargs):
     """Check if two math expressions are equivalent."""
-    student = args.get("student_answer", "").strip()
-    correct = args.get("correct_answer", "").strip()
+    student = (student_answer or "").strip()
+    correct = (correct_answer or "").strip()
     if not student or not correct:
         return {"error": "Both student_answer and correct_answer are required"}
 
-    tolerance = args.get("tolerance", 0.001)
     return check_math_equivalence(student, correct, tolerance)
 
 
-def handle_grade_math_question(args):
+def handle_grade_math_question(correct_answer="", student_answer="", points=1, accept_equivalent=True, show_work=False, **kwargs):
     """Grade a single math question."""
-    correct = args.get("correct_answer", "").strip()
-    student = args.get("student_answer", "").strip()
+    correct = (correct_answer or "").strip()
+    student = (student_answer or "").strip()
     if not correct or not student:
         return {"error": "Both correct_answer and student_answer are required"}
 
     question = {
         "correctAnswer": correct,
-        "points": args.get("points", 1),
-        "acceptEquivalent": args.get("accept_equivalent", True),
-        "showWork": args.get("show_work", False),
+        "points": points,
+        "acceptEquivalent": accept_equivalent,
+        "showWork": show_work,
     }
     return grade_math_question(question, student)
 
 
-def handle_grade_data_table(args):
+def handle_grade_data_table(expected_table=None, student_table=None, tolerance_percent=5.0, **kwargs):
     """Grade a science data table."""
-    expected = args.get("expected_table")
-    student = args.get("student_table")
-    if not expected or not student:
+    if not expected_table or not student_table:
         return {"error": "Both expected_table and student_table are required"}
-    if not expected.get("data") or not student.get("data"):
+    if not expected_table.get("data") or not student_table.get("data"):
         return {"error": "Both tables must include a 'data' array of rows"}
 
-    tolerance = args.get("tolerance_percent", 5.0)
-    return grade_data_table(expected, student, tolerance)
+    return grade_data_table(expected_table, student_table, tolerance_percent)
 
 
-def handle_grade_coordinates(args):
+def handle_grade_coordinates(expected_latitude=None, expected_longitude=None, student_latitude=None, student_longitude=None, tolerance_km=50, **kwargs):
     """Grade a geography coordinate answer."""
     try:
-        exp_lat = float(args["expected_latitude"])
-        exp_lon = float(args["expected_longitude"])
-        stu_lat = float(args["student_latitude"])
-        stu_lon = float(args["student_longitude"])
-    except (KeyError, TypeError, ValueError):
+        exp_lat = float(expected_latitude)
+        exp_lon = float(expected_longitude)
+        stu_lat = float(student_latitude)
+        stu_lon = float(student_longitude)
+    except (TypeError, ValueError):
         return {"error": "All four coordinate values (expected_latitude, expected_longitude, student_latitude, student_longitude) are required as numbers"}
 
-    tolerance = args.get("tolerance_km", 50)
     return grade_coordinate_question(
         {"latitude": exp_lat, "longitude": exp_lon},
         {"latitude": stu_lat, "longitude": stu_lon},
-        tolerance,
+        tolerance_km,
     )
 
 
-def handle_grade_place_name(args):
+def handle_grade_place_name(accepted_names=None, student_answer="", **kwargs):
     """Grade a place name answer."""
-    accepted = args.get("accepted_names", [])
-    student = args.get("student_answer", "").strip()
+    accepted = accepted_names or []
+    student = (student_answer or "").strip()
     if not accepted:
         return {"error": "accepted_names list is required"}
     if not student:

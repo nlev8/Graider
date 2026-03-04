@@ -9,26 +9,9 @@ import random
 import string
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from supabase import create_client, Client
+from backend.supabase_client import get_supabase_or_raise as get_supabase
 
 student_portal_bp = Blueprint('student_portal', __name__)
-
-# Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # Use service key for full access
-
-supabase: Client = None
-
-def get_supabase() -> Client:
-    """Get or create Supabase client."""
-    global supabase
-    if supabase is None:
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_KEY")
-        if not url or not key:
-            raise Exception("Supabase credentials not configured. Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env")
-        supabase = create_client(url, key)
-    return supabase
 
 
 def generate_join_code():

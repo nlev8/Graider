@@ -21,27 +21,14 @@ import secrets
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, g
-from supabase import create_client, Client
+from backend.supabase_client import get_supabase_or_raise as _get_supabase
 
 student_account_bp = Blueprint('student_account', __name__)
-
-_supabase: Client = None
 
 # In-memory rate limiter: {student_id_number: [(timestamp, ...)] }
 _login_attempts = defaultdict(list)
 LOGIN_RATE_LIMIT = 5
 LOGIN_RATE_WINDOW = 600  # 10 minutes
-
-
-def _get_supabase() -> Client:
-    global _supabase
-    if _supabase is None:
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_KEY")
-        if not url or not key:
-            raise Exception("Supabase credentials not configured")
-        _supabase = create_client(url, key)
-    return _supabase
 
 
 def _get_teacher_id():

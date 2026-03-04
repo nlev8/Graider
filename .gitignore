@@ -230,6 +230,9 @@ Uploads/
 !templates/*.docx
 !templates/*.pdf
 
+# Checkpoint backup files
+*_checkpoint_*.py
+
 # Chrome profile for SharePoint (contains session data)
 .graider_chrome_profile/
 

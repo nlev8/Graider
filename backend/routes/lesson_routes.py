@@ -15,7 +15,7 @@ try:
 except ImportError:
     anthropic = None
 
-from backend.services.assistant_tools import _extract_pdf_text, _extract_docx_text
+from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 
 logger = logging.getLogger(__name__)
 
