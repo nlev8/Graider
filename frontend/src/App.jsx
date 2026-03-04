@@ -9664,6 +9664,9 @@ ${signature}`;
                   showOnboardingWizard={showOnboardingWizard}
                   setShowOnboardingWizard={setShowOnboardingWizard}
                   loadAvailableFiles={loadAvailableFiles}
+                  filesLoading={filesLoading}
+                  sortedPeriods={sortedPeriods}
+                  accommodationPresets={accommodationPresets}
                   addToast={addToast}
                 />
               )}

@@ -117,6 +117,9 @@ export default function SettingsTab({
   showOnboardingWizard,
   setShowOnboardingWizard,
   loadAvailableFiles,
+  filesLoading,
+  sortedPeriods,
+  accommodationPresets,
   addToast,
 }) {
   const periodInputRef = useRef(null);
