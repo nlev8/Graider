@@ -35,6 +35,7 @@ import { supabase } from "./services/supabase";
 import LoginScreen from "./components/LoginScreen";
 import AssistantChat from "./components/AssistantChat";
 import AutomationBuilder from "./components/AutomationBuilder";
+import BehaviorPanel from "./components/BehaviorPanel";
 import OnboardingWizard from "./components/OnboardingWizard";
 import TutorialOverlay, { TUTORIAL_STEPS } from "./components/TutorialOverlay";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
@@ -16932,9 +16933,13 @@ ${signature}`;
               <div data-tutorial="assistant-chat" className={activeTab === "assistant" ? "fade-in glass-card" : ""} style={{
                 padding: 0,
                 overflow: "hidden",
-                display: activeTab === "assistant" ? "block" : "none",
+                display: activeTab === "assistant" ? "flex" : "none",
+                position: "relative",
               }}>
-                <AssistantChat addToast={addToast} subject={config.subject} />
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                  <AssistantChat addToast={addToast} subject={config.subject} />
+                </div>
+                <BehaviorPanel addToast={addToast} />
               </div>
 
               {/* Builder Tab */}

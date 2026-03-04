@@ -4,7 +4,10 @@
   "description": "**AI-Powered Grading Assistant for Educators**",
   "main": "focus-automation.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate-sitemap": "node landing/scripts/generate-sitemap.js",
+    "seo-check": "node landing/scripts/seo-health-check.js",
+    "lighthouse": "bash landing/scripts/lighthouse-check.sh"
   },
   "repository": {
     "type": "git",

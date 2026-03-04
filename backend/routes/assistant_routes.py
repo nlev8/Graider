@@ -872,7 +872,12 @@ COMMUNICATIONS:
   - SMS only: provide email_subject + sms_body, DO NOT provide email_body (omit it entirely, do not pass empty string)
   - Email + SMS: provide all three. The sms_body should be a SHORT notification (e.g. "Please check your email for a message regarding [subject]. -Mr./Ms. [Teacher]") pointing parents to the full email.
   - When the teacher says "send a message" or "contact parents", default to email + SMS with the SMS as a check-your-email notification.
-- send_parent_emails: Send emails to parents via Outlook automation. Use ONLY if the teacher specifically asks for Outlook. Always use dry_run=true first."""
+- send_parent_emails: Send emails to parents via Outlook automation. Use ONLY if the teacher specifically asks for Outlook. Always use dry_run=true first.
+
+BEHAVIOR TRACKING:
+- get_behavior_summary: Get behavior correction and praise counts for a student or class period. Shows daily breakdown, notes, and trends. Use when the teacher asks "how has [student] behaved?" or "show behavior for Period 3".
+- generate_behavior_email: Generate a professional behavior email to a student's parents. Includes correction counts, dates, notes, and constructive tone. Returns a draft for review. Use when asked to "write a behavior email for [student]'s parents".
+- send_behavior_email: Send a reviewed behavior email via Resend (direct email) or Focus portal automation. Always show the draft first and get teacher approval before sending."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:

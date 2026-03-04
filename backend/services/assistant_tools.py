@@ -4042,6 +4042,7 @@ def _merge_submodules():
         ("backend.services.assistant_tools_ai", "AI_TOOL_DEFINITIONS", "AI_TOOL_HANDLERS"),
         ("backend.services.assistant_tools_stem", "STEM_TOOL_DEFINITIONS", "STEM_TOOL_HANDLERS"),
         ("backend.services.assistant_tools_automation", "AUTOMATION_TOOL_DEFINITIONS", "AUTOMATION_TOOL_HANDLERS"),
+        ("backend.services.assistant_tools_behavior", "BEHAVIOR_TOOL_DEFINITIONS", "BEHAVIOR_TOOL_HANDLERS"),
     ]
 
     existing_names = {td["name"] for td in TOOL_DEFINITIONS}

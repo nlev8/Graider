@@ -665,6 +665,7 @@ def _match_to_config_title(normalized_name, config_titles):
     return best_title or normalized_name
 
 
+
 def _find_in_roster(roster, parsed):
     """Find a student in the roster using multiple matching strategies.
 
@@ -1161,6 +1162,7 @@ def mark_confirmations_sent_file():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 # ══════════════════════════════════════════════════════════════

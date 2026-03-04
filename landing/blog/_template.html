@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-80NP6VL2BK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-80NP6VL2BK', { anonymize_ip: true });
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- TODO: Replace BLOG-TITLE with your post title (50-60 chars ideal) -->
+    <title>BLOG-TITLE</title>
+    <!-- TODO: Replace BLOG-DESCRIPTION with 150-160 char description -->
+    <meta name="description" content="BLOG-DESCRIPTION">
+    <!-- TODO: Replace BLOG-KEYWORDS with comma-separated target keywords -->
+    <meta name="keywords" content="BLOG-KEYWORDS">
+
+    <!-- TODO: Replace BLOG-SLUG with your URL slug (e.g., my-new-post) -->
+    <link rel="canonical" href="https://graider.live/blog/BLOG-SLUG">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://graider.live/blog/BLOG-SLUG">
+    <meta property="og:title" content="BLOG-TITLE">
+    <meta property="og:description" content="BLOG-DESCRIPTION">
+    <meta property="og:image" content="https://graider.live/og-image.png">
+    <meta property="og:site_name" content="Graider">
+
+    <!-- Twitter Card -->
+    <meta name="robots" content="index, follow">
+    <!-- TODO: Replace PUBLISH-DATE with YYYY-MM-DD format -->
+    <meta property="article:published_time" content="PUBLISH-DATE">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="BLOG-TITLE">
+    <meta name="twitter:description" content="BLOG-DESCRIPTION">
+    <meta name="twitter:image" content="https://graider.live/og-image.png">
+
+    <link rel="icon" href="../favicon.ico" sizes="32x32">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="apple-touch-icon" href="../favicon.png">
+
+    <link rel="stylesheet" href="../styles.css">
+
+    <!-- JSON-LD: Article + FAQPage schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Article",
+          "headline": "BLOG-TITLE",
+          "datePublished": "PUBLISH-DATE",
+          "dateModified": "PUBLISH-DATE",
+          "author": {
+            "@type": "Organization",
+            "name": "Graider",
+            "url": "https://graider.live"
+          },
+          "publisher": {
+            "@type": "Organization",
+            "name": "Graider",
+            "url": "https://graider.live",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://graider.live/logo.svg"
+            }
+          },
+          "description": "BLOG-DESCRIPTION",
+          "mainEntityOfPage": "https://graider.live/blog/BLOG-SLUG",
+          "image": "https://graider.live/og-image.png"
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "TODO: Add FAQ question 1",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "TODO: Add FAQ answer 1"
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "TODO: Add FAQ question 2",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "TODO: Add FAQ answer 2"
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "TODO: Add FAQ question 3",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "TODO: Add FAQ answer 3"
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><img src="../logo.svg" alt="Graider" class="logo-icon" style="height: 168px; width: auto;"></a>
+            <div class="nav-links">
+                <a href="/#features">Features</a>
+                <a href="/#how-it-works">How It Works</a>
+                <a href="/#testimonials">Testimonials</a>
+                <a href="/#pricing">Beta</a>
+                <a href="/blog">Blog</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://app.graider.live" class="btn btn-ghost">Log In</a>
+                <a href="https://app.graider.live" class="btn btn-primary">Get Started</a>
+            </div>
+            <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+        </div>
+    </nav>
+
+    <!-- Article -->
+    <article class="blog-article">
+        <div class="blog-layout">
+
+            <!-- Breadcrumbs -->
+            <nav class="breadcrumbs" aria-label="Breadcrumb">
+                <a href="/">Home</a>
+                <span class="separator">/</span>
+                <a href="/blog">Blog</a>
+                <span class="separator">/</span>
+                <!-- TODO: Replace with your article title -->
+                <span>BLOG-TITLE</span>
+            </nav>
+
+            <!-- Header -->
+            <header class="blog-header">
+                <!-- TODO: Replace with your article title -->
+                <h1>BLOG-TITLE</h1>
+                <!-- TODO: Update date and read time -->
+                <div class="blog-meta">
+                    <span>Published PUBLISH-DATE</span>
+                    <span>&middot;</span>
+                    <span>X min read</span>
+                </div>
+            </header>
+
+            <!-- Table of Contents -->
+            <nav class="toc">
+                <h2>Table of Contents</h2>
+                <ul>
+                    <!-- TODO: Add your table of contents links -->
+                    <li><a href="#section-1">Section 1</a></li>
+                    <li><a href="#section-2">Section 2</a></li>
+                    <li><a href="#section-3">Section 3</a></li>
+                    <li><a href="#faq">FAQ</a></li>
+                </ul>
+            </nav>
+
+            <!-- Content -->
+            <div class="blog-content">
+
+                <!-- TODO: Add your blog content sections here -->
+                <section id="section-1">
+                    <h2>Section 1 Heading</h2>
+                    <p>Your content here...</p>
+                </section>
+
+                <section id="section-2">
+                    <h2>Section 2 Heading</h2>
+                    <p>Your content here...</p>
+                </section>
+
+                <section id="section-3">
+                    <h2>Section 3 Heading</h2>
+                    <p>Your content here...</p>
+                </section>
+
+                <!-- FAQ Section -->
+                <section id="faq">
+                    <h2>Frequently Asked Questions</h2>
+                    <!-- TODO: Add FAQ items matching the JSON-LD FAQPage schema above -->
+                    <div class="faq-item">
+                        <h3>FAQ question 1?</h3>
+                        <p>Answer 1...</p>
+                    </div>
+                    <div class="faq-item">
+                        <h3>FAQ question 2?</h3>
+                        <p>Answer 2...</p>
+                    </div>
+                    <div class="faq-item">
+                        <h3>FAQ question 3?</h3>
+                        <p>Answer 3...</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Related Posts -->
+            <div class="related-posts">
+                <h2>Related Articles</h2>
+                <div class="blog-grid">
+                    <a href="/blog/best-ai-grading-tools" class="blog-card">
+                        <span class="card-tag">Guide</span>
+                        <h3>Best AI Grading Tools for Teachers in 2026</h3>
+                        <span class="card-meta">Feb 2026 &middot; 15 min read</span>
+                    </a>
+                    <a href="/blog/graider-vs-cograder" class="blog-card">
+                        <span class="card-tag">Comparison</span>
+                        <h3>Graider vs CoGrader</h3>
+                        <span class="card-meta">Feb 2026 &middot; 12 min read</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="blog-cta">
+                <h2>Ready to Save Hours on Grading?</h2>
+                <p>Grade any assignment type, generate lesson plans, and track student progress &mdash; all in one tool. Free to start with Google Gemini.</p>
+                <a href="https://app.graider.live" class="btn">Try Graider Free</a>
+            </div>
+
+        </div>
+    </article>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="/" class="logo">
+                        <img src="../logo.svg" alt="Graider" class="logo-icon" style="height: 144px; width: auto;">
+                    </a>
+                    <p>AI-powered grading and planning assistant for K-12 teachers.</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Product</h4>
+                    <a href="/#features">Features</a>
+                    <a href="/#pricing">Beta</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Resources</h4>
+                    <a href="/blog">Blog</a>
+                    <a href="https://app.graider.live/User_Manual.md" target="_blank">User Manual</a>
+                    <a href="/llms.txt">LLMs.txt</a>
+                    <a href="mailto:admin@graider.live">Support</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Legal</h4>
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/terms">Terms of Service</a>
+                    <a href="/ferpa">FERPA Compliance</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Graider. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+    // Navbar scroll effect
+    window.addEventListener('scroll', function() {
+        document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 20);
+    });
+    // Mobile menu
+    document.getElementById('mobile-menu-btn').addEventListener('click', function() {
+        this.classList.toggle('active');
+    });
+    </script>
+</body>
+</html>
