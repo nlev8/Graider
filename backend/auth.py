@@ -1,10 +1,12 @@
 """
 Supabase JWT Authentication for Graider.
 Validates Bearer tokens on all /api/ routes except public endpoints.
+Supports both ES256 (JWKS) and HS256 (legacy secret) verification.
 """
 import os
 import logging
 import jwt
+from jwt import PyJWKClient
 from flask import request, jsonify, g
 
 logger = logging.getLogger(__name__)
@@ -24,9 +26,23 @@ PUBLIC_EXACT = [
     '/api/auth/approve-user',   # One-click approval from admin email (HMAC-protected)
 ]
 
+# JWKS client for ES256 verification (cached, refreshes automatically)
+_jwks_client = None
+
+
+def _get_jwks_client():
+    """Lazy-init JWKS client from Supabase URL."""
+    global _jwks_client
+    if _jwks_client is None:
+        supabase_url = os.getenv('SUPABASE_URL')
+        if supabase_url:
+            jwks_url = f"{supabase_url}/auth/v1/.well-known/jwks.json"
+            _jwks_client = PyJWKClient(jwks_url)
+    return _jwks_client
+
 
 def get_jwt_secret():
-    """Get the Supabase JWT secret from environment."""
+    """Get the Supabase JWT secret from environment (HS256 fallback)."""
     secret = os.getenv('SUPABASE_JWT_SECRET')
     if not secret:
         raise RuntimeError('SUPABASE_JWT_SECRET not configured')
@@ -36,8 +52,27 @@ def get_jwt_secret():
 def validate_token(token):
     """
     Validate a Supabase JWT and return the decoded payload.
+    Tries ES256 (JWKS) first, falls back to HS256 (legacy secret).
     Returns None if invalid.
     """
+    # Try ES256 via JWKS first
+    jwks = _get_jwks_client()
+    if jwks:
+        try:
+            signing_key = jwks.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=['ES256'],
+                audience='authenticated',
+            )
+            return payload
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidTokenError:
+            pass  # Fall through to HS256
+
+    # Fallback: HS256 with legacy secret
     try:
         payload = jwt.decode(
             token,

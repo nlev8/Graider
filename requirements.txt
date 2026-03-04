@@ -33,8 +33,9 @@ resend>=0.7.0
 # Database (Student Portal)
 supabase>=2.0.0
 
-# Auth (JWT validation)
+# Auth (JWT validation — cryptography needed for ES256/JWKS verification)
 PyJWT>=2.8.0
+cryptography>=42.0.0
 
 # Secure credential storage (SharePoint password)
 keyring>=25.0.0
