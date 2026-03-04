@@ -194,10 +194,19 @@ DEFAULT_PRESETS = {
 # PRESET MANAGEMENT
 # ══════════════════════════════════════════════════════════════
 
-def load_presets() -> dict:
+def load_presets(teacher_id: str = 'local-dev') -> dict:
     """Load accommodation presets (defaults + any custom ones)."""
     presets = DEFAULT_PRESETS.copy()
 
+    # Try storage abstraction first (Supabase for cloud users)
+    if _storage_load:
+        data = _storage_load('accommodation_presets', teacher_id)
+        if data is not None:
+            presets.update(data)
+            audit_log_accommodation("LOAD_PRESETS", f"Loaded {len(presets)} presets")
+            return presets
+
+    # Fallback to file
     if os.path.exists(PRESETS_FILE):
         try:
             with open(PRESETS_FILE, 'r') as f:
@@ -211,11 +220,17 @@ def load_presets() -> dict:
     return presets
 
 
-def save_preset(preset: dict) -> bool:
+def save_preset(preset: dict, teacher_id: str = 'local-dev') -> bool:
     """Save a custom accommodation preset."""
     try:
+        # Load existing custom presets
         presets = {}
-        if os.path.exists(PRESETS_FILE):
+        if _storage_load:
+            data = _storage_load('accommodation_presets', teacher_id)
+            if data is not None:
+                presets = data
+
+        if not presets and os.path.exists(PRESETS_FILE):
             with open(PRESETS_FILE, 'r') as f:
                 presets = json.load(f)
 
@@ -223,8 +238,13 @@ def save_preset(preset: dict) -> bool:
         preset['id'] = preset_id
         presets[preset_id] = preset
 
+        # Write to local file
         with open(PRESETS_FILE, 'w') as f:
             json.dump(presets, f, indent=2)
+
+        # Write to storage (Supabase)
+        if _storage_save:
+            _storage_save('accommodation_presets', presets, teacher_id)
 
         audit_log_accommodation("SAVE_PRESET", f"Saved preset: {preset_id}")
         return True
@@ -233,23 +253,30 @@ def save_preset(preset: dict) -> bool:
         return False
 
 
-def delete_preset(preset_id: str) -> bool:
+def delete_preset(preset_id: str, teacher_id: str = 'local-dev') -> bool:
     """Delete a custom preset (cannot delete defaults)."""
     if preset_id in DEFAULT_PRESETS:
         return False  # Cannot delete default presets
 
     try:
-        if os.path.exists(PRESETS_FILE):
+        # Load from storage first, fallback to file
+        presets = None
+        if _storage_load:
+            presets = _storage_load('accommodation_presets', teacher_id)
+
+        if presets is None and os.path.exists(PRESETS_FILE):
             with open(PRESETS_FILE, 'r') as f:
                 presets = json.load(f)
 
-            if preset_id in presets:
-                del presets[preset_id]
-                with open(PRESETS_FILE, 'w') as f:
-                    json.dump(presets, f, indent=2)
+        if presets and preset_id in presets:
+            del presets[preset_id]
+            with open(PRESETS_FILE, 'w') as f:
+                json.dump(presets, f, indent=2)
+            if _storage_save:
+                _storage_save('accommodation_presets', presets, teacher_id)
 
-                audit_log_accommodation("DELETE_PRESET", f"Deleted preset: {preset_id}")
-                return True
+            audit_log_accommodation("DELETE_PRESET", f"Deleted preset: {preset_id}")
+            return True
         return False
     except Exception as e:
         print(f"Error deleting preset: {e}")
@@ -305,7 +332,7 @@ def save_student_accommodations(mappings: dict, teacher_id: str = 'local-dev') -
         return False
 
 
-def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: str = "", student_name: str = "") -> bool:
+def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: str = "", student_name: str = "", teacher_id: str = 'local-dev') -> bool:
     """
     Assign accommodation presets to a student.
 
@@ -314,8 +341,9 @@ def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: s
         preset_ids: List of preset IDs to apply
         custom_notes: Additional custom accommodation notes
         student_name: Display name (stored locally, never sent to AI)
+        teacher_id: Teacher's Supabase UUID, or 'local-dev' for file backend
     """
-    mappings = load_student_accommodations()
+    mappings = load_student_accommodations(teacher_id)
 
     entry = {
         "presets": preset_ids,
@@ -331,15 +359,15 @@ def set_student_accommodation(student_id: str, preset_ids: list, custom_notes: s
 
     audit_log_accommodation("SET_STUDENT_ACCOMMODATION",
                            f"Student {student_id[:6]}... assigned {len(preset_ids)} presets")
-    return save_student_accommodations(mappings)
+    return save_student_accommodations(mappings, teacher_id)
 
 
-def get_student_accommodation(student_id: str) -> Optional[dict]:
+def get_student_accommodation(student_id: str, teacher_id: str = 'local-dev') -> Optional[dict]:
     """Get accommodation settings for a specific student."""
     if not student_id or student_id == "UNKNOWN":
         return None
 
-    mappings = load_student_accommodations()
+    mappings = load_student_accommodations(teacher_id)
     accommodation = mappings.get(student_id)
 
     if accommodation:
@@ -349,15 +377,15 @@ def get_student_accommodation(student_id: str) -> Optional[dict]:
     return accommodation
 
 
-def remove_student_accommodation(student_id: str) -> bool:
+def remove_student_accommodation(student_id: str, teacher_id: str = 'local-dev') -> bool:
     """Remove accommodation settings for a student."""
-    mappings = load_student_accommodations()
+    mappings = load_student_accommodations(teacher_id)
 
     if student_id in mappings:
         del mappings[student_id]
         audit_log_accommodation("REMOVE_STUDENT_ACCOMMODATION",
                                f"Removed accommodation for {student_id[:6]}...")
-        return save_student_accommodations(mappings)
+        return save_student_accommodations(mappings, teacher_id)
 
     return False
 
@@ -382,7 +410,7 @@ def _get_ell_language(student_id: str) -> Optional[str]:
     return None
 
 
-def build_accommodation_prompt(student_id: str) -> str:
+def build_accommodation_prompt(student_id: str, teacher_id: str = 'local-dev') -> str:
     """
     Build AI prompt instructions for a student's accommodations.
 
@@ -397,11 +425,11 @@ def build_accommodation_prompt(student_id: str) -> str:
     if not student_id or student_id == "UNKNOWN":
         return ""
 
-    accommodation = get_student_accommodation(student_id)
+    accommodation = get_student_accommodation(student_id, teacher_id)
     if not accommodation:
         return ""
 
-    presets = load_presets()
+    presets = load_presets(teacher_id)
     preset_ids = accommodation.get("presets", [])
     custom_notes = accommodation.get("custom_notes", "")
 
@@ -447,7 +475,7 @@ def build_accommodation_prompt(student_id: str) -> str:
 # ══════════════════════════════════════════════════════════════
 
 def import_accommodations_from_csv(csv_data: list, id_col: str, accommodation_col: str,
-                                   notes_col: str = None) -> dict:
+                                   notes_col: str = None, teacher_id: str = 'local-dev') -> dict:
     """
     Import student accommodations from CSV data.
 
@@ -456,11 +484,12 @@ def import_accommodations_from_csv(csv_data: list, id_col: str, accommodation_co
         id_col: Column name for student ID
         accommodation_col: Column name for accommodation type/presets
         notes_col: Optional column for custom notes
+        teacher_id: Teacher's Supabase UUID, or 'local-dev' for file backend
 
     Returns:
         Dict with import statistics
     """
-    presets = load_presets()
+    presets = load_presets(teacher_id)
     preset_names = {p['name'].lower(): p['id'] for p in presets.values()}
 
     imported = 0
@@ -492,7 +521,7 @@ def import_accommodations_from_csv(csv_data: list, id_col: str, accommodation_co
                 else:
                     custom_notes = item
 
-        set_student_accommodation(student_id, preset_ids, custom_notes)
+        set_student_accommodation(student_id, preset_ids, custom_notes, teacher_id=teacher_id)
         imported += 1
 
     audit_log_accommodation("IMPORT_FROM_CSV", f"Imported {imported}, skipped {skipped}")
@@ -508,16 +537,16 @@ def import_accommodations_from_csv(csv_data: list, id_col: str, accommodation_co
 # DATA MANAGEMENT (FERPA COMPLIANCE)
 # ══════════════════════════════════════════════════════════════
 
-def export_student_accommodations() -> dict:
+def export_student_accommodations(teacher_id: str = 'local-dev') -> dict:
     """
     Export all student accommodation data for backup/portability.
     FERPA: Data stays local, this is for teacher's own backup.
     """
     audit_log_accommodation("EXPORT_DATA", "Exported all student accommodation data")
-    return load_student_accommodations()
+    return load_student_accommodations(teacher_id)
 
 
-def clear_all_accommodations() -> bool:
+def clear_all_accommodations(teacher_id: str = 'local-dev') -> bool:
     """
     Clear all student accommodation data.
     FERPA: Supports data deletion requirements.
@@ -526,6 +555,10 @@ def clear_all_accommodations() -> bool:
         if os.path.exists(STUDENT_ACCOMMODATIONS_FILE):
             os.remove(STUDENT_ACCOMMODATIONS_FILE)
 
+        # Also clear from storage (Supabase)
+        if _storage_save:
+            _storage_save('accommodations', {}, teacher_id)
+
         audit_log_accommodation("CLEAR_ALL_DATA", "Deleted all student accommodation data")
         return True
     except Exception as e:
@@ -533,10 +566,10 @@ def clear_all_accommodations() -> bool:
         return False
 
 
-def get_accommodation_stats() -> dict:
+def get_accommodation_stats(teacher_id: str = 'local-dev') -> dict:
     """Get statistics about accommodation usage."""
-    mappings = load_student_accommodations()
-    presets = load_presets()
+    mappings = load_student_accommodations(teacher_id)
+    presets = load_presets(teacher_id)
 
     preset_usage = {}
     for student_data in mappings.values():

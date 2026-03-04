@@ -34,13 +34,14 @@ except ImportError:
 
 # Import storage abstraction
 try:
-    from backend.storage import load as storage_load, save as storage_save, sync_all_to_cloud
+    from backend.storage import load as storage_load, save as storage_save, list_keys as storage_list_keys, sync_all_to_cloud
 except ImportError:
     try:
-        from storage import load as storage_load, save as storage_save, sync_all_to_cloud
+        from storage import load as storage_load, save as storage_save, list_keys as storage_list_keys, sync_all_to_cloud
     except ImportError:
         storage_load = None
         storage_save = None
+        storage_list_keys = None
         sync_all_to_cloud = None
 
 settings_bp = Blueprint('settings', __name__)
@@ -409,10 +410,60 @@ def upload_period():
     })
 
 
+def _get_students_from_period_rows(rows):
+    """Extract student list from stored period JSON rows (cloud equivalent of get_students_from_period_file)."""
+    students = []
+    if not rows:
+        return students
+    # Detect column names from first row's keys
+    headers = list(rows[0].keys()) if rows else []
+    first_col = next((h for h in headers if 'first' in h.lower()), None)
+    last_col = next((h for h in headers if 'last' in h.lower()), None)
+    name_col = next((h for h in headers if any(x in h.lower() for x in ['name', 'student'])), None)
+    id_col = next((h for h in headers if h.lower().strip() == 'student id'), None)
+
+    for row in rows:
+        student_id = row.get(id_col, '').strip() if id_col else ''
+        if first_col and last_col:
+            first = row.get(first_col, '').strip()
+            last = row.get(last_col, '').strip()
+            if first or last:
+                students.append({"first": first, "last": last, "full": f"{first} {last}".strip(), "id": student_id})
+        elif name_col:
+            name = row.get(name_col, '').strip()
+            if name:
+                first, last = parse_student_name(name)
+                students.append({"first": first, "last": last, "full": name, "id": student_id})
+    return students
+
+
 @settings_bp.route('/api/list-periods')
 def list_periods():
     """List all uploaded period files with their students."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     periods = []
+
+    # Try cloud storage first for non-local users
+    if teacher_id != 'local-dev' and storage_list_keys and storage_load:
+        meta_keys = storage_list_keys('period_meta:', teacher_id)
+        for key in meta_keys:
+            try:
+                metadata = storage_load(key, teacher_id)
+                if metadata:
+                    # Load student data from stored period JSON
+                    filename = metadata.get('filename', '')
+                    period_data = storage_load(f'period:{filename}', teacher_id)
+                    if period_data and period_data.get('rows'):
+                        metadata['students'] = _get_students_from_period_rows(period_data['rows'])
+                    else:
+                        metadata['students'] = []
+                    periods.append(metadata)
+            except Exception as e:
+                print(f"Error loading cloud period metadata {key}: {e}")
+        if periods:
+            return jsonify({"periods": periods})
+
+    # Fallback to local files
     if os.path.exists(PERIODS_DIR):
         for f in os.listdir(PERIODS_DIR):
             if f.endswith('.meta.json'):
@@ -1065,7 +1116,8 @@ def get_parent_contacts():
 @settings_bp.route('/api/accommodation-presets')
 def get_accommodation_presets():
     """Get all available accommodation presets (default + custom)."""
-    presets = load_presets()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    presets = load_presets(teacher_id)
     return jsonify({"presets": list(presets.values())})
 
 
@@ -1076,7 +1128,8 @@ def create_accommodation_preset():
     if not data.get('name') or not data.get('ai_instructions'):
         return jsonify({"error": "Name and AI instructions required"}), 400
 
-    if save_preset(data):
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    if save_preset(data, teacher_id):
         return jsonify({"status": "saved", "preset": data})
     else:
         return jsonify({"error": "Failed to save preset"}), 500
@@ -1085,7 +1138,8 @@ def create_accommodation_preset():
 @settings_bp.route('/api/accommodation-presets/<preset_id>', methods=['DELETE'])
 def delete_accommodation_preset(preset_id):
     """Delete a custom accommodation preset."""
-    if delete_preset(preset_id):
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    if delete_preset(preset_id, teacher_id):
         return jsonify({"status": "deleted"})
     else:
         return jsonify({"error": "Cannot delete default presets or preset not found"}), 400
@@ -1098,12 +1152,30 @@ def get_all_student_accommodations():
     FERPA: Returns student IDs with their accommodation settings.
     Data is stored and displayed locally only.
     """
-    mappings = load_student_accommodations()
-    presets = load_presets()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    mappings = load_student_accommodations(teacher_id)
+    presets = load_presets(teacher_id)
 
-    # Build student ID → name lookup from period CSVs for name resolution
+    # Build student ID → name lookup from period data for name resolution
     id_to_name = {}
-    if os.path.exists(PERIODS_DIR):
+    # Try cloud period data first
+    if teacher_id != 'local-dev' and storage_list_keys and storage_load:
+        period_keys = storage_list_keys('period:', teacher_id)
+        for key in period_keys:
+            try:
+                period_data = storage_load(key, teacher_id)
+                if period_data and period_data.get('rows'):
+                    students = _get_students_from_period_rows(period_data['rows'])
+                    for s in students:
+                        sid = s.get("id", "")
+                        if sid:
+                            name = s.get("full") or ((s.get("first", "") + " " + s.get("last", "")).strip())
+                            if name:
+                                id_to_name[sid] = name
+            except Exception:
+                pass
+    # Fallback to local files
+    if not id_to_name and os.path.exists(PERIODS_DIR):
         for fname in os.listdir(PERIODS_DIR):
             if fname.endswith(('.csv', '.xlsx', '.xls')) and not fname.startswith('.'):
                 try:
@@ -1145,7 +1217,8 @@ def get_all_student_accommodations():
 @settings_bp.route('/api/student-accommodations/<student_id>', methods=['GET'])
 def get_single_student_accommodation(student_id):
     """Get accommodation settings for a specific student."""
-    accommodation = get_student_accommodation(student_id)
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    accommodation = get_student_accommodation(student_id, teacher_id)
     if accommodation:
         return jsonify({"accommodation": accommodation})
     else:
@@ -1160,7 +1233,8 @@ def set_single_student_accommodation(student_id):
     custom_notes = data.get('custom_notes', '')
     student_name = data.get('student_name', '')
 
-    if set_student_accommodation(student_id, preset_ids, custom_notes, student_name):
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    if set_student_accommodation(student_id, preset_ids, custom_notes, student_name, teacher_id):
         audit_log_accommodation("API_SET", f"Set accommodation for {student_id[:6]}...")
         return jsonify({"status": "saved"})
     else:
@@ -1170,7 +1244,8 @@ def set_single_student_accommodation(student_id):
 @settings_bp.route('/api/student-accommodations/<student_id>', methods=['DELETE'])
 def delete_student_accommodation(student_id):
     """Remove accommodation settings for a student."""
-    if remove_student_accommodation(student_id):
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    if remove_student_accommodation(student_id, teacher_id):
         return jsonify({"status": "deleted"})
     else:
         return jsonify({"error": "Student not found or deletion failed"}), 404
@@ -1199,7 +1274,8 @@ def import_accommodations():
         reader = csv.DictReader(content.splitlines())
         csv_data = list(reader)
 
-        result = import_accommodations_from_csv(csv_data, id_col, accommodation_col, notes_col)
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        result = import_accommodations_from_csv(csv_data, id_col, accommodation_col, notes_col, teacher_id)
 
         return jsonify({
             "status": "imported",
@@ -1217,7 +1293,8 @@ def export_accommodations():
     Export all accommodation data for backup.
     FERPA: Supports data portability requirements.
     """
-    data = export_student_accommodations()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    data = export_student_accommodations(teacher_id)
     return jsonify({
         "accommodations": data,
         "exported_at": __import__('datetime').datetime.now().isoformat()
@@ -1230,7 +1307,8 @@ def clear_accommodations():
     Delete all student accommodation data.
     FERPA: Supports data deletion requirements.
     """
-    if clear_all_accommodations():
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    if clear_all_accommodations(teacher_id):
         return jsonify({"status": "cleared"})
     else:
         return jsonify({"error": "Failed to clear accommodations"}), 500
@@ -1239,7 +1317,8 @@ def clear_accommodations():
 @settings_bp.route('/api/accommodation-stats')
 def accommodation_stats():
     """Get statistics about accommodation usage."""
-    stats = get_accommodation_stats()
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    stats = get_accommodation_stats(teacher_id)
     return jsonify(stats)
 
 

@@ -1282,7 +1282,7 @@ Look for: main ideas captured, good questions, clear summary at bottom.
 
                 # Add accommodation prompt if student has IEP/504
                 if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-                    accommodation_prompt = build_accommodation_prompt(student_info['student_id'])
+                    accommodation_prompt = build_accommodation_prompt(student_info['student_id'], teacher_id)
                     if accommodation_prompt:
                         file_ai_notes += f"\n{accommodation_prompt}"
 
@@ -2908,10 +2908,11 @@ def import_individual_student_data():
 
     # 3. Accommodations
     if accommodations:
-        all_acc = load_student_accommodations()
+        tid = getattr(g, 'user_id', 'local-dev')
+        all_acc = load_student_accommodations(tid)
         all_acc[student_id] = accommodations
         all_acc[student_id]["updated"] = datetime.now().isoformat()
-        save_student_accommodations(all_acc)
+        save_student_accommodations(all_acc, tid)
         imported["accommodations"] = True
 
     # 4. ELL data
