@@ -9663,6 +9663,7 @@ ${signature}`;
                   setExportStudentSearch={setExportStudentSearch}
                   showOnboardingWizard={showOnboardingWizard}
                   setShowOnboardingWizard={setShowOnboardingWizard}
+                  loadAvailableFiles={loadAvailableFiles}
                   addToast={addToast}
                 />
               )}
