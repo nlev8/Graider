@@ -120,6 +120,9 @@ export default function SettingsTab({
   filesLoading,
   sortedPeriods,
   accommodationPresets,
+  handleBrowse,
+  EDTECH_TOOLS,
+  MODEL_COST_PER_ASSIGNMENT,
   addToast,
 }) {
   const periodInputRef = useRef(null);

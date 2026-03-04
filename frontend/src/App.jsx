@@ -9667,6 +9667,9 @@ ${signature}`;
                   filesLoading={filesLoading}
                   sortedPeriods={sortedPeriods}
                   accommodationPresets={accommodationPresets}
+                  handleBrowse={handleBrowse}
+                  EDTECH_TOOLS={EDTECH_TOOLS}
+                  MODEL_COST_PER_ASSIGNMENT={MODEL_COST_PER_ASSIGNMENT}
                   addToast={addToast}
                 />
               )}
