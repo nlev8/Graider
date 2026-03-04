@@ -165,9 +165,21 @@ function findStudentPeriod(studentName, roster) {
     const students = periodData.students || [];
     for (const student of students) {
       if (namesMatch(studentName, student.name)) {
+        // Extract the student's actual course code for this period from their schedule
+        // This is needed to pick the correct section when multiple sections share a period number
+        var courseCode = '';
+        if (student.schedule && Array.isArray(student.schedule)) {
+          for (var si = 0; si < student.schedule.length; si++) {
+            if (student.schedule[si].period === periodData.period_num) {
+              courseCode = student.schedule[si].course || '';
+              break;
+            }
+          }
+        }
         return {
           periodName: periodName,
           periodNum: periodData.period_num,
+          courseCode: courseCode,
           student: student,
         };
       }
@@ -237,6 +249,7 @@ function validateMessages(messages, roster) {
       message: msg,
       periodName: match.periodName,
       periodNum: match.periodNum,
+      courseCode: match.courseCode || '',
       student: match.student,
     });
   }
@@ -490,8 +503,8 @@ async function navigateToCompose(page) {
  * We scan ALL <select> elements on the page and find the one whose options
  * match the "NN - CODE" pattern, then select the option matching our periodNum.
  */
-async function selectPeriodSection(page, periodNum) {
-  emit('status', { message: 'Selecting period ' + periodNum + '...' });
+async function selectPeriodSection(page, periodNum, courseCode) {
+  emit('status', { message: 'Selecting period ' + periodNum + (courseCode ? ' (course: ' + courseCode + ')' : '') + '...' });
 
   const padded = String(periodNum).padStart(2, '0');
 
@@ -503,7 +516,7 @@ async function selectPeriodSection(page, periodNum) {
     const sel = allSelects[si];
     const opts = await sel.locator('option').all();
     let hasPeriodFormat = false;
-    let matchOpt = null;
+    let allMatches = [];  // Collect ALL options matching this period number
 
     for (const opt of opts) {
       const text = (await opt.textContent().catch(() => '')).trim();
@@ -512,12 +525,24 @@ async function selectPeriodSection(page, periodNum) {
         hasPeriodFormat = true;
         const optNum = text.split(/[\s-]/)[0].replace(/^0+/, '');
         if (optNum === String(periodNum)) {
-          matchOpt = { text: text, value: await opt.getAttribute('value').catch(() => '') };
+          allMatches.push({ text: text, value: await opt.getAttribute('value').catch(() => '') });
         }
       }
     }
 
-    if (hasPeriodFormat && matchOpt) {
+    if (hasPeriodFormat && allMatches.length > 0) {
+      // If multiple sections for the same period, use courseCode to disambiguate
+      var matchOpt = allMatches[0];  // default to first match
+      if (allMatches.length > 1 && courseCode) {
+        var courseUpper = courseCode.toUpperCase();
+        for (var mi = 0; mi < allMatches.length; mi++) {
+          if (allMatches[mi].text.toUpperCase().indexOf(courseUpper) !== -1) {
+            matchOpt = allMatches[mi];
+            emit('status', { message: 'Disambiguated ' + allMatches.length + ' sections using course code ' + courseCode });
+            break;
+          }
+        }
+      }
       await sel.selectOption(matchOpt.value);
       emit('status', { message: 'Selected period: ' + matchOpt.text });
       await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
@@ -552,28 +577,31 @@ async function selectPeriodSection(page, periodNum) {
 }
 
 /**
- * Select "Primary Contacts" from the recipient type dropdown.
+ * Select the recipient type from the dropdown.
  * This dropdown is the small icon/button to the left of the student picker ▼,
  * between the "Once Per Family" select and the recipient input field.
  * It controls who receives the message — students vs parents/guardians.
- * Must be set to "Primary Contacts" so emails/SMS go to parents.
+ *
+ * Options: "Students", "Primary Contacts", "Once Per Family",
+ *          "Teachers Of", "Students & Primary Contacts"
+ *
+ * @param {string} recipientType - e.g. "Primary Contacts" or "Students"
  */
-async function selectPrimaryContacts(page) {
-  emit('status', { message: 'Selecting "Primary Contacts" recipient type...' });
+async function selectRecipientType(page, recipientType) {
+  recipientType = recipientType || 'Primary Contacts';
+  emit('status', { message: 'Selecting "' + recipientType + '" recipient type...' });
 
   // The recipient type is a <select> in the recipient row (at ~y=154, ~x=231).
-  // It defaults to "Once Per Family" and has options:
-  //   Students, Primary Contacts, Once Per Family, Teachers Of, Students & Primary Contacts
-  // We need "Primary Contacts" so emails/SMS go to parents.
   // The select has no name attribute, so we find it by scanning all selects for the option text.
-  const selected = await page.evaluate(function() {
+  var target = recipientType;
+  const selected = await page.evaluate(function(target) {
     var selects = document.querySelectorAll('select');
     for (var i = 0; i < selects.length; i++) {
       var sel = selects[i];
       var rect = sel.getBoundingClientRect();
       if (rect.top < 100 || rect.top > 200) continue;
       for (var j = 0; j < sel.options.length; j++) {
-        if (sel.options[j].text === 'Primary Contacts') {
+        if (sel.options[j].text === target) {
           sel.selectedIndex = j;
           sel.dispatchEvent(new Event('change', { bubbles: true }));
           return true;
@@ -581,16 +609,16 @@ async function selectPrimaryContacts(page) {
       }
     }
     return false;
-  });
+  }, target);
 
   if (selected) {
-    emit('status', { message: 'Selected "Primary Contacts"' });
+    emit('status', { message: 'Selected "' + recipientType + '"' });
     await page.waitForTimeout(1500);
-    await screenshot(page, 'primary_contacts_selected');
+    await screenshot(page, 'recipient_type_selected');
     return true;
   }
 
-  emit('warning', { message: 'Could not find "Primary Contacts" dropdown' });
+  emit('warning', { message: 'Could not find "' + recipientType + '" in recipient dropdown' });
   return false;
 }
 
@@ -1437,16 +1465,20 @@ async function sendOneMessage(page, entry, dryRun, currentPeriod) {
   const msg = entry.message;
   const studentName = msg.student_name;
   const periodNum = entry.periodNum;
+  const courseCode = entry.courseCode || '';
 
-  emit('status', { message: 'Processing: ' + studentName + ' (Period ' + periodNum + ')' });
+  emit('status', { message: 'Processing: ' + studentName + ' (Period ' + periodNum + (courseCode ? ', ' + courseCode : '') + ')' });
 
-  // Step 1: Select period if different from current
-  if (currentPeriod !== periodNum) {
-    await selectPeriodSection(page, periodNum);
+  // Step 1: Select period/section if different from current
+  // Track both period number and course code to handle multiple sections per period
+  var currentKey = currentPeriod ? (currentPeriod.num + ':' + (currentPeriod.course || '')) : '';
+  var targetKey = periodNum + ':' + courseCode;
+  if (currentKey !== targetKey) {
+    await selectPeriodSection(page, periodNum, courseCode);
   }
 
-  // Step 2: Select "Primary Contacts" so messages go to parents
-  await selectPrimaryContacts(page);
+  // Step 2: Select recipient type (Students, Primary Contacts, etc.)
+  await selectRecipientType(page, msg.recipient_type || 'Primary Contacts');
 
   // Step 3: Open student dropdown and select student
   const dropdownOpened = await openStudentDropdown(page);
@@ -1533,8 +1565,11 @@ async function main() {
 
   emit('status', { message: valid.length + ' valid message(s) to process' });
 
-  // Group by period for efficient processing (minimize section switches)
-  valid.sort(function(a, b) { return a.periodNum - b.periodNum; });
+  // Group by period+course for efficient processing (minimize section switches)
+  valid.sort(function(a, b) {
+    if (a.periodNum !== b.periodNum) return a.periodNum - b.periodNum;
+    return (a.courseCode || '').localeCompare(b.courseCode || '');
+  });
 
   // If dry-run with no --screenshot, just validate and exit
   if (dryRun && !screenshotsEnabled) {
@@ -1597,7 +1632,7 @@ async function main() {
         const result = await sendOneMessage(page, entry, dryRun, currentPeriod);
         if (result.success) {
           results.sent++;
-          currentPeriod = entry.periodNum;
+          currentPeriod = { num: entry.periodNum, course: entry.courseCode || '' };
           emit('status', { message: 'Message ' + msgNum + ' processed successfully' });
         } else {
           results.failed++;
