@@ -2136,8 +2136,14 @@ function App() {
     return () => clearTimeout(saveTimeout);
   }, [assignment, importedDoc, settingsLoaded, loadedAssignmentName, isLoadingAssignment]);
 
-  // Poll status while grading
+  // Fetch status once on mount (catch in-progress grading on page refresh)
   useEffect(() => {
+    api.getStatus().then(setStatus).catch(() => {});
+  }, []);
+
+  // Poll status while grading (only when grading is active)
+  useEffect(() => {
+    if (!status.is_running) return;
     const interval = setInterval(async () => {
       try {
         const data = await api.getStatus();
@@ -2147,7 +2153,7 @@ function App() {
       }
     }, 500);
     return () => clearInterval(interval);
-  }, []);
+  }, [status.is_running]);
 
   // Fetch pending confirmation count and student list (scans assignments folder + roster)
   const fetchPendingConfirmations = async (studentOverride) => {
@@ -19778,15 +19784,17 @@ ${signature}`;
                                 </h4>
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "start" }}>
                                   <div style={{ display: "flex", justifyContent: "center" }}>
-                                    <ResponsiveContainer width="100%" height={250}>
-                                      <RadarChart data={radarData}>
+                                    <ResponsiveContainer width="100%" height={280}>
+                                      <RadarChart data={radarData} cy="45%">
                                         <PolarGrid stroke="rgba(148,163,184,0.3)" />
                                         <PolarAngleAxis dataKey="category" tick={(props) => {
                                           const { x, y, payload } = props;
-                                          let dy = 0;
+                                          let dx = 0, dy = 0, anchor = "middle";
                                           if (payload.value === "Content") dy = -8;
                                           if (payload.value === "Writing") dy = 8;
-                                          return React.createElement("text", { x: x, y: y + dy, textAnchor: "middle", fill: "var(--text-secondary)", fontSize: 12 }, payload.value);
+                                          if (payload.value === "Effort") { dx = -6; anchor = "end"; }
+                                          if (payload.value === "Completeness") { dx = 6; anchor = "start"; }
+                                          return React.createElement("text", { x: x + dx, y: y + dy, textAnchor: anchor, fill: "var(--text-secondary)", fontSize: 12 }, payload.value);
                                         }} />
                                         <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "var(--text-secondary)", fontSize: 10 }} />
                                         <Radar name="Student" dataKey="student" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} />
@@ -20587,9 +20595,11 @@ ${signature}`;
                                     const normName = aName.replace(/[_\-\.\u2013\u2014]/g, " ").replace(/\s+/g, " ").trim();
                                     if (fLower.includes(normName)) return true;
                                     // Word-overlap fallback: handles truncated filenames and minor wording differences
-                                    const words = normName.split(" ").filter((w) => w.length > 1);
+                                    // Filter out short words (the, of, an, in, war, etc.) to avoid false positives
+                                    const words = normName.split(" ").filter((w) => w.length > 3);
+                                    if (words.length < 2) return false;
                                     const matched = words.filter((w) => fLower.includes(w)).length;
-                                    return matched >= Math.max(3, Math.ceil(words.length * 0.6));
+                                    return matched >= Math.max(3, Math.ceil(words.length * 0.75));
                                   },
                                 );
                                 return hasStudentName && hasAssignment;
