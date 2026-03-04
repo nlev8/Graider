@@ -118,10 +118,11 @@ def _normalize_assignment_name(name):
     """Normalize assignment name for comparison (strips suffixes like (1), .docx)."""
     import re
     n = name.strip()
-    n = re.sub(r'\s*\(\d+\)\s*$', '', n)       # Remove trailing (1), (2)
     n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)  # Remove .docx
     n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)    # Remove .pdf
-    n = re.sub(r'[._\-]', ' ', n)              # Replace . _ - with space
+    n = re.sub(r'\s*\(\d+\)\s*$', '', n)       # Remove trailing (1), (2) — after extensions
+    n = re.sub(r'[^\w\s&\']', ' ', n)          # Strip punctuation/symbols/emoji (keep & and ')
+    n = n.replace('_', ' ')                    # Underscores to spaces
     n = re.sub(r'\s+', ' ', n)                 # Collapse whitespace
     return n.strip().lower()
 
@@ -558,6 +559,14 @@ def _load_saved_assignments(teacher_id='local-dev'):
     """Load saved assignment configs.
     Returns list of dicts with normalized name and display title."""
     saved = []
+    def _collect_aliases(data, aliases):
+        """Build normalized alias list from explicit aliases + importedDoc filename."""
+        norms = [_normalize_assignment_name(a) for a in aliases if a]
+        imported_fn = data.get('importedDoc', {}).get('filename', '')
+        if imported_fn:
+            norms.append(_normalize_assignment_name(imported_fn))
+        return [n for n in norms if n]
+
     if storage_list_keys and storage_load:
         keys = storage_list_keys('assignment:', teacher_id)
         for key in keys:
@@ -566,6 +575,7 @@ def _load_saved_assignments(teacher_id='local-dev'):
             saved.append({
                 "title": title,
                 "norm": _normalize_assignment_name(title),
+                "aliases": _collect_aliases(data, data.get('aliases', [])),
             })
         if saved:
             return saved
@@ -582,6 +592,7 @@ def _load_saved_assignments(teacher_id='local-dev'):
             saved.append({
                 "title": title,
                 "norm": _normalize_assignment_name(title),
+                "aliases": _collect_aliases(data, data.get('aliases', [])),
             })
         except Exception:
             pass

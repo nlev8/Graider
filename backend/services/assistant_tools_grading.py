@@ -38,12 +38,16 @@ except ImportError:
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════
 
-def _match_assignment_to_config(assign_name, saved_norms, saved_display):
+def _match_assignment_to_config(assign_name, saved_norms, saved_display,
+                                alias_to_norm=None):
     """Try to match an assignment name to a saved config. Returns the matched
-    norm key or None."""
+    norm key or None.  Checks: exact norm → alias lookup → 25-char prefix fuzzy."""
     norm = _normalize_assignment_name(assign_name)
     if norm in saved_norms:
         return norm
+    # Check aliases
+    if alias_to_norm and norm in alias_to_norm:
+        return alias_to_norm[norm]
     norm_lower = norm.lower()
     for sn in saved_norms:
         sn_lower = sn.lower()
@@ -54,10 +58,18 @@ def _match_assignment_to_config(assign_name, saved_norms, saved_display):
                 norm_lower.startswith(sd_norm[:25]) or
                 sd_norm.startswith(norm_lower[:25])):
             return sn
+    # Check alias fuzzy match (25-char prefix)
+    if alias_to_norm:
+        for alias_norm, config_norm in alias_to_norm.items():
+            alias_lower = alias_norm.lower()
+            if (norm_lower.startswith(alias_lower[:25]) or
+                    alias_lower.startswith(norm_lower[:25])):
+                return config_norm
     return None
 
 
-def _scan_submission_folder(roster_name_map, saved_norms, saved_display):
+def _scan_submission_folder(roster_name_map, saved_norms, saved_display,
+                            alias_to_norm=None):
     """Scan the assignments folder for submitted files. Returns a dict of
     student_id -> set of matched saved config norm keys.
     This catches submissions that haven't been graded yet."""
@@ -122,7 +134,7 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display):
             continue
 
         # Match assignment to saved config
-        matched_config = _match_assignment_to_config(assign_part, saved_norms, saved_display)
+        matched_config = _match_assignment_to_config(assign_part, saved_norms, saved_display, alias_to_norm)
         if matched_config:
             result[sid].add(matched_config)
 
@@ -141,6 +153,13 @@ def _build_missing_assignments_data():
 
     saved_norms = {a["norm"] for a in saved_assignments}
     saved_display = {a["norm"]: a["title"] for a in saved_assignments}
+
+    # Build alias -> config norm lookup
+    alias_to_norm = {}
+    for a in saved_assignments:
+        for alias_norm in a.get("aliases", []):
+            if alias_norm:
+                alias_to_norm[alias_norm] = a["norm"]
 
     # Roster is authoritative for student_id -> period mapping
     roster = _load_roster()
@@ -161,7 +180,7 @@ def _build_missing_assignments_data():
             name = r["student_name"]
             if not sid or sid == "UNKNOWN":
                 continue
-            matched = _match_assignment_to_config(r["assignment"], saved_norms, saved_display)
+            matched = _match_assignment_to_config(r["assignment"], saved_norms, saved_display, alias_to_norm)
             if matched:
                 student_data[sid]["assigns"].add(matched)
             # Set period from roster (authoritative)
@@ -174,7 +193,7 @@ def _build_missing_assignments_data():
                 student_data[sid]["name"] = name
 
     # Pass 2: ungraded submissions from assignments folder
-    folder_submissions = _scan_submission_folder(roster_name_map, saved_norms, saved_display)
+    folder_submissions = _scan_submission_folder(roster_name_map, saved_norms, saved_display, alias_to_norm)
     for sid, assigns in folder_submissions.items():
         student_data[sid]["assigns"].update(assigns)
         if not student_data[sid]["period"] and sid in roster_period_map:

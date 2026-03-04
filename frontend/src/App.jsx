@@ -11341,10 +11341,10 @@ ${signature}`;
                                   .replace(/\.(docx|pdf|doc|txt)$/i, "");
                                 // Strip OneDrive/SharePoint duplicate suffixes
                                 name = name.replace(/\s*\(\d+\)\s*$/, "");   // "file (1)" -> "file"
-                                name = name.replace(/\s+\d{1,2}\s*$/, "");   // "file 1" -> "file"
                                 name = name.replace(/\s*-\s*copy\s*\d*$/i, ""); // "file - Copy 2" -> "file"
                                 return name
-                                  .replace(/[_\-\.\u2013\u2014]/g, " ")
+                                  .replace(/[^\w\s&']/g, " ")
+                                  .replace(/_/g, " ")
                                   .replace(/\s+/g, " ")
                                   .trim();
                               }),
@@ -11364,6 +11364,7 @@ ${signature}`;
                                 ...(assignmentData.aliases || []).map((a) =>
                                   a.toLowerCase(),
                                 ),
+                                ...(assignmentData.importedFilename ? [assignmentData.importedFilename.replace(/\.\w+$/, "").toLowerCase()] : []),
                               ];
 
                               // Normalize student name: strip commas/punctuation, replace separators with spaces
@@ -11374,22 +11375,25 @@ ${signature}`;
 
                               return [...uploadedNames].some((fileName) => {
                                 const fLower = fileName.toLowerCase();
+                                const fNorm = fLower.replace(/[^\w\s&']/g, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim();
                                 const nameMatchCount = nameParts.filter((part) =>
                                   fLower.includes(part),
                                 ).length;
                                 const hasStudentName =
                                   nameMatchCount >= nameThreshold ||
                                   fLower.includes(sNorm.replace(/ /g, ""));
-                                // Check if file matches any assignment name (includes word-overlap for truncated filenames)
+                                // Check if file matches any assignment name
                                 const hasAssignment = namesToCheck.some(
                                   (aName) => {
-                                    const normName = aName.replace(/[_\-\.\u2013\u2014]/g, " ").replace(/\s+/g, " ").trim();
-                                    if (fLower.includes(normName)) return true;
-                                    // Word-overlap fallback: handles truncated filenames and minor wording differences
-                                    // Filter out short words (the, of, an, in, war, etc.) to avoid false positives
+                                    const normName = aName.replace(/[^\w\s&']/g, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim();
+                                    if (fNorm.includes(normName)) return true;
+                                    // Prefix check: handles SharePoint-truncated filenames
+                                    // (config name starts with same words as what's in the file)
+                                    if (normName.length > 15 && fNorm.includes(normName.slice(0, Math.min(normName.length, 35)))) return true;
+                                    // Word-overlap fallback for minor wording differences
                                     const words = normName.split(" ").filter((w) => w.length > 3);
                                     if (words.length < 2) return false;
-                                    const matched = words.filter((w) => fLower.includes(w)).length;
+                                    const matched = words.filter((w) => fNorm.includes(w)).length;
                                     return matched >= Math.max(3, Math.ceil(words.length * 0.75));
                                   },
                                 );
