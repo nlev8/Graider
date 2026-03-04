@@ -116,6 +116,7 @@ export default function SettingsTab({
   setExportStudentSearch,
   showOnboardingWizard,
   setShowOnboardingWizard,
+  loadAvailableFiles,
   addToast,
 }) {
   const periodInputRef = useRef(null);
