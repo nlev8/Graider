@@ -19781,7 +19781,13 @@ ${signature}`;
                                     <ResponsiveContainer width="100%" height={250}>
                                       <RadarChart data={radarData}>
                                         <PolarGrid stroke="rgba(148,163,184,0.3)" />
-                                        <PolarAngleAxis dataKey="category" tick={{ fill: "var(--text-secondary)", fontSize: 12 }} />
+                                        <PolarAngleAxis dataKey="category" tick={(props) => {
+                                          const { x, y, payload } = props;
+                                          let dy = 0;
+                                          if (payload.value === "Content") dy = -8;
+                                          if (payload.value === "Writing") dy = 8;
+                                          return React.createElement("text", { x: x, y: y + dy, textAnchor: "middle", fill: "var(--text-secondary)", fontSize: 12 }, payload.value);
+                                        }} />
                                         <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "var(--text-secondary)", fontSize: 10 }} />
                                         <Radar name="Student" dataKey="student" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} />
                                         <Radar name="Class Avg" dataKey="classAvg" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.1} />
@@ -20528,15 +20534,21 @@ ${signature}`;
                                 )
                               : sortedPeriods;
 
-                            // Build set of uploaded file names (normalized)
+                            // Build set of uploaded file names (normalized, with duplicate suffixes stripped)
                             const uploadedNames = new Set(
-                              missingUploadedFiles.map((f) =>
-                                (f.name || f)
+                              missingUploadedFiles.map((f) => {
+                                let name = (f.name || f)
                                   .toLowerCase()
+                                  .replace(/\.(docx|pdf|doc|txt)$/i, "");
+                                // Strip OneDrive/SharePoint duplicate suffixes
+                                name = name.replace(/\s*\(\d+\)\s*$/, "");   // "file (1)" -> "file"
+                                name = name.replace(/\s+\d{1,2}\s*$/, "");   // "file 1" -> "file"
+                                name = name.replace(/\s*-\s*copy\s*\d*$/i, ""); // "file - Copy 2" -> "file"
+                                return name
                                   .replace(/[_\-\.\u2013\u2014]/g, " ")
                                   .replace(/\s+/g, " ")
-                                  .trim(),
-                              ),
+                                  .trim();
+                              }),
                             );
 
                             // Check if student has uploaded for an assignment (including aliases)
@@ -20730,7 +20742,8 @@ ${signature}`;
                                                 "rgba(251,191,36,0.15)",
                                               borderRadius: "6px",
                                               fontSize: "0.85rem",
-                                              color: "#fbbf24",
+                                              color: "#b45309",
+                                              border: "1px solid rgba(180,83,9,0.3)",
                                             }}
                                           >
                                             {a}
@@ -20935,7 +20948,7 @@ ${signature}`;
                                               ✓ All complete
                                             </span>
                                           ) : (
-                                            <span style={{ color: "#f59e0b" }}>
+                                            <span style={{ color: "#b45309" }}>
                                               {
                                                 report.studentsWithMissing
                                                   .length
@@ -20990,7 +21003,8 @@ ${signature}`;
                                                           "rgba(251,191,36,0.15)",
                                                         borderRadius: "4px",
                                                         fontSize: "0.75rem",
-                                                        color: "#fbbf24",
+                                                        color: "#b45309",
+                                                        border: "1px solid rgba(180,83,9,0.3)",
                                                       }}
                                                     >
                                                       {a}
