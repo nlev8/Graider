@@ -406,7 +406,8 @@ def parse_document_for_calendar():
     if anthropic is None:
         return jsonify({"error": "anthropic package is not installed"}), 500
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    from backend.api_keys import get_api_key
+    api_key = get_api_key('anthropic', getattr(g, 'user_id', 'local-dev'))
     if not api_key:
         return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
 

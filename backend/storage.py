@@ -72,6 +72,10 @@ def _key_to_filepath(data_key):
         return os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
     elif data_key == 'teaching_calendar':
         return os.path.join(GRAIDER_DATA_DIR, "teaching_calendar.json")
+    elif data_key == 'api_keys':
+        return os.path.join(GRAIDER_DATA_DIR, ".api_keys.json")
+    elif data_key == 'portal_credentials':
+        return os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
     elif data_key.startswith('assignment:'):
         title = data_key[len('assignment:'):]
         return os.path.join(ASSIGNMENTS_DIR, f"{title}.json")
@@ -345,9 +349,15 @@ def load(data_key, teacher_id='local-dev'):
         result = _sb_load(data_key, teacher_id)
         if result is not None:
             return result
+        # Don't fall back to shared file for sensitive keys (prevents cross-teacher leakage)
+        if data_key in _SENSITIVE_KEYS:
+            return None
         # Fallback: try local file (covers first-time migration)
         return _file_load(data_key)
     return _file_load(data_key)
+
+
+_SENSITIVE_KEYS = {'api_keys', 'portal_credentials'}
 
 
 def save(data_key, data, teacher_id='local-dev'):
@@ -361,13 +371,16 @@ def save(data_key, data, teacher_id='local-dev'):
     Returns:
         True on success.
     """
-    # Always write to local file (keeps local dev in sync)
-    file_ok = _file_save(data_key, data)
-
     if _use_supabase(teacher_id):
         sb_ok = _sb_save(data_key, data, teacher_id)
+        # Skip file write for sensitive data when not local-dev
+        # to prevent different teachers from overwriting each other's secrets
+        if data_key not in _SENSITIVE_KEYS:
+            _file_save(data_key, data)
         return sb_ok
-    return file_ok
+
+    # Local-dev: file only
+    return _file_save(data_key, data)
 
 
 def delete(data_key, teacher_id='local-dev'):

@@ -13,7 +13,7 @@ import subprocess
 import threading
 from pathlib import Path
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 grading_bp = Blueprint('grading', __name__)
 
@@ -25,26 +25,29 @@ for _dir in [EXPORTS_DIR, FOCUS_EXPORTS_DIR, OUTLOOK_EXPORTS_DIR]:
     os.makedirs(_dir, exist_ok=True)
 
 # These will be set by app.py during initialization
-grading_state = None
+_get_state = None       # function(teacher_id) -> state dict
 run_grading_thread = None
 reset_state = None
-grading_lock = None
+_get_lock = None        # function(teacher_id) -> Lock
 
 
-def init_grading_routes(state_ref, thread_fn, reset_fn, lock_ref=None):
-    """Initialize grading routes with references from main app."""
-    global grading_state, run_grading_thread, reset_state, grading_lock
-    grading_state = state_ref
+def init_grading_routes(get_state_fn, thread_fn, reset_fn, get_lock_fn=None):
+    """Initialize grading routes with per-teacher state factory functions."""
+    global _get_state, run_grading_thread, reset_state, _get_lock
+    _get_state = get_state_fn
     run_grading_thread = thread_fn
     reset_state = reset_fn
-    grading_lock = lock_ref
+    _get_lock = get_lock_fn
 
 
 @grading_bp.route('/api/status')
 def get_status():
     """Get current grading status."""
-    if grading_state is None:
+    if _get_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+    grading_lock = _get_lock(teacher_id) if _get_lock else None
     if grading_lock:
         with grading_lock:
             snapshot = dict(grading_state)
@@ -88,7 +91,9 @@ def check_new_files():
         except:
             pass
 
-    # Also check in-memory results (from grading_state)
+    # Also check in-memory results (from per-teacher grading_state)
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id) if _get_state else None
     if grading_state and grading_state.get("results"):
         for r in grading_state["results"]:
             if r.get("filename"):
@@ -113,8 +118,12 @@ def check_new_files():
 @grading_bp.route('/api/stop-grading', methods=['POST'])
 def stop_grading():
     """Stop grading and save progress."""
-    if grading_state is None:
+    if _get_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
+
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+    grading_lock = _get_lock(teacher_id) if _get_lock else None
 
     if grading_lock:
         with grading_lock:
@@ -136,8 +145,12 @@ def stop_grading():
 @grading_bp.route('/api/clear-results', methods=['POST'])
 def clear_results():
     """Clear grading results. Optionally filter by assignment name."""
-    if grading_state is None:
+    if _get_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
+
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+    grading_lock = _get_lock(teacher_id) if _get_lock else None
 
     if grading_lock:
         grading_lock.acquire()
@@ -317,8 +330,12 @@ def update_result():
     """Update a single grading result (score, feedback, etc.)."""
     import json
 
-    if grading_state is None:
+    if _get_state is None:
         return jsonify({"error": "Grading not initialized"}), 500
+
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+    grading_lock = _get_lock(teacher_id) if _get_lock else None
 
     data = request.json
     filename = data.get('filename', '')
@@ -553,14 +570,9 @@ def export_focus_csv():
     if not results:
         return jsonify({"error": "No results to export"})
 
-    # Load API key
-    api_key = None
-    env_path = Path(__file__).parent.parent.parent / '.env'
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            if line.startswith('ANTHROPIC_API_KEY='):
-                api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
-                break
+    # Load API key (BYOK-aware)
+    from backend.api_keys import get_api_key
+    api_key = get_api_key('anthropic', getattr(g, 'user_id', 'local-dev'))
 
     # Load roster data to get student IDs
     rosters_dir = Path.home() / '.graider_data' / 'rosters'
@@ -799,6 +811,8 @@ def export_focus_batch():
     Input JSON: { results?, assignment?, include_letter_grade? }
     Defaults to grading_state["results"] if results not provided.
     """
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id) if _get_state else None
     data = request.json or {}
     results = data.get('results') or (grading_state.get("results", []) if grading_state else [])
     assignment = data.get('assignment', 'Assignment')
@@ -885,6 +899,8 @@ def export_focus_comments():
 
     Input JSON: { results?, assignment? }
     """
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id) if _get_state else None
     data = request.json or {}
     results = data.get('results') or (grading_state.get("results", []) if grading_state else [])
     assignment = data.get('assignment', 'Assignment')
@@ -1002,6 +1018,12 @@ def upload_focus_comments():
         return jsonify({"error": "Already uploading comments. Check status or wait."}), 409
 
     try:
+        # Write per-teacher creds to temp file for subprocess access
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        from backend.routes.assistant_routes import write_temp_creds_file
+        if not write_temp_creds_file(teacher_id):
+            return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
+
         data = request.json or {}
         use_manifest = data.get("use_manifest", True)
         comments = data.get("comments")

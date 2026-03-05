@@ -357,11 +357,12 @@ _outlook_send_state = {
 }
 
 
-def launch_outlook_sender(emails):
+def launch_outlook_sender(emails, teacher_id='local-dev'):
     """Write email payloads to temp file and spawn the Playwright Outlook sender.
 
     Args:
         emails: list of dicts with keys: to, cc, subject, body, student_name
+        teacher_id: teacher identifier for credential lookup
 
     Returns:
         dict with status and total count, or error
@@ -371,6 +372,11 @@ def launch_outlook_sender(emails):
 
     if not emails:
         return {"error": "No emails to send"}
+
+    # Write per-teacher creds to temp file for subprocess access
+    from backend.routes.assistant_routes import write_temp_creds_file
+    if not write_temp_creds_file(teacher_id):
+        return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
     tmp_file = os.path.join(GRAIDER_DATA_DIR, "tmp_outlook_emails.json")
     os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
@@ -540,7 +546,9 @@ def send_outlook_emails():
         if not emails:
             return jsonify({"error": "No emails to send (no matching contacts)"}), 400
 
-        result = launch_outlook_sender(emails)
+        from flask import g
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" in result:
             return jsonify(result), 409
         return jsonify(result)
@@ -565,6 +573,12 @@ def outlook_send_status():
 def outlook_login():
     """Open Outlook in browser for login verification."""
     try:
+        # Write per-teacher creds to temp file for subprocess access
+        from flask import g
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        from backend.routes.assistant_routes import write_temp_creds_file
+        if not write_temp_creds_file(teacher_id):
+            return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
         script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
         subprocess.Popen(
             [sys.executable, script_path, "--login-only"],
@@ -999,7 +1013,9 @@ def send_confirmation_emails():
         if not emails:
             return jsonify({"error": "No emails to send"}), 400
 
-        result = launch_outlook_sender(emails)
+        from flask import g
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" in result:
             return jsonify(result), 409
 
@@ -1186,11 +1202,12 @@ _focus_comms_state = {
 }
 
 
-def launch_focus_comms(messages):
+def launch_focus_comms(messages, teacher_id='local-dev'):
     """Write messages to temp file and spawn the Focus Communications script.
 
     Args:
         messages: list of dicts with keys: student_name, subject, email_body, sms_body, cc_emails
+        teacher_id: teacher identifier for credential lookup
 
     Returns:
         dict with status and total count, or error
@@ -1200,6 +1217,11 @@ def launch_focus_comms(messages):
 
     if not messages:
         return {"error": "No messages to send"}
+
+    # Write per-teacher creds to temp file for subprocess access
+    from backend.routes.assistant_routes import write_temp_creds_file
+    if not write_temp_creds_file(teacher_id):
+        return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
     if not os.path.exists(FOCUS_COMMS_SCRIPT):
         return {"error": "focus-comms.js not found at " + FOCUS_COMMS_SCRIPT}
@@ -1293,7 +1315,9 @@ def send_focus_comms():
         if not messages:
             return jsonify({"error": "No messages provided"}), 400
 
-        result = launch_focus_comms(messages)
+        from flask import g
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        result = launch_focus_comms(messages, teacher_id=teacher_id)
         if "error" in result:
             return jsonify(result), 400
         return jsonify(result)
@@ -1331,34 +1355,51 @@ def focus_comms_stop():
 def confirm_send():
     """Execute a confirmed send action from the assistant preview.
 
-    Reads the pending payload saved by send_focus_comms or send_parent_emails.
+    Accepts payload from POST body (preferred) or reads from pending_send.json file.
     Called by the frontend 'Send Now' button or by the confirm_and_send tool.
     """
+    pending = None
     pending_path = os.path.join(GRAIDER_DATA_DIR, "pending_send.json")
-    if not os.path.exists(pending_path):
+
+    # Try POST body first (sent by frontend Send Now button)
+    body = request.get_json(silent=True) or {}
+    if body.get("action"):
+        pending = body
+
+    # Fall back to pending file
+    if not pending and os.path.exists(pending_path):
+        try:
+            with open(pending_path, 'r') as f:
+                pending = json.load(f)
+        except Exception as e:
+            return jsonify({"error": "Failed to read pending send: " + str(e)})
+
+    if not pending:
         return jsonify({"error": "No pending send. Generate a preview first."})
 
+    # Clean up file if it exists (prevent double-send)
     try:
-        with open(pending_path, 'r') as f:
-            pending = json.load(f)
-        os.remove(pending_path)  # Remove so it can't be sent twice
-    except Exception as e:
-        return jsonify({"error": "Failed to read pending send: " + str(e)})
+        if os.path.exists(pending_path):
+            os.remove(pending_path)
+    except Exception:
+        pass
 
     action = pending.get("action")
+    from flask import g
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
     if action == "send_focus_comms":
         messages = pending.get("messages", [])
         if not messages:
             return jsonify({"error": "No messages in pending payload"})
-        result = launch_focus_comms(messages)
+        result = launch_focus_comms(messages, teacher_id=teacher_id)
         return jsonify(result)
 
     elif action == "send_parent_emails":
         emails = pending.get("emails", [])
         if not emails:
             return jsonify({"error": "No emails in pending payload"})
-        result = launch_outlook_sender(emails)
+        result = launch_outlook_sender(emails, teacher_id=teacher_id)
         return jsonify(result)
 
     else:

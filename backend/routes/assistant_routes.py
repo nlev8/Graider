@@ -17,7 +17,7 @@ import queue
 import logging
 from datetime import datetime
 
-from flask import Blueprint, request, jsonify, Response, stream_with_context
+from flask import Blueprint, request, jsonify, Response, stream_with_context, g
 
 try:
     import anthropic
@@ -40,6 +40,16 @@ from backend.services.assistant_tools import (
     DOCUMENTS_DIR,
 )
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
+
+# Import storage abstraction for per-teacher credential isolation
+try:
+    from backend.storage import load as storage_load, save as storage_save
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save
+    except ImportError:
+        storage_load = None
+        storage_save = None
 
 assistant_bp = Blueprint('assistant', __name__)
 
@@ -1128,23 +1138,25 @@ def assistant_chat():
     model_info = _get_assistant_model()
     provider = model_info["provider"]
 
-    # Validate provider SDK + API key
+    # Validate provider SDK + API key (BYOK-aware)
+    from backend.api_keys import get_api_key
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     if provider == "anthropic":
         if anthropic is None:
             return jsonify({"error": "anthropic package not installed. Run: pip install anthropic"}), 500
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = get_api_key('anthropic', teacher_id)
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY not set in .env"}), 500
     elif provider == "openai":
         if openai_pkg is None:
             return jsonify({"error": "openai package not installed. Run: pip install openai"}), 500
-        api_key = os.environ.get("OPENAI_API_KEY")
+        api_key = get_api_key('openai', teacher_id)
         if not api_key:
             return jsonify({"error": "OPENAI_API_KEY not set in .env"}), 500
     elif provider == "gemini":
         if genai_pkg is None:
             return jsonify({"error": "google-generativeai package not installed. Run: pip install google-generativeai"}), 500
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = get_api_key('gemini', teacher_id)
         if not api_key:
             return jsonify({"error": "GEMINI_API_KEY not set in .env"}), 500
     else:
@@ -1529,6 +1541,8 @@ def assistant_chat():
                     yield from _flush_audio_queue()
 
                     _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
+                    # Inject teacher_id for tools that need per-teacher context
+                    tool_input["teacher_id"] = getattr(g, 'user_id', 'local-dev')
                     result = execute_tool(tb["name"], tool_input)
                     result_str = json.dumps(result)
                     if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
@@ -1550,6 +1564,14 @@ def assistant_chat():
                             event_data['download_urls'] = dl_urls
                         if result.get('NOT_SENT'):
                             event_data['pending_send'] = True
+                            # Include payload so frontend can send directly
+                            pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+                            try:
+                                if os.path.exists(pending_path):
+                                    with open(pending_path, 'r') as _pf:
+                                        event_data['pending_payload'] = json.load(_pf)
+                            except Exception:
+                                pass
 
                     yield f"data: {json.dumps(event_data)}\n\n"
 
@@ -1729,7 +1751,7 @@ def clear_memory():
 
 @assistant_bp.route('/api/assistant/credentials', methods=['POST'])
 def save_credentials():
-    """Save VPortal credentials (base64 obfuscated)."""
+    """Save VPortal credentials (base64 obfuscated, per-teacher in Supabase)."""
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -1740,11 +1762,18 @@ def save_credentials():
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
 
-    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
-
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     encoded = base64.b64encode(password.encode()).decode()
+    creds_data = {"email": email, "password": encoded}
+
+    # Primary: Supabase per-teacher
+    if storage_save:
+        storage_save('portal_credentials', creds_data, teacher_id)
+
+    # File fallback for local-dev and subprocess access
+    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
     with open(CREDS_FILE, 'w') as f:
-        json.dump({"email": email, "password": encoded}, f)
+        json.dump(creds_data, f)
 
     _audit_log("credentials_saved", "VPortal credentials updated")
     return jsonify({"status": "saved"})
@@ -1753,6 +1782,15 @@ def save_credentials():
 @assistant_bp.route('/api/assistant/credentials', methods=['GET'])
 def get_credentials():
     """Check if VPortal credentials are configured (never returns password)."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    # Primary: Supabase per-teacher
+    if storage_load:
+        data = storage_load('portal_credentials', teacher_id)
+        if data and data.get('email'):
+            return jsonify({"configured": True, "email": data.get("email", "")})
+
+    # File fallback
     if os.path.exists(CREDS_FILE):
         try:
             with open(CREDS_FILE, 'r') as f:
@@ -1763,6 +1801,46 @@ def get_credentials():
     return jsonify({"configured": False})
 
 
+def load_portal_credentials(teacher_id='local-dev'):
+    """Load VPortal credentials for a specific teacher.
+
+    Returns (email, password) tuple, or (None, None) if not configured.
+    Used by subprocess launchers to write temp creds files.
+    """
+    # Primary: Supabase per-teacher
+    if storage_load:
+        data = storage_load('portal_credentials', teacher_id)
+        if data and data.get('email') and data.get('password'):
+            email = data['email']
+            password = base64.b64decode(data['password']).decode()
+            return email, password
+
+    # File fallback
+    if os.path.exists(CREDS_FILE):
+        try:
+            with open(CREDS_FILE, 'r') as f:
+                data = json.load(f)
+            email = data.get('email', '')
+            password = base64.b64decode(data.get('password', '')).decode()
+            if email and password:
+                return email, password
+        except Exception:
+            pass
+    return None, None
+
+
+def write_temp_creds_file(teacher_id='local-dev'):
+    """Write a temp creds file for subprocess access. Returns True if creds available."""
+    email, password = load_portal_credentials(teacher_id)
+    if not email or not password:
+        return False
+    os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
+    encoded = base64.b64encode(password.encode()).decode()
+    with open(CREDS_FILE, 'w') as f:
+        json.dump({"email": email, "password": encoded}, f)
+    return True
+
+
 # ═══════════════════════════════════════════════════════
 # VOICE CONFIGURATION
 # ═══════════════════════════════════════════════════════
@@ -1770,7 +1848,8 @@ def get_credentials():
 @assistant_bp.route('/api/assistant/voice-config', methods=['GET'])
 def get_voice_config():
     """Return voice TTS configuration status."""
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    from backend.api_keys import get_api_key
+    api_key = get_api_key('openai', getattr(g, 'user_id', 'local-dev'))
     voice = os.environ.get("OPENAI_TTS_VOICE", "nova")
     try:
         with open(SETTINGS_FILE, 'r') as f:

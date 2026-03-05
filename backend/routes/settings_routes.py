@@ -1322,118 +1322,66 @@ def accommodation_stats():
     return jsonify(stats)
 
 
-# ============ API Keys Management ============
-
-API_KEYS_FILE = os.path.join(GRAIDER_DATA_DIR, ".api_keys.json")
-
-
-def load_api_keys():
-    """Load API keys from secure storage."""
-    if os.path.exists(API_KEYS_FILE):
-        try:
-            with open(API_KEYS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            pass
-    return {}
-
-
-def save_api_keys_to_file(keys):
-    """Save API keys to secure storage."""
-    # Set restrictive permissions on the file
-    with open(API_KEYS_FILE, 'w') as f:
-        json.dump(keys, f)
-    os.chmod(API_KEYS_FILE, 0o600)  # Owner read/write only
-
+# ============ API Keys Management (BYOK) ============
 
 @settings_bp.route('/api/save-api-keys', methods=['POST'])
 def save_api_keys():
-    """Save API keys securely."""
+    """Save API keys securely via BYOK module."""
+    from backend.api_keys import save_user_keys, check_user_keys
     data = request.json
-    openai_key = data.get('openai_key')
-    anthropic_key = data.get('anthropic_key')
-    gemini_key = data.get('gemini_key')
+    teacher_id = getattr(g, 'user_id', 'local-dev')
 
-    # Load existing keys
-    keys = load_api_keys()
+    keys_to_save = {}
+    if data.get('openai_key'):
+        keys_to_save['openai'] = data['openai_key']
+    if data.get('anthropic_key'):
+        keys_to_save['anthropic'] = data['anthropic_key']
+    if data.get('gemini_key'):
+        keys_to_save['gemini'] = data['gemini_key']
 
-    # Update keys if provided
-    if openai_key:
-        keys['openai'] = openai_key
-    if anthropic_key:
-        keys['anthropic'] = anthropic_key
-    if gemini_key:
-        keys['gemini'] = gemini_key
+    save_user_keys(teacher_id, keys_to_save)
 
-    # Save to file
-    save_api_keys_to_file(keys)
+    # For local-dev backward compat, also update .env
+    if teacher_id == 'local-dev':
+        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+        env_lines = []
+        if os.path.exists(env_path):
+            with open(env_path, 'r') as f:
+                env_lines = f.readlines()
 
-    # Also update .env file for immediate use
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
-    env_lines = []
-    if os.path.exists(env_path):
-        with open(env_path, 'r') as f:
-            env_lines = f.readlines()
+        env_map = {
+            'openai': ('OPENAI_API_KEY', data.get('openai_key')),
+            'anthropic': ('ANTHROPIC_API_KEY', data.get('anthropic_key')),
+            'gemini': ('GEMINI_API_KEY', data.get('gemini_key')),
+        }
+        for provider, (env_var, val) in env_map.items():
+            if not val:
+                continue
+            found = False
+            new_lines = []
+            for line in env_lines:
+                if line.startswith(f'{env_var}='):
+                    new_lines.append(f'{env_var}={val}\n')
+                    found = True
+                else:
+                    new_lines.append(line)
+            if not found:
+                new_lines.append(f'{env_var}={val}\n')
+            env_lines = new_lines
 
-    # Update or add keys in .env
-    openai_found = False
-    anthropic_found = False
-    gemini_found = False
-    new_lines = []
-    for line in env_lines:
-        if line.startswith('OPENAI_API_KEY=') and openai_key:
-            new_lines.append(f'OPENAI_API_KEY={openai_key}\n')
-            openai_found = True
-        elif line.startswith('ANTHROPIC_API_KEY=') and anthropic_key:
-            new_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
-            anthropic_found = True
-        elif line.startswith('GEMINI_API_KEY=') and gemini_key:
-            new_lines.append(f'GEMINI_API_KEY={gemini_key}\n')
-            gemini_found = True
-        else:
-            new_lines.append(line)
+        with open(env_path, 'w') as f:
+            f.writelines(env_lines)
 
-    if openai_key and not openai_found:
-        new_lines.append(f'OPENAI_API_KEY={openai_key}\n')
-    if anthropic_key and not anthropic_found:
-        new_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
-    if gemini_key and not gemini_found:
-        new_lines.append(f'GEMINI_API_KEY={gemini_key}\n')
-
-    with open(env_path, 'w') as f:
-        f.writelines(new_lines)
-
-    return jsonify({
-        "status": "success",
-        "openai_configured": bool(keys.get('openai')),
-        "anthropic_configured": bool(keys.get('anthropic')),
-        "gemini_configured": bool(keys.get('gemini'))
-    })
+    status = check_user_keys(teacher_id)
+    return jsonify({"status": "success", **status})
 
 
 @settings_bp.route('/api/check-api-keys')
 def check_api_keys():
     """Check which API keys are configured (without exposing the keys)."""
-    keys = load_api_keys()
-
-    # Also check .env file
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
-    openai_in_env = False
-    anthropic_in_env = False
-    gemini_in_env = False
-
-    if os.path.exists(env_path):
-        with open(env_path, 'r') as f:
-            content = f.read()
-            openai_in_env = 'OPENAI_API_KEY=' in content and 'your-key-here' not in content
-            anthropic_in_env = 'ANTHROPIC_API_KEY=' in content
-            gemini_in_env = 'GEMINI_API_KEY=' in content
-
-    return jsonify({
-        "openai_configured": bool(keys.get('openai')) or openai_in_env,
-        "anthropic_configured": bool(keys.get('anthropic')) or anthropic_in_env,
-        "gemini_configured": bool(keys.get('gemini')) or gemini_in_env
-    })
+    from backend.api_keys import check_user_keys
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    return jsonify(check_user_keys(teacher_id))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1671,9 +1619,11 @@ def _process_focus_import(import_data):
 @settings_bp.route('/api/import-from-focus', methods=['POST'])
 def import_from_focus():
     """Trigger Focus SIS roster import via Playwright."""
-    # Check credentials exist
-    creds_path = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
-    if not os.path.exists(creds_path):
+    # Write per-teacher creds to temp file for subprocess access
+    from flask import g
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    from backend.routes.assistant_routes import write_temp_creds_file
+    if not write_temp_creds_file(teacher_id):
         return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools > District Portal."}), 400
 
     if _focus_import_state["status"] == "running":

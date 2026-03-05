@@ -100,9 +100,10 @@ AI_TOOL_DEFINITIONS = [
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _get_anthropic_client():
+def _get_anthropic_client(teacher_id=None):
     """Lazy-import anthropic and return a client, or None + error message."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    from backend.api_keys import get_api_key
+    api_key = get_api_key('anthropic', teacher_id or 'local-dev')
     if not api_key:
         return None, "ANTHROPIC_API_KEY not configured"
     try:

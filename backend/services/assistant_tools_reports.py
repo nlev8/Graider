@@ -1080,10 +1080,11 @@ def _fill_email_template(template, replacements):
 # TOOL HANDLER FUNCTIONS
 # ═══════════════════════════════════════════════════════
 
-def create_focus_assignment(name, category=None, points=None, date=None, description=None):
+def create_focus_assignment(name, category=None, points=None, date=None, description=None, teacher_id='local-dev'):
     """Launch Focus automation to create an assignment."""
-    # Check credentials
-    if not os.path.exists(CREDS_FILE):
+    # Write per-teacher creds to temp file for subprocess access
+    from backend.routes.assistant_routes import write_temp_creds_file
+    if not write_temp_creds_file(teacher_id):
         return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
     script_path = os.path.join(PROJECT_ROOT, "focus-automation.js")
@@ -2128,7 +2129,7 @@ def save_assignment_config(title, document_text=None, questions=None, totalPoint
 
 
 def send_parent_emails(email_subject, email_body, student_names=None, period=None,
-                       zero_submissions=False, dry_run=True):
+                       zero_submissions=False, dry_run=True, teacher_id='local-dev'):
     """Generate email preview for parents/guardians via Outlook automation.
 
     When called from the AI assistant, this ALWAYS returns a preview.
@@ -2297,7 +2298,7 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
     # Actually send via Outlook/Playwright
     try:
         from backend.routes.email_routes import launch_outlook_sender
-        result = launch_outlook_sender(emails)
+        result = launch_outlook_sender(emails, teacher_id=teacher_id)
         result["skipped_students"] = skipped
         result["total_emails"] = len(emails)
         return result
@@ -2308,7 +2309,7 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
 
 
 def send_focus_comms(email_subject, email_body=None, sms_body=None, student_names=None,
-                     period=None, dry_run=True, recipient_type=None):
+                     period=None, dry_run=True, recipient_type=None, teacher_id='local-dev'):
     """Generate email/SMS preview for parents via Focus SIS Communications.
 
     When called from the AI assistant, this ALWAYS returns a preview.
@@ -2433,7 +2434,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
     # Actually send via focus-comms.js
     try:
         from backend.routes.email_routes import launch_focus_comms
-        result = launch_focus_comms(messages)
+        result = launch_focus_comms(messages, teacher_id=teacher_id)
         result["total_messages"] = len(messages)
         return result
     except ImportError:
@@ -2442,7 +2443,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
         return {"error": "Failed to launch Focus Comms: " + str(e)}
 
 
-def confirm_and_send():
+def confirm_and_send(teacher_id='local-dev'):
     """Execute the pending send action after teacher confirmation.
 
     Reads the pending payload saved by send_focus_comms or send_parent_emails,
@@ -2469,7 +2470,7 @@ def confirm_and_send():
             messages = pending.get("messages", [])
             if not messages:
                 return {"error": "No messages in pending payload."}
-            result = launch_focus_comms(messages)
+            result = launch_focus_comms(messages, teacher_id=teacher_id)
             result["total_messages"] = len(messages)
             return result
         elif action == "send_parent_emails":
@@ -2477,7 +2478,7 @@ def confirm_and_send():
             emails = pending.get("emails", [])
             if not emails:
                 return {"error": "No emails in pending payload."}
-            result = launch_outlook_sender(emails)
+            result = launch_outlook_sender(emails, teacher_id=teacher_id)
             result["total_emails"] = len(emails)
             return result
         else:

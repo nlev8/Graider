@@ -9,7 +9,7 @@ import time
 import math
 import re
 import subprocess
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from pathlib import Path
 
 # Import MODEL_PRICING for token cost tracking
@@ -629,7 +629,8 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
 
     try:
         from openai import OpenAI
-        api_key = os.getenv('OPENAI_API_KEY', '')
+        from backend.api_keys import get_api_key
+        api_key = get_api_key('openai', getattr(g, 'user_id', 'local-dev'))
         if not api_key or api_key.startswith('your-'):
             return
         client = OpenAI(api_key=api_key)
@@ -2292,11 +2293,9 @@ def brainstorm_lesson_ideas():
 
     try:
         from openai import OpenAI
-        from dotenv import load_dotenv
+        from backend.api_keys import get_api_key
 
-        app_dir = Path(__file__).parent.parent.parent
-        load_dotenv(app_dir / '.env', override=True)
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = get_api_key('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
@@ -2469,10 +2468,8 @@ def generate_lesson_plan():
         from openai import OpenAI
         from dotenv import load_dotenv
 
-        # Load .env from the app directory
-        app_dir = Path(__file__).parent.parent.parent
-        load_dotenv(app_dir / '.env', override=True)
-        api_key = os.getenv("OPENAI_API_KEY")
+        from backend.api_keys import get_api_key as _gak
+        api_key = _gak('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
@@ -2969,9 +2966,8 @@ def generate_assignment_from_lesson():
         from openai import OpenAI
         from dotenv import load_dotenv
 
-        app_dir = Path(__file__).parent.parent.parent
-        load_dotenv(app_dir / '.env', override=True)
-        api_key = os.getenv("OPENAI_API_KEY")
+        from backend.api_keys import get_api_key as _gak
+        api_key = _gak('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
@@ -4875,8 +4871,8 @@ def generate_assessment():
         from dotenv import load_dotenv
 
         app_dir = Path(__file__).parent.parent.parent
-        load_dotenv(app_dir / '.env', override=True)
-        api_key = os.getenv("OPENAI_API_KEY")
+        from backend.api_keys import get_api_key as _gak
+        api_key = _gak('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
@@ -6175,7 +6171,8 @@ def regenerate_questions():
 
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        from backend.api_keys import get_api_key as _gak
+        client = OpenAI(api_key=_gak('openai', getattr(g, 'user_id', 'local-dev')))
 
         grade = config.get('grade', '')
         subject = config.get('subject', '')

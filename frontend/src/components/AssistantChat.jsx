@@ -472,6 +472,9 @@ export default function AssistantChat({ addToast, subject }) {
                   }
                   if (event.pending_send) {
                     newState.pendingSend = true
+                    if (event.pending_payload) {
+                      newState.pendingPayload = event.pending_payload
+                    }
                   }
                   updated[updated.length - 1] = newState
                 }
@@ -951,9 +954,11 @@ export default function AssistantChat({ addToast, subject }) {
                   <button
                     onClick={async () => {
                       try {
+                        const authHeaders = await getAuthHeaders()
                         const resp = await fetch('/api/confirm-send', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                          body: JSON.stringify(msg.pendingPayload || {}),
                         })
                         const data = await resp.json()
                         if (data.error) {

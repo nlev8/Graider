@@ -126,7 +126,8 @@ class OpenAITTSStream:
         if openai_pkg is None:
             raise ImportError("openai package required: pip install openai")
 
-        api_key = os.environ.get("OPENAI_API_KEY", "")
+        from backend.api_keys import get_api_key
+        api_key = get_api_key('openai')
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set")
 

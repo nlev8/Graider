@@ -2422,14 +2422,8 @@ OUTPUT_FOLDER = "/Users/alexc/Downloads/Assignment Grader/Results"
 # Path to your student roster Excel file
 ROSTER_FILE = "/Users/alexc/Downloads/Assignment Grader/all_students_updated.xlsx"
 
-# Your OpenAI API key (set in .env file or paste here)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-api-key-here")
-
-# Anthropic API key for Claude models
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-
-# Google Gemini API key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# BYOK: API keys resolved per-request via contextvars → user keys → env vars
+from backend.api_keys import get_api_key as _get_api_key
 
 # Assignment name (used in output files and emails)
 ASSIGNMENT_NAME = ""  # Set dynamically from assignment config; empty = use filename
@@ -3943,7 +3937,7 @@ def detect_ai_plagiarism(student_responses: str, grade_level: str = '6', token_t
         return {"ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
                 "plagiarism_detection": {"flag": "none", "reason": ""}}
 
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = OpenAI(api_key=_get_api_key('openai'))
 
     age_range = "11-12" if grade_level == "6" else "12-13" if grade_level == "7" else "13-14"
 
@@ -4618,7 +4612,7 @@ Read these FIRST, then score accordingly:
     try:
         if ai_provider == "anthropic":
             import anthropic
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            client = anthropic.Anthropic(api_key=_get_api_key('anthropic'))
             claude_model_map = {
                 "claude-haiku": "claude-3-5-haiku-latest",
                 "claude-sonnet": "claude-sonnet-4-20250514",
@@ -4640,7 +4634,7 @@ Read these FIRST, then score accordingly:
 
         elif ai_provider == "gemini":
             import google.generativeai as genai
-            genai.configure(api_key=GEMINI_API_KEY)
+            genai.configure(api_key=_get_api_key('gemini'))
             gemini_model_map = {
                 "gemini-flash": "gemini-2.0-flash",
                 "gemini-pro": "gemini-2.0-pro-exp",
@@ -4658,7 +4652,7 @@ Read these FIRST, then score accordingly:
 
         else:  # OpenAI — use structured output
             from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
+            client = OpenAI(api_key=_get_api_key('openai'))
             response = client.beta.chat.completions.parse(
                 model=ai_model,
                 messages=[
@@ -4875,7 +4869,7 @@ Also identify:
     try:
         if ai_provider == "anthropic":
             import anthropic
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            client = anthropic.Anthropic(api_key=_get_api_key('anthropic'))
             claude_model_map = {
                 "claude-haiku": "claude-3-5-haiku-latest",
                 "claude-sonnet": "claude-sonnet-4-20250514",
@@ -4903,7 +4897,7 @@ Also identify:
 
         elif ai_provider == "gemini":
             import google.generativeai as genai
-            genai.configure(api_key=GEMINI_API_KEY)
+            genai.configure(api_key=_get_api_key('gemini'))
             gemini_model_map = {
                 "gemini-flash": "gemini-2.0-flash",
                 "gemini-pro": "gemini-2.0-pro-exp",
@@ -4927,7 +4921,7 @@ Also identify:
 
         else:  # OpenAI — use structured output
             from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
+            client = OpenAI(api_key=_get_api_key('openai'))
             response = client.beta.chat.completions.parse(
                 model=ai_model,
                 messages=[
@@ -5488,7 +5482,7 @@ FEEDBACK TO TRANSLATE:
     try:
         if ai_model.startswith("claude"):
             import anthropic
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            client = anthropic.Anthropic(api_key=_get_api_key('anthropic'))
             claude_model_map = {
                 "claude-haiku": "claude-3-5-haiku-latest",
                 "claude-sonnet": "claude-sonnet-4-20250514",
@@ -5506,7 +5500,7 @@ FEEDBACK TO TRANSLATE:
 
         elif ai_model.startswith("gemini"):
             import google.generativeai as genai
-            genai.configure(api_key=GEMINI_API_KEY)
+            genai.configure(api_key=_get_api_key('gemini'))
             gemini_model_map = {
                 "gemini-flash": "gemini-2.0-flash",
                 "gemini-pro": "gemini-2.0-pro-exp",
@@ -5520,7 +5514,7 @@ FEEDBACK TO TRANSLATE:
 
         else:
             from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
+            client = OpenAI(api_key=_get_api_key('openai'))
             response = client.chat.completions.create(
                 model=ai_model,
                 messages=[{"role": "user", "content": prompt}],
@@ -5673,10 +5667,10 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
             print("❌ anthropic not installed. Run: pip install anthropic")
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API not available - pip install anthropic"}
 
-        if not ANTHROPIC_API_KEY:
+        if not _get_api_key('anthropic'):
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API key not configured"}
 
-        claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        claude_client = anthropic.Anthropic(api_key=_get_api_key('anthropic'))
         claude_model_map = {
             "claude-haiku": "claude-3-5-haiku-latest",
             "claude-sonnet": "claude-sonnet-4-20250514",
@@ -5692,10 +5686,10 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
             print("❌ google-generativeai not installed. Run: pip install google-generativeai")
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Google AI not available - pip install google-generativeai"}
 
-        if not GEMINI_API_KEY:
+        if not _get_api_key('gemini'):
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Gemini API key not configured"}
 
-        genai.configure(api_key=GEMINI_API_KEY)
+        genai.configure(api_key=_get_api_key('gemini'))
         gemini_model_map = {
             "gemini-flash": "gemini-2.0-flash",
             "gemini-pro": "gemini-2.0-pro-exp",
@@ -5711,7 +5705,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
             print("❌ openai not installed. Run: pip install openai")
             return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "OpenAI API not available"}
 
-        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        openai_client = OpenAI(api_key=_get_api_key('openai'))
 
     content = assignment_data.get("content", "")
 

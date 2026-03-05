@@ -130,7 +130,7 @@ export default function BehaviorPanel({ addToast, voiceModeActive = false }) {
       <div
         onClick={() => setCollapsed(false)}
         style={{
-          position: 'absolute', right: 0, top: 8, zIndex: 10,
+          position: 'absolute', right: 0, top: 60, zIndex: 10,
           background: 'rgba(99,102,241,0.15)', borderRadius: '8px 0 0 8px',
           padding: '8px 10px', cursor: 'pointer', display: 'flex',
           alignItems: 'center', gap: 6, fontSize: 13, color: '#a5b4fc',

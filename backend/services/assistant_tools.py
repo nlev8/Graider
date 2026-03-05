@@ -743,7 +743,10 @@ def execute_tool(tool_name, tool_input):
 
     All handlers MUST be bare functions (not lambda wrappers).
     They are called with **kwargs from tool_input.
+    teacher_id is injected by the assistant route for per-teacher context;
+    it's stripped before calling handlers that don't accept it.
     """
+    import inspect
     _merge_submodules()  # Ensure submodule tools are registered
     handler = TOOL_HANDLERS.get(tool_name)
     if not handler:
@@ -751,7 +754,18 @@ def execute_tool(tool_name, tool_input):
 
     try:
         if tool_input:
-            return handler(**tool_input)
+            # Strip teacher_id if the handler doesn't accept it
+            kwargs = dict(tool_input)
+            if 'teacher_id' in kwargs:
+                try:
+                    sig = inspect.signature(handler)
+                    if 'teacher_id' not in sig.parameters and not any(
+                        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                    ):
+                        kwargs.pop('teacher_id')
+                except (ValueError, TypeError):
+                    kwargs.pop('teacher_id', None)
+            return handler(**kwargs)
         else:
             return handler()
     except Exception as e:

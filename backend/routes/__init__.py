@@ -27,12 +27,12 @@ from .behavior_routes import behavior_bp
 from .seo_routes import seo_bp
 
 
-def register_routes(app, grading_state=None, run_grading_fn=None, reset_fn=None, grading_lock=None):
+def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, get_lock_fn=None):
     """Register all route blueprints with the Flask app."""
 
-    # Initialize grading routes with state references if provided
-    if grading_state is not None:
-        init_grading_routes(grading_state, run_grading_fn, reset_fn, grading_lock)
+    # Initialize grading routes with state factory functions if provided
+    if get_state_fn is not None:
+        init_grading_routes(get_state_fn, run_grading_fn, reset_fn, get_lock_fn)
 
     # Register all blueprints
     app.register_blueprint(settings_bp)

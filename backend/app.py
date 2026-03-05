@@ -261,52 +261,74 @@ def save_results(results, teacher_id='local-dev'):
         except Exception as e:
             print(f"Error saving results: {e}")
 
-grading_state = {
-    "is_running": False,
-    "stop_requested": False,
-    "progress": 0,
-    "total": 0,
-    "current_file": "",
-    "log": [],
-    "results": load_saved_results(),  # Load saved results on startup
-    "complete": False,
-    "error": None,
-    "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
-    "cost_limit": 0,
-    "cost_warning_pct": 80,
-    "cost_limit_hit": False,
-    "cost_warning_sent": False,
-}
-
-# Lock for thread-safe access to grading_state (mutated by grading thread + Flask request threads)
-grading_lock = threading.Lock()
+# ── Per-teacher grading state (dict-of-dicts) ────────────────
+_grading_states = {}   # teacher_id -> state dict
+_grading_locks = {}    # teacher_id -> Lock
+_states_meta_lock = threading.Lock()
 
 
-def _update_state(**kwargs):
-    """Thread-safe grading_state update."""
-    with grading_lock:
-        grading_state.update(kwargs)
+def _create_default_state(teacher_id='local-dev'):
+    """Create a fresh grading state dict for a teacher."""
+    return {
+        "is_running": False,
+        "stop_requested": False,
+        "progress": 0,
+        "total": 0,
+        "current_file": "",
+        "log": [],
+        "results": load_saved_results(teacher_id),
+        "complete": False,
+        "error": None,
+        "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
+        "cost_limit": 0,
+        "cost_warning_pct": 80,
+        "cost_limit_hit": False,
+        "cost_warning_sent": False,
+    }
 
 
-def reset_state(clear_results=False):
-    global grading_state
-    with grading_lock:
-        grading_state.update({
+def _get_state(teacher_id='local-dev'):
+    """Get (or lazily create) the grading state dict for a teacher."""
+    if teacher_id not in _grading_states:
+        with _states_meta_lock:
+            if teacher_id not in _grading_states:
+                _grading_states[teacher_id] = _create_default_state(teacher_id)
+                _grading_locks[teacher_id] = threading.Lock()
+    return _grading_states[teacher_id]
+
+
+def _get_lock(teacher_id='local-dev'):
+    """Get (or lazily create) the grading lock for a teacher."""
+    _get_state(teacher_id)  # ensure state+lock exist
+    return _grading_locks[teacher_id]
+
+
+def _update_state(teacher_id='local-dev', **kwargs):
+    """Thread-safe grading_state update for a specific teacher."""
+    with _get_lock(teacher_id):
+        _get_state(teacher_id).update(kwargs)
+
+
+def reset_state(teacher_id='local-dev', clear_results=False):
+    """Reset grading state for a specific teacher."""
+    state = _get_state(teacher_id)
+    with _get_lock(teacher_id):
+        state.update({
             "is_running": False,
             "stop_requested": False,
             "progress": 0,
             "total": 0,
             "current_file": "",
             "log": [],
-            "results": [] if clear_results else grading_state.get("results", []),
+            "results": [] if clear_results else state.get("results", []),
             "complete": False,
             "error": None,
             "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
             "cost_limit": 0,
             "cost_warning_pct": 80,
             "cost_limit_hit": False,
-        "cost_warning_sent": False,
-    })
+            "cost_warning_sent": False,
+        })
 
 
 # ══════════════════════════════════════════════════════════════
@@ -363,7 +385,7 @@ def _check_batch_calibration(results: list) -> dict:
 # GRADING THREAD
 # ══════════════════════════════════════════════════════════════
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard', teacher_id='local-dev'):
+def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard', teacher_id='local-dev', user_api_keys=None):
     """Run the grading process in a background thread.
 
     Args:
@@ -374,8 +396,30 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
         ensemble_models: List of models for ensemble grading (e.g., ['gpt-4o-mini', 'claude-haiku', 'gemini-flash'])
         extraction_mode: "structured" (parse with rules) or "ai" (let AI identify responses)
         trusted_students: List of student IDs to skip AI/plagiarism detection for
+        user_api_keys: Pre-resolved BYOK keys dict for contextvars propagation
     """
-    global grading_state
+    # Resolve per-teacher state for try/finally
+    state = _get_state(teacher_id)
+
+    # BYOK: Set per-user API keys in contextvars for this thread + child workers
+    from backend.api_keys import set_thread_keys, clear_thread_keys
+    if user_api_keys:
+        set_thread_keys(user_api_keys)
+
+    try:
+        _run_grading_thread_inner(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id)
+    finally:
+        clear_thread_keys()
+
+
+def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard', teacher_id='local-dev'):
+    """Inner grading logic (extracted so run_grading_thread can wrap with BYOK context)."""
+    # Shadow globals with per-teacher locals — all 100+ references below just work unchanged
+    grading_state = _get_state(teacher_id)
+    grading_lock = _get_lock(teacher_id)
+    def _update_state(**kwargs):
+        with grading_lock:
+            grading_state.update(kwargs)
 
     # Log global AI notes status
     if global_ai_notes:
@@ -1879,7 +1923,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
 # ══════════════════════════════════════════════════════════════
 
 from routes import register_routes
-register_routes(app, grading_state, run_grading_thread, reset_state, grading_lock)
+register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1890,7 +1934,10 @@ register_routes(app, grading_state, run_grading_thread, reset_state, grading_loc
 def start_grading():
     """Start the grading process."""
     print("🚀 BACKEND/APP.PY - /api/grade called")  # DEBUG: Confirm this file is being used
-    global grading_state
+
+    # Capture teacher_id before thread start (g is request-scoped)
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
 
     if grading_state["is_running"]:
         return jsonify({"error": "Grading already in progress"}), 400
@@ -1938,15 +1985,16 @@ def start_grading():
     if not os.path.exists(roster_file):
         return jsonify({"error": f"Roster file not found: {roster_file}"}), 400
 
-    reset_state()
-    _update_state(
+    reset_state(teacher_id)
+    _update_state(teacher_id,
         is_running=True,
         cost_limit=float(data.get('cost_limit_per_session', 0)),
         cost_warning_pct=float(data.get('cost_warning_pct', 80)),
     )
 
-    # Capture teacher_id before thread start (g is request-scoped)
-    teacher_id = getattr(g, 'user_id', 'local-dev')
+    # BYOK: Pre-resolve API keys for this teacher before spawning thread
+    from backend.api_keys import resolve_keys_for_teacher
+    user_api_keys = resolve_keys_for_teacher(teacher_id)
 
     # FERPA: Audit log grading session start
     file_count = len(selected_files) if selected_files else "all"
@@ -1954,7 +2002,7 @@ def start_grading():
 
     thread = threading.Thread(
         target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id)
+        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id, user_api_keys)
     )
     thread.start()
 
@@ -2144,8 +2192,9 @@ def list_files():
         return jsonify({"files": [], "error": "Folder not found"})
 
     # Get already graded files
+    teacher_id = getattr(g, 'user_id', 'local-dev')
     already_graded = set()
-    for result in grading_state.get("results", []):
+    for result in _get_state(teacher_id).get("results", []):
         if result.get("filename"):
             already_graded.add(result["filename"])
 
@@ -2284,7 +2333,8 @@ def _sync_approval_to_master_csv(result, approval_status):
 @app.route('/api/delete-result', methods=['POST'])
 def delete_single_result():
     """Delete a single grading result by filename."""
-    global grading_state
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
 
     if grading_state["is_running"]:
         return jsonify({"error": "Cannot delete results while grading is in progress"}), 400
@@ -2313,7 +2363,7 @@ def delete_single_result():
         return jsonify({"status": "already_deleted", "filename": filename})
 
     # Save updated results to storage
-    save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
+    save_results(grading_state["results"], teacher_id)
 
     # Also remove from master_grades.csv so the Assistant sees fresh data
     if deleted_result:
@@ -2332,6 +2382,9 @@ def delete_single_result():
 @app.route('/api/update-approval', methods=['POST'])
 def update_approval():
     """Update email approval status for a result."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+
     data = request.json
     filename = data.get('filename')
     approval = data.get('approval')  # 'approved', 'rejected', or 'pending'
@@ -2343,7 +2396,7 @@ def update_approval():
     for r in grading_state["results"]:
         if r.get('filename') == filename:
             r['email_approval'] = approval
-            save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
+            save_results(grading_state["results"], teacher_id)
             _sync_approval_to_master_csv(r, approval)
             return jsonify({"status": "updated", "filename": filename, "approval": approval})
 
@@ -2353,6 +2406,9 @@ def update_approval():
 @app.route('/api/update-approvals-bulk', methods=['POST'])
 def update_approvals_bulk():
     """Update email approval status for multiple results at once."""
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+
     data = request.json
     approvals = data.get('approvals', {})  # { filename: approval_status }
 
@@ -2368,7 +2424,7 @@ def update_approvals_bulk():
             updated += 1
 
     if updated > 0:
-        save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
+        save_results(grading_state["results"], teacher_id)
 
     return jsonify({"status": "updated", "count": updated})
 
@@ -2383,7 +2439,8 @@ def delete_all_student_data():
     FERPA Compliance: Securely delete all student data.
     This includes grading results, settings, and cached data.
     """
-    global grading_state
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
 
     if grading_state["is_running"]:
         return jsonify({"error": "Cannot delete data while grading is in progress"}), 400
@@ -2455,6 +2512,8 @@ def get_data_summary():
     FERPA Compliance: Get summary of stored student data.
     Helps teachers understand what data is stored locally.
     """
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
     summary = {
         "results": {
             "count": len(grading_state.get("results", [])),
@@ -2495,6 +2554,8 @@ def export_student_data():
     FERPA Compliance: Export all student data for portability.
     Supports parent/guardian data requests.
     """
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
     student_name = request.args.get('student', '')
 
     if student_name:
@@ -2524,6 +2585,9 @@ def export_individual_student_data():
     """
     import re
     import subprocess
+
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
 
     data = request.json or {}
     student_name = data.get('student_name', '').strip()
@@ -2782,6 +2846,9 @@ def import_individual_student_data():
     """FERPA-compliant: Import a previously exported student data file."""
     import re as _re
 
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id)
+
     preview = request.form.get('preview', 'false').lower() == 'true'
     period_filename = request.form.get('period_filename', '')
     student_id_override = request.form.get('student_id', '')
@@ -2880,7 +2947,7 @@ def import_individual_student_data():
 
         if new_results:
             grading_state["results"].extend(new_results)
-            save_results(grading_state["results"], getattr(g, 'user_id', 'local-dev'))
+            save_results(grading_state["results"], teacher_id)
             imported["results"] = len(new_results)
 
     # 2. Student history — merge assignments lists
@@ -3029,7 +3096,8 @@ def retranslate_feedback():
         return jsonify({"error": "No feedback provided"})
 
     try:
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        from backend.api_keys import get_api_key
+        client = openai.OpenAI(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -3067,7 +3135,8 @@ def extract_student_from_image():
         except ImportError:
             return jsonify({"error": "Anthropic library not installed. Run: pip install anthropic"})
 
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        from backend.api_keys import get_api_key
+        api_key = get_api_key('anthropic', getattr(g, 'user_id', 'local-dev'))
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY not configured"})
 

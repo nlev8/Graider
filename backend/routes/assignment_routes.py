@@ -126,7 +126,8 @@ Return ONLY valid JSON:
 
     try:
         import openai
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        from backend.api_keys import get_api_key
+        client = openai.OpenAI(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],

@@ -414,7 +414,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **Graider** (2057 symbols, 5193 relationships, 153 execution flows).
+This project is indexed by GitNexus as **Graider** (2058 symbols, 5192 relationships, 153 execution flows).
 
 ## Always Start Here
 

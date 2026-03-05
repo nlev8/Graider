@@ -920,8 +920,10 @@ def send_submission_confirmations():
             })
 
         # Launch Outlook sender
+        from flask import g
         from backend.routes.email_routes import launch_outlook_sender
-        result = launch_outlook_sender(emails)
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        result = launch_outlook_sender(emails, teacher_id=teacher_id)
 
         if 'error' in result:
             # Revert to pending on launch failure

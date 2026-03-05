@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
 import { getAuthHeaders } from "../services/api";
@@ -129,6 +129,7 @@ export default function SettingsTab({
   const parentContactsInputRef = useRef(null);
   const supportDocInputRef = useRef(null);
   const importFileRef = useRef(null);
+  const [showVportalPassword, setShowVportalPassword] = useState(false);
 
   return (
     <>
@@ -1501,6 +1502,134 @@ export default function SettingsTab({
                 </select>
               </div>
             </div>
+
+            {/* District Portal (VPortal) Credentials */}
+            <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "20px", marginTop: "20px" }}>
+              <h3 style={{
+                fontSize: "1.1rem",
+                fontWeight: 700,
+                marginBottom: "15px",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}>
+                <Icon name="Building2" size={20} style={{ color: "#6366f1" }} />
+                District Portal (VPortal)
+              </h3>
+              <p style={{
+                fontSize: "0.85rem",
+                color: "var(--text-secondary)",
+                marginBottom: "15px",
+              }}>
+                Save your VPortal credentials to enable Focus gradebook automation and Outlook email sending.
+                Credentials are stored securely on the server and never shared externally.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "400px" }}>
+                <div>
+                  <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={vportalEmail}
+                    onChange={(e) => setVportalEmail(e.target.value)}
+                    placeholder="you@district.edu"
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      background: "var(--input-bg)",
+                      border: "1px solid var(--input-border)",
+                      borderRadius: "10px",
+                      color: "var(--text-primary)",
+                      fontSize: "0.9rem",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                    Password
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showVportalPassword ? "text" : "password"}
+                      value={vportalPassword}
+                      onChange={(e) => setVportalPassword(e.target.value)}
+                      placeholder={vportalConfigured ? "••••••••" : "Enter password"}
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        paddingRight: "44px",
+                        background: "var(--input-bg)",
+                        border: "1px solid var(--input-border)",
+                        borderRadius: "10px",
+                        color: "var(--text-primary)",
+                        fontSize: "0.9rem",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowVportalPassword(!showVportalPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "10px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "4px",
+                        color: "var(--text-secondary)",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      title={showVportalPassword ? "Hide password" : "Show password"}
+                    >
+                      <Icon name={showVportalPassword ? "EyeOff" : "Eye"} size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <button
+                    onClick={async () => {
+                      if (!vportalEmail || !vportalPassword) {
+                        addToast("Please enter both email and password", "error");
+                        return;
+                      }
+                      setVportalSaving(true);
+                      try {
+                        await api.savePortalCredentials(vportalEmail, vportalPassword);
+                        setVportalConfigured(true);
+                        setVportalPassword("");
+                        setShowVportalPassword(false);
+                        addToast("VPortal credentials saved", "success");
+                      } catch (err) {
+                        addToast("Failed to save credentials: " + err.message, "error");
+                      }
+                      setVportalSaving(false);
+                    }}
+                    className="btn btn-primary"
+                    style={{ padding: "8px 16px" }}
+                    disabled={vportalSaving}
+                  >
+                    {vportalSaving ? "Saving..." : "Save Credentials"}
+                  </button>
+                  {vportalConfigured && (
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "0.8rem",
+                      color: "var(--success)",
+                    }}>
+                      <Icon name="CheckCircle2" size={14} />
+                      Configured
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
               </>
             )}
 
@@ -2040,111 +2169,6 @@ export default function SettingsTab({
               )}
             </div>
 
-            {/* District Portal (VPortal) Credentials */}
-            <div>
-              <h3 style={{
-                fontSize: "1.1rem",
-                fontWeight: 700,
-                marginBottom: "15px",
-                marginTop: "25px",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-              }}>
-                <Icon name="Building2" size={20} style={{ color: "#6366f1" }} />
-                District Portal (VPortal)
-              </h3>
-              <p style={{
-                fontSize: "0.85rem",
-                color: "var(--text-secondary)",
-                marginBottom: "15px",
-              }}>
-                Save your VPortal credentials to enable Focus gradebook automation and Outlook email sending.
-                Credentials are stored securely on the server and never shared externally.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "400px" }}>
-                <div>
-                  <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={vportalEmail}
-                    onChange={(e) => setVportalEmail(e.target.value)}
-                    placeholder="you@district.edu"
-                    style={{
-                      width: "100%",
-                      padding: "10px 14px",
-                      background: "var(--input-bg)",
-                      border: "1px solid var(--input-border)",
-                      borderRadius: "10px",
-                      color: "var(--text-primary)",
-                      fontSize: "0.9rem",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={vportalPassword}
-                    onChange={(e) => setVportalPassword(e.target.value)}
-                    placeholder={vportalConfigured ? "••••••••" : "Enter password"}
-                    style={{
-                      width: "100%",
-                      padding: "10px 14px",
-                      background: "var(--input-bg)",
-                      border: "1px solid var(--input-border)",
-                      borderRadius: "10px",
-                      color: "var(--text-primary)",
-                      fontSize: "0.9rem",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <button
-                    onClick={async () => {
-                      if (!vportalEmail || !vportalPassword) {
-                        addToast("Please enter both email and password", "error");
-                        return;
-                      }
-                      setVportalSaving(true);
-                      try {
-                        await api.savePortalCredentials(vportalEmail, vportalPassword);
-                        setVportalConfigured(true);
-                        setVportalPassword("");
-                        addToast("VPortal credentials saved", "success");
-                      } catch (err) {
-                        addToast("Failed to save credentials: " + err.message, "error");
-                      }
-                      setVportalSaving(false);
-                    }}
-                    className="btn btn-primary"
-                    style={{ padding: "8px 16px" }}
-                    disabled={vportalSaving}
-                  >
-                    {vportalSaving ? "Saving..." : "Save Credentials"}
-                  </button>
-                  {vportalConfigured && (
-                    <span style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      fontSize: "0.8rem",
-                      color: "var(--success)",
-                    }}>
-                      <Icon name="CheckCircle2" size={14} />
-                      Configured
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
             {/* Cloud Sync Section */}
             <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "20px", marginTop: "20px" }}>
               <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -2166,14 +2190,14 @@ export default function SettingsTab({
                     });
                     const data = await resp.json();
                     if (data.error) {
-                      showToast(data.error, "error");
+                      addToast(data.error, "error");
                     } else {
                       const summary = data.summary || {};
                       const parts = Object.entries(summary).map(function(e) { return e[0] + ": " + e[1]; });
-                      showToast("Synced to cloud! " + parts.join(", "), "success");
+                      addToast("Synced to cloud! " + parts.join(", "), "success");
                     }
                   } catch (err) {
-                    showToast("Sync failed: " + err.message, "error");
+                    addToast("Sync failed: " + err.message, "error");
                   } finally {
                     setSyncingCloud(false);
                   }

@@ -229,9 +229,10 @@ BEHAVIOR_TOOL_DEFINITIONS = [
 # IMPLEMENTATION
 # ═══════════════════════════════════════════════════════
 
-def get_behavior_summary(student_name=None, period=None, days=7):
+def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='local-dev'):
     """Get behavior summary for a student or period."""
-    teacher_id = _get_teacher_id()
+    if not teacher_id or teacher_id == 'local-dev':
+        teacher_id = _get_teacher_id() or teacher_id
     if not teacher_id:
         return {"error": "Not authenticated"}
 
@@ -318,9 +319,10 @@ def get_behavior_summary(student_name=None, period=None, days=7):
     }
 
 
-def generate_behavior_email(student_name, tone=None, custom_note=None):
+def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_id='local-dev'):
     """Generate a professional behavior email draft."""
-    teacher_id = _get_teacher_id()
+    if not teacher_id or teacher_id == 'local-dev':
+        teacher_id = _get_teacher_id() or teacher_id
     if not teacher_id:
         return {"error": "Not authenticated"}
 

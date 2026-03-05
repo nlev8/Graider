@@ -14,7 +14,7 @@ import os
 import sys
 import json
 import time
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from pathlib import Path
 
 # Import multipass grading for text-based question types
@@ -296,11 +296,8 @@ def _vision_ocr_fallback(image_data, question_text, subject):
     """
     try:
         from openai import OpenAI
-        from dotenv import load_dotenv
-
-        app_dir = Path(__file__).parent.parent.parent
-        load_dotenv(app_dir / '.env', override=True)
-        api_key = os.getenv("OPENAI_API_KEY")
+        from backend.api_keys import get_api_key
+        api_key = get_api_key('openai', getattr(g, 'user_id', 'local-dev'))
         if not api_key:
             return {'extracted_text': '', 'confidence': 0, 'error': 'No OpenAI API key'}
 
