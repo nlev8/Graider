@@ -50,14 +50,14 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
     {
         "student_key": {
             "name": "...",
-            "entries": [ { date, period, type, count, notes, timestamps } ]
+            "entries": [ { date, period, type, count, notes, transcripts, timestamps } ]
         }
     }
     """
     sb = _get_supabase()
 
     query = sb.table('behavior_events').select(
-        'student_name, type, note, event_time, '
+        'student_name, type, note, transcript, event_time, source, '
         'behavior_sessions!inner(period, date)'
     ).eq('teacher_id', teacher_id)
 
@@ -81,6 +81,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
         sid = name.lower().replace(' ', '_')
         evt_type = row.get('type', 'correction')
         note = row.get('note', '')
+        transcript = row.get('transcript', '')
         session = row.get('behavior_sessions', {})
         date_val = session.get('date', '')
         period_val = session.get('period', '')
@@ -106,6 +107,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
                 "type": evt_type,
                 "count": 0,
                 "notes": [],
+                "transcripts": [],
                 "timestamps": [],
             }
 
@@ -113,6 +115,8 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
         entry["count"] += 1
         if note and note not in entry["notes"]:
             entry["notes"].append(note)
+        if transcript and transcript not in entry["transcripts"]:
+            entry["transcripts"].append(transcript)
         if timestamp:
             entry["timestamps"].append(timestamp)
 
@@ -197,7 +201,7 @@ BEHAVIOR_TOOL_DEFINITIONS = [
     },
     {
         "name": "send_behavior_email",
-        "description": "Send a behavior email to a student's parents. Requires a draft from generate_behavior_email. Supports two methods: 'email' (Resend API) or 'focus' (generates Playwright workflow for Focus portal messaging).",
+        "description": "Send a behavior email to a student's parents. Requires a draft from generate_behavior_email. Supports two methods: 'email' (Resend API) or 'focus' (sends via Focus Communications portal using Playwright browser automation — opens browser, logs in, and sends through Focus SIS).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -262,12 +266,16 @@ def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='loc
             corrections = sum(e.get("count", 0) for e in entries if e.get("type") == "correction")
             praise = sum(e.get("count", 0) for e in entries if e.get("type") == "praise")
 
-            # Collect all notes
+            # Collect all notes and transcripts
             all_notes = []
+            all_transcripts = []
             for e in entries:
                 for note in e.get("notes", []):
                     if note:
                         all_notes.append({"date": e.get("date", ""), "note": note, "type": e.get("type", "")})
+                for t in e.get("transcripts", []):
+                    if t:
+                        all_transcripts.append({"date": e.get("date", ""), "transcript": t, "type": e.get("type", "")})
 
             # Day-by-day breakdown
             daily = defaultdict(lambda: {"corrections": 0, "praise": 0})
@@ -284,6 +292,7 @@ def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='loc
                 "total_corrections": corrections,
                 "total_praise": praise,
                 "notes": all_notes[-10:],
+                "recent_transcripts": all_transcripts[-10:],
                 "daily_breakdown": dict(sorted(daily.items())),
             })
 
@@ -319,35 +328,21 @@ def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='loc
     }
 
 
-def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_id='local-dev'):
-    """Generate a professional behavior email draft."""
-    if not teacher_id or teacher_id == 'local-dev':
-        teacher_id = _get_teacher_id() or teacher_id
-    if not teacher_id:
-        return {"error": "Not authenticated"}
-
+def _gather_email_context(teacher_id, student_name):
+    """Gather all behavior data and teacher settings needed for email generation."""
     cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
 
-    # Query from Supabase (last 14 days, fuzzy-matched student)
     students_data = _load_behavior_events(
         teacher_id=teacher_id,
         cutoff_date=cutoff,
         student_name=student_name,
     )
-
     if not students_data:
-        return {"error": f"No behavior data found for '{student_name}'."}
+        return None
 
-    # Take first matching student
     match = next(iter(students_data.values()))
-
-    # Load teacher settings for signature
     settings = _load_settings()
     config = settings.get('config', {})
-    teacher_name = config.get('teacher_name', 'Your Teacher')
-    subject_area = config.get('subject', '')
-    school_name = config.get('school_name', '')
-    email_signature = config.get('email_signature', '')
 
     name = match.get("name", student_name)
     first_name = _extract_first_name(name)
@@ -356,40 +351,27 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
     corrections = sum(e.get("count", 0) for e in entries if e.get("type") == "correction")
     praise = sum(e.get("count", 0) for e in entries if e.get("type") == "praise")
 
-    # Collect notes
-    correction_notes = []
-    praise_notes = []
+    # Collect notes and transcripts
+    correction_notes, praise_notes = [], []
+    all_transcripts = []
     for e in entries:
         for note in e.get("notes", []):
             if note:
-                if e.get("type") == "correction":
-                    correction_notes.append(note)
-                else:
-                    praise_notes.append(note)
+                (correction_notes if e.get("type") == "correction" else praise_notes).append(note)
+        for t in e.get("transcripts", []):
+            if t:
+                all_transcripts.append({"date": e.get("date", ""), "type": e.get("type", ""), "transcript": t})
 
-    # Get dates of corrections
     correction_dates = sorted(set(e.get("date", "") for e in entries if e.get("type") == "correction"))
-
-    # Auto-detect tone
-    if not tone:
-        if corrections > praise and corrections >= 3:
-            tone = "concern"
-        elif praise > corrections:
-            tone = "positive"
-        else:
-            tone = "concern"
 
     # Look up parent contact
     contacts = _load_parent_contacts()
-    parent_email = ""
-    parent_name = ""
+    parent_email, parent_name = "", ""
     for contact in contacts:
         if _fuzzy_name_match(name, contact.get("student_name", "")):
             parent_email = contact.get("parent_email", "") or contact.get("email", "")
             parent_name = contact.get("parent_name", "") or contact.get("contact_name", "")
             break
-
-    # Also check roster for parent info
     if not parent_email:
         roster = _load_roster()
         for s in roster:
@@ -398,9 +380,116 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
                 parent_name = s.get("parent_name", "") or s.get("guardian_name", "")
                 break
 
-    parent_greeting = f"Dear {parent_name}" if parent_name else f"Dear Parent/Guardian of {first_name}"
+    return {
+        "name": name,
+        "first_name": first_name,
+        "corrections": corrections,
+        "praise": praise,
+        "correction_notes": correction_notes,
+        "praise_notes": praise_notes,
+        "correction_dates": correction_dates,
+        "transcripts": all_transcripts[-15:],
+        "parent_email": parent_email,
+        "parent_name": parent_name,
+        "teacher_name": config.get('teacher_name', 'Your Teacher'),
+        "subject_area": config.get('subject', ''),
+        "school_name": config.get('school_name', ''),
+        "email_signature": config.get('email_signature', ''),
+    }
 
-    # Build email based on tone
+
+def _generate_email_ai(ctx, tone, custom_note, teacher_id):
+    """Generate email using Claude AI. Returns (subject, body) or None on failure."""
+    try:
+        from backend.api_keys import get_api_key
+        import anthropic
+
+        api_key = get_api_key('anthropic', teacher_id)
+        if not api_key:
+            return None
+
+        # Build behavior data summary for the prompt
+        behavior_lines = []
+        behavior_lines.append(f"Student: {ctx['name']}")
+        behavior_lines.append(f"Total corrections (last 14 days): {ctx['corrections']}")
+        behavior_lines.append(f"Total praise (last 14 days): {ctx['praise']}")
+        if ctx['correction_dates']:
+            behavior_lines.append(f"Correction dates: {', '.join(ctx['correction_dates'])}")
+        if ctx['correction_notes']:
+            behavior_lines.append(f"Teacher notes (corrections): {'; '.join(ctx['correction_notes'][:8])}")
+        if ctx['praise_notes']:
+            behavior_lines.append(f"Teacher notes (praise): {'; '.join(ctx['praise_notes'][:5])}")
+        if ctx['transcripts']:
+            behavior_lines.append("Voice transcripts from class:")
+            for t in ctx['transcripts']:
+                behavior_lines.append(f"  [{t['date']}] ({t['type']}) \"{t['transcript'][:120]}\"")
+
+        behavior_data = "\n".join(behavior_lines)
+
+        parent_label = ctx['parent_name'] if ctx['parent_name'] else f"Parent/Guardian of {ctx['first_name']}"
+
+        tone_instructions = {
+            "concern": "Express concern about behavioral issues. Be direct but constructive. Emphasize partnership with parents. Reference specific incidents from the data.",
+            "positive": "Celebrate positive behavior. Be warm and encouraging. Reference specific instances of good behavior from the data.",
+            "followup": "Follow up on previous behavior communication. Note progress or continued concerns. Reference specific recent data.",
+        }
+
+        prompt = f"""Write a professional parent behavior email from a teacher.
+
+BEHAVIOR DATA:
+{behavior_data}
+
+DETAILS:
+- Teacher: {ctx['teacher_name']}
+- Subject: {ctx['subject_area'] or 'class'}
+- School: {ctx['school_name'] or ''}
+- Parent/Guardian: {parent_label}
+- Student first name: {ctx['first_name']}
+- Tone: {tone}
+- {tone_instructions.get(tone, tone_instructions['concern'])}
+{f'- Additional note from teacher: {custom_note}' if custom_note else ''}
+
+INSTRUCTIONS:
+- Write a complete email body (no subject line — just the body)
+- Start with "Dear {parent_label},"
+- Reference specific behavioral incidents using the transcript and note data — don't just cite counts
+- Keep it professional, constructive, and concise (150-250 words)
+- End with a signature using the teacher name{' and school' if ctx['school_name'] else ''}
+{f'- Use this exact signature block: {ctx["email_signature"]}' if ctx['email_signature'] else ''}
+- Do not use markdown formatting — plain text only
+- Do not include a subject line"""
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        body = response.content[0].text.strip()
+
+        # Generate subject line
+        subject_map = {
+            "concern": f"Behavior Update - {ctx['first_name']}",
+            "positive": f"Positive Behavior Update - {ctx['first_name']}",
+            "followup": f"Behavior Follow-Up - {ctx['first_name']}",
+        }
+        subject = subject_map.get(tone, f"Behavior Update - {ctx['first_name']}")
+
+        return subject, body
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"AI email generation failed: {e}")
+        return None
+
+
+def _generate_email_template(ctx, tone, custom_note):
+    """Generate email using hardcoded template (fallback)."""
+    first_name = ctx['first_name']
+    subject_area = ctx['subject_area']
+    parent_greeting = f"Dear {ctx['parent_name']}" if ctx['parent_name'] else f"Dear Parent/Guardian of {first_name}"
+
     if tone == "positive":
         email_subject = f"Positive Behavior Update - {first_name}"
         lines = [
@@ -409,10 +498,10 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
             f"I wanted to reach out with a positive update about {first_name}'s behavior in {subject_area + ' ' if subject_area else ''}class.",
             "",
         ]
-        if praise > 0:
-            lines.append(f"Over the past two weeks, {first_name} has received {praise} positive recognition(s) for good behavior.")
-        if praise_notes:
-            lines.append("Specifically noted: " + "; ".join(praise_notes[:5]) + ".")
+        if ctx['praise'] > 0:
+            lines.append(f"Over the past two weeks, {first_name} has received {ctx['praise']} positive recognition(s) for good behavior.")
+        if ctx['praise_notes']:
+            lines.append("Specifically noted: " + "; ".join(ctx['praise_notes'][:5]) + ".")
         lines.extend([
             "",
             f"It's great to see {first_name} making positive contributions to our classroom. Please let {first_name} know how proud we are!",
@@ -425,10 +514,10 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
             f"I'm following up on {first_name}'s behavior in {subject_area + ' ' if subject_area else ''}class.",
             "",
         ]
-        if corrections > 0:
-            lines.append(f"Since our last communication, {first_name} has had {corrections} correction(s).")
-        if praise > 0:
-            lines.append(f"{first_name} has also received {praise} positive recognition(s), which is encouraging.")
+        if ctx['corrections'] > 0:
+            lines.append(f"Since our last communication, {first_name} has had {ctx['corrections']} correction(s).")
+        if ctx['praise'] > 0:
+            lines.append(f"{first_name} has also received {ctx['praise']} positive recognition(s), which is encouraging.")
         lines.extend([
             "",
             "I'd like to continue working together to support improvement. Please don't hesitate to reach out if you have questions.",
@@ -441,20 +530,20 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
             f"I'm reaching out regarding {first_name}'s behavior in {subject_area + ' ' if subject_area else ''}class. I want to partner with you to help {first_name} succeed.",
             "",
         ]
-        if corrections > 0:
-            lines.append(f"Over the past two weeks, {first_name} has needed {corrections} correction(s) during class.")
-        if correction_dates:
-            lines.append(f"Dates: {', '.join(correction_dates)}.")
-        if correction_notes:
-            lines.append(f"Areas of concern: {'; '.join(correction_notes[:5])}.")
-        if praise > 0:
+        if ctx['corrections'] > 0:
+            lines.append(f"Over the past two weeks, {first_name} has needed {ctx['corrections']} correction(s) during class.")
+        if ctx['correction_dates']:
+            lines.append(f"Dates: {', '.join(ctx['correction_dates'])}.")
+        if ctx['correction_notes']:
+            lines.append(f"Areas of concern: {'; '.join(ctx['correction_notes'][:5])}.")
+        if ctx['praise'] > 0:
             lines.extend([
                 "",
-                f"I also want to note that {first_name} has received {praise} positive recognition(s) during this period, which shows potential for improvement.",
+                f"I also want to note that {first_name} has received {ctx['praise']} positive recognition(s) during this period, which shows potential for improvement.",
             ])
         lines.extend([
             "",
-            "I believe that with consistent support at home and school, we can help turn this around. I'd appreciate it if you could discuss this with " + first_name + ".",
+            f"I believe that with consistent support at home and school, we can help turn this around. I'd appreciate it if you could discuss this with {first_name}.",
             "",
             "Please feel free to contact me if you'd like to schedule a conference or discuss strategies.",
         ])
@@ -462,50 +551,95 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
     if custom_note:
         lines.extend(["", custom_note])
 
-    # Add signature
-    lines.extend([
-        "",
-        "Thank you for your support,",
-    ])
-    if email_signature:
-        lines.append(email_signature)
+    lines.extend(["", "Thank you for your support,"])
+    if ctx['email_signature']:
+        lines.append(ctx['email_signature'])
     else:
-        lines.append(teacher_name)
-        if school_name:
-            lines.append(school_name)
+        lines.append(ctx['teacher_name'])
+        if ctx['school_name']:
+            lines.append(ctx['school_name'])
 
-    body = "\n".join(lines)
+    return email_subject, "\n".join(lines)
+
+
+def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_id='local-dev'):
+    """Generate a professional behavior email draft using AI (with template fallback)."""
+    if not teacher_id or teacher_id == 'local-dev':
+        teacher_id = _get_teacher_id() or teacher_id
+    if not teacher_id:
+        return {"error": "Not authenticated"}
+
+    ctx = _gather_email_context(teacher_id, student_name)
+    if not ctx:
+        return {"error": f"No behavior data found for '{student_name}'."}
+
+    # Auto-detect tone
+    if not tone:
+        if ctx['corrections'] > ctx['praise'] and ctx['corrections'] >= 3:
+            tone = "concern"
+        elif ctx['praise'] > ctx['corrections']:
+            tone = "positive"
+        else:
+            tone = "concern"
+
+    # Try AI generation first, fall back to template
+    ai_generated = False
+    ai_result = _generate_email_ai(ctx, tone, custom_note, teacher_id)
+    if ai_result:
+        email_subject, body = ai_result
+        ai_generated = True
+    else:
+        email_subject, body = _generate_email_template(ctx, tone, custom_note)
 
     return {
         "status": "success",
         "data": {
             "subject": email_subject,
             "body": body,
-            "to_email": parent_email,
-            "parent_name": parent_name,
-            "student_name": name,
+            "to_email": ctx['parent_email'],
+            "parent_name": ctx['parent_name'],
+            "student_name": ctx['name'],
             "tone": tone,
-            "corrections": corrections,
-            "praise": praise,
+            "corrections": ctx['corrections'],
+            "praise": ctx['praise'],
+            "ai_generated": ai_generated,
             "note": "Review the draft above. Ask me to send it when ready, or request changes.",
         }
     }
 
 
 def send_behavior_email(student_name, subject, body, method="email"):
-    """Send a behavior email via Resend or Focus automation."""
+    """Send a behavior email via Resend or Focus Communications automation."""
+    teacher_id = _get_teacher_id() or 'local-dev'
+
     if method == "focus":
-        # Generate a Playwright automation workflow for Focus messaging
-        return {
-            "status": "success",
-            "data": {
-                "method": "focus",
-                "message": "To send via Focus, use the 'create an automation' command with these details. Say: 'Create an automation to send a message in Focus to " + student_name + "'s parents with this subject and body.'",
-                "subject": subject,
-                "body": body,
+        # Send via Focus Communications Playwright automation
+        try:
+            from backend.routes.email_routes import launch_focus_comms
+
+            message = {
                 "student_name": student_name,
+                "subject": subject,
+                "email_body": body,
+                "sms_body": "",
+                "cc_emails": [],
             }
-        }
+
+            result = launch_focus_comms([message], teacher_id=teacher_id)
+            if result.get("error"):
+                return {"error": result["error"]}
+
+            return {
+                "status": "success",
+                "data": {
+                    "method": "focus",
+                    "message": f"Focus Communications sending to {student_name}'s parents. Check the automation progress — a browser window will open for 2FA if needed.",
+                    "subject": subject,
+                    "student_name": student_name,
+                }
+            }
+        except Exception as e:
+            return {"error": f"Focus Communications error: {str(e)}"}
 
     # Email method via Resend
     try:
