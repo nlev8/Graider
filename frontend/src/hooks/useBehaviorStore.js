@@ -16,7 +16,7 @@ const initialState = {
   // Cumulative data from backend
   cumulativeData: {},
   // View toggle
-  viewMode: 'session', // 'session' | 'cumulative'
+  viewMode: 'cumulative', // 'session' | 'cumulative'
   loading: false,
   error: null,
 }

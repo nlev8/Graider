@@ -152,7 +152,7 @@ def get_behavior_data():
 
         # Query events for this teacher, joined with session for period/date
         query = sb.table('behavior_events').select(
-            'student_name, type, note, event_time, '
+            'student_name, type, note, transcript, event_time, source, '
             'behavior_sessions!inner(period, date)'
         ).eq('teacher_id', teacher_id)
 
@@ -180,6 +180,7 @@ def get_behavior_data():
             sid = name.lower().replace(' ', '_')
             evt_type = row.get('type', 'correction')
             note = row.get('note', '')
+            transcript = row.get('transcript', '')
             session = row.get('behavior_sessions', {})
             date_val = session.get('date', '')
             period_val = session.get('period', '')
@@ -205,6 +206,7 @@ def get_behavior_data():
                     "type": evt_type,
                     "count": 0,
                     "notes": [],
+                    "transcripts": [],
                     "timestamps": [],
                 }
 
@@ -212,6 +214,8 @@ def get_behavior_data():
             entry["count"] += 1
             if note and note not in entry["notes"]:
                 entry["notes"].append(note)
+            if transcript and transcript not in entry["transcripts"]:
+                entry["transcripts"].append(transcript)
             if timestamp:
                 entry["timestamps"].append(timestamp)
 
@@ -227,6 +231,70 @@ def get_behavior_data():
             }
 
         return jsonify({"status": "success", "data": result})
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@behavior_bp.route('/api/behavior/events', methods=['GET'])
+def get_behavior_events():
+    """Get individual behavior events (not aggregated).
+
+    Query params:
+    - student_name: filter to a specific student (optional)
+    - period: filter to a specific period (optional)
+    - date_from: start date YYYY-MM-DD (optional)
+    - date_to: end date YYYY-MM-DD (optional)
+    - limit: max events to return (default 50, max 200)
+
+    Returns individual events with full detail for the event viewer.
+    """
+    try:
+        teacher_id = _get_teacher_id()
+        if not teacher_id:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        sb = _get_supabase()
+        student_filter = request.args.get('student_name', '').strip().lower()
+        period_filter = request.args.get('period', '').strip()
+        date_from = request.args.get('date_from', '')
+        date_to = request.args.get('date_to', '')
+        limit = min(int(request.args.get('limit', '50')), 200)
+
+        query = sb.table('behavior_events').select(
+            'id, student_name, type, note, transcript, source, event_time, '
+            'behavior_sessions!inner(period, date)'
+        ).eq('teacher_id', teacher_id).order('event_time', desc=True).limit(limit)
+
+        if date_from:
+            query = query.gte('behavior_sessions.date', date_from)
+        if date_to:
+            query = query.lte('behavior_sessions.date', date_to)
+        if period_filter:
+            query = query.eq('behavior_sessions.period', period_filter)
+
+        res = query.execute()
+        rows = res.data or []
+
+        if student_filter:
+            rows = [r for r in rows if student_filter in r.get('student_name', '').lower()]
+
+        events = []
+        for row in rows:
+            session = row.get('behavior_sessions', {})
+            events.append({
+                "id": row.get('id', ''),
+                "student_name": row.get('student_name', ''),
+                "type": row.get('type', 'correction'),
+                "note": row.get('note', '') or '',
+                "transcript": row.get('transcript', '') or '',
+                "source": row.get('source', 'manual') or 'manual',
+                "event_time": row.get('event_time', ''),
+                "period": session.get('period', ''),
+                "date": session.get('date', ''),
+            })
+
+        return jsonify({"status": "success", "data": {"events": events, "total": len(events)}})
 
     except Exception as e:
         return jsonify({"error": str(e)})

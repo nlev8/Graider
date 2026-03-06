@@ -562,6 +562,17 @@ export default function AssistantChat({ addToast, subject }) {
   // Wire up ref so voice hook can call sendMessage
   sendMessageRef.current = sendMessage
 
+  // Listen for behavior email requests from BehaviorPanel
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.message && sendMessageRef.current) {
+        sendMessageRef.current(e.detail.message)
+      }
+    }
+    window.addEventListener('behavior-email-request', handler)
+    return () => window.removeEventListener('behavior-email-request', handler)
+  }, [])
+
   function stopStreaming() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
