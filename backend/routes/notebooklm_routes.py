@@ -202,6 +202,19 @@ def nlm_download(material_type):
     if not file_path or not os.path.exists(file_path):
         return jsonify({"error": "Material not found: " + material_type}), 404
 
+    # Convert study guide markdown to DOCX for download
+    if material_type == "study_guide" and file_path.endswith(".md"):
+        from backend.services.notebooklm_service import _md_to_docx
+        docx_path = file_path.replace(".md", ".docx")
+        if not os.path.exists(docx_path) or os.path.getmtime(file_path) > os.path.getmtime(docx_path):
+            _md_to_docx(file_path, docx_path)
+        return send_file(
+            docx_path,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            as_attachment=True,
+            download_name="study_guide.docx"
+        )
+
     ext = MATERIAL_EXTENSIONS.get(material_type, "bin")
     mime_types = {
         "mp3": "audio/mpeg",
@@ -212,10 +225,12 @@ def nlm_download(material_type):
         "png": "image/png",
         "csv": "text/csv",
     }
+    # ?inline=1 serves the file for in-browser preview (no download prompt)
+    inline = request.args.get("inline") == "1"
     return send_file(
         file_path,
         mimetype=mime_types.get(ext, "application/octet-stream"),
-        as_attachment=True,
+        as_attachment=not inline,
         download_name=material_type + "." + ext
     )
 

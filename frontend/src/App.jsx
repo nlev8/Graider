@@ -37,6 +37,58 @@ import AssistantChat from "./components/AssistantChat";
 import AutomationBuilder from "./components/AutomationBuilder";
 import BehaviorPanel from "./components/BehaviorPanel";
 import MatchingCards from "./components/MatchingCards";
+import MindMapView from "./components/MindMapView";
+
+// Inline CSV table preview — fetches CSV from URL and renders as HTML table
+function DataTablePreview({ url }) {
+  var [rows, setRows] = React.useState(null);
+  React.useEffect(function() {
+    fetch(url).then(function(r) { return r.text(); }).then(function(text) {
+      var lines = text.trim().split(String.fromCharCode(10));
+      var parsed = lines.map(function(line) {
+        // Simple CSV parse (handles quoted fields)
+        var result = [];
+        var current = "";
+        var inQuotes = false;
+        for (var i = 0; i < line.length; i++) {
+          var ch = line[i];
+          if (ch === '"') { inQuotes = !inQuotes; }
+          else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ""; }
+          else { current += ch; }
+        }
+        result.push(current.trim());
+        return result;
+      });
+      setRows(parsed);
+    }).catch(function() { setRows([]); });
+  }, [url]);
+  if (!rows) return React.createElement("div", { style: { padding: "20px", textAlign: "center", color: "var(--text-secondary)" } }, "Loading table...");
+  if (rows.length === 0) return React.createElement("div", { style: { padding: "20px", color: "var(--text-secondary)" } }, "Empty table");
+  var header = rows[0];
+  var body = rows.slice(1);
+  return (
+    React.createElement("div", { style: { maxHeight: "400px", overflow: "auto", borderRadius: "12px", border: "1px solid var(--border)" } },
+      React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" } },
+        React.createElement("thead", null,
+          React.createElement("tr", null,
+            header.map(function(h, i) {
+              return React.createElement("th", { key: i, style: { padding: "10px 12px", background: "rgba(139, 92, 246, 0.1)", fontWeight: 600, textAlign: "left", borderBottom: "2px solid var(--border)", position: "sticky", top: 0 } }, h);
+            })
+          )
+        ),
+        React.createElement("tbody", null,
+          body.map(function(row, ri) {
+            return React.createElement("tr", { key: ri, style: { background: ri % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" } },
+              row.map(function(cell, ci) {
+                return React.createElement("td", { key: ci, style: { padding: "8px 12px", borderBottom: "1px solid var(--border)" } }, cell);
+              })
+            );
+          })
+        )
+      )
+    )
+  );
+}
 import OnboardingWizard from "./components/OnboardingWizard";
 import TutorialOverlay, { TUTORIAL_STEPS } from "./components/TutorialOverlay";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
@@ -1339,9 +1391,6 @@ function App() {
     useState(false);
   const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
   const [modelAnswersLoading, setModelAnswersLoading] = useState(false);
-  const [standardsAlignment, setStandardsAlignment] = useState(null);
-  const [alignmentLoading, setAlignmentLoading] = useState(false);
-  const [rewriteLoading, setRewriteLoading] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
   const skipAutoSaveRef = useRef(false); // Skip one auto-save cycle after loading from disk
@@ -2245,8 +2294,17 @@ function App() {
       }
       if (status.results && status.results.length > 0) {
         const costStr = status.session_cost?.total_cost > 0 ? ` (API cost: $${status.session_cost.total_cost.toFixed(4)})` : "";
-        const sessionGraded = status.total || status.results.length;
-        addToast(`Grading complete! ${sessionGraded} assignments graded.${costStr}`, "success");
+        addToast(`Grading complete! ${status.results.length} assignments graded.${costStr}`, "success");
+        // Resubmission summary notification
+        const resubCount = status.results.filter(r => r.is_resubmission).length;
+        if (resubCount > 0) {
+          const keptCount = status.results.filter(r => r.is_resubmission && r.kept_higher).length;
+          const improvedCount = resubCount - keptCount;
+          let msg = resubCount + " resubmission(s) detected.";
+          if (improvedCount > 0) msg += " " + improvedCount + " improved.";
+          if (keptCount > 0) msg += " " + keptCount + " kept original (higher) grade.";
+          addToast(msg, "info", 8000);
+        }
       }
     }
   }, [status.is_running, status.current_file, status.results]);
@@ -3083,10 +3141,7 @@ function App() {
         try {
           const filesData = await api.listFiles(config.assignments_folder);
           if (filesData.files) {
-            // Include graded files when "exclude already graded" is unchecked
-            let filtered = excludeGradedStudents
-              ? filesData.files.filter((f) => !f.graded)
-              : filesData.files.slice();
+            let filtered = filesData.files.filter((f) => !f.graded);
 
             // Filter by period students
             if (selectedPeriod && periodStudents.length > 0) {
@@ -3278,10 +3333,10 @@ function App() {
               }
 
               const approvedStudentNames = approvedRelevant.map((r) =>
-                (r.student_name || "").toLowerCase().replace(/['\u2019\s_-]+/g, "")
+                (r.student_name || "").toLowerCase().replace(/['\u2019\s]+/g, "")
               );
               filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase().replace(/['\u2019\s_-]+/g, "");
+                const fileName = f.name.toLowerCase().replace(/['\u2019\s]+/g, "");
                 return !approvedStudentNames.some((name) =>
                   name && fileName.includes(name)
                 );
@@ -3332,7 +3387,12 @@ function App() {
         subject: config.subject,
         teacher_name: config.teacher_name,
         school_name: config.school_name,
-        assignmentConfig: gradeAssignment.title ? gradeAssignment : null,
+        assignmentConfig:
+          gradeAssignment.customMarkers.length > 0 ||
+          gradeAssignment.gradingNotes ||
+          (gradeAssignment.responseSections || []).length > 0
+            ? gradeAssignment
+            : null,
         globalAINotes,
         // Pass the custom rubric from Settings
         rubric: rubric,
@@ -3620,7 +3680,6 @@ ${signature}`;
           filename: file.name,
           loading: false,
         });
-        setStandardsAlignment(null);
         setLoadedAssignmentName("");
         setDocEditorModal({
           show: true,
@@ -3831,58 +3890,6 @@ ${signature}`;
       addToast("Failed: " + err.message, "error");
     } finally {
       setModelAnswersLoading(false);
-    }
-  };
-
-  const handleAlignToStandards = async () => {
-    var docText = importedDoc.text || (importedDoc.html ? importedDoc.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '');
-    if (!importedDoc || !docText) {
-      addToast("Import the assignment document first", "warning");
-      return;
-    }
-    if (!config.subject) {
-      addToast("Set your subject in Settings first", "warning");
-      return;
-    }
-    setAlignmentLoading(true);
-    setStandardsAlignment(null);
-    try {
-      var data = await api.alignDocumentToStandards({
-        documentText: docText,
-        state: config.state || "FL",
-        grade: config.grade_level || "7",
-        subject: config.subject,
-      });
-      if (data.error) { addToast(data.error, "error"); return; }
-      setStandardsAlignment(data);
-      addToast((data.matched_standards || []).length + " standards identified", "success");
-    } catch (err) {
-      addToast("Alignment failed: " + err.message, "error");
-    } finally {
-      setAlignmentLoading(false);
-    }
-  };
-
-  const handleRewriteForAlignment = async (questions) => {
-    setRewriteLoading(true);
-    try {
-      var docText = importedDoc.text || '';
-      var data = await api.rewriteForAlignment({
-        questions: questions,
-        documentText: docText,
-        grade: config.grade_level || "7",
-        subject: config.subject || "",
-        state: config.state || "FL",
-      });
-      if (data.error) { addToast(data.error, "error"); return; }
-      setStandardsAlignment(function(prev) {
-        return Object.assign({}, prev, { rewrites: data.rewrites });
-      });
-      addToast((data.rewrites || []).length + " questions rewritten", "success");
-    } catch (err) {
-      addToast("Rewrite failed: " + err.message, "error");
-    } finally {
-      setRewriteLoading(false);
     }
   };
 
@@ -4645,6 +4652,11 @@ ${signature}`;
     try {
       setNlmGenerating(true);
       setNlmTotalSelected(selected.length);
+      setNlmProgress([]);
+      setNlmCompleted([]);
+      setNlmErrors([]);
+      setNlmMaterials({});
+      setNlmPreviewData(null);
 
       // Create notebook if needed
       var notebookId = nlmNotebookId;
@@ -5607,7 +5619,7 @@ ${signature}`;
     const result = status.results[index];
     if (result?.filename) {
       try {
-        await api.updateApproval(result.filename, approval, result.graded_at);
+        await api.updateApproval(result.filename, approval);
       } catch (e) {
         console.error("Error saving approval:", e);
       }
@@ -9898,11 +9910,6 @@ ${signature}`;
                   handleDocImport={handleDocImport}
                   openDocEditor={openDocEditor}
                   handleGenerateModelAnswers={handleGenerateModelAnswers}
-                  standardsAlignment={standardsAlignment}
-                  alignmentLoading={alignmentLoading}
-                  rewriteLoading={rewriteLoading}
-                  handleAlignToStandards={handleAlignToStandards}
-                  handleRewriteForAlignment={handleRewriteForAlignment}
                   removeMarker={removeMarker}
                   addQuestion={addQuestion}
                   updateQuestion={updateQuestion}
@@ -13582,6 +13589,19 @@ ${signature}`;
                                 </div>
                               )}
 
+                              {/* Custom instructions */}
+                              <div style={{ marginBottom: "10px" }}>
+                                <label className="label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Custom Instructions (optional)</label>
+                                <textarea
+                                  className="input"
+                                  rows={2}
+                                  placeholder="e.g., Content is for 6th graders even though standards are 8th grade. Focus on vocabulary. Use simple language for ELL students."
+                                  value={(nlmOptions._global || {}).instructions || ""}
+                                  onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { _global: Object.assign({}, prev._global, { instructions: e.target.value }) }); }); }}
+                                  style={{ width: "100%", fontSize: "0.85rem", resize: "vertical", minHeight: "48px" }}
+                                />
+                              </div>
+
                               {/* Generate / Cancel / Retry buttons */}
                               <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "10px", flexWrap: "wrap" }}>
                                 <button
@@ -13628,18 +13648,70 @@ ${signature}`;
                               {/* Progress */}
                               {nlmProgress.length > 0 && (
                                 <div style={{ marginTop: "15px" }}>
+                                  {/* Progress bar */}
+                                  {nlmGenerating && (
+                                    <div style={{ marginBottom: "12px" }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                                        <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                                          {nlmCompleted.length} of {nlmTotalSelected} materials complete
+                                        </span>
+                                        <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                                          {nlmTotalSelected > 0 ? Math.round((nlmCompleted.length / nlmTotalSelected) * 100) : 0}%
+                                        </span>
+                                      </div>
+                                      <div style={{ height: "8px", borderRadius: "4px", background: "rgba(139, 92, 246, 0.15)", overflow: "hidden" }}>
+                                        <div style={{
+                                          height: "100%",
+                                          borderRadius: "4px",
+                                          background: "linear-gradient(90deg, #8b5cf6, #ec4899)",
+                                          width: (nlmTotalSelected > 0 ? Math.round((nlmCompleted.length / nlmTotalSelected) * 100) : 0) + "%",
+                                          transition: "width 0.5s ease",
+                                        }} />
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Per-material status */}
                                   {nlmProgress.map(function(msg, i) {
                                     var isDone = nlmCompleted.indexOf(msg.type) !== -1;
+                                    var hasError = nlmErrors.some(function(e) { return e.indexOf(msg.type) === 0; });
+                                    var isActive = nlmGenerating && !isDone && !hasError && i === nlmProgress.length - 1 + (nlmErrors.length > 0 ? -nlmErrors.length : 0);
+                                    var mt = NLM_MATERIAL_TYPES.find(function(m) { return m.id === msg.type; });
                                     return (
-                                      <div key={i} style={{ fontSize: "0.85rem", color: isDone ? "var(--success)" : "var(--text-secondary)", padding: "4px 0" }}>
-                                        {isDone ? String.fromCharCode(10003) : String.fromCharCode(8987)} {msg.message}
+                                      <div key={i} style={{
+                                        display: "flex", alignItems: "center", gap: "10px",
+                                        fontSize: "0.85rem", padding: "6px 10px", marginBottom: "4px", borderRadius: "8px",
+                                        background: isDone ? "rgba(34, 197, 94, 0.08)" : hasError ? "rgba(239, 68, 68, 0.08)" : isActive ? "rgba(139, 92, 246, 0.08)" : "transparent",
+                                        color: isDone ? "var(--success)" : hasError ? "var(--error)" : "var(--text-secondary)",
+                                      }}>
+                                        {isDone
+                                          ? React.createElement(Icon, { name: "CheckCircle", size: 16 })
+                                          : hasError
+                                          ? React.createElement(Icon, { name: "XCircle", size: 16 })
+                                          : isActive
+                                          ? React.createElement(Icon, { name: "Loader", size: 16, className: "spinning" })
+                                          : React.createElement(Icon, { name: "Clock", size: 16 })
+                                        }
+                                        <span style={{ fontWeight: isDone || isActive ? 600 : 400 }}>
+                                          {mt ? mt.label : msg.type.replace("_", " ")}
+                                        </span>
+                                        {isDone && (
+                                          <span style={{ marginLeft: "auto", fontSize: "0.75rem", opacity: 0.7 }}>Done</span>
+                                        )}
+                                        {isActive && (
+                                          <span style={{ marginLeft: "auto", fontSize: "0.75rem", opacity: 0.7 }}>Generating...</span>
+                                        )}
                                       </div>
                                     );
                                   })}
                                   {nlmErrors.length > 0 && nlmErrors.map(function(err, i) {
                                     return (
-                                      <div key={"err-" + i} style={{ fontSize: "0.85rem", color: "var(--error)", padding: "4px 0" }}>
-                                        {String.fromCharCode(10007)} {err}
+                                      <div key={"err-" + i} style={{
+                                        display: "flex", alignItems: "center", gap: "10px",
+                                        fontSize: "0.85rem", padding: "6px 10px", marginBottom: "4px", borderRadius: "8px",
+                                        background: "rgba(239, 68, 68, 0.08)", color: "var(--error)",
+                                      }}>
+                                        <Icon name="AlertTriangle" size={16} />
+                                        <span>{err}</span>
                                       </div>
                                     );
                                   })}
@@ -13654,7 +13726,8 @@ ${signature}`;
                                     var mt = NLM_MATERIAL_TYPES.find(function(m) { return m.id === type; });
                                     var label = mt ? mt.label : type;
                                     var icon = mt ? mt.icon : "File";
-                                    var previewable = ["quiz", "flashcards", "mind_map", "study_guide"].indexOf(type) !== -1;
+                                    var jsonPreviewable = ["quiz", "flashcards", "mind_map", "study_guide"].indexOf(type) !== -1;
+                                    var mediaPreviewable = ["audio_overview", "video_overview", "infographic", "data_table"].indexOf(type) !== -1;
                                     return (
                                       <div key={type} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
                                         <Icon name={icon} size={16} />
@@ -13662,8 +13735,15 @@ ${signature}`;
                                         <button onClick={function() { api.notebookLMDownload(type); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
                                           <Icon name="Download" size={14} /> Download
                                         </button>
-                                        {previewable && (
+                                        {jsonPreviewable && (
                                           <button onClick={function() { handleNlmPreview(type); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
+                                            <Icon name="Eye" size={14} /> Preview
+                                          </button>
+                                        )}
+                                        {mediaPreviewable && (
+                                          <button onClick={function() {
+                                            setNlmPreviewData({ type: type, mediaUrl: "/api/notebooklm/download/" + type + "?inline=1" });
+                                          }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
                                             <Icon name="Eye" size={14} /> Preview
                                           </button>
                                         )}
@@ -13682,9 +13762,88 @@ ${signature}`;
                                       <Icon name="X" size={14} />
                                     </button>
                                   </div>
-                                  <pre style={{ background: "var(--bg-secondary)", padding: "15px", borderRadius: "8px", fontSize: "0.85rem", maxHeight: "400px", overflow: "auto", whiteSpace: "pre-wrap" }}>
-                                    {nlmPreviewData.content || JSON.stringify(nlmPreviewData.data, null, 2)}
-                                  </pre>
+                                  {/* Mind map — visual tree */}
+                                  {nlmPreviewData.type === "mind_map" && nlmPreviewData.data && (
+                                    <div style={{ background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border)" }}>
+                                      <MindMapView data={nlmPreviewData.data} />
+                                    </div>
+                                  )}
+                                  {/* Study guide — rendered markdown */}
+                                  {nlmPreviewData.type === "study_guide" && nlmPreviewData.content && (
+                                    <div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", fontSize: "0.9rem", maxHeight: "500px", overflow: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                                      {nlmPreviewData.content}
+                                    </div>
+                                  )}
+                                  {/* Quiz / Flashcards — formatted cards */}
+                                  {(nlmPreviewData.type === "quiz" || nlmPreviewData.type === "flashcards") && nlmPreviewData.data && (
+                                    <div style={{ maxHeight: "500px", overflow: "auto" }}>
+                                      {(Array.isArray(nlmPreviewData.data) ? nlmPreviewData.data : nlmPreviewData.data.questions || nlmPreviewData.data.cards || [nlmPreviewData.data]).map(function(item, idx) {
+                                        return (
+                                          <div key={idx} style={{
+                                            background: "var(--bg-secondary)", padding: "14px 16px", borderRadius: "10px",
+                                            marginBottom: "8px", border: "1px solid var(--border)",
+                                          }}>
+                                            <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "6px" }}>
+                                              {nlmPreviewData.type === "flashcards" ? "Card " + (idx + 1) : "Q" + (idx + 1)}
+                                            </div>
+                                            <div style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
+                                              {item.question || item.front || item.term || item.text || JSON.stringify(item)}
+                                            </div>
+                                            {(item.answer || item.back || item.definition || item.correct_answer) && (
+                                              <div style={{ marginTop: "8px", padding: "8px 12px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.08)", fontSize: "0.85rem", color: "var(--success)" }}>
+                                                <strong>Answer:</strong> {item.answer || item.back || item.definition || item.correct_answer}
+                                              </div>
+                                            )}
+                                            {item.options && (
+                                              <div style={{ marginTop: "6px", fontSize: "0.83rem" }}>
+                                                {item.options.map(function(opt, oi) {
+                                                  var isCorrect = opt === item.answer || opt === item.correct_answer || oi === item.correct_index;
+                                                  return (
+                                                    <div key={oi} style={{ padding: "3px 0", color: isCorrect ? "var(--success)" : "var(--text-secondary)" }}>
+                                                      {String.fromCharCode(65 + oi)}) {typeof opt === "string" ? opt : opt.text || JSON.stringify(opt)}
+                                                      {isCorrect ? " " + String.fromCharCode(10003) : ""}
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                  {/* Audio player */}
+                                  {nlmPreviewData.type === "audio_overview" && nlmPreviewData.mediaUrl && (
+                                    <div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", textAlign: "center" }}>
+                                      <audio controls style={{ width: "100%" }} src={nlmPreviewData.mediaUrl}>
+                                        Your browser does not support the audio element.
+                                      </audio>
+                                    </div>
+                                  )}
+                                  {/* Video player */}
+                                  {nlmPreviewData.type === "video_overview" && nlmPreviewData.mediaUrl && (
+                                    <div style={{ background: "var(--bg-secondary)", padding: "12px", borderRadius: "12px", textAlign: "center" }}>
+                                      <video controls style={{ width: "100%", maxHeight: "400px", borderRadius: "8px" }} src={nlmPreviewData.mediaUrl}>
+                                        Your browser does not support the video element.
+                                      </video>
+                                    </div>
+                                  )}
+                                  {/* Infographic image */}
+                                  {nlmPreviewData.type === "infographic" && nlmPreviewData.mediaUrl && (
+                                    <div style={{ background: "var(--bg-secondary)", padding: "12px", borderRadius: "12px", textAlign: "center", maxHeight: "500px", overflow: "auto" }}>
+                                      <img src={nlmPreviewData.mediaUrl} alt="Infographic" style={{ maxWidth: "100%", borderRadius: "8px" }} />
+                                    </div>
+                                  )}
+                                  {/* Data table from CSV */}
+                                  {nlmPreviewData.type === "data_table" && nlmPreviewData.mediaUrl && (
+                                    <DataTablePreview url={nlmPreviewData.mediaUrl} />
+                                  )}
+                                  {/* Fallback — raw JSON */}
+                                  {!["mind_map", "study_guide", "quiz", "flashcards", "audio_overview", "video_overview", "infographic", "data_table"].includes(nlmPreviewData.type) && (
+                                    <pre style={{ background: "var(--bg-secondary)", padding: "15px", borderRadius: "8px", fontSize: "0.85rem", maxHeight: "400px", overflow: "auto", whiteSpace: "pre-wrap" }}>
+                                      {nlmPreviewData.content || JSON.stringify(nlmPreviewData.data, null, 2)}
+                                    </pre>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -249,6 +249,77 @@ def cleanup_expired_materials():
                 shutil.rmtree(dirpath, ignore_errors=True)
 
 
+# ── Markdown to DOCX conversion ─────────────────────────────────────────
+
+
+def _md_to_docx(md_path, docx_path):
+    """Convert a markdown file to DOCX using python-docx."""
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    with open(md_path, "r") as f:
+        lines = f.readlines()
+
+    doc = Document()
+
+    # Style defaults
+    style = doc.styles["Normal"]
+    style.font.size = Pt(11)
+    style.font.name = "Calibri"
+
+    for line in lines:
+        stripped = line.rstrip("\n")
+
+        # Headers
+        if stripped.startswith("### "):
+            p = doc.add_heading(stripped[4:], level=3)
+        elif stripped.startswith("## "):
+            p = doc.add_heading(stripped[3:], level=2)
+        elif stripped.startswith("# "):
+            p = doc.add_heading(stripped[2:], level=1)
+        # Bullet points
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            text = stripped[2:]
+            p = doc.add_paragraph(style="List Bullet")
+            # Handle **bold** within bullets
+            _add_md_runs(p, text)
+        # Numbered lists
+        elif len(stripped) > 2 and stripped[0].isdigit() and stripped[1] in (".", ")"):
+            text = stripped[2:].lstrip()
+            p = doc.add_paragraph(style="List Number")
+            _add_md_runs(p, text)
+        # Horizontal rules
+        elif stripped.startswith("---") or stripped.startswith("***"):
+            p = doc.add_paragraph()
+            p.add_run("_" * 50).font.color.rgb = RGBColor(180, 180, 180)
+        # Empty lines
+        elif stripped == "":
+            doc.add_paragraph()
+        # Regular text
+        else:
+            p = doc.add_paragraph()
+            _add_md_runs(p, stripped)
+
+    doc.save(docx_path)
+
+
+def _add_md_runs(paragraph, text):
+    """Parse simple markdown bold/italic into Word runs."""
+    import re as _re
+    # Split on **bold** and *italic* patterns
+    parts = _re.split(r"(\*\*.*?\*\*|\*.*?\*)", text)
+    for part in parts:
+        if part.startswith("**") and part.endswith("**"):
+            run = paragraph.add_run(part[2:-2])
+            run.bold = True
+        elif part.startswith("*") and part.endswith("*") and len(part) > 2:
+            run = paragraph.add_run(part[1:-1])
+            run.italic = True
+        else:
+            paragraph.add_run(part)
+
+
 # ── PII sanitization ────────────────────────────────────────────────────
 
 
@@ -407,7 +478,7 @@ async def _create_notebook_with_sources(title, sources_list, storage_path=None):
         nb = await client.notebooks.create(title)
         for src in sources_list:
             if src["type"] == "text":
-                await client.sources.add_text(nb.id, src["content"], wait=True)
+                await client.sources.add_text(nb.id, src.get("title", "Lesson Plan"), src["content"], wait=True)
             elif src["type"] == "url":
                 await client.sources.add_url(nb.id, src["url"], wait=True)
             elif src["type"] == "file":
@@ -429,7 +500,7 @@ def _resolve_storage_path(teacher_id):
 def create_notebook(title, plan, standards, config, teacher_id="local-dev", support_doc_paths=None):
     """Create NotebookLM notebook with lesson plan as source. Synchronous wrapper."""
     source_text = format_lesson_plan_as_source(plan, standards, config)
-    sources = [{"type": "text", "content": source_text}]
+    sources = [{"type": "text", "title": title, "content": source_text}]
 
     # Add support documents as file sources
     if support_doc_paths:
@@ -476,13 +547,45 @@ async def _generate_single_material(notebook_id, material_type, options, output_
         client_ctx = await NotebookLMClient.from_storage()
 
     async with client_ctx as client:
+        from notebooklm.rpc.types import (
+            AudioFormat, AudioLength, VideoStyle,
+            QuizQuantity, QuizDifficulty, ReportFormat,
+            SlideDeckFormat, InfographicOrientation,
+        )
+
+        # Enum lookup helpers
+        _audio_fmt = {
+            "deep-dive": AudioFormat.DEEP_DIVE, "brief": AudioFormat.BRIEF,
+            "critique": AudioFormat.CRITIQUE, "debate": AudioFormat.DEBATE,
+        }
+        _audio_len = {
+            "short": AudioLength.SHORT, "medium": AudioLength.DEFAULT, "long": AudioLength.LONG,
+        }
+        _video_style = {
+            "classic": VideoStyle.CLASSIC, "whiteboard": VideoStyle.WHITEBOARD,
+            "kawaii": VideoStyle.KAWAII, "anime": VideoStyle.ANIME,
+            "watercolor": VideoStyle.WATERCOLOR, "retro_print": VideoStyle.RETRO_PRINT,
+        }
+        _quiz_qty = {"fewer": QuizQuantity.FEWER, "standard": QuizQuantity.STANDARD}
+        _quiz_diff = {"easy": QuizDifficulty.EASY, "medium": QuizDifficulty.MEDIUM, "hard": QuizDifficulty.HARD}
+        _report_fmt = {
+            "study_guide": ReportFormat.STUDY_GUIDE, "briefing_doc": ReportFormat.BRIEFING_DOC,
+            "blog_post": ReportFormat.BLOG_POST,
+        }
+        _slide_fmt = {"detailed": SlideDeckFormat.DETAILED_DECK, "presenter": SlideDeckFormat.PRESENTER_SLIDES}
+        _infographic_orient = {
+            "portrait": InfographicOrientation.PORTRAIT,
+            "landscape": InfographicOrientation.LANDSCAPE,
+            "square": InfographicOrientation.SQUARE,
+        }
+
         if material_type == "audio_overview":
             status = await client.artifacts.generate_audio(
                 notebook_id,
-                format=options.get("format", "deep-dive"),
-                length=options.get("length", "medium"),
+                audio_format=_audio_fmt.get(options.get("format", "deep-dive"), AudioFormat.DEEP_DIVE),
+                audio_length=_audio_len.get(options.get("length", "medium"), AudioLength.DEFAULT),
                 language=options.get("language", "en"),
-                instructions=options.get("instructions", ""),
+                instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
             await client.artifacts.download_audio(notebook_id, out_path)
@@ -490,7 +593,9 @@ async def _generate_single_material(notebook_id, material_type, options, output_
         elif material_type == "video_overview":
             status = await client.artifacts.generate_video(
                 notebook_id,
-                style=options.get("style", "classic"),
+                video_style=_video_style.get(options.get("style", "classic"), VideoStyle.CLASSIC),
+                language=options.get("language", "en"),
+                instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
             await client.artifacts.download_video(notebook_id, out_path)
@@ -498,8 +603,9 @@ async def _generate_single_material(notebook_id, material_type, options, output_
         elif material_type == "quiz":
             status = await client.artifacts.generate_quiz(
                 notebook_id,
-                quantity=options.get("quantity", "default"),
-                difficulty=options.get("difficulty", "medium"),
+                quantity=_quiz_qty.get(options.get("quantity", "standard"), QuizQuantity.STANDARD),
+                difficulty=_quiz_diff.get(options.get("difficulty", "medium"), QuizDifficulty.MEDIUM),
+                instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
             await client.artifacts.download_quiz(notebook_id, out_path, output_format="json")
@@ -507,45 +613,64 @@ async def _generate_single_material(notebook_id, material_type, options, output_
         elif material_type == "flashcards":
             status = await client.artifacts.generate_flashcards(
                 notebook_id,
-                quantity=options.get("quantity", "default"),
-                difficulty=options.get("difficulty", "medium"),
+                quantity=_quiz_qty.get(options.get("quantity", "standard"), QuizQuantity.STANDARD),
+                difficulty=_quiz_diff.get(options.get("difficulty", "medium"), QuizDifficulty.MEDIUM),
+                instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
             await client.artifacts.download_flashcards(notebook_id, out_path, output_format="json")
 
         elif material_type == "study_guide":
-            status = await client.artifacts.generate_report(
-                notebook_id,
-                template=options.get("format", "study_guide"),
-            )
+            fmt = options.get("format", "study_guide")
+            if fmt == "study_guide":
+                status = await client.artifacts.generate_study_guide(
+                    notebook_id,
+                    language=options.get("language", "en"),
+                    extra_instructions=options.get("instructions") or None,
+                )
+            else:
+                status = await client.artifacts.generate_report(
+                    notebook_id,
+                    report_format=_report_fmt.get(fmt, ReportFormat.BRIEFING_DOC),
+                    language=options.get("language", "en"),
+                    extra_instructions=options.get("instructions") or None,
+                )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
             await client.artifacts.download_report(notebook_id, out_path)
 
         elif material_type == "slide_deck":
-            status = await client.artifacts.generate_slides(
+            status = await client.artifacts.generate_slide_deck(
                 notebook_id,
-                format=options.get("format", "detailed"),
+                slide_format=_slide_fmt.get(options.get("format", "detailed"), SlideDeckFormat.DETAILED_DECK),
+                language=options.get("language", "en"),
+                instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
-            await client.artifacts.download_slides(notebook_id, out_path, output_format="pptx")
+            await client.artifacts.download_slide_deck(notebook_id, out_path, output_format="pptx")
 
         elif material_type == "mind_map":
-            status = await client.artifacts.generate_mindmap(notebook_id)
-            await client.artifacts.wait_for_completion(notebook_id, status.task_id)
-            await client.artifacts.download_mindmap(notebook_id, out_path)
+            result = await client.artifacts.generate_mind_map(notebook_id)
+            # generate_mind_map returns dict directly, write as JSON
+            import json as _json
+            with open(out_path, "w") as f:
+                _json.dump(result, f, indent=2)
 
         elif material_type == "infographic":
             status = await client.artifacts.generate_infographic(
                 notebook_id,
-                orientation=options.get("orientation", "portrait"),
+                orientation=_infographic_orient.get(options.get("orientation", "portrait"), InfographicOrientation.PORTRAIT),
+                instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
             await client.artifacts.download_infographic(notebook_id, out_path)
 
         elif material_type == "data_table":
-            status = await client.artifacts.generate_table(notebook_id)
+            status = await client.artifacts.generate_data_table(
+                notebook_id,
+                instructions=options.get("instructions") or None,
+            )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
-            await client.artifacts.download_table(notebook_id, out_path)
+            await client.artifacts.download_data_table(notebook_id, out_path)
 
     return out_path
 
@@ -568,7 +693,12 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
             _save_state(teacher_id, state)
 
             try:
-                mat_options = options.get(mat_type, {})
+                mat_options = dict(options.get(mat_type, {}))
+                # Merge global instructions into per-material options
+                global_instructions = options.get("_global", {}).get("instructions", "")
+                if global_instructions:
+                    existing = mat_options.get("instructions", "")
+                    mat_options["instructions"] = (global_instructions + ". " + existing).strip(". ") if existing else global_instructions
                 out_path = asyncio.run(
                     _generate_single_material(
                         notebook_id, mat_type, mat_options, output_dir, storage_path
