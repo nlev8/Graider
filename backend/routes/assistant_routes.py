@@ -908,7 +908,8 @@ BEHAVIOR TRACKING:
 - get_behavior_summary: Get behavior correction and praise counts for a student or class period. Shows daily breakdown, notes, and trends. Use when the teacher asks "how has [student] behaved?" or "show behavior for Period 3". If default 7-day window returns no data, retry with days=30 or days=90 before giving up.
 - generate_behavior_email: Generate a professional behavior email to a student's parents. Includes correction counts, dates, notes, and constructive tone. Returns a draft for review. Use when asked to "write a behavior email for [student]'s parents". If it returns an error about no data, try get_behavior_summary with days=30 first — the data may exist outside the default window.
 - send_behavior_email: Send a reviewed behavior email via Resend (direct email) or Focus portal automation. Always show the draft first and get teacher approval before sending.
-CRITICAL: If behavior tools return errors about missing data, report the specific error to the teacher. NEVER fabricate a behavior email without real data from the tools — the email MUST reference actual tracked incidents, not placeholders."""
+- debug_behavior: Diagnostic tool — shows teacher_id, total session/event counts, and stored student names. Use this FIRST if behavior data retrieval fails, to diagnose why.
+CRITICAL: If behavior tools return errors about missing data, call debug_behavior to diagnose, then report findings to the teacher. NEVER fabricate a behavior email without real data from the tools — the email MUST reference actual tracked incidents, not placeholders."""
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:

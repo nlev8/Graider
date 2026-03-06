@@ -270,12 +270,55 @@ BEHAVIOR_TOOL_DEFINITIONS = [
             "required": ["student_name", "subject", "body"]
         }
     },
+    {
+        "name": "debug_behavior",
+        "description": "Diagnostic tool: shows teacher_id, total session/event counts, and all student names stored in behavior data. Use when behavior data retrieval fails to diagnose why.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
 ]
 
 
 # ═══════════════════════════════════════════════════════
 # IMPLEMENTATION
 # ═══════════════════════════════════════════════════════
+
+def debug_behavior(teacher_id='local-dev'):
+    """Diagnostic: show what behavior data exists for the current teacher."""
+    if not teacher_id or teacher_id == 'local-dev':
+        teacher_id = _get_teacher_id() or teacher_id
+    if not teacher_id:
+        return {"error": "Not authenticated"}
+
+    try:
+        sb = _get_supabase()
+
+        ses_res = sb.table('behavior_sessions').select('id, period, date, device').eq(
+            'teacher_id', teacher_id
+        ).execute()
+        sessions = ses_res.data or []
+
+        evt_res = sb.table('behavior_events').select('id, student_name, type, event_time').eq(
+            'teacher_id', teacher_id
+        ).order('event_time', desc=True).limit(100).execute()
+        events = evt_res.data or []
+
+        student_names = sorted(set(e.get('student_name', '') for e in events if e.get('student_name')))
+
+        return {
+            "status": "success",
+            "teacher_id": teacher_id,
+            "total_sessions": len(sessions),
+            "total_events": len(events),
+            "student_names_in_db": student_names,
+            "recent_sessions": [{"period": s.get("period"), "date": s.get("date"), "device": s.get("device")} for s in sessions[:5]],
+            "recent_events": [{"name": e.get("student_name"), "type": e.get("type"), "time": e.get("event_time")} for e in events[:10]],
+        }
+    except Exception as e:
+        return {"error": f"Debug query failed: {str(e)}", "teacher_id": teacher_id}
+
 
 def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='local-dev'):
     """Get behavior summary for a student or period."""
@@ -750,6 +793,7 @@ def send_behavior_email(student_name, subject, body, method="email"):
 # ═══════════════════════════════════════════════════════
 
 BEHAVIOR_TOOL_HANDLERS = {
+    "debug_behavior": debug_behavior,
     "get_behavior_summary": get_behavior_summary,
     "generate_behavior_email": generate_behavior_email,
     "send_behavior_email": send_behavior_email,
