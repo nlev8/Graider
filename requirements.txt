@@ -50,7 +50,7 @@ playwright>=1.40.0
 websocket-client>=1.6.0
 
 # NotebookLM Integration (study materials generation)
-notebooklm-py[browser]>=0.5.0
+notebooklm-py[browser]>=0.3.0
 
 # Production Server
 gunicorn>=21.0.0
