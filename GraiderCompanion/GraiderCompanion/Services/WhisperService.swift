@@ -37,7 +37,29 @@ class WhisperService: ObservableObject {
     // Adaptive voice gate — only emit detections when speaker is near the phone
     private var recentRMS: [Float] = []         // rolling window of chunk RMS values
     private let rmsWindowSize = 12              // ~60s of history at 5s chunks
-    private let proximityMultiplier: Float = 2.0 // current chunk must be 2x ambient
+    private let proximityMultiplier: Float = 1.4 // current chunk must be 1.4x ambient (was 2.0)
+
+    // Per-student cooldown to prevent duplicate detections from sliding transcript window
+    private var lastDetectionTime: [UUID: Date] = [:]
+    private let detectionCooldown: TimeInterval = 5  // seconds before same student can trigger again
+
+    // Common short words that should never fuzzy-match to student names
+    private static let commonWords: Set<String> = [
+        "the", "and", "that", "this", "then", "than", "they", "them", "their", "there",
+        "with", "will", "well", "were", "what", "when", "where", "which", "while", "who",
+        "have", "here", "been", "some", "come", "came", "done", "gone", "more", "most",
+        "made", "make", "like", "look", "good", "work", "just", "know", "also", "back",
+        "your", "from", "does", "each", "much", "such", "very", "over", "only", "many",
+        "down", "into", "need", "said", "says", "take", "want", "give", "gave", "turn",
+        "stop", "seat", "hand", "away", "keep", "next", "last", "page", "read", "write",
+        "name", "game", "same", "time", "home", "line", "side", "part", "test", "help",
+        "talk", "walk", "okay", "yeah", "sure", "open", "shut", "move", "note", "class",
+        "great", "place", "right", "think", "thing", "about", "could", "would", "should",
+        "going", "doing", "being", "after", "first", "start", "still", "other", "those",
+        "these", "quiet", "today", "point", "grade", "paper", "group", "table", "chair",
+        "raise", "three", "please", "really", "answer", "number", "listen", "enough",
+        "write", "black", "blank", "bring", "close",
+    ]
 
     // Classification patterns (ported from web useBehaviorListener.js)
     private static let correctionPatterns: [NSRegularExpression] = {
@@ -167,6 +189,7 @@ class WhisperService: ObservableObject {
         previousChunkAudio = []
         transcriptHistory = []
         recentRMS = []
+        lastDetectionTime = [:]
         isListening = false
     }
 
@@ -224,10 +247,9 @@ class WhisperService: ObservableObject {
                 transcriptHistory.removeFirst()
             }
 
-            // Detect student names in transcript
-            // Check current + previous transcript for broader context matching
-            let contextTranscript = transcriptHistory.joined(separator: " ")
-            let detections = detectStudents(in: contextTranscript)
+            // Detect student names in the CURRENT chunk only (not accumulated history)
+            // to avoid re-detecting the same name across sliding windows
+            let detections = detectStudents(in: text)
 
             // Voice gate: only emit detections if speaker is near the phone
             // Compare current chunk RMS against ambient baseline
@@ -235,6 +257,8 @@ class WhisperService: ObservableObject {
                 guard recentRMS.count >= 3 else { return true } // not enough data yet, allow
                 let sorted = recentRMS.sorted()
                 let median = sorted[sorted.count / 2]
+                // If median is very low (quiet room), always allow clear speech
+                if median < 0.01 { return rms > 0.008 }
                 // Must be louder than ambient median * multiplier
                 return rms >= median * proximityMultiplier
             }()
@@ -314,12 +338,19 @@ class WhisperService: ObservableObject {
         let range = NSRange(text.startIndex..., in: text)
         var matched: Set<UUID> = []
         var detections: [STTDetection] = []
+        let now = Date()
 
-        // Phase 1: Exact regex matching (includes aliases)
+        // Phase 1: Exact regex matching (includes aliases) — high confidence
         for (student, regex) in studentPatterns {
             guard !matched.contains(student.id) else { continue }
             if regex.firstMatch(in: text, range: range) != nil {
+                // Cooldown check — skip if detected recently
+                if let last = lastDetectionTime[student.id],
+                   now.timeIntervalSince(last) < detectionCooldown {
+                    continue
+                }
                 matched.insert(student.id)
+                lastDetectionTime[student.id] = now
                 let eventType = classify(text: text)
                 detections.append(STTDetection(
                     studentId: student.id,
@@ -331,22 +362,35 @@ class WhisperService: ObservableObject {
             }
         }
 
-        // Phase 2: Fuzzy matching for unmatched students
+        // Phase 2: Fuzzy matching for unmatched students — stricter thresholds
+        // Only fuzzy-match names with 4+ characters, max 1 edit distance
         let words = text.lowercased()
             .components(separatedBy: .whitespacesAndNewlines)
             .map { $0.trimmingCharacters(in: .punctuationCharacters) }
-            .filter { $0.count >= 2 }
+            .filter { $0.count >= 3 }
+            .filter { !Self.commonWords.contains($0) }  // skip common English words
 
         for student in students where !matched.contains(student.id) {
-            let namesToCheck = [student.firstName, student.lastName].filter { $0.count >= 2 }
+            // Cooldown check
+            if let last = lastDetectionTime[student.id],
+               now.timeIntervalSince(last) < detectionCooldown {
+                continue
+            }
+
+            // Only fuzzy-match names with 4+ characters to avoid false positives on short names
+            let namesToCheck = [student.firstName, student.lastName].filter { $0.count >= 4 }
             for name in namesToCheck {
                 let nameLower = name.lowercased()
-                let threshold = nameLower.count <= 4 ? 1 : 2
+                // Strict: max 1 edit for all fuzzy matches (was 2 for long names)
+                let threshold = 1
                 let found = words.contains { word in
-                    levenshteinDistance(word, nameLower) <= threshold
+                    // Word must be similar length to name (within +/- 2 chars)
+                    guard abs(word.count - nameLower.count) <= 2 else { return false }
+                    return levenshteinDistance(word, nameLower) <= threshold
                 }
                 if found {
                     matched.insert(student.id)
+                    lastDetectionTime[student.id] = now
                     let eventType = classify(text: text)
                     detections.append(STTDetection(
                         studentId: student.id,

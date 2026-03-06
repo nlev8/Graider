@@ -38,6 +38,7 @@ import AutomationBuilder from "./components/AutomationBuilder";
 import BehaviorPanel from "./components/BehaviorPanel";
 import MatchingCards from "./components/MatchingCards";
 import MindMapView from "./components/MindMapView";
+import FlashcardView from "./components/FlashcardView";
 
 // Inline CSV table preview — fetches CSV from URL and renders as HTML table
 function DataTablePreview({ url }) {
@@ -13774,8 +13775,14 @@ ${signature}`;
                                       {nlmPreviewData.content}
                                     </div>
                                   )}
-                                  {/* Quiz / Flashcards — formatted cards */}
-                                  {(nlmPreviewData.type === "quiz" || nlmPreviewData.type === "flashcards") && nlmPreviewData.data && (
+                                  {/* Flashcards — interactive flip cards */}
+                                  {nlmPreviewData.type === "flashcards" && nlmPreviewData.data && (
+                                    <div style={{ background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border)", padding: "16px" }}>
+                                      <FlashcardView data={nlmPreviewData.data} />
+                                    </div>
+                                  )}
+                                  {/* Quiz — formatted list */}
+                                  {nlmPreviewData.type === "quiz" && nlmPreviewData.data && (
                                     <div style={{ maxHeight: "500px", overflow: "auto" }}>
                                       {(Array.isArray(nlmPreviewData.data) ? nlmPreviewData.data : nlmPreviewData.data.questions || nlmPreviewData.data.cards || [nlmPreviewData.data]).map(function(item, idx) {
                                         return (
@@ -13784,7 +13791,7 @@ ${signature}`;
                                             marginBottom: "8px", border: "1px solid var(--border)",
                                           }}>
                                             <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "6px" }}>
-                                              {nlmPreviewData.type === "flashcards" ? "Card " + (idx + 1) : "Q" + (idx + 1)}
+                                              {"Q" + (idx + 1)}
                                             </div>
                                             <div style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
                                               {item.question || item.front || item.term || item.text || JSON.stringify(item)}
