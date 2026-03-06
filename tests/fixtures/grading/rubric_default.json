@@ -1,0 +1,10 @@
+{
+  "categories": [
+    {"name": "Content Accuracy", "weight": 40, "description": "Are the answers factually correct and complete?"},
+    {"name": "Completeness", "weight": 25, "description": "Did the student attempt all sections and questions?"},
+    {"name": "Writing Quality", "weight": 20, "description": "Is the writing clear, organized, and age-appropriate?"},
+    {"name": "Effort", "weight": 15, "description": "Does the work show genuine effort and engagement?"}
+  ],
+  "generous": true,
+  "gradingStyle": "standard"
+}

@@ -1,0 +1,67 @@
+Student Name: David Chen
+Period: 1
+Date: 2/20/2025
+Assignment: Solving Equations Worksheet
+
+Questions
+
+[GRAIDER:QUESTION:1]
+1) 3x + 7 = 22 (5 pts)
+3x = 15
+x = 5
+
+[GRAIDER:QUESTION:2]
+2) 2(x - 4) = 10 (5 pts)
+2x - 8 = 10
+2x = 18
+x = 9
+
+[GRAIDER:QUESTION:3]
+3) 5x - 3 = 2x + 12 (5 pts)
+3x = 15
+x = 5
+
+[GRAIDER:QUESTION:4]
+4) x/4 + 6 = 11 (5 pts)
+x/4 = 5
+x = 20
+
+[GRAIDER:QUESTION:5]
+5) -2x + 8 = 3x - 7 (5 pts)
+-5x = -15
+x = 3
+
+[GRAIDER:QUESTION:6]
+6) 4(2x + 1) = 36 (5 pts)
+8x + 4 = 36
+8x = 32
+x = 4
+
+[GRAIDER:QUESTION:7]
+7) 3x/5 = 9 (5 pts)
+3x = 45
+x = 15
+
+[GRAIDER:QUESTION:8]
+8) 7 - x = 2x + 1 (5 pts)
+6 = 3x
+x = 2
+
+[GRAIDER:QUESTION:9]
+9) Sarah has 3 times as many stickers as Tom. Together they have 48 stickers. How many does each person have? (10 pts)
+Let x = Tom's stickers
+3x + x = 48
+4x = 48
+x = 12
+Tom has 12, Sarah has 36
+
+[GRAIDER:QUESTION:10]
+10) A rectangle's length is 5 more than its width. The perimeter is 42 cm. Find the dimensions. (10 pts)
+Let w = width
+2(w + 5) + 2w = 42
+2w + 10 + 2w = 42
+4w = 32
+w = 8
+Width = 8 cm, Length = 13 cm
+
+GRAIDER_TABLE_V1

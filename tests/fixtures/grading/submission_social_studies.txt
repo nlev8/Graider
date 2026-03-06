@@ -1,0 +1,52 @@
+Student Name: Maria Garcia
+Period: 3
+Date: 2/15/2025
+Assignment: Louisiana Purchase Cornell Notes
+
+Vocabulary
+
+[GRAIDER:VOCAB:Louisiana Purchase]
+Louisiana Purchase: (5 pts)
+When the US bought a huge piece of land from France in 1803 for $15 million
+
+[GRAIDER:VOCAB:Treaty]
+Treaty: (5 pts)
+An official agreement between two countries
+
+[GRAIDER:VOCAB:Expedition]
+Expedition: (5 pts)
+A journey taken for a specific purpose like exploring new land
+
+[GRAIDER:VOCAB:Manifest Destiny]
+Manifest Destiny: (5 pts)
+The belief that America was supposed to expand across the whole continent
+
+[GRAIDER:VOCAB:Sovereignty]
+Sovereignty: (5 pts)
+The power of a country to govern itself without outside interference
+
+Questions
+
+[GRAIDER:QUESTION:1]
+1) Why did Napoleon sell the Louisiana Territory to the United States? (10 pts)
+Napoleon sold Louisiana because he needed money for his wars in Europe and he lost control of Haiti after the slave revolt led by Toussaint L'Ouverture. He couldn't maintain his empire in the Americas anymore so he decided to sell.
+
+[GRAIDER:QUESTION:2]
+2) How did the Louisiana Purchase affect the size of the United States? (10 pts)
+The Louisiana Purchase doubled the size of the United States. It added about 828,000 square miles of territory west of the Mississippi River.
+
+[GRAIDER:QUESTION:3]
+3) Who did President Jefferson send to explore the new territory? (10 pts)
+Jefferson sent Meriwether Lewis and William Clark to explore the Louisiana Territory in 1804. They traveled with Sacagawea and documented plants, animals, and Native American tribes.
+
+[GRAIDER:QUESTION:4]
+4) What constitutional concerns did Jefferson have about the purchase? (10 pts)
+Jefferson worried because the Constitution did not specifically give the president power to buy land from foreign countries. He believed in strict interpretation but decided the purchase was too important to pass up.
+
+Summary
+
+[GRAIDER:SUMMARY:main]
+Write a summary of the Louisiana Purchase. (20 pts)
+The Louisiana Purchase of 1803 was one of the most important events in American history. President Thomas Jefferson bought the territory from France for about $15 million, which doubled the size of the country. Napoleon sold it because he needed money for wars and lost Haiti. Jefferson had concerns about whether it was constitutional but went through with it anyway. Lewis and Clark explored the new land and found many new species and met Native American tribes.
+
+GRAIDER_TABLE_V1

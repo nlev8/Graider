@@ -1,0 +1,19 @@
+{
+  "title": "Louisiana Purchase Cornell Notes",
+  "rubricType": "cornell-notes",
+  "useSectionPoints": true,
+  "effortPoints": 15,
+  "customMarkers": [
+    {"start": "QUESTIONS", "points": 40, "type": "written"},
+    {"start": "SUMMARY", "points": 20, "type": "written"},
+    {"start": "VOCABULARY", "points": 25, "type": "vocab"}
+  ],
+  "excludeMarkers": [],
+  "gradingNotes": "Expected answers:\nQ1: Napoleon needed money for European wars and lost Haiti after Toussaint L'Ouverture's revolt\nQ2: Doubled the size of the US, about 828,000 square miles\nQ3: Lewis and Clark with Sacagawea in 1804\nQ4: No constitutional authority to buy land, strict vs loose interpretation\n\nVocabulary should include all 5 terms. Accept student-friendly definitions.\nSummary should mention: $15 million price, doubled size, Napoleon's reasons, constitutional concerns.",
+  "importedDoc": {
+    "text": "Louisiana Purchase Cornell Notes\n\nQUESTIONS:\n1) Why did Napoleon sell the Louisiana Territory?\n2) How did the purchase affect US size?\n3) Who explored the new territory?\n4) What constitutional concerns existed?\n\nSUMMARY:\n[Write a summary of the Louisiana Purchase]\n\nVOCABULARY:\nLouisiana Purchase -\nTreaty -\nExpedition -\nManifest Destiny -\nSovereignty -"
+  },
+  "completionOnly": false,
+  "modelAnswers": {},
+  "customRubric": null
+}

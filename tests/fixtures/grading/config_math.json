@@ -1,0 +1,18 @@
+{
+  "title": "Solving Equations Worksheet",
+  "rubricType": "fill-in-blank",
+  "useSectionPoints": true,
+  "effortPoints": 15,
+  "customMarkers": [
+    {"start": "PROBLEMS", "points": 50, "type": "fill-in-blank"},
+    {"start": "WORD PROBLEMS", "points": 35, "type": "written"}
+  ],
+  "excludeMarkers": [],
+  "gradingNotes": "Answer key:\nQ1: x = 5\nQ2: x = 9\nQ3: x = 5\nQ4: x = 20\nQ5: x = 3\nQ6: x = 4\nQ7: x = 15\nQ8: x = 2\nQ9: Tom = 12, Sarah = 36\nQ10: Width = 8 cm, Length = 13 cm\n\nAward partial credit for correct process with arithmetic errors.\nAccept equivalent expressions.",
+  "importedDoc": {
+    "text": "Solving Equations Worksheet\n\nPROBLEMS:\n1) 3x + 7 = 22\n2) 2(x - 4) = 10\n3) 5x - 3 = 2x + 12\n4) x/4 + 6 = 11\n5) -2x + 8 = 3x - 7\n6) 4(2x + 1) = 36\n7) 3x/5 = 9\n8) 7 - x = 2x + 1\n\nWORD PROBLEMS:\n9) Sarah has 3 times as many stickers...\n10) A rectangle's length is 5 more..."
+  },
+  "completionOnly": false,
+  "modelAnswers": {},
+  "customRubric": null
+}

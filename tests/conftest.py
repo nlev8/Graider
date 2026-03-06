@@ -10,6 +10,7 @@ import shutil
 import pytest
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+GRADING_FIXTURES_DIR = os.path.join(FIXTURES_DIR, "grading")
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -159,3 +160,31 @@ def sample_results(patch_paths):
     """Load the fixture results JSON."""
     from backend.services.assistant_tools import _load_results
     return _load_results()
+
+
+# ── Grading pipeline fixtures ──────────────────────────────────────────
+
+@pytest.fixture
+def grading_fixtures():
+    """Load all grading test fixtures (submissions, configs, rubrics)."""
+    data = {"submissions": {}, "configs": {}, "rubrics": {}}
+
+    for fname in os.listdir(GRADING_FIXTURES_DIR):
+        fpath = os.path.join(GRADING_FIXTURES_DIR, fname)
+        if not os.path.isfile(fpath):
+            continue
+
+        if fname.startswith("submission_") and fname.endswith(".txt"):
+            key = fname.replace("submission_", "").replace(".txt", "")
+            with open(fpath, "r") as f:
+                data["submissions"][key] = f.read()
+        elif fname.startswith("config_") and fname.endswith(".json"):
+            key = fname.replace("config_", "").replace(".json", "")
+            with open(fpath, "r") as f:
+                data["configs"][key] = json.load(f)
+        elif fname.startswith("rubric_") and fname.endswith(".json"):
+            key = fname.replace("rubric_", "").replace(".json", "")
+            with open(fpath, "r") as f:
+                data["rubrics"][key] = json.load(f)
+
+    return data

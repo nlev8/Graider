@@ -1,0 +1,10 @@
+{
+  "categories": [
+    {"name": "Evidence Use", "weight": 35, "description": "Does the student use specific evidence to support claims?"},
+    {"name": "Critical Analysis", "weight": 30, "description": "Does the student analyze rather than just summarize?"},
+    {"name": "Organization", "weight": 20, "description": "Is the response logically structured?"},
+    {"name": "Creativity", "weight": 15, "description": "Does the student show original thinking?"}
+  ],
+  "generous": true,
+  "gradingStyle": "lenient"
+}

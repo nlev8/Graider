@@ -1,0 +1,17 @@
+{
+  "title": "To Kill a Mockingbird Theme Essay",
+  "rubricType": "essay",
+  "useSectionPoints": true,
+  "effortPoints": 15,
+  "customMarkers": [
+    {"start": "QUESTIONS", "points": 85, "type": "written"}
+  ],
+  "excludeMarkers": [],
+  "gradingNotes": "Students should identify a major theme (courage, justice, prejudice, innocence) and support with at least 3 text examples.\nLook for direct quotes from the novel.\nThesis should clearly state the theme and argument.\nConclusion should connect theme to modern relevance.\nDo NOT penalize for minor grammar issues if the ideas are strong.",
+  "importedDoc": {
+    "text": "To Kill a Mockingbird Theme Essay\n\n[GRAIDER:QUESTION:1]\n1) State your thesis (20 pts)\n\n[GRAIDER:QUESTION:2]\n2) Provide evidence (45 pts)\n\n[GRAIDER:QUESTION:3]\n3) Write a conclusion (20 pts)"
+  },
+  "completionOnly": false,
+  "modelAnswers": {},
+  "customRubric": null
+}

@@ -1,0 +1,24 @@
+Student Name: Aisha Johnson
+Period: 4
+Date: 2/22/2025
+Assignment: Photosynthesis Lab Report
+
+Questions
+
+[GRAIDER:QUESTION:1]
+1) State your hypothesis. Use an IF/THEN format and explain your reasoning. (15 pts)
+If we increase the amount of light a plant receives, then the rate of photosynthesis will increase because light energy is needed to power the chemical reactions that convert carbon dioxide and water into glucose and oxygen. I predict that the plant in direct sunlight will produce the most oxygen bubbles.
+
+[GRAIDER:QUESTION:2]
+2) Describe the procedure you followed. Include enough detail that someone could replicate your experiment. (20 pts)
+We placed three Elodea plants in beakers of water with baking soda dissolved in it. One beaker was placed in direct sunlight, one under a desk lamp, and one in a dark closet. We counted the number of oxygen bubbles produced by each plant every 5 minutes for 30 minutes. We recorded our observations in a data table. We repeated the experiment the next day to verify our results.
+
+[GRAIDER:QUESTION:3]
+3) Describe your results. Reference specific data and observations. (25 pts)
+The plant in direct sunlight produced the most oxygen bubbles with an average of 47 bubbles per 5-minute interval. The plant under the desk lamp produced about 23 bubbles per interval. The plant in the dark closet produced 0 bubbles during the entire experiment. On day 2 our results were similar with the sunlight plant producing 52 bubbles and the lamp plant producing 21 bubbles. The data shows a clear relationship between light intensity and photosynthesis rate. As light increased so did the number of bubbles which represent oxygen production.
+
+[GRAIDER:QUESTION:4]
+4) Write your conclusion. Reference your hypothesis, explain WHY the results occurred using science concepts, identify sources of error, and suggest improvements. (25 pts)
+Our hypothesis was supported by the data. Increasing light intensity did increase the rate of photosynthesis as measured by oxygen bubble production. The plant in direct sunlight produced about twice as many bubbles as the plant under the desk lamp, and the plant in the dark produced none. This makes sense because photosynthesis requires light energy to split water molecules and produce oxygen as a byproduct. The chemical equation is 6CO2 + 6H2O + light -> C6H12O6 + 6O2. Without light the light-dependent reactions cannot occur. One source of error in our experiment was that the desk lamp may not have provided consistent light throughout the 30 minutes because it got hot and we had to turn it off briefly. For future experiments we could use an LED light that doesn't produce as much heat. We could also test more light intensities to see if there is a point where increasing light no longer increases photosynthesis.
+
+GRAIDER_TABLE_V1

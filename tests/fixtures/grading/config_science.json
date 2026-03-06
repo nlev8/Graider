@@ -1,0 +1,17 @@
+{
+  "title": "Photosynthesis Lab Report",
+  "rubricType": "standard",
+  "useSectionPoints": true,
+  "effortPoints": 15,
+  "customMarkers": [
+    {"start": "QUESTIONS", "points": 85, "type": "written"}
+  ],
+  "excludeMarkers": [],
+  "gradingNotes": "Look for proper scientific method structure.\nHypothesis should include IF/THEN format with reasoning.\nProcedure should be detailed enough to replicate.\nResults should reference specific data and observations.\nConclusion should: reference hypothesis, explain WHY results occurred using science concepts, identify sources of error, suggest improvements.\nMust mention: light-dependent reactions, chlorophyll, chemical equation for photosynthesis.",
+  "importedDoc": {
+    "text": "Photosynthesis Lab Report\n\n[GRAIDER:QUESTION:1]\n1) State your hypothesis (15 pts)\n\n[GRAIDER:QUESTION:2]\n2) Describe the procedure (20 pts)\n\n[GRAIDER:QUESTION:3]\n3) Describe your results (25 pts)\n\n[GRAIDER:QUESTION:4]\n4) Write your conclusion (25 pts)"
+  },
+  "completionOnly": false,
+  "modelAnswers": {},
+  "customRubric": null
+}
