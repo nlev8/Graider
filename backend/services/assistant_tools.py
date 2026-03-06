@@ -66,11 +66,16 @@ def _fuzzy_name_match(search, full_name):
     """Word-based name matching. Returns True if every word in search appears
     as a word (or word-prefix) in full_name. Order-independent, case-insensitive.
 
+    Also handles middle name mismatch: if search has 3+ words and full_name
+    has fewer, tries matching first + last words only (middle names are often
+    dropped or abbreviated in different systems).
+
     Examples:
         _fuzzy_name_match("Dicen Wilkins", "Dicen Macheil Wilkins Reels") → True
         _fuzzy_name_match("Dicen Wilkins", "Wilkins Reels, Dicen Macheil") → True
         _fuzzy_name_match("Luke Lundell", "Luke J Lundell") → True
         _fuzzy_name_match("John Smith", "Jane Smith") → False
+        _fuzzy_name_match("Troy Jaxson Mikell", "Troy Mikell") → True
     """
     import re
     # Strip punctuation (commas, semicolons, periods) and normalize
@@ -79,10 +84,31 @@ def _fuzzy_name_match(search, full_name):
     name_words = clean(full_name)
     if not search_words:
         return False
-    return all(
-        any(nw.startswith(sw) or (len(nw) >= 2 and sw.startswith(nw)) for nw in name_words)
-        for sw in search_words
-    )
+
+    def _words_match(sw_list, nw_list):
+        return all(
+            any(nw.startswith(sw) or (len(nw) >= 2 and sw.startswith(nw)) for nw in nw_list)
+            for sw in sw_list
+        )
+
+    # Strict: all search words match
+    if _words_match(search_words, name_words):
+        return True
+
+    # Middle name tolerance: if search has 3+ words and more words than
+    # full_name, try first + last only (covers "Troy Jaxson Mikell" → "Troy Mikell")
+    if len(search_words) >= 3 and len(search_words) > len(name_words):
+        key_words = [search_words[0], search_words[-1]]
+        if _words_match(key_words, name_words):
+            return True
+
+    # Reverse: full_name has more words, try matching with first + last of full_name
+    if len(name_words) >= 3 and len(name_words) > len(search_words):
+        key_name = [name_words[0], name_words[-1]]
+        if _words_match(search_words, key_name):
+            return True
+
+    return False
 
 
 def _extract_first_name(name):
