@@ -340,6 +340,43 @@ def delete_behavior_data():
         return jsonify({"error": str(e)})
 
 
+@behavior_bp.route('/api/behavior/debug', methods=['GET'])
+def debug_behavior_data():
+    """Diagnostic: show teacher_id, event count, session count, and stored student names."""
+    try:
+        teacher_id = _get_teacher_id()
+        if not teacher_id:
+            return jsonify({"error": "Not authenticated", "g_user_id": "missing"})
+
+        sb = _get_supabase()
+
+        # Count sessions for this teacher
+        ses_res = sb.table('behavior_sessions').select('id, period, date, device').eq(
+            'teacher_id', teacher_id
+        ).execute()
+        sessions = ses_res.data or []
+
+        # Count events for this teacher
+        evt_res = sb.table('behavior_events').select('id, student_name, type, event_time').eq(
+            'teacher_id', teacher_id
+        ).order('event_time', desc=True).limit(100).execute()
+        events = evt_res.data or []
+
+        # Unique student names
+        student_names = sorted(set(e.get('student_name', '') for e in events if e.get('student_name')))
+
+        return jsonify({
+            "teacher_id": teacher_id,
+            "total_sessions": len(sessions),
+            "total_events": len(events),
+            "student_names": student_names,
+            "recent_sessions": sessions[:5],
+            "recent_events": [{"name": e.get("student_name"), "type": e.get("type"), "time": e.get("event_time")} for e in events[:10]],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "teacher_id": _get_teacher_id()})
+
+
 @behavior_bp.route('/api/behavior/roster', methods=['GET'])
 def get_roster_for_behavior():
     """Return a lightweight roster for name matching in the behavior panel.
