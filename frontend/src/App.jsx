@@ -1338,6 +1338,9 @@ function App() {
     useState(false);
   const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
   const [modelAnswersLoading, setModelAnswersLoading] = useState(false);
+  const [standardsAlignment, setStandardsAlignment] = useState(null);
+  const [alignmentLoading, setAlignmentLoading] = useState(false);
+  const [rewriteLoading, setRewriteLoading] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
   const skipAutoSaveRef = useRef(false); // Skip one auto-save cycle after loading from disk
@@ -2206,17 +2209,8 @@ function App() {
       }
       if (status.results && status.results.length > 0) {
         const costStr = status.session_cost?.total_cost > 0 ? ` (API cost: $${status.session_cost.total_cost.toFixed(4)})` : "";
-        addToast(`Grading complete! ${status.results.length} assignments graded.${costStr}`, "success");
-        // Resubmission summary notification
-        const resubCount = status.results.filter(r => r.is_resubmission).length;
-        if (resubCount > 0) {
-          const keptCount = status.results.filter(r => r.is_resubmission && r.kept_higher).length;
-          const improvedCount = resubCount - keptCount;
-          let msg = resubCount + " resubmission(s) detected.";
-          if (improvedCount > 0) msg += " " + improvedCount + " improved.";
-          if (keptCount > 0) msg += " " + keptCount + " kept original (higher) grade.";
-          addToast(msg, "info", 8000);
-        }
+        const sessionGraded = status.total || status.results.length;
+        addToast(`Grading complete! ${sessionGraded} assignments graded.${costStr}`, "success");
       }
     }
   }, [status.is_running, status.current_file, status.results]);
@@ -3021,7 +3015,10 @@ function App() {
         try {
           const filesData = await api.listFiles(config.assignments_folder);
           if (filesData.files) {
-            let filtered = filesData.files.filter((f) => !f.graded);
+            // Include graded files when "exclude already graded" is unchecked
+            let filtered = excludeGradedStudents
+              ? filesData.files.filter((f) => !f.graded)
+              : filesData.files.slice();
 
             // Filter by period students
             if (selectedPeriod && periodStudents.length > 0) {
@@ -3213,10 +3210,10 @@ function App() {
               }
 
               const approvedStudentNames = approvedRelevant.map((r) =>
-                (r.student_name || "").toLowerCase().replace(/['\u2019\s]+/g, "")
+                (r.student_name || "").toLowerCase().replace(/['\u2019\s_-]+/g, "")
               );
               filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase().replace(/['\u2019\s]+/g, "");
+                const fileName = f.name.toLowerCase().replace(/['\u2019\s_-]+/g, "");
                 return !approvedStudentNames.some((name) =>
                   name && fileName.includes(name)
                 );
@@ -3267,12 +3264,7 @@ function App() {
         subject: config.subject,
         teacher_name: config.teacher_name,
         school_name: config.school_name,
-        assignmentConfig:
-          gradeAssignment.customMarkers.length > 0 ||
-          gradeAssignment.gradingNotes ||
-          (gradeAssignment.responseSections || []).length > 0
-            ? gradeAssignment
-            : null,
+        assignmentConfig: gradeAssignment.title ? gradeAssignment : null,
         globalAINotes,
         // Pass the custom rubric from Settings
         rubric: rubric,
@@ -3560,6 +3552,7 @@ ${signature}`;
           filename: file.name,
           loading: false,
         });
+        setStandardsAlignment(null);
         setLoadedAssignmentName("");
         setDocEditorModal({
           show: true,
@@ -3770,6 +3763,58 @@ ${signature}`;
       addToast("Failed: " + err.message, "error");
     } finally {
       setModelAnswersLoading(false);
+    }
+  };
+
+  const handleAlignToStandards = async () => {
+    var docText = importedDoc.text || (importedDoc.html ? importedDoc.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '');
+    if (!importedDoc || !docText) {
+      addToast("Import the assignment document first", "warning");
+      return;
+    }
+    if (!config.subject) {
+      addToast("Set your subject in Settings first", "warning");
+      return;
+    }
+    setAlignmentLoading(true);
+    setStandardsAlignment(null);
+    try {
+      var data = await api.alignDocumentToStandards({
+        documentText: docText,
+        state: config.state || "FL",
+        grade: config.grade_level || "7",
+        subject: config.subject,
+      });
+      if (data.error) { addToast(data.error, "error"); return; }
+      setStandardsAlignment(data);
+      addToast((data.matched_standards || []).length + " standards identified", "success");
+    } catch (err) {
+      addToast("Alignment failed: " + err.message, "error");
+    } finally {
+      setAlignmentLoading(false);
+    }
+  };
+
+  const handleRewriteForAlignment = async (questions) => {
+    setRewriteLoading(true);
+    try {
+      var docText = importedDoc.text || '';
+      var data = await api.rewriteForAlignment({
+        questions: questions,
+        documentText: docText,
+        grade: config.grade_level || "7",
+        subject: config.subject || "",
+        state: config.state || "FL",
+      });
+      if (data.error) { addToast(data.error, "error"); return; }
+      setStandardsAlignment(function(prev) {
+        return Object.assign({}, prev, { rewrites: data.rewrites });
+      });
+      addToast((data.rewrites || []).length + " questions rewritten", "success");
+    } catch (err) {
+      addToast("Rewrite failed: " + err.message, "error");
+    } finally {
+      setRewriteLoading(false);
     }
   };
 
@@ -5432,7 +5477,7 @@ ${signature}`;
     const result = status.results[index];
     if (result?.filename) {
       try {
-        await api.updateApproval(result.filename, approval);
+        await api.updateApproval(result.filename, approval, result.graded_at);
       } catch (e) {
         console.error("Error saving approval:", e);
       }
@@ -9723,6 +9768,11 @@ ${signature}`;
                   handleDocImport={handleDocImport}
                   openDocEditor={openDocEditor}
                   handleGenerateModelAnswers={handleGenerateModelAnswers}
+                  standardsAlignment={standardsAlignment}
+                  alignmentLoading={alignmentLoading}
+                  rewriteLoading={rewriteLoading}
+                  handleAlignToStandards={handleAlignToStandards}
+                  handleRewriteForAlignment={handleRewriteForAlignment}
                   removeMarker={removeMarker}
                   addQuestion={addQuestion}
                   updateQuestion={updateQuestion}

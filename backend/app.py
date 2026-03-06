@@ -764,10 +764,24 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
     fallback_markers = []
     fallback_notes = ''
     fallback_sections = []
+    fallback_exclude_markers = []
+    fallback_imported_doc = {}
+    fallback_rubric_type = 'standard'
+    fallback_custom_rubric = None
+    fallback_completion_only = False
+    fallback_use_section_points = False
+    fallback_effort_points = 15
     if assignment_config:
         fallback_markers = assignment_config.get('customMarkers', [])
         fallback_notes = assignment_config.get('gradingNotes', '')
         fallback_sections = assignment_config.get('responseSections', [])
+        fallback_exclude_markers = assignment_config.get('excludeMarkers', [])
+        fallback_imported_doc = assignment_config.get('importedDoc') or {}
+        fallback_rubric_type = assignment_config.get('rubricType') or 'standard'
+        fallback_custom_rubric = assignment_config.get('customRubric', None)
+        fallback_completion_only = assignment_config.get('completionOnly', False)
+        fallback_use_section_points = assignment_config.get('useSectionPoints', False)
+        fallback_effort_points = assignment_config.get('effortPoints', 15)
 
     try:
         from assignment_grader import (
@@ -868,24 +882,30 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         master_file = os.path.join(output_folder, "master_grades.csv")
         if os.path.exists(master_file):
             try:
+                from backend.staging import canonicalize_filename as _canon_csv
                 with open(master_file, 'r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
                     for row in reader:
                         filename = row.get('Filename', '')
                         if filename:
                             already_graded.add(filename)
+                            already_graded.add(_canon_csv(filename))  # also add canonical form
             except:
                 pass
 
         # Also check in-memory results (loaded from saved JSON)
         # Track which files are verified (have markers/config) for skip_verified option
+        # Canonicalize all filenames so they match staged canonical names
+        from backend.staging import canonicalize_filename as _canon
         verified_files = set()
         for r in grading_state.get("results", []):
             if r.get("filename"):
                 already_graded.add(r["filename"])
+                already_graded.add(_canon(r["filename"]))  # also add canonical form
                 # Track verified status for skip_verified filtering
                 if r.get("marker_status") == "verified":
                     verified_files.add(r["filename"])
+                    verified_files.add(_canon(r["filename"]))
 
         if already_graded:
             grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
@@ -896,118 +916,34 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         roster = load_roster(roster_file)
         grading_state["log"].append(f"Loaded {len(roster)//2} students")
 
-        assignment_path = Path(assignments_folder)
+        # Stage files: canonicalize names and deduplicate (keeps newest per student+assignment)
+        from backend.staging import stage_files
+        stage_result = stage_files(assignments_folder, log_fn=grading_state["log"].append)
+        staging_folder = stage_result["staging_folder"]
+        resubmissions = stage_result.get("resubmissions", set())
+
+        staging_path = Path(staging_folder)
         all_files = []
         for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
-            all_files.extend(assignment_path.glob(ext))
+            all_files.extend(staging_path.glob(ext))
 
-        # DEDUPLICATE: Keep only the most recent file per student + assignment combo
-        # If a student uploads the same assignment twice, ignore all but the newest
-        # But different assignments from the same student should all be graded
-        def extract_student_and_assignment(filename):
-            """Extract student name AND assignment from filename for deduplication.
-
-            Returns tuple: (student_key, assignment_key)
-            Example: 'jackson_gaytan_Chapter_10_Notes.docx' -> ('jackson_gaytan', 'chapter_10_notes')
-            Handles duplicate suffixes: '(1)', '(2)', trailing ' 1', ' 2'
-            """
-            import re
-            name = filename.lower()
-            name = os.path.splitext(name)[0]  # Remove extension
-
-            # Strip OneDrive/SharePoint duplicate suffixes BEFORE normalizing:
-            #   "file (1)" -> "file", "file (2)" -> "file"
-            #   "file 1" -> "file", "file 2" -> "file" (only trailing bare digits)
-            name = re.sub(r'\s*\(\d+\)\s*$', '', name)   # Remove trailing (1), (2), etc.
-            name = re.sub(r'\s+\d{1,2}\s*$', '', name)    # Remove trailing " 1", " 2" (1-2 digits only)
-            name = re.sub(r'\s*-\s*copy\s*(\d*)$', '', name)  # Remove "- Copy", "- Copy 2"
-
-            # Remove emojis and special chars for cleaner parsing
-            name_clean = re.sub(r'[^\w\s_-]', '', name)
-
-            # Handle "Last, First._Assignment" format (comma before first underscore)
-            first_underscore = name_clean.find('_')
-            if first_underscore > 0 and ',' in name_clean[:first_underscore]:
-                name_part = name_clean[:first_underscore]
-                assignment_part = name_clean[first_underscore + 1:] if first_underscore < len(name_clean) - 1 else ""
-                comma_parts = name_part.split(',')
-                last_name = comma_parts[0].strip()
-                first_name = comma_parts[1].strip().split()[0] if len(comma_parts) > 1 else ""
-                student_key = f"{first_name}_{last_name}".lower().strip('_')
-                assignment_key = re.sub(r'[_\s]+', '_', assignment_part.strip()).strip('_')
-                return (student_key, assignment_key or "unknown")
-
-            # Split by underscores or spaces
-            parts = re.split(r'[_\s]+', name_clean)
-            parts = [p for p in parts if p]  # Remove empty parts
-
-            if len(parts) >= 3:
-                # First 2 parts are student name, rest is assignment
-                student_key = f"{parts[0]}_{parts[1]}".lower()
-                assignment_key = '_'.join(parts[2:]).lower()
-            elif len(parts) == 2:
-                student_key = f"{parts[0]}_{parts[1]}".lower()
-                assignment_key = "unknown"
-            else:
-                student_key = name_clean
-                assignment_key = "unknown"
-
-            return (student_key, assignment_key)
-
-        # Group files by student + assignment
-        file_groups = {}
-        for f in all_files:
-            key = extract_student_and_assignment(f.name)
-            if key not in file_groups:
-                file_groups[key] = []
-            file_groups[key].append(f)
-
-        # Keep only the most recent file per student + assignment
-        deduplicated_files = []
-        duplicates_found = 0
-        for (student_key, assignment_key), files in file_groups.items():
-            if len(files) > 1:
-                # Sort by modification time (newest first)
-                files_sorted = sorted(files, key=lambda x: x.stat().st_mtime, reverse=True)
-                deduplicated_files.append(files_sorted[0])
-                duplicates_found += len(files) - 1
-                # Log which files were skipped
-                for skipped in files_sorted[1:]:
-                    grading_state["log"].append(f"⏭️ Skipping older version: {skipped.name}")
-            else:
-                deduplicated_files.append(files[0])
-
-        if duplicates_found > 0:
-            grading_state["log"].append(f"📋 Found {duplicates_found} duplicate submissions, using most recent only")
-
-        all_files = deduplicated_files
-
-        # Filter by selected files if provided
+        # Filter by selected files if provided (match canonical names)
         if selected_files is not None and len(selected_files) > 0:
-            selected_set = set(selected_files)
-            all_files = [f for f in all_files if f.name in selected_set]
-            grading_state["log"].append(f"🎯 Matched {len(all_files)} of {len(selected_files)} selected files")
+            from backend.staging import canonicalize_filename as _canon
+            selected_canonical = set(_canon(f) for f in selected_files)
+            all_files = [f for f in all_files if f.name in selected_canonical]
+            grading_state["log"].append(f"Matched {len(all_files)} of {len(selected_files)} selected files")
         else:
             grading_state["log"].append(f"Found {len(all_files)} total files (no filter applied)")
 
-        # Detect resubmissions: newest file in a group where an older version was already graded
-        resubmissions = set()
-        for (student_key, assignment_key), files in file_groups.items():
-            if len(files) > 1:
-                files_sorted = sorted(files, key=lambda x: x.stat().st_mtime, reverse=True)
-                newest = files_sorted[0]
-                older_graded = [f for f in files_sorted[1:] if f.name in already_graded]
-                if older_graded and newest.name not in already_graded:
-                    resubmissions.add(newest.name)
-
-        if resubmissions:
-            grading_state["log"].append(f"🔄 {len(resubmissions)} resubmission(s) detected — grading latest versions")
-            for name in sorted(resubmissions):
-                grading_state["log"].append(f"  ↳ {name}")
-
         # Filter out already graded files (only if not using selection)
+        # Resubmissions bypass the already_graded filter — they have newer content
         if selected_files is None:
-            new_files = [f for f in all_files if f.name not in already_graded]
+            new_files = [f for f in all_files
+                         if f.name not in already_graded or f.name in resubmissions]
+            resubmit_count = sum(1 for f in new_files if f.name in resubmissions and f.name in already_graded)
+            if resubmit_count > 0:
+                grading_state["log"].append(f"Re-grading {resubmit_count} resubmission(s) with newer versions")
             skipped = len(all_files) - len(new_files)
             if skipped > 0:
                 grading_state["log"].append(f"Skipping {skipped} already-graded files")
@@ -1151,18 +1087,20 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                         grading_state["log"].append(f"  ⚠️  NO CONFIG: {submitted_assignment}")
 
                     file_markers = fallback_markers
-                    file_exclude_markers = []
+                    file_exclude_markers = fallback_exclude_markers
                     file_notes = fallback_notes
                     file_sections = fallback_sections
                     # Use the loaded assignment config name so all results group together.
                     # Only fall back to filename if there's truly no config at all.
                     matched_title = ASSIGNMENT_NAME if ASSIGNMENT_NAME else submitted_assignment
-                    is_completion_only = False
-                    assignment_template_local = ''
-                    rubric_type = 'standard'
-                    custom_rubric = None
-                    marker_config = None
-                    effort_points = 15
+                    is_completion_only = fallback_completion_only
+                    imported_doc = fallback_imported_doc
+                    assignment_template_local = fallback_imported_doc.get('text', '')
+                    rubric_type = fallback_rubric_type
+                    custom_rubric = fallback_custom_rubric
+                    use_section_points = fallback_use_section_points
+                    marker_config = file_markers if use_section_points else None
+                    effort_points = fallback_effort_points if use_section_points else 15
 
                 # Handle completion-only rubric type
                 if rubric_type == 'completion-only':
@@ -1742,7 +1680,9 @@ STANDARD CLASS GRADING EXPECTATIONS:
                             f"  Late penalty: -{penalty_applied} pts ({late_info['days_late']} day{'s' if late_info['days_late'] != 1 else ''} late)"
                         )
 
-                    is_resub = filepath.name in resubmissions
+                    # Only treat as resubmission if no explicit file selection
+                    # (explicit selection = teacher re-grade, not student resubmission)
+                    is_resub = filepath.name in resubmissions and selected_files is None
                     previous_result = None
                     previous_score = None
 
@@ -1799,7 +1739,11 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
                     }
                     with grading_lock:
-                        grading_state["results"] = [r for r in grading_state["results"] if r.get("filename") != filepath.name]
+                        from backend.staging import canonicalize_filename as _canon_dedup
+                        canon_name = filepath.name
+                        grading_state["results"] = [r for r in grading_state["results"]
+                                                    if r.get("filename") != canon_name
+                                                    and _canon_dedup(r.get("filename", "")) != canon_name]
                         if is_resub and previous_result:
                             sid = student_info.get('student_id', '')
                             assign = result["matched_title"]
@@ -1960,6 +1904,9 @@ def start_grading():
 
     # Get selected files (if any) for selective grading
     selected_files = data.get('selectedFiles', None)  # None means grade all
+    print(f"📋 selectedFiles received: {type(selected_files)} — {len(selected_files) if selected_files else 'None'}")
+    if selected_files:
+        print(f"📋 First 5 files: {selected_files[:5]}")
 
     # Skip verified grades on regrade (only regrade unverified assignments)
     skip_verified = data.get('skipVerified', False)
@@ -2191,22 +2138,34 @@ def list_files():
     if not folder or not os.path.exists(folder):
         return jsonify({"files": [], "error": "Folder not found"})
 
-    # Get already graded files
+    # Stage files first — canonicalize and deduplicate
+    from backend.staging import stage_files, MANIFEST_NAME
+    try:
+        stage_result = stage_files(folder)
+        staging_folder = stage_result["staging_folder"]
+    except Exception as e:
+        return jsonify({"files": [], "error": f"Staging failed: {e}"})
+
+    # Get already graded files (canonicalize so they match staged names)
+    from backend.staging import canonicalize_filename as _canon
     teacher_id = getattr(g, 'user_id', 'local-dev')
     already_graded = set()
     for result in _get_state(teacher_id).get("results", []):
         if result.get("filename"):
             already_graded.add(result["filename"])
+            already_graded.add(_canon(result["filename"]))
 
-    # Scan folder for supported files
+    # List staged files (canonical names, deduplicated)
     supported_extensions = ['.docx', '.txt', '.jpg', '.jpeg', '.png', '.pdf']
     files = []
 
     try:
-        for f in os.listdir(folder):
+        for f in os.listdir(staging_folder):
+            if f == MANIFEST_NAME:
+                continue
             ext = os.path.splitext(f)[1].lower()
             if ext in supported_extensions:
-                filepath = os.path.join(folder, f)
+                filepath = os.path.join(staging_folder, f)
                 stat = os.stat(filepath)
                 files.append({
                     "name": f,
@@ -2388,17 +2347,26 @@ def update_approval():
     data = request.json
     filename = data.get('filename')
     approval = data.get('approval')  # 'approved', 'rejected', or 'pending'
+    graded_at = data.get('graded_at')  # optional — disambiguate duplicates
 
     if not filename:
         return jsonify({"error": "Missing filename"}), 400
 
-    # Find and update the result
+    # Find and update the result (prefer exact match on graded_at for duplicates)
+    target = None
     for r in grading_state["results"]:
         if r.get('filename') == filename:
-            r['email_approval'] = approval
-            save_results(grading_state["results"], teacher_id)
-            _sync_approval_to_master_csv(r, approval)
-            return jsonify({"status": "updated", "filename": filename, "approval": approval})
+            if graded_at and r.get('graded_at') == graded_at:
+                target = r
+                break  # exact match
+            if target is None:
+                target = r  # fallback to first match
+
+    if target:
+        target['email_approval'] = approval
+        save_results(grading_state["results"], teacher_id)
+        _sync_approval_to_master_csv(target, approval)
+        return jsonify({"status": "updated", "filename": filename, "approval": approval})
 
     return jsonify({"error": "Result not found"}), 404
 

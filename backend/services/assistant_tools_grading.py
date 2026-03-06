@@ -79,6 +79,14 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display,
     if not folder or not os.path.isdir(folder):
         return {}
 
+    # Stage files first — canonicalize and deduplicate
+    from backend.staging import stage_files, MANIFEST_NAME
+    try:
+        stage_result = stage_files(folder)
+        scan_folder = stage_result["staging_folder"]
+    except Exception:
+        scan_folder = folder  # fallback to raw folder
+
     # Build reverse lookup: lowercase (first, last) -> student_id
     # Handles both "First Last" and "Last, First Middle" roster formats
     name_to_sid = {}
@@ -102,7 +110,9 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display,
     result = defaultdict(set)
     supported = {'.docx', '.pdf', '.txt', '.jpg', '.jpeg', '.png'}
 
-    for filename in os.listdir(folder):
+    for filename in os.listdir(scan_folder):
+        if filename == MANIFEST_NAME:
+            continue
         ext = os.path.splitext(filename)[1].lower()
         if ext not in supported:
             continue
@@ -801,8 +811,7 @@ def compare_periods(assignment_name=None):
 def scan_submissions_folder(top_n=None, assignment_filter=None):
     """Scan the assignments folder for submitted files. Shows top assignments
     by submission count, unique students, graded/ungraded status.
-    Deduplicates multiple uploads per student (OneDrive duplicates)."""
-    import re
+    Uses centralized staging for deduplication."""
 
     # Read from ~/.graider_settings.json (where the UI saves config)
     folder = ''
@@ -823,19 +832,31 @@ def scan_submissions_folder(top_n=None, assignment_filter=None):
     if not os.path.isdir(folder):
         return {"error": f"Assignments folder not found: {folder}. Configure it in Settings > General."}
 
+    # Stage files — canonicalize and deduplicate via centralized staging
+    from backend.staging import stage_files, MANIFEST_NAME
+    try:
+        stage_result = stage_files(folder)
+        scan_folder = stage_result["staging_folder"]
+        duplicates_removed = stage_result["duplicates_skipped"]
+    except Exception:
+        scan_folder = folder
+        duplicates_removed = 0
+
     top_n = min(max(int(top_n or 10), 1), 25)
     supported = {'.docx', '.pdf', '.txt', '.jpg', '.jpeg', '.png'}
 
-    # Phase 1: Scan all files and parse filenames
-    raw_files = []  # list of (filename, first, last, assign_part, mtime)
+    # Phase 1: Scan staged files and parse filenames (already canonical)
+    parsed_files = []  # list of (filename, first, last, assign_part)
     unparseable = []
 
-    for filename in os.listdir(folder):
+    for filename in os.listdir(scan_folder):
+        if filename == MANIFEST_NAME:
+            continue
         ext = os.path.splitext(filename)[1].lower()
         if ext not in supported:
             continue
 
-        filepath = os.path.join(folder, filename)
+        filepath = os.path.join(scan_folder, filename)
         if not os.path.isfile(filepath):
             continue
 
@@ -849,51 +870,41 @@ def scan_submissions_folder(top_n=None, assignment_filter=None):
         last = parts[1].strip()
         assign_part = parts[2].strip()
 
-        try:
-            mtime = os.stat(filepath).st_mtime
-        except OSError:
-            mtime = 0
+        parsed_files.append((filename, first, last, assign_part))
 
-        raw_files.append((filename, first, last, assign_part, mtime))
+    total_files = len(parsed_files) + len(unparseable) + duplicates_removed
 
-    total_files = len(raw_files) + len(unparseable)
-
-    # Phase 2: Deduplicate — strip OneDrive suffixes, keep newest per (student, assignment)
-    deduped = {}  # (student_key, assignment_norm) -> (filename, first, last, assign_part, mtime)
-
-    for filename, first, last, assign_part, mtime in raw_files:
-        student_key = f"{first.lower()}_{last.lower()}"
-
-        # Strip OneDrive duplicate suffixes from assignment part
-        clean_assign = assign_part
-        clean_assign = re.sub(r'\s*\(\d+\)\s*$', '', clean_assign)        # "Notes (1)" -> "Notes"
-        clean_assign = re.sub(r'\s+\d{1,2}\s*$', '', clean_assign)        # "Notes 1" -> "Notes"
-        clean_assign = re.sub(r'\s*-\s*[Cc]opy\s*(\d*)\s*$', '', clean_assign)  # "Notes - Copy" -> "Notes"
-
-        assignment_norm = _normalize_assignment_name(clean_assign)
-
-        key = (student_key, assignment_norm)
-        existing = deduped.get(key)
-        if existing is None or mtime > existing[4]:
-            deduped[key] = (filename, first, last, assign_part, mtime)
-
-    duplicates_removed = len(raw_files) - len(deduped)
-
-    # Phase 3: Group deduplicated files by assignment
+    # Phase 2: Group files by assignment (no dedup needed — staging handled it)
     assignment_groups = defaultdict(list)  # assignment_norm -> [(student_display, filename)]
-    for (student_key, assignment_norm), (filename, first, last, assign_part, mtime) in deduped.items():
+    for filename, first, last, assign_part in parsed_files:
+        assignment_norm = _normalize_assignment_name(assign_part)
         student_display = f"{first} {last[0].upper()}." if last else first
         assignment_groups[assignment_norm].append((student_display, filename))
 
-    # Phase 4: Cross-reference with graded results
+    # Phase 3: Cross-reference with graded results (filenames now match)
     results = _load_results()
-    graded_keys = set()
+    graded_keys = set()  # exact filename match (canonical names)
+    graded_by_student = defaultdict(set)  # student_key -> set of assignment_norms
+
     for r in results:
         fname = r.get('filename', r.get('file', ''))
         if fname:
             graded_keys.add(fname.lower())
+            base = os.path.splitext(fname)[0]
+            parts = base.split('_', 2)
+            if len(parts) >= 3:
+                sk = f"{parts[0].strip().lower()}_{parts[1].strip().lower()}"
+                graded_by_student[sk].add(_normalize_assignment_name(parts[2]))
+        # Also match using student_name + assignment fields from result
+        sname = r.get('student_name', r.get('name', ''))
+        aname = r.get('assignment', '')
+        if sname and aname:
+            sname_parts = sname.strip().split()
+            if len(sname_parts) >= 2:
+                sk2 = f"{sname_parts[0].strip().lower()}_{sname_parts[-1].strip().lower()}"
+                graded_by_student[sk2].add(_normalize_assignment_name(aname))
 
-    # Phase 5: Filter by assignment name if requested
+    # Phase 4: Filter by assignment name if requested
     if assignment_filter:
         filter_norm = _normalize_assignment_name(assignment_filter)
         assignment_groups = {
@@ -901,27 +912,34 @@ def scan_submissions_folder(top_n=None, assignment_filter=None):
             if filter_norm in k
         }
 
-    # Phase 6: Build output sorted by submission count
-    # Find display name: use most common raw assignment part for each group
+    # Phase 5: Build output sorted by submission count
     all_students = set()
     top_assignments = []
     for assignment_norm, entries in sorted(assignment_groups.items(), key=lambda x: len(x[1]), reverse=True)[:top_n]:
-        graded = sum(1 for _, fn in entries if fn.lower() in graded_keys)
+        def _is_graded(fn, _anorm=assignment_norm):
+            if fn.lower() in graded_keys:
+                return True
+            # Fuzzy: check by student+assignment pair
+            base = os.path.splitext(fn)[0]
+            parts = base.split('_', 2)
+            if len(parts) >= 3:
+                sk = f"{parts[0].strip().lower()}_{parts[1].strip().lower()}"
+                student_assignments = graded_by_student.get(sk, set())
+                if _anorm in student_assignments:
+                    return True
+                for ga in student_assignments:
+                    if ga.startswith(_anorm) or _anorm.startswith(ga):
+                        return True
+            return False
+        graded = sum(1 for _, fn in entries if _is_graded(fn))
         students = sorted(set(s for s, _ in entries))
         all_students.update(students)
 
-        # Pick most common raw assignment part for display name
-        raw_parts = []
-        for (sk, an), (fn, first, last, ap, mt) in deduped.items():
-            if an == assignment_norm:
-                raw_parts.append(ap)
+        # Display name: pick most common raw assign_part for this group
+        raw_parts = [ap for _, _, _, ap in parsed_files
+                     if _normalize_assignment_name(ap) == assignment_norm]
         if raw_parts:
-            from collections import Counter
             display_name = Counter(raw_parts).most_common(1)[0][0]
-            # Clean up display name
-            display_name = re.sub(r'\s*\(\d+\)\s*$', '', display_name)
-            display_name = re.sub(r'\s+\d{1,2}\s*$', '', display_name)
-            display_name = re.sub(r'\s*-\s*[Cc]opy\s*(\d*)\s*$', '', display_name)
         else:
             display_name = assignment_norm
 

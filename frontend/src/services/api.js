@@ -276,6 +276,20 @@ export async function getStandards(config) {
   })
 }
 
+export async function alignDocumentToStandards(data) {
+  return fetchApi('/api/align-document-to-standards', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function rewriteForAlignment(data) {
+  return fetchApi('/api/rewrite-for-alignment', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function brainstormLessonIdeas(data) {
   return fetchApi('/api/brainstorm-lesson-ideas', {
     method: 'POST',
@@ -442,10 +456,10 @@ export async function sendEmails(results, teacherEmail = '', teacherName = '', e
   })
 }
 
-export async function updateApproval(filename, approval) {
+export async function updateApproval(filename, approval, graded_at) {
   return fetchApi('/api/update-approval', {
     method: 'POST',
-    body: JSON.stringify({ filename, approval }),
+    body: JSON.stringify({ filename, approval, graded_at }),
   })
 }
 
@@ -1096,6 +1110,8 @@ export default {
   exportDistrictReport,
   retranslateFeedback,
   getStandards,
+  alignDocumentToStandards,
+  rewriteForAlignment,
   brainstormLessonIdeas,
   generateLessonPlan,
   exportLessonPlan,

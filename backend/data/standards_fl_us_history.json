@@ -91,6 +91,39 @@
     "sample_assessment": "Which is the BEST way to verify information from an online news source? A) Read only one article B) Cross-reference with multiple reliable sources C) Accept it as fact D) Check social media comments"
   },
   {
+    "code": "SS.8.A.1.4",
+    "benchmark": "Differentiate fact from opinion, utilize appropriate historical research and fiction/nonfiction support materials. Identify facts and opinions (8-T.2)",
+    "topics": [
+      "fact vs opinion",
+      "historical research",
+      "fiction vs nonfiction"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to analyze statements and categorize them as facts or opinions, using historical research methods and distinguishing between fiction and nonfiction sources. Items may include multiple-choice questions, short answer prompts, or matching exercises that assess students' ability to identify and justify their reasoning.",
+    "essential_questions": [
+      "How can we determine if a statement is a fact or an opinion?",
+      "What role do primary and secondary sources play in historical research?",
+      "Why is it important to differentiate between fiction and nonfiction in historical studies?"
+    ],
+    "learning_targets": [
+      "I can identify facts and opinions in historical texts.",
+      "I can use appropriate sources to support my historical arguments.",
+      "I can explain the importance of distinguishing between fiction and nonfiction."
+    ],
+    "vocabulary": [
+      "fact",
+      "opinion",
+      "historical research",
+      "primary source",
+      "secondary source",
+      "fiction",
+      "nonfiction",
+      "evidence",
+      "analysis"
+    ],
+    "sample_assessment": "Which of the following statements is an opinion? A) The Declaration of Independence was signed in 1776. B) The American Revolution was justified."
+  },
+  {
     "code": "SS.8.A.1.5",
     "benchmark": "Identify, within both primary and secondary sources, parsing for word meaning, the author, audience, format, and purpose of the source.",
     "topics": [
@@ -119,6 +152,39 @@
       "context"
     ],
     "sample_assessment": "A letter written by a soldier during the Revolutionary War is an example of a: A) Secondary source B) Primary source C) Textbook D) Newspaper editorial"
+  },
+  {
+    "code": "SS.8.A.1.6",
+    "benchmark": "Compare interpretations of key events and issues throughout American History. Source analysis: the Gettysburg Address (8-P.5)",
+    "topics": [
+      "historical interpretation",
+      "Gettysburg Address",
+      "American History"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should challenge students to compare and contrast different interpretations of key events, particularly focusing on the Gettysburg Address. Items may include analysis of excerpts, multiple-choice questions that require critical thinking, and short essays where students articulate their own interpretations based on evidence.",
+    "essential_questions": [
+      "How can the same historical event be interpreted in different ways?",
+      "What are the key themes of the Gettysburg Address?",
+      "Why is it important to analyze different perspectives in history?"
+    ],
+    "learning_targets": [
+      "I can compare different interpretations of historical events.",
+      "I can analyze the themes and messages in the Gettysburg Address.",
+      "I can articulate my own interpretation of a historical event."
+    ],
+    "vocabulary": [
+      "interpretation",
+      "Gettysburg Address",
+      "perspective",
+      "theme",
+      "analysis",
+      "historical context",
+      "evidence",
+      "argument",
+      "rhetoric"
+    ],
+    "sample_assessment": "What is one main theme of the Gettysburg Address? A) The importance of unity. B) The need for more land. C) The role of women in the war."
   },
   {
     "code": "SS.8.A.1.7",
@@ -214,6 +280,39 @@
     "sample_assessment": "The Southern colonies' economy was based primarily on: A) Manufacturing B) Fishing and shipbuilding C) Agriculture and cash crops D) Fur trading"
   },
   {
+    "code": "SS.8.A.2.3",
+    "benchmark": "Differentiate economic systems of New England, Middle and Southern colonies including indentured servants and slaves as labor sources. New England Colonies: economy and interactions with Native Americans (8-K.6) Middle Colonies: economy and society (8-K.8) Southern Colonies: economy and slavery (8-K.10)",
+    "topics": [
+      "economic systems",
+      "colonial America",
+      "labor sources"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to differentiate between the economic systems of the New England, Middle, and Southern colonies, focusing on labor sources such as indentured servants and slaves. Items may include multiple-choice questions, graphic organizers, and short answer questions that assess students' understanding of economic interactions and societal structures.",
+    "essential_questions": [
+      "What were the main economic activities in each colonial region?",
+      "How did labor sources differ among the New England, Middle, and Southern colonies?",
+      "What impact did these economic systems have on colonial society?"
+    ],
+    "learning_targets": [
+      "I can describe the economic systems of the New England, Middle, and Southern colonies.",
+      "I can explain the role of indentured servants and slaves in colonial economies.",
+      "I can compare the economic interactions of different colonial regions."
+    ],
+    "vocabulary": [
+      "economic system",
+      "New England colonies",
+      "Middle colonies",
+      "Southern colonies",
+      "indentured servant",
+      "slave",
+      "labor source",
+      "trade",
+      "agriculture"
+    ],
+    "sample_assessment": "Which of the following best describes the economy of the Southern colonies? A) Primarily based on trade and manufacturing. B) Heavily reliant on agriculture and slave labor. C) Focused on fishing and shipbuilding."
+  },
+  {
     "code": "SS.8.A.2.4",
     "benchmark": "Identify the impact of key colonial figures on the economic, political, and social development of the colonies.",
     "topics": [
@@ -301,6 +400,39 @@
       "war debt"
     ],
     "sample_assessment": "A major consequence of the French and Indian War was that: A) France gained control of Canada B) Britain imposed new taxes on the colonies to pay war debts C) Spain took control of the 13 colonies D) Native Americans gained more land"
+  },
+  {
+    "code": "SS.8.A.2.7",
+    "benchmark": "Describe the contributions of key groups (Africans, Native Americans, women, and children) to the society and culture of colonial America.",
+    "topics": [
+      "cultural contributions",
+      "colonial America",
+      "key groups"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying and describing the contributions of key groups such as Africans, Native Americans, women, and children to colonial society and culture. Items may include multiple-choice questions, short answer prompts, and group projects that encourage collaboration and discussion about these contributions.",
+    "essential_questions": [
+      "What roles did different groups play in colonial society?",
+      "How did the contributions of these groups shape American culture?",
+      "Why is it important to recognize diverse contributions in history?"
+    ],
+    "learning_targets": [
+      "I can identify key groups that contributed to colonial America.",
+      "I can describe the contributions of Africans, Native Americans, women, and children.",
+      "I can analyze how these contributions influenced American culture."
+    ],
+    "vocabulary": [
+      "contribution",
+      "colonial society",
+      "Africans",
+      "Native Americans",
+      "women",
+      "children",
+      "culture",
+      "diversity",
+      "influence"
+    ],
+    "sample_assessment": "Which group contributed significantly to the agricultural development of colonial America? A) Native Americans. B) European settlers. C) Women."
   },
   {
     "code": "SS.8.A.3.1",
@@ -392,6 +524,71 @@
     "sample_assessment": "Who was the primary author of the Declaration of Independence? A) George Washington B) Thomas Jefferson C) Benjamin Franklin D) John Adams"
   },
   {
+    "code": "SS.8.A.3.4",
+    "benchmark": "Examine the contributions of influential groups to both the American and British war efforts during the American Revolutionary War and their effects on the outcome of the war.",
+    "topics": [
+      "American Revolutionary War",
+      "influential groups",
+      "war efforts"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to examine the contributions of various influential groups to both the American and British war efforts during the American Revolutionary War. Items may include comparative essays, multiple-choice questions that assess understanding of key contributions, and projects that explore the effects of these contributions on the war's outcome.",
+    "essential_questions": [
+      "What were the contributions of different groups during the American Revolutionary War?",
+      "How did these contributions affect the outcome of the war?",
+      "Why is it important to study the roles of various groups in historical events?"
+    ],
+    "learning_targets": [
+      "I can examine the contributions of influential groups during the Revolutionary War.",
+      "I can analyze the effects of these contributions on the war's outcome.",
+      "I can articulate the importance of diverse perspectives in understanding history."
+    ],
+    "vocabulary": [
+      "Revolutionary War",
+      "contribution",
+      "influential groups",
+      "American patriots",
+      "British loyalists",
+      "outcome",
+      "strategy",
+      "collaboration",
+      "impact"
+    ],
+    "sample_assessment": "Which group played a crucial role in supporting the American war effort? A) British loyalists. B) Native Americans. C) French allies."
+  },
+  {
+    "code": "SS.8.A.3.5",
+    "benchmark": "Describe the influence of individuals on social and political developments during the Revolutionary era.",
+    "topics": [
+      "Revolutionary Era",
+      "Social Influence",
+      "Political Influence"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze the contributions of key individuals during the Revolutionary era, including their social and political impacts. Items may include scenario-based questions, requiring students to evaluate the effectiveness of these individuals' actions and decisions.",
+    "essential_questions": [
+      "How did individual actions shape the course of the Revolutionary era?",
+      "What role did key figures play in influencing public opinion and political decisions?",
+      "In what ways did social movements contribute to political developments during this time?"
+    ],
+    "learning_targets": [
+      "I can identify key individuals from the Revolutionary era.",
+      "I can explain the social and political impacts of these individuals.",
+      "I can analyze how individual actions influenced the Revolutionary War."
+    ],
+    "vocabulary": [
+      "Revolution",
+      "Influence",
+      "Patriot",
+      "Loyalist",
+      "Independence",
+      "Leadership",
+      "Protest",
+      "Rights"
+    ],
+    "sample_assessment": "Which individual is credited with inspiring the colonies to seek independence through their writings and speeches?"
+  },
+  {
     "code": "SS.8.A.3.6",
     "benchmark": "Examine the causes, course, and consequences of the American Revolution.",
     "topics": [
@@ -422,6 +619,70 @@
     "sample_assessment": "The Battle of Saratoga was a turning point in the American Revolution because it: A) Ended the war B) Convinced France to ally with the Americans C) Was the first battle D) Was fought on British soil"
   },
   {
+    "code": "SS.8.A.3.7",
+    "benchmark": "Examine the structure, content, and consequences of the Declaration of Independence. Source analysis: the Declaration of Independence (8-L.10)",
+    "topics": [
+      "Declaration of Independence",
+      "Political Structure",
+      "Historical Analysis"
+    ],
+    "dok": 2,
+    "item_specs": "Items should focus on the structure and content of the Declaration of Independence, requiring students to interpret its key principles and assess its consequences. Questions may involve matching sections of the document to their implications or analyzing excerpts for meaning.",
+    "essential_questions": [
+      "What are the main ideas presented in the Declaration of Independence?",
+      "How did the Declaration of Independence reflect the values of the time?",
+      "What were the immediate and long-term consequences of the Declaration?"
+    ],
+    "learning_targets": [
+      "I can summarize the main ideas of the Declaration of Independence.",
+      "I can analyze the structure of the Declaration.",
+      "I can discuss the consequences of the Declaration on American society."
+    ],
+    "vocabulary": [
+      "Declaration",
+      "Independence",
+      "Rights",
+      "Grievances",
+      "Colonies",
+      "Government",
+      "Philosophy",
+      "Revolution"
+    ],
+    "sample_assessment": "What was one major grievance listed in the Declaration of Independence against King George III?"
+  },
+  {
+    "code": "SS.8.A.3.8",
+    "benchmark": "Examine individuals and groups that affected political and social motivations during the American Revolution. The Revolutionary War: struggle for independence (8-L.6) The Revolutionary War: turning the tide of war (8-L.7)",
+    "topics": [
+      "American Revolution",
+      "Political Motivations",
+      "Social Change"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to evaluate the roles of various individuals and groups in shaping political and social motivations during the American Revolution. Items may include case studies or comparative analyses of different figures and their impacts.",
+    "essential_questions": [
+      "Who were the key figures and groups that influenced the American Revolution?",
+      "How did social motivations drive political actions during the Revolution?",
+      "What strategies did individuals and groups use to promote their causes?"
+    ],
+    "learning_targets": [
+      "I can identify key individuals and groups involved in the American Revolution.",
+      "I can explain the motivations behind their actions.",
+      "I can analyze the impact of these individuals and groups on the Revolution."
+    ],
+    "vocabulary": [
+      "Revolution",
+      "Motivation",
+      "Patriot",
+      "Loyalist",
+      "Militia",
+      "Activism",
+      "Strategy",
+      "Leadership"
+    ],
+    "sample_assessment": "Which group played a significant role in mobilizing public support for the American Revolution?"
+  },
+  {
     "code": "SS.8.A.3.9",
     "benchmark": "Evaluate the structure, strengths, and weaknesses of the Articles of Confederation and its aspects that led to the Constitutional Convention.",
     "topics": [
@@ -449,6 +710,38 @@
       "New Jersey Plan"
     ],
     "sample_assessment": "The Great Compromise at the Constitutional Convention resolved the conflict between large and small states by: A) Eliminating the Senate B) Creating a two-house legislature C) Giving each state one vote D) Banning slavery"
+  },
+  {
+    "code": "SS.8.A.3.10",
+    "benchmark": "Examine the course and consequences of the Constitutional Convention (New Jersey Plan, Virginia Plan, Great Compromise, Three-Fifths Compromise, compromises regarding taxation and slave trade, Electoral College, state vs. federal power, empowering a president). The Constitutional Convention (8-M.2)",
+    "topics": [
+      "Constitutional Convention",
+      "Political Compromises",
+      "Founding Documents"
+    ],
+    "dok": 4,
+    "item_specs": "Items should require students to analyze the debates and compromises made during the Constitutional Convention, assessing their implications for the formation of the U.S. government. Questions may involve evaluating different plans and their impacts on federalism and representation.",
+    "essential_questions": [
+      "What were the major compromises made during the Constitutional Convention?",
+      "How did the different plans shape the structure of the U.S. government?",
+      "What were the consequences of these compromises for future governance?"
+    ],
+    "learning_targets": [
+      "I can describe the key compromises of the Constitutional Convention.",
+      "I can analyze the significance of the New Jersey and Virginia Plans.",
+      "I can evaluate the impact of the Constitutional Convention on American government."
+    ],
+    "vocabulary": [
+      "Constitution",
+      "Compromise",
+      "Federalism",
+      "Representation",
+      "Electoral College",
+      "Three-Fifths Compromise",
+      "Taxation",
+      "Governance"
+    ],
+    "sample_assessment": "What was the main purpose of the Great Compromise during the Constitutional Convention?"
   },
   {
     "code": "SS.8.A.3.11",
@@ -481,6 +774,170 @@
     "sample_assessment": "The Federalist Papers were written to: A) Oppose the Constitution B) Support ratification of the Constitution C) Propose the Bill of Rights D) Declare independence from Britain"
   },
   {
+    "code": "SS.8.A.3.12",
+    "benchmark": "Examine the influences of George Washington's presidency in the formation of the new nation. Washington's presidency: part I (8-M.3) Washington's presidency: part II (8-M.4)",
+    "topics": [
+      "George Washington",
+      "Presidency",
+      "Nation Building"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on George Washington's presidency and its impact on the formation of the new nation. Items may include analysis of his policies, decisions, and the precedents he set, requiring students to evaluate their significance in shaping the U.S.",
+    "essential_questions": [
+      "What were the key challenges faced by George Washington during his presidency?",
+      "How did Washington's leadership influence the development of the new nation?",
+      "What precedents did Washington set for future presidents?"
+    ],
+    "learning_targets": [
+      "I can identify key events during George Washington's presidency.",
+      "I can explain how Washington's decisions shaped the new nation.",
+      "I can analyze the significance of Washington's leadership style."
+    ],
+    "vocabulary": [
+      "Presidency",
+      "Leadership",
+      "Precedent",
+      "Nation",
+      "Policy",
+      "Cabinet",
+      "Foreign Affairs",
+      "Domestic Issues"
+    ],
+    "sample_assessment": "Which policy established by George Washington set a precedent for future U.S. presidents regarding foreign relations?"
+  },
+  {
+    "code": "SS.8.A.3.13",
+    "benchmark": "Explain major domestic and international economic, military, political, and socio-cultural events of John Adams's presidency. The first party system: Federalists and Democratic-Republicans (8-M.5)",
+    "topics": [
+      "John Adams",
+      "Federalists",
+      "Democratic-Republicans",
+      "Presidency"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to explain and analyze the major events during John Adams's presidency, focusing on economic, military, political, and socio-cultural aspects. Items may include multiple-choice questions, short answer prompts, or essay questions that encourage critical thinking and connections to the first party system.",
+    "essential_questions": [
+      "What were the key domestic and international events during John Adams's presidency?",
+      "How did the Federalist and Democratic-Republican parties influence American politics during this time?",
+      "In what ways did Adams's decisions shape the future of the United States?"
+    ],
+    "learning_targets": [
+      "I can identify major events of John Adams's presidency.",
+      "I can explain the significance of the first party system.",
+      "I can analyze the impact of political decisions on American society."
+    ],
+    "vocabulary": [
+      "Federalists",
+      "Democratic-Republicans",
+      "presidency",
+      "political parties",
+      "socio-cultural",
+      "military",
+      "economics",
+      "diplomacy"
+    ],
+    "sample_assessment": "Which of the following events occurred during John Adams's presidency? A) The signing of the Declaration of Independence B) The XYZ Affair C) The Louisiana Purchase D) The War of 1812"
+  },
+  {
+    "code": "SS.8.A.3.14",
+    "benchmark": "Explain major domestic and international economic, military, political, and socio-cultural events of Thomas Jefferson's presidency. The first party system: Federalists and Democratic-Republicans (8-M.5) The Marshall Court (8-M.6) The Louisiana Purchase (8-M.7)",
+    "topics": [
+      "Thomas Jefferson",
+      "Louisiana Purchase",
+      "Marshall Court",
+      "Presidency"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the major events and policies during Thomas Jefferson's presidency, including the Louisiana Purchase and the role of the Marshall Court. Items may include multiple-choice questions, short essays, or case studies that require students to evaluate the implications of these events.",
+    "essential_questions": [
+      "What were the significant achievements of Thomas Jefferson's presidency?",
+      "How did the Louisiana Purchase affect the United States?",
+      "What role did the Marshall Court play in shaping American law?"
+    ],
+    "learning_targets": [
+      "I can summarize key events of Thomas Jefferson's presidency.",
+      "I can describe the impact of the Louisiana Purchase.",
+      "I can analyze the decisions made by the Marshall Court."
+    ],
+    "vocabulary": [
+      "Louisiana Purchase",
+      "Marshall Court",
+      "presidency",
+      "Federalists",
+      "Democratic-Republicans",
+      "judicial review",
+      "expansion",
+      "territory"
+    ],
+    "sample_assessment": "What was one major outcome of the Louisiana Purchase? A) It doubled the size of the United States B) It led to the War of 1812 C) It established the first political party D) It ended slavery in the South"
+  },
+  {
+    "code": "SS.8.A.3.15",
+    "benchmark": "Examine this time period (1763-1815) from the perspective of historically under-represented groups (children, indentured servants, Native Americans, slaves, women, working class). Life as a colonist (8-K.1) Slavery in the South (8-O.5)",
+    "topics": [
+      "historically under-represented groups",
+      "colonial life",
+      "slavery",
+      "perspective"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should encourage students to examine the experiences of historically under-represented groups during the period from 1763 to 1815. Items may include analytical essays, projects, or presentations that require students to synthesize information from multiple perspectives.",
+    "essential_questions": [
+      "How did the experiences of different groups vary during this time period?",
+      "What role did slavery play in shaping the lives of individuals and communities?",
+      "How can we understand history from the perspectives of those who were marginalized?"
+    ],
+    "learning_targets": [
+      "I can analyze the experiences of historically under-represented groups.",
+      "I can compare and contrast the lives of different groups during this era.",
+      "I can articulate the impact of colonial policies on various populations."
+    ],
+    "vocabulary": [
+      "indentured servants",
+      "Native Americans",
+      "slavery",
+      "working class",
+      "colonial life",
+      "marginalization",
+      "perspective",
+      "historical narrative"
+    ],
+    "sample_assessment": "Which group faced significant challenges during the period from 1763 to 1815? A) Wealthy landowners B) Indentured servants C) British soldiers D) European immigrants"
+  },
+  {
+    "code": "SS.8.A.3.16",
+    "benchmark": "Examine key events in Florida history as each impacts this era of American history.",
+    "topics": [
+      "Florida history",
+      "American history",
+      "key events",
+      "impact"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on key events in Florida history and their significance in the broader context of American history. Items may include multiple-choice questions, timelines, or short essays that require students to connect Florida's history to national events.",
+    "essential_questions": [
+      "What were the key events in Florida history during this era?",
+      "How did Florida's history intersect with major American historical events?",
+      "In what ways did Florida contribute to the development of the United States?"
+    ],
+    "learning_targets": [
+      "I can identify significant events in Florida history.",
+      "I can explain the relationship between Florida's history and American history.",
+      "I can evaluate the impact of these events on Florida's development."
+    ],
+    "vocabulary": [
+      "Florida history",
+      "colonization",
+      "territorial expansion",
+      "American Revolution",
+      "Spanish Florida",
+      "statehood",
+      "conflict",
+      "migration"
+    ],
+    "sample_assessment": "Which event significantly impacted Florida's history during the early 1800s? A) The signing of the Treaty of Paris B) The acquisition of Florida by the United States C) The Civil War D) The Gold Rush"
+  },
+  {
     "code": "SS.8.A.4.1",
     "benchmark": "Examine the causes, course, and consequences of United States westward expansion and its growing diplomatic assertiveness (War of 1812, Convention of 1818, Adams-Onis Treaty, Missouri Compromise, Monroe Doctrine, Trail of Tears, Texas annexation, Manifest Destiny, Oregon Territory, Mexican American War/Mexican Cession, California Gold Rush, Compromise of 1850, Kansas Nebraska Act, Gadsden Purchase).",
     "topics": [
@@ -509,6 +966,569 @@
       "Kansas-Nebraska Act"
     ],
     "sample_assessment": "The belief that the United States was destined to expand across the continent was known as: A) Popular sovereignty B) Manifest Destiny C) Imperialism D) Isolationism"
+  },
+  {
+    "code": "SS.8.A.4.2",
+    "benchmark": "Describe the debate surrounding the spread of slavery into western territories and Florida. The abolitionists (8-O.6) Causes of the Civil War: Missouri Compromise to Bleeding Kansas (8-O.9)",
+    "topics": [
+      "slavery",
+      "western territories",
+      "abolitionists",
+      "Civil War"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should explore the debates surrounding the spread of slavery into western territories and Florida, including the perspectives of abolitionists. Items may include argumentative essays, debates, or case studies that require students to analyze differing viewpoints and historical context.",
+    "essential_questions": [
+      "What were the main arguments for and against the spread of slavery into western territories?",
+      "How did the abolitionist movement influence public opinion on slavery?",
+      "What events contributed to the tensions leading up to the Civil War?"
+    ],
+    "learning_targets": [
+      "I can describe the debate over the spread of slavery.",
+      "I can analyze the role of abolitionists in the fight against slavery.",
+      "I can evaluate the causes of the Civil War."
+    ],
+    "vocabulary": [
+      "abolitionists",
+      "slavery",
+      "Missouri Compromise",
+      "Bleeding Kansas",
+      "territorial expansion",
+      "Civil War",
+      "debate",
+      "conflict"
+    ],
+    "sample_assessment": "What was a key outcome of the Missouri Compromise? A) It abolished slavery B) It allowed slavery in all territories C) It maintained a balance between free and slave states D) It led to the Civil War"
+  },
+  {
+    "code": "SS.8.A.4.3",
+    "benchmark": "Examine the experiences and perspectives of significant individuals and groups during this era of American History. Jacksonian Democracy (8-N.1) Antebellum reform movements (8-O.3) Antebellum immigration (8-O.4) The abolitionists (8-O.6) Causes of the Civil War: Dred Scott to secession (8-O.10)",
+    "topics": [
+      "Jacksonian Democracy",
+      "Abolitionists",
+      "Civil War Causes"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze primary and secondary sources, compare different perspectives, and synthesize information about the experiences of significant individuals and groups during the specified historical era.",
+    "essential_questions": [
+      "How did the perspectives of different groups shape the events leading to the Civil War?",
+      "What were the key experiences of individuals during the Jacksonian era?",
+      "In what ways did antebellum reform movements influence American society?"
+    ],
+    "learning_targets": [
+      "I can identify key figures and their contributions during the Jacksonian era.",
+      "I can analyze the impact of abolitionist movements on American society.",
+      "I can explain the causes of the Civil War from multiple perspectives."
+    ],
+    "vocabulary": [
+      "Jacksonian Democracy",
+      "Abolitionists",
+      "Secession",
+      "Dred Scott",
+      "Reform Movements",
+      "Antebellum",
+      "Civil War",
+      "Immigration",
+      "Perspectives",
+      "Significant Individuals"
+    ],
+    "sample_assessment": "Which of the following best describes the impact of abolitionists on American society during the antebellum period? A) They promoted the expansion of slavery. B) They advocated for the immediate end of slavery. C) They remained neutral on the issue of slavery. D) They supported the Missouri Compromise."
+  },
+  {
+    "code": "SS.8.A.4.4",
+    "benchmark": "Discuss the impact of westward expansion on cultural practices and migration patterns of Native American and African slave populations. Indian Removal and the Trail of Tears (8-N.3) Causes of the Civil War: Missouri Compromise to Bleeding Kansas (8-O.9)",
+    "topics": [
+      "Westward Expansion",
+      "Native American Culture",
+      "Migration Patterns"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on students' ability to discuss and explain the effects of westward expansion on different cultural practices and migration patterns, utilizing maps and historical accounts.",
+    "essential_questions": [
+      "How did westward expansion affect Native American populations?",
+      "What were the cultural impacts of migration on African slave populations during this period?",
+      "In what ways did the Trail of Tears exemplify the consequences of westward expansion?"
+    ],
+    "learning_targets": [
+      "I can describe the impact of westward expansion on Native American cultures.",
+      "I can explain how migration patterns changed for African slaves during this era.",
+      "I can analyze the significance of the Trail of Tears in American history."
+    ],
+    "vocabulary": [
+      "Westward Expansion",
+      "Cultural Practices",
+      "Migration Patterns",
+      "Indian Removal",
+      "Trail of Tears",
+      "Native Americans",
+      "African Slaves",
+      "Consequences",
+      "Missouri Compromise",
+      "Bleeding Kansas"
+    ],
+    "sample_assessment": "What was one major consequence of westward expansion for Native American populations? A) Increased land ownership. B) Forced relocation. C) Cultural assimilation. D) Economic prosperity."
+  },
+  {
+    "code": "SS.8.A.4.5",
+    "benchmark": "Explain the causes, course, and consequences of the 19th century transportation revolution on the growth of the nation's economy. Industrial and Transportation Revolutions (8-O.1)",
+    "topics": [
+      "Transportation Revolution",
+      "Economic Growth",
+      "Industrialization"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to explain the relationships between the causes, course, and consequences of the transportation revolution, including its impact on the economy, using graphs and historical data.",
+    "essential_questions": [
+      "What were the key causes of the 19th-century transportation revolution?",
+      "How did transportation improvements contribute to economic growth?",
+      "What were the long-term consequences of the transportation revolution on American society?"
+    ],
+    "learning_targets": [
+      "I can explain the causes of the transportation revolution.",
+      "I can analyze how transportation changes influenced the economy.",
+      "I can describe the consequences of industrial growth during this period."
+    ],
+    "vocabulary": [
+      "Transportation Revolution",
+      "Economic Growth",
+      "Industrialization",
+      "Railroads",
+      "Canals",
+      "Inventions",
+      "Manufacturing",
+      "Trade",
+      "Infrastructure",
+      "Market Economy"
+    ],
+    "sample_assessment": "Which of the following was a significant outcome of the transportation revolution? A) Decreased trade between regions. B) Increased efficiency in moving goods. C) A decline in urban populations. D) The end of the Industrial Revolution."
+  },
+  {
+    "code": "SS.8.A.4.6",
+    "benchmark": "Identify technological improvements (inventions/inventors) that contributed to industrial growth. Industrial and Transportation Revolutions (8-O.1) Comparing the North and the South (8-O.2)",
+    "topics": [
+      "Technological Improvements",
+      "Industrial Growth",
+      "Inventions"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying key technological improvements and their inventors, as well as analyzing their contributions to industrial growth, using timelines and invention summaries.",
+    "essential_questions": [
+      "What technological improvements were significant during the industrial growth period?",
+      "Who were the key inventors, and what were their contributions?",
+      "How did these inventions impact the economy and society?"
+    ],
+    "learning_targets": [
+      "I can identify key inventions that contributed to industrial growth.",
+      "I can explain the role of inventors in technological advancements.",
+      "I can analyze the impact of these technologies on society."
+    ],
+    "vocabulary": [
+      "Inventions",
+      "Inventors",
+      "Industrial Growth",
+      "Technological Improvements",
+      "Manufacturing",
+      "Innovation",
+      "Economy",
+      "Steam Engine",
+      "Textile Industry",
+      "Transportation"
+    ],
+    "sample_assessment": "Which invention is credited with significantly improving textile production in the 19th century? A) The steam engine. B) The cotton gin. C) The telegraph. D) The spinning jenny."
+  },
+  {
+    "code": "SS.8.A.4.7",
+    "benchmark": "Explain the causes, course, and consequences (industrial growth, subsequent effect on children and women) of New England's textile industry.",
+    "topics": [
+      "Textile Industry",
+      "Industrial Growth",
+      "Social Impact"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to explain the causes, course, and consequences of New England's textile industry, including its social implications for children and women, using case studies and historical narratives.",
+    "essential_questions": [
+      "What were the primary causes of the growth of the textile industry in New England?",
+      "How did the textile industry affect the lives of children and women?",
+      "What were the broader social consequences of industrialization in this region?"
+    ],
+    "learning_targets": [
+      "I can explain the causes of the growth of the textile industry.",
+      "I can analyze the impact of the textile industry on children and women.",
+      "I can discuss the social consequences of industrial growth in New England."
+    ],
+    "vocabulary": [
+      "Textile Industry",
+      "Industrial Growth",
+      "Child Labor",
+      "Women Workers",
+      "Factory System",
+      "Social Consequences",
+      "New England",
+      "Economic Impact",
+      "Labor Movement",
+      "Working Conditions"
+    ],
+    "sample_assessment": "What was one significant consequence of the textile industry's growth in New England? A) Increased employment opportunities for men only. B) The decline of the factory system. C) The rise of child labor and women's employment. D) A decrease in textile production."
+  },
+  {
+    "code": "SS.8.A.4.8",
+    "benchmark": "Describe the influence of individuals on social and political developments of this era in American History. Jacksonian Democracy (8-N.1) Tariff, nullification, and bank war (8-N.2) Antebellum reform movements (8-O.3) The abolitionists (8-O.6)",
+    "topics": [
+      "Jacksonian Democracy",
+      "Political Influence",
+      "Social Developments"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze primary and secondary sources to evaluate the influence of key individuals on social and political developments during the era. Items may include scenario-based questions, requiring students to apply their knowledge to specific historical contexts.",
+    "essential_questions": [
+      "How did individual actions shape the political landscape during the Jacksonian era?",
+      "In what ways did social movements influence political decisions in early American history?",
+      "Who were the key figures in the Jacksonian Democracy, and what were their impacts?"
+    ],
+    "learning_targets": [
+      "I can identify key individuals who influenced social and political developments.",
+      "I can explain the significance of the Tariff, nullification, and bank war.",
+      "I can discuss the role of abolitionists in shaping societal views."
+    ],
+    "vocabulary": [
+      "Jacksonian Democracy",
+      "Tariff",
+      "Nullification",
+      "Bank War",
+      "Abolitionists",
+      "Reform Movements",
+      "Political Influence",
+      "Social Change"
+    ],
+    "sample_assessment": "Which individual is most closely associated with the concept of Jacksonian Democracy? A) John Quincy Adams B) Andrew Jackson C) Henry Clay D) Frederick Douglass"
+  },
+  {
+    "code": "SS.8.A.4.9",
+    "benchmark": "Analyze the causes, course and consequences of the Second Great Awakening on social reform movements. Antebellum reform movements (8-O.3)",
+    "topics": [
+      "Second Great Awakening",
+      "Social Reform",
+      "Religious Movements"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze the connections between the Second Great Awakening and various social reform movements. Items may include comparative analyses and cause-and-effect relationships.",
+    "essential_questions": [
+      "What were the main causes of the Second Great Awakening?",
+      "How did the Second Great Awakening influence social reform movements?",
+      "What role did religion play in shaping social change during this period?"
+    ],
+    "learning_targets": [
+      "I can analyze the causes of the Second Great Awakening.",
+      "I can evaluate the impact of the Second Great Awakening on social reform.",
+      "I can connect religious movements to broader social changes."
+    ],
+    "vocabulary": [
+      "Second Great Awakening",
+      "Social Reform",
+      "Revivalism",
+      "Abolition",
+      "Temperance",
+      "Education Reform",
+      "Women's Rights"
+    ],
+    "sample_assessment": "Which social reform movement was most directly influenced by the Second Great Awakening? A) Labor Movement B) Abolition Movement C) Industrialization D) Immigration Reform"
+  },
+  {
+    "code": "SS.8.A.4.10",
+    "benchmark": "Analyze the impact of technological advancements on the agricultural economy and slave labor. Comparing the North and the South (8-O.2)",
+    "topics": [
+      "Technological Advancements",
+      "Agricultural Economy",
+      "Slave Labor"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the analysis of technological advancements and their effects on agriculture and slave labor. Items may include data interpretation and scenario-based questions.",
+    "essential_questions": [
+      "How did technological advancements impact the agricultural economy in the South?",
+      "What were the implications of these advancements for slave labor?",
+      "In what ways did the North and South differ in their technological developments?"
+    ],
+    "learning_targets": [
+      "I can analyze the impact of technology on agriculture.",
+      "I can explain how technological changes affected slave labor.",
+      "I can compare the agricultural economies of the North and South."
+    ],
+    "vocabulary": [
+      "Technological Advancements",
+      "Agricultural Economy",
+      "Cotton Gin",
+      "Slave Labor",
+      "North vs South",
+      "Industrial Revolution",
+      "Economic Impact"
+    ],
+    "sample_assessment": "Which technological advancement had the greatest impact on the agricultural economy of the South? A) Steam Engine B) Cotton Gin C) Telegraph D) Railroad"
+  },
+  {
+    "code": "SS.8.A.4.11",
+    "benchmark": "Examine the aspects of slave culture including plantation life, resistance efforts, and the role of the slaves' spiritual system. Slavery in the South (8-O.5)",
+    "topics": [
+      "Slave Culture",
+      "Plantation Life",
+      "Resistance Efforts"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to examine various aspects of slave culture, including daily life, resistance efforts, and spiritual practices. Items may include source analysis and reflective writing prompts.",
+    "essential_questions": [
+      "What were the daily lives of slaves like on plantations?",
+      "How did slaves resist their conditions, both overtly and covertly?",
+      "What role did spirituality play in the lives of enslaved people?"
+    ],
+    "learning_targets": [
+      "I can describe aspects of plantation life for enslaved individuals.",
+      "I can analyze forms of resistance among enslaved people.",
+      "I can explain the significance of spirituality in slave culture."
+    ],
+    "vocabulary": [
+      "Plantation Life",
+      "Resistance",
+      "Spirituality",
+      "Slave Culture",
+      "Abolition",
+      "Cultural Practices",
+      "Daily Life"
+    ],
+    "sample_assessment": "What was one common form of resistance among enslaved people? A) Working harder B) Running away C) Accepting their situation D) Ignoring their culture"
+  },
+  {
+    "code": "SS.8.A.4.12",
+    "benchmark": "Examine the effects of the 1804 Haitian Revolution on the United States acquisition of the Louisiana Territory.",
+    "topics": [
+      "Haitian Revolution",
+      "Louisiana Territory",
+      "U.S. Expansion"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the analysis of the effects of the 1804 Haitian Revolution on U.S. territorial expansion. Items may include cause-and-effect relationships and historical interpretation.",
+    "essential_questions": [
+      "How did the Haitian Revolution influence U.S. policies regarding the Louisiana Territory?",
+      "What were the broader implications of the Haitian Revolution for American expansion?",
+      "In what ways did the revolution impact perceptions of slavery in the U.S.?"
+    ],
+    "learning_targets": [
+      "I can analyze the effects of the Haitian Revolution on U.S. expansion.",
+      "I can explain the significance of the Louisiana Territory acquisition.",
+      "I can discuss how the revolution influenced American views on slavery."
+    ],
+    "vocabulary": [
+      "Haitian Revolution",
+      "Louisiana Territory",
+      "U.S. Expansion",
+      "Slavery",
+      "Territorial Acquisition",
+      "Diplomatic Relations",
+      "Political Impact"
+    ],
+    "sample_assessment": "What was one significant outcome of the Haitian Revolution for the United States? A) Increased immigration B) Acquisition of the Louisiana Territory C) Strengthening of slavery D) Decreased agricultural production"
+  },
+  {
+    "code": "SS.8.A.4.13",
+    "benchmark": "Explain the consequences of landmark Supreme Court decisions (McCulloch v. Maryland [1819], Gibbons v. Ogden [1824], Cherokee Nation v. Georgia [1831], and Worcester v. Georgia [1832]) significant to this era of American history. The Marshall Court (8-M.6) Indian Removal and the Trail of Tears (8-N.3)",
+    "topics": [
+      "Supreme Court",
+      "Landmark Decisions",
+      "American History"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze the consequences of landmark Supreme Court decisions by comparing and contrasting their impacts on American society and governance. Items may include case studies, scenario-based questions, and require justification of answers with historical evidence.",
+    "essential_questions": [
+      "What were the key consequences of landmark Supreme Court decisions?",
+      "How did these decisions shape the legal landscape of the United States?",
+      "In what ways did the Marshall Court influence federal power?"
+    ],
+    "learning_targets": [
+      "I can explain the significance of McCulloch v. Maryland.",
+      "I can analyze the impact of Gibbons v. Ogden on interstate commerce.",
+      "I can discuss the implications of Cherokee Nation v. Georgia and Worcester v. Georgia."
+    ],
+    "vocabulary": [
+      "Supreme Court",
+      "McCulloch v. Maryland",
+      "Gibbons v. Ogden",
+      "Cherokee Nation v. Georgia",
+      "Worcester v. Georgia",
+      "Marshall Court",
+      "Federalism",
+      "Interstate Commerce",
+      "Indian Removal",
+      "Trail of Tears"
+    ],
+    "sample_assessment": "Which Supreme Court case established the principle of federal supremacy over state laws?"
+  },
+  {
+    "code": "SS.8.A.4.14",
+    "benchmark": "Examine the causes, course, and consequences of the women's suffrage movement (1848 Seneca Falls Convention, Declaration of Sentiments). Antebellum reform movements (8-O.3)",
+    "topics": [
+      "Women's Suffrage",
+      "Reform Movements",
+      "Social Change"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on evaluating the causes, key events, and outcomes of the women's suffrage movement. Items may include analyzing primary sources, comparing different reform movements, and discussing the significance of the Seneca Falls Convention.",
+    "essential_questions": [
+      "What were the main causes of the women's suffrage movement?",
+      "How did the Seneca Falls Convention influence the fight for women's rights?",
+      "What were the consequences of the women's suffrage movement on American society?"
+    ],
+    "learning_targets": [
+      "I can identify the key events of the women's suffrage movement.",
+      "I can explain the significance of the Declaration of Sentiments.",
+      "I can analyze the impact of antebellum reform movements on women's rights."
+    ],
+    "vocabulary": [
+      "Women's Suffrage",
+      "Seneca Falls Convention",
+      "Declaration of Sentiments",
+      "Reform Movements",
+      "Social Change",
+      "Activism",
+      "Equality",
+      "Voting Rights",
+      "19th Amendment",
+      "Civil Rights"
+    ],
+    "sample_assessment": "What was one major outcome of the Seneca Falls Convention?"
+  },
+  {
+    "code": "SS.8.A.4.15",
+    "benchmark": "Examine the causes, course, and consequences of literature movements (Transcendentalism) significant to this era of American history.",
+    "topics": [
+      "Literature Movements",
+      "Transcendentalism",
+      "Cultural Impact"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to examine the causes and effects of literature movements, particularly Transcendentalism. Items may include analysis of literary works, discussions of key figures, and the movement's influence on American thought and culture.",
+    "essential_questions": [
+      "What were the core beliefs of Transcendentalism?",
+      "How did Transcendentalism influence American literature and culture?",
+      "Who were the key figures in the Transcendentalist movement?"
+    ],
+    "learning_targets": [
+      "I can describe the main ideas of Transcendentalism.",
+      "I can analyze the works of key Transcendentalist authors.",
+      "I can discuss the cultural impact of Transcendentalism on American society."
+    ],
+    "vocabulary": [
+      "Transcendentalism",
+      "Ralph Waldo Emerson",
+      "Henry David Thoreau",
+      "Individualism",
+      "Nature",
+      "Self-Reliance",
+      "Civil Disobedience",
+      "Romanticism",
+      "Philosophy",
+      "Literature"
+    ],
+    "sample_assessment": "Which author is most closely associated with the philosophy of Transcendentalism?"
+  },
+  {
+    "code": "SS.8.A.4.16",
+    "benchmark": "Identify key ideas and influences of Jacksonian democracy. Jacksonian Democracy (8-N.1) Tariff, nullification, and bank war (8-N.2) Indian Removal and the Trail of Tears (8-N.3)",
+    "topics": [
+      "Jacksonian Democracy",
+      "Political Influence",
+      "American History"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on identifying and analyzing the key ideas and influences of Jacksonian democracy, including its political, social, and economic implications. Items may include case studies, debates, and require critical thinking about the era's policies and their effects.",
+    "essential_questions": [
+      "What were the key principles of Jacksonian democracy?",
+      "How did Jacksonian democracy affect the political landscape of the United States?",
+      "What were the consequences of the Indian Removal policies during this era?"
+    ],
+    "learning_targets": [
+      "I can explain the main ideas of Jacksonian democracy.",
+      "I can analyze the impact of the Tariff and Nullification Crisis.",
+      "I can discuss the implications of the Indian Removal Act."
+    ],
+    "vocabulary": [
+      "Jacksonian Democracy",
+      "Andrew Jackson",
+      "Tariff",
+      "Nullification",
+      "Bank War",
+      "Indian Removal",
+      "Trail of Tears",
+      "Political Parties",
+      "Suffrage",
+      "Populism"
+    ],
+    "sample_assessment": "What was a significant consequence of the Indian Removal Act during Jackson's presidency?"
+  },
+  {
+    "code": "SS.8.A.4.17",
+    "benchmark": "Examine key events and peoples in Florida history as each impacts this era of American history.",
+    "topics": [
+      "Florida History",
+      "Key Events",
+      "American History"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to identify and describe key events and figures in Florida history and their significance to the broader context of American history. Items may include timelines, short answer questions, and identification of historical figures.",
+    "essential_questions": [
+      "What key events in Florida history had a significant impact on American history?",
+      "Who were the influential figures in Florida's history during this era?",
+      "How did Florida's history intersect with national events?"
+    ],
+    "learning_targets": [
+      "I can identify important events in Florida history.",
+      "I can describe the contributions of key figures in Florida's past.",
+      "I can explain how Florida's history relates to broader American history."
+    ],
+    "vocabulary": [
+      "Florida History",
+      "Colonization",
+      "Seminole Wars",
+      "Spanish Florida",
+      "Statehood",
+      "Civil War",
+      "Reconstruction",
+      "Key Figures",
+      "Cultural Heritage",
+      "Historical Events"
+    ],
+    "sample_assessment": "Which event marked Florida's transition to statehood?"
+  },
+  {
+    "code": "SS.8.A.4.18",
+    "benchmark": "Examine the experiences and perspectives of different ethnic, national, and religious groups in Florida, explaining their contributions to Florida's and America's society and culture during the Territorial Period.",
+    "topics": [
+      "ethnic groups",
+      "Florida history",
+      "cultural contributions"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and compare the contributions of various ethnic, national, and religious groups in Florida during the Territorial Period. Items may include source-based questions, short answer responses, or essays that encourage critical thinking and synthesis of information.",
+    "essential_questions": [
+      "How did the experiences of different groups shape Florida's society?",
+      "What contributions did various ethnic and religious groups make to Florida's culture?",
+      "In what ways did the interactions between these groups influence American society?"
+    ],
+    "learning_targets": [
+      "I can identify different ethnic and religious groups in Florida during the Territorial Period.",
+      "I can explain the contributions of these groups to Florida's culture.",
+      "I can analyze the impact of these contributions on American society."
+    ],
+    "vocabulary": [
+      "Territorial Period",
+      "ethnicity",
+      "culture",
+      "contribution",
+      "perspective",
+      "diversity",
+      "heritage",
+      "influence",
+      "community",
+      "interaction"
+    ],
+    "sample_assessment": "Which group contributed significantly to Florida's agricultural development during the Territorial Period?"
   },
   {
     "code": "SS.8.A.5.1",
@@ -572,6 +1592,108 @@
     "sample_assessment": "The Dred Scott decision was significant because it: A) Freed all enslaved people B) Ruled that enslaved people were not citizens and had no rights C) Ended the slave trade D) Established the Underground Railroad"
   },
   {
+    "code": "SS.8.A.5.3",
+    "benchmark": "Explain major domestic and international economic, military, political, and socio-cultural events of Abraham Lincoln's presidency. The Civil War: the beginning of the war (8-P.1) The Civil War: Bull Run to the Emancipation Proclamation (8-P.2) The Civil War: Gettysburg to the election of 1864 (8-P.3) The Civil War: the conclusion of the war (8-P.4) Source analysis: the Gettysburg Address (8-P.5)",
+    "topics": [
+      "Abraham Lincoln",
+      "Civil War",
+      "political events"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on major events during Abraham Lincoln's presidency, requiring students to explain the significance of these events and their impact on the Civil War. Items may include multiple-choice questions, short essays, or source analysis tasks.",
+    "essential_questions": [
+      "What were the key events of Lincoln's presidency that influenced the Civil War?",
+      "How did Lincoln's decisions shape the outcome of the war?",
+      "In what ways did socio-cultural factors affect the political landscape during Lincoln's presidency?"
+    ],
+    "learning_targets": [
+      "I can explain major events during Lincoln's presidency.",
+      "I can analyze the impact of these events on the Civil War.",
+      "I can evaluate the socio-cultural influences on Lincoln's decisions."
+    ],
+    "vocabulary": [
+      "Emancipation Proclamation",
+      "Gettysburg Address",
+      "Civil War",
+      "politics",
+      "military",
+      "economics",
+      "socio-cultural",
+      "Union",
+      "Confederacy",
+      "leadership"
+    ],
+    "sample_assessment": "What was the significance of the Emancipation Proclamation during Lincoln's presidency?"
+  },
+  {
+    "code": "SS.8.A.5.4",
+    "benchmark": "Identify the division (Confederate and Union States, Border states, western territories) of the United States at the outbreak of the Civil War. The Civil War: the beginning of the war (8-P.1)",
+    "topics": [
+      "Civil War",
+      "Union vs. Confederate",
+      "geography"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to identify and describe the geographical divisions of the United States at the outbreak of the Civil War. Items may include map analysis, multiple-choice questions, or fill-in-the-blank exercises.",
+    "essential_questions": [
+      "What were the key geographical divisions in the United States at the start of the Civil War?",
+      "How did these divisions affect the strategies of both the Union and the Confederacy?",
+      "What role did border states play in the conflict?"
+    ],
+    "learning_targets": [
+      "I can identify the Union and Confederate states.",
+      "I can explain the significance of border states during the Civil War.",
+      "I can analyze how geography influenced the war."
+    ],
+    "vocabulary": [
+      "Union",
+      "Confederate",
+      "border states",
+      "territories",
+      "geography",
+      "division",
+      "conflict",
+      "strategy",
+      "civil war",
+      "map"
+    ],
+    "sample_assessment": "Which of the following states was considered a border state at the outbreak of the Civil War?"
+  },
+  {
+    "code": "SS.8.A.5.5",
+    "benchmark": "Compare Union and Confederate strengths and weaknesses.",
+    "topics": [
+      "Civil War",
+      "strengths and weaknesses",
+      "military strategy"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should ask students to compare and contrast the strengths and weaknesses of the Union and Confederate forces. Items may include Venn diagrams, short answer questions, or analytical essays.",
+    "essential_questions": [
+      "What were the key strengths of the Union and Confederate armies?",
+      "How did the weaknesses of each side affect their strategies during the war?",
+      "In what ways did resources play a role in the outcomes of battles?"
+    ],
+    "learning_targets": [
+      "I can compare the strengths of the Union and Confederate forces.",
+      "I can analyze the weaknesses of each side.",
+      "I can evaluate how these factors influenced military strategies."
+    ],
+    "vocabulary": [
+      "strengths",
+      "weaknesses",
+      "military strategy",
+      "resources",
+      "tactics",
+      "Union",
+      "Confederacy",
+      "battlefield",
+      "logistics",
+      "leadership"
+    ],
+    "sample_assessment": "Which of the following was a significant strength of the Union army during the Civil War?"
+  },
+  {
     "code": "SS.8.A.5.6",
     "benchmark": "Compare significant Civil War battles and events and their effects on civilian populations.",
     "topics": [
@@ -600,6 +1722,40 @@
       "casualty"
     ],
     "sample_assessment": "Sherman's March to the Sea was an example of: A) Defensive warfare B) Naval warfare C) Total war targeting civilian infrastructure D) Guerrilla warfare"
+  },
+  {
+    "code": "SS.8.A.5.7",
+    "benchmark": "Examine key events and peoples in Florida history as each impacts this era of American history.",
+    "topics": [
+      "Florida history",
+      "key events",
+      "American history"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to examine and analyze key events and figures in Florida history that impacted the broader context of American history. Items may include research projects, essays, or source analysis questions.",
+    "essential_questions": [
+      "What were the key events in Florida's history during the Civil War era?",
+      "How did Florida's involvement in the Civil War influence its development?",
+      "Who were the significant figures in Florida's history during this period?"
+    ],
+    "learning_targets": [
+      "I can identify key events in Florida's history related to the Civil War.",
+      "I can analyze the impact of these events on American history.",
+      "I can describe the contributions of significant figures from Florida."
+    ],
+    "vocabulary": [
+      "Florida history",
+      "Civil War",
+      "key events",
+      "significant figures",
+      "impact",
+      "development",
+      "era",
+      "context",
+      "contribution",
+      "analysis"
+    ],
+    "sample_assessment": "Which key event in Florida's history had a significant impact on the Civil War?"
   },
   {
     "code": "SS.8.A.5.8",

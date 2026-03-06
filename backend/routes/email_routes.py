@@ -828,11 +828,18 @@ def send_confirmation_emails():
                 if r.get('confirmation_sent'):
                     confirmed_filenames.add(r.get('filename', ''))
 
-        # Scan assignments folder for all submitted files
-        assignment_path = Path(assignments_folder)
+        # Stage files first — canonicalize and deduplicate
+        from backend.staging import stage_files, MANIFEST_NAME
+        try:
+            stage_result = stage_files(assignments_folder)
+            scan_path = Path(stage_result["staging_folder"])
+        except Exception:
+            scan_path = Path(assignments_folder)
+
         all_files = []
         for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
-            all_files.extend(assignment_path.glob(ext))
+            all_files.extend(scan_path.glob(ext))
+        all_files = [f for f in all_files if f.name != MANIFEST_NAME]
 
         # Load all saved assignment config titles (and aliases) for matching.
         # alias_to_title maps every name (title + aliases) back to the canonical title.
@@ -1069,12 +1076,20 @@ def pending_confirmations():
                 if r.get('confirmation_sent'):
                     confirmed_filenames.add(r.get('filename', ''))
 
-        # Scan folder — count unique students with pending (unconfirmed) files
-        assignment_path = Path(assignments_folder)
+        # Stage files first — canonicalize and deduplicate
+        from backend.staging import stage_files, MANIFEST_NAME
+        try:
+            stage_result = stage_files(assignments_folder)
+            scan_path = Path(stage_result["staging_folder"])
+        except Exception:
+            scan_path = Path(assignments_folder)
+
         pending_students = set()
         students_with_files = set()
         for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
-            for filepath in assignment_path.glob(ext):
+            for filepath in scan_path.glob(ext):
+                if filepath.name == MANIFEST_NAME:
+                    continue
                 filename = filepath.name
                 parsed = parse_filename(filename)
                 student_info = _find_in_roster(roster, parsed)

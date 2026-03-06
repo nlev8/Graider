@@ -1,5 +1,283 @@
 [
   {
+    "code": "ELA.6.C.1.2",
+    "benchmark": "Write personal or fictional narratives using narrative techniques, precise words and phrases, and figurative language.",
+    "topics": [
+      "Narrative Writing",
+      "Writing Techniques",
+      "Figurative Language"
+    ],
+    "dok": 3,
+    "item_specs": "Students write narratives that include narrative techniques (dialogue, pacing, description), precise language, and figurative language.",
+    "essential_questions": [
+      "What techniques make narratives engaging and effective?",
+      "How does word choice and figurative language enhance narrative writing?"
+    ],
+    "learning_targets": [
+      "I can use narrative techniques like dialogue, pacing, and description.",
+      "I can choose precise words and phrases to create effect.",
+      "I can incorporate figurative language in my narrative writing."
+    ],
+    "vocabulary": [
+      "narrative",
+      "dialogue",
+      "pacing",
+      "sensory details",
+      "figurative language",
+      "precise language",
+      "transitions",
+      "point of view"
+    ],
+    "sample_assessment": "Write a personal or fictional narrative about a time when a character faces an unexpected challenge. Use narrative techniques, precise words and phrases, and at least two examples of figurative language."
+  },
+  {
+    "code": "ELA.6.C.1.3",
+    "benchmark": "Write and support a claim using logical reasoning, relevant evidence from sources, elaboration, and a logical organizational structure with varied transitions.",
+    "topics": [
+      "Argumentative Writing",
+      "Claims",
+      "Evidence"
+    ],
+    "dok": 3,
+    "item_specs": "Students write arguments that include a clear claim, logical reasoning, relevant evidence, elaboration, and organized structure with transitions.",
+    "essential_questions": [
+      "How do writers construct effective arguments?",
+      "What makes evidence relevant and sufficient to support a claim?"
+    ],
+    "learning_targets": [
+      "I can write a clear, arguable claim.",
+      "I can support my claim with relevant evidence from sources.",
+      "I can use logical reasoning, elaboration, and varied transitions to organize my argument."
+    ],
+    "vocabulary": [
+      "claim",
+      "evidence",
+      "reasoning",
+      "elaboration",
+      "transitions",
+      "organizational structure",
+      "credible sources",
+      "counterargument"
+    ],
+    "sample_assessment": "Write an argumentative essay supporting a claim about whether schools should require uniforms. Use logical reasoning, evidence from at least two sources, and a clear organizational structure."
+  },
+  {
+    "code": "ELA.6.C.1.4",
+    "benchmark": "Write expository texts to explain and/or analyze information from multiple sources, using a logical organizational structure, relevant elaboration, and varied transitions.",
+    "topics": [
+      "Expository Writing",
+      "Informational Writing",
+      "Organization"
+    ],
+    "dok": 3,
+    "item_specs": "Students write expository texts that explain or analyze information from multiple sources with logical organization, elaboration, and transitions.",
+    "essential_questions": [
+      "How do writers organize expository texts effectively?",
+      "How do you synthesize information from multiple sources into a clear explanation?"
+    ],
+    "learning_targets": [
+      "I can write expository texts that explain or analyze information.",
+      "I can use information from multiple sources in my writing.",
+      "I can organize my writing logically with relevant elaboration and varied transitions."
+    ],
+    "vocabulary": [
+      "expository",
+      "explain",
+      "analyze",
+      "organizational structure",
+      "elaboration",
+      "transitions",
+      "synthesis",
+      "multiple sources"
+    ],
+    "sample_assessment": "Using information from the two provided articles, write an expository essay explaining how technology has changed the way students learn. Use a logical organizational structure and varied transitions."
+  },
+  {
+    "code": "ELA.6.C.1.5",
+    "benchmark": "Improve writing by planning, revising, and editing, considering feedback from adults and peers.",
+    "topics": [
+      "Writing Process",
+      "Revision",
+      "Editing"
+    ],
+    "dok": 2,
+    "item_specs": "Students demonstrate the ability to improve their writing through planning, revising for content and clarity, and editing for conventions.",
+    "essential_questions": [
+      "How does the writing process help improve the quality of writing?",
+      "How can feedback from others strengthen your writing?"
+    ],
+    "learning_targets": [
+      "I can plan my writing before drafting.",
+      "I can revise my writing for content, clarity, and organization.",
+      "I can edit my writing for grammar, punctuation, and spelling using feedback."
+    ],
+    "vocabulary": [
+      "planning",
+      "revising",
+      "editing",
+      "drafting",
+      "feedback",
+      "peer review",
+      "conventions",
+      "clarity"
+    ],
+    "sample_assessment": "Read the student draft below. Identify two areas where the writing could be improved and explain what revisions you would make and why."
+  },
+  {
+    "code": "ELA.6.C.2.1",
+    "benchmark": "Present information orally, in a logical sequence, using nonverbal cues, appropriate volume, clear pronunciation, and appropriate pacing.",
+    "topics": [
+      "Oral Presentation",
+      "Speaking Skills",
+      "Communication"
+    ],
+    "dok": 2,
+    "item_specs": "Students present information orally with logical sequence, effective nonverbal communication, and appropriate delivery techniques.",
+    "essential_questions": [
+      "What makes an oral presentation effective?",
+      "How do nonverbal cues and delivery techniques enhance communication?"
+    ],
+    "learning_targets": [
+      "I can present information in a logical sequence.",
+      "I can use nonverbal cues effectively during a presentation.",
+      "I can speak with appropriate volume, pronunciation, and pacing."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "nonverbal cues",
+      "volume",
+      "pronunciation",
+      "pacing",
+      "logical sequence",
+      "eye contact",
+      "body language"
+    ],
+    "sample_assessment": "Prepare and deliver a 2-3 minute oral presentation on a topic of your choice. Use a logical sequence, appropriate volume, clear pronunciation, and nonverbal cues to engage your audience."
+  },
+  {
+    "code": "ELA.6.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Mechanics"
+    ],
+    "dok": 1,
+    "item_specs": "Students demonstrate command of standard English grammar, punctuation, capitalization, and spelling conventions appropriate to grade 6.",
+    "essential_questions": [
+      "Why is it important to follow standard English conventions in writing?",
+      "How do grammar and mechanics affect the clarity of writing?"
+    ],
+    "learning_targets": [
+      "I can use correct grammar in my writing.",
+      "I can apply rules of punctuation and capitalization.",
+      "I can spell grade-level words correctly."
+    ],
+    "vocabulary": [
+      "grammar",
+      "punctuation",
+      "capitalization",
+      "spelling",
+      "conventions",
+      "subject-verb agreement",
+      "pronoun-antecedent agreement",
+      "comma"
+    ],
+    "sample_assessment": "Read the paragraph below. Which sentence contains a grammatical error? A) ... B) ... C) ... D) ..."
+  },
+  {
+    "code": "ELA.6.C.4.1",
+    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and refocusing the inquiry when appropriate.",
+    "topics": [
+      "Research",
+      "Inquiry",
+      "Source Evaluation"
+    ],
+    "dok": 3,
+    "item_specs": "Students conduct research using multiple reliable sources, evaluate source validity, and refocus inquiry as needed.",
+    "essential_questions": [
+      "How do you determine if a source is reliable and valid?",
+      "When should you refocus your research inquiry?"
+    ],
+    "learning_targets": [
+      "I can develop a research question and conduct focused research.",
+      "I can identify and use multiple reliable and valid sources.",
+      "I can refocus my inquiry when my research leads in a new direction."
+    ],
+    "vocabulary": [
+      "research",
+      "inquiry",
+      "reliable sources",
+      "valid sources",
+      "refocus",
+      "credibility",
+      "bibliography",
+      "citation"
+    ],
+    "sample_assessment": "You are researching the effects of pollution on ocean ecosystems. Identify which of the following sources would be MOST reliable and explain why."
+  },
+  {
+    "code": "ELA.6.C.5.1",
+    "benchmark": "Integrate diverse digital media to enhance audience engagement in oral or written tasks.",
+    "topics": [
+      "Digital Media",
+      "Technology",
+      "Multimedia"
+    ],
+    "dok": 2,
+    "item_specs": "Students integrate digital media (images, audio, video, graphics) to enhance audience engagement in presentations or written work.",
+    "essential_questions": [
+      "How can digital media enhance a presentation or written task?",
+      "What types of digital media are most effective for different audiences?"
+    ],
+    "learning_targets": [
+      "I can select appropriate digital media to enhance my message.",
+      "I can integrate digital media into oral or written tasks.",
+      "I can evaluate the effectiveness of digital media for audience engagement."
+    ],
+    "vocabulary": [
+      "digital media",
+      "multimedia",
+      "audience engagement",
+      "graphics",
+      "audio",
+      "video",
+      "infographic",
+      "visual aid"
+    ],
+    "sample_assessment": "Plan a multimedia presentation on a science topic. Describe at least three types of digital media you would include and explain how each would enhance audience engagement."
+  },
+  {
+    "code": "ELA.6.C.5.2",
+    "benchmark": "Use digital tools to produce writing.",
+    "topics": [
+      "Digital Writing",
+      "Technology",
+      "Writing Production"
+    ],
+    "dok": 1,
+    "item_specs": "Students use digital tools (word processors, collaborative platforms, publishing tools) to produce and share writing.",
+    "essential_questions": [
+      "How do digital tools support the writing process?",
+      "What digital tools are most useful for producing and sharing writing?"
+    ],
+    "learning_targets": [
+      "I can use word processing software to produce writing.",
+      "I can use digital tools to collaborate on writing.",
+      "I can use technology to publish and share my writing."
+    ],
+    "vocabulary": [
+      "digital tools",
+      "word processor",
+      "collaboration",
+      "publishing",
+      "formatting",
+      "document",
+      "revision tools"
+    ],
+    "sample_assessment": "Using a digital tool of your choice, produce a final draft of your essay. Include proper formatting such as headings, font consistency, and spacing."
+  },
+  {
     "code": "ELA.6.R.1.1",
     "benchmark": "Analyze how the interaction between characters, setting, and plot develops the conflict in a literary text.",
     "topics": [
@@ -373,284 +651,6 @@
     "sample_assessment": "Which sentence from the speech is the BEST example of an appeal to pathos? A) ... B) ... C) ... D) ..."
   },
   {
-    "code": "ELA.6.C.1.2",
-    "benchmark": "Write personal or fictional narratives using narrative techniques, precise words and phrases, and figurative language.",
-    "topics": [
-      "Narrative Writing",
-      "Writing Techniques",
-      "Figurative Language"
-    ],
-    "dok": 3,
-    "item_specs": "Students write narratives that include narrative techniques (dialogue, pacing, description), precise language, and figurative language.",
-    "essential_questions": [
-      "What techniques make narratives engaging and effective?",
-      "How does word choice and figurative language enhance narrative writing?"
-    ],
-    "learning_targets": [
-      "I can use narrative techniques like dialogue, pacing, and description.",
-      "I can choose precise words and phrases to create effect.",
-      "I can incorporate figurative language in my narrative writing."
-    ],
-    "vocabulary": [
-      "narrative",
-      "dialogue",
-      "pacing",
-      "sensory details",
-      "figurative language",
-      "precise language",
-      "transitions",
-      "point of view"
-    ],
-    "sample_assessment": "Write a personal or fictional narrative about a time when a character faces an unexpected challenge. Use narrative techniques, precise words and phrases, and at least two examples of figurative language."
-  },
-  {
-    "code": "ELA.6.C.1.3",
-    "benchmark": "Write and support a claim using logical reasoning, relevant evidence from sources, elaboration, and a logical organizational structure with varied transitions.",
-    "topics": [
-      "Argumentative Writing",
-      "Claims",
-      "Evidence"
-    ],
-    "dok": 3,
-    "item_specs": "Students write arguments that include a clear claim, logical reasoning, relevant evidence, elaboration, and organized structure with transitions.",
-    "essential_questions": [
-      "How do writers construct effective arguments?",
-      "What makes evidence relevant and sufficient to support a claim?"
-    ],
-    "learning_targets": [
-      "I can write a clear, arguable claim.",
-      "I can support my claim with relevant evidence from sources.",
-      "I can use logical reasoning, elaboration, and varied transitions to organize my argument."
-    ],
-    "vocabulary": [
-      "claim",
-      "evidence",
-      "reasoning",
-      "elaboration",
-      "transitions",
-      "organizational structure",
-      "credible sources",
-      "counterargument"
-    ],
-    "sample_assessment": "Write an argumentative essay supporting a claim about whether schools should require uniforms. Use logical reasoning, evidence from at least two sources, and a clear organizational structure."
-  },
-  {
-    "code": "ELA.6.C.1.4",
-    "benchmark": "Write expository texts to explain and/or analyze information from multiple sources, using a logical organizational structure, relevant elaboration, and varied transitions.",
-    "topics": [
-      "Expository Writing",
-      "Informational Writing",
-      "Organization"
-    ],
-    "dok": 3,
-    "item_specs": "Students write expository texts that explain or analyze information from multiple sources with logical organization, elaboration, and transitions.",
-    "essential_questions": [
-      "How do writers organize expository texts effectively?",
-      "How do you synthesize information from multiple sources into a clear explanation?"
-    ],
-    "learning_targets": [
-      "I can write expository texts that explain or analyze information.",
-      "I can use information from multiple sources in my writing.",
-      "I can organize my writing logically with relevant elaboration and varied transitions."
-    ],
-    "vocabulary": [
-      "expository",
-      "explain",
-      "analyze",
-      "organizational structure",
-      "elaboration",
-      "transitions",
-      "synthesis",
-      "multiple sources"
-    ],
-    "sample_assessment": "Using information from the two provided articles, write an expository essay explaining how technology has changed the way students learn. Use a logical organizational structure and varied transitions."
-  },
-  {
-    "code": "ELA.6.C.1.5",
-    "benchmark": "Improve writing by planning, revising, and editing, considering feedback from adults and peers.",
-    "topics": [
-      "Writing Process",
-      "Revision",
-      "Editing"
-    ],
-    "dok": 2,
-    "item_specs": "Students demonstrate the ability to improve their writing through planning, revising for content and clarity, and editing for conventions.",
-    "essential_questions": [
-      "How does the writing process help improve the quality of writing?",
-      "How can feedback from others strengthen your writing?"
-    ],
-    "learning_targets": [
-      "I can plan my writing before drafting.",
-      "I can revise my writing for content, clarity, and organization.",
-      "I can edit my writing for grammar, punctuation, and spelling using feedback."
-    ],
-    "vocabulary": [
-      "planning",
-      "revising",
-      "editing",
-      "drafting",
-      "feedback",
-      "peer review",
-      "conventions",
-      "clarity"
-    ],
-    "sample_assessment": "Read the student draft below. Identify two areas where the writing could be improved and explain what revisions you would make and why."
-  },
-  {
-    "code": "ELA.6.C.2.1",
-    "benchmark": "Present information orally, in a logical sequence, using nonverbal cues, appropriate volume, clear pronunciation, and appropriate pacing.",
-    "topics": [
-      "Oral Presentation",
-      "Speaking Skills",
-      "Communication"
-    ],
-    "dok": 2,
-    "item_specs": "Students present information orally with logical sequence, effective nonverbal communication, and appropriate delivery techniques.",
-    "essential_questions": [
-      "What makes an oral presentation effective?",
-      "How do nonverbal cues and delivery techniques enhance communication?"
-    ],
-    "learning_targets": [
-      "I can present information in a logical sequence.",
-      "I can use nonverbal cues effectively during a presentation.",
-      "I can speak with appropriate volume, pronunciation, and pacing."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "nonverbal cues",
-      "volume",
-      "pronunciation",
-      "pacing",
-      "logical sequence",
-      "eye contact",
-      "body language"
-    ],
-    "sample_assessment": "Prepare and deliver a 2-3 minute oral presentation on a topic of your choice. Use a logical sequence, appropriate volume, clear pronunciation, and nonverbal cues to engage your audience."
-  },
-  {
-    "code": "ELA.6.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Mechanics"
-    ],
-    "dok": 1,
-    "item_specs": "Students demonstrate command of standard English grammar, punctuation, capitalization, and spelling conventions appropriate to grade 6.",
-    "essential_questions": [
-      "Why is it important to follow standard English conventions in writing?",
-      "How do grammar and mechanics affect the clarity of writing?"
-    ],
-    "learning_targets": [
-      "I can use correct grammar in my writing.",
-      "I can apply rules of punctuation and capitalization.",
-      "I can spell grade-level words correctly."
-    ],
-    "vocabulary": [
-      "grammar",
-      "punctuation",
-      "capitalization",
-      "spelling",
-      "conventions",
-      "subject-verb agreement",
-      "pronoun-antecedent agreement",
-      "comma"
-    ],
-    "sample_assessment": "Read the paragraph below. Which sentence contains a grammatical error? A) ... B) ... C) ... D) ..."
-  },
-  {
-    "code": "ELA.6.C.4.1",
-    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and refocusing the inquiry when appropriate.",
-    "topics": [
-      "Research",
-      "Inquiry",
-      "Source Evaluation"
-    ],
-    "dok": 3,
-    "item_specs": "Students conduct research using multiple reliable sources, evaluate source validity, and refocus inquiry as needed.",
-    "essential_questions": [
-      "How do you determine if a source is reliable and valid?",
-      "When should you refocus your research inquiry?"
-    ],
-    "learning_targets": [
-      "I can develop a research question and conduct focused research.",
-      "I can identify and use multiple reliable and valid sources.",
-      "I can refocus my inquiry when my research leads in a new direction."
-    ],
-    "vocabulary": [
-      "research",
-      "inquiry",
-      "reliable sources",
-      "valid sources",
-      "refocus",
-      "credibility",
-      "bibliography",
-      "citation"
-    ],
-    "sample_assessment": "You are researching the effects of pollution on ocean ecosystems. Identify which of the following sources would be MOST reliable and explain why."
-  },
-  {
-    "code": "ELA.6.C.5.1",
-    "benchmark": "Integrate diverse digital media to enhance audience engagement in oral or written tasks.",
-    "topics": [
-      "Digital Media",
-      "Technology",
-      "Multimedia"
-    ],
-    "dok": 2,
-    "item_specs": "Students integrate digital media (images, audio, video, graphics) to enhance audience engagement in presentations or written work.",
-    "essential_questions": [
-      "How can digital media enhance a presentation or written task?",
-      "What types of digital media are most effective for different audiences?"
-    ],
-    "learning_targets": [
-      "I can select appropriate digital media to enhance my message.",
-      "I can integrate digital media into oral or written tasks.",
-      "I can evaluate the effectiveness of digital media for audience engagement."
-    ],
-    "vocabulary": [
-      "digital media",
-      "multimedia",
-      "audience engagement",
-      "graphics",
-      "audio",
-      "video",
-      "infographic",
-      "visual aid"
-    ],
-    "sample_assessment": "Plan a multimedia presentation on a science topic. Describe at least three types of digital media you would include and explain how each would enhance audience engagement."
-  },
-  {
-    "code": "ELA.6.C.5.2",
-    "benchmark": "Use digital tools to produce writing.",
-    "topics": [
-      "Digital Writing",
-      "Technology",
-      "Writing Production"
-    ],
-    "dok": 1,
-    "item_specs": "Students use digital tools (word processors, collaborative platforms, publishing tools) to produce and share writing.",
-    "essential_questions": [
-      "How do digital tools support the writing process?",
-      "What digital tools are most useful for producing and sharing writing?"
-    ],
-    "learning_targets": [
-      "I can use word processing software to produce writing.",
-      "I can use digital tools to collaborate on writing.",
-      "I can use technology to publish and share my writing."
-    ],
-    "vocabulary": [
-      "digital tools",
-      "word processor",
-      "collaboration",
-      "publishing",
-      "formatting",
-      "document",
-      "revision tools"
-    ],
-    "sample_assessment": "Using a digital tool of your choice, produce a final draft of your essay. Include proper formatting such as headings, font consistency, and spacing."
-  },
-  {
     "code": "ELA.6.V.1.1",
     "benchmark": "Integrate academic vocabulary appropriate to grade level in speaking and writing.",
     "topics": [
@@ -743,6 +743,282 @@
       "antonym"
     ],
     "sample_assessment": "Read the sentence: 'The politician's speech was filled with lofty promises.' What does the word 'lofty' MOST likely suggest in this context? A) Extremely tall B) Grand but possibly unrealistic C) Simple and clear D) Boring"
+  },
+  {
+    "code": "ELA.7.C.1.2",
+    "benchmark": "Write personal or fictional narratives using narrative techniques, a recognizable point of view, precise words and phrases, and figurative language.",
+    "topics": [
+      "Narrative Writing",
+      "Point of View",
+      "Writing Techniques"
+    ],
+    "dok": 3,
+    "item_specs": "Students write narratives using techniques such as dialogue, pacing, and description, with a clear point of view and effective use of precise language and figurative language.",
+    "essential_questions": [
+      "How does a recognizable point of view strengthen narrative writing?",
+      "What narrative techniques make a story engaging and effective?"
+    ],
+    "learning_targets": [
+      "I can write narratives with a clear and consistent point of view.",
+      "I can use narrative techniques such as dialogue, pacing, and description.",
+      "I can use precise words, phrases, and figurative language effectively."
+    ],
+    "vocabulary": [
+      "narrative",
+      "point of view",
+      "dialogue",
+      "pacing",
+      "description",
+      "figurative language",
+      "precise language",
+      "sensory details"
+    ],
+    "sample_assessment": "Write a fictional narrative from the first-person point of view about a character who discovers something unexpected. Use narrative techniques, precise words, and figurative language."
+  },
+  {
+    "code": "ELA.7.C.1.3",
+    "benchmark": "Write and support a claim using logical reasoning, relevant evidence from sources, elaboration, a logical organizational structure with varied transitions, and acknowledging at least one counterclaim.",
+    "topics": [
+      "Argumentative Writing",
+      "Claims",
+      "Counterclaim"
+    ],
+    "dok": 3,
+    "item_specs": "Students write arguments with claims supported by reasoning and evidence, a logical structure with transitions, and acknowledgment of at least one counterclaim.",
+    "essential_questions": [
+      "How does acknowledging a counterclaim strengthen an argument?",
+      "What is the role of elaboration in argumentative writing?"
+    ],
+    "learning_targets": [
+      "I can write and support a clear claim with logical reasoning.",
+      "I can use relevant evidence from sources and elaboration.",
+      "I can acknowledge and respond to at least one counterclaim."
+    ],
+    "vocabulary": [
+      "claim",
+      "counterclaim",
+      "reasoning",
+      "evidence",
+      "elaboration",
+      "transitions",
+      "organizational structure",
+      "rebuttal"
+    ],
+    "sample_assessment": "Write an argumentative essay about whether students should be allowed to use phones in school. Support your claim with evidence, use a logical structure, and acknowledge at least one counterclaim."
+  },
+  {
+    "code": "ELA.7.C.1.4",
+    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using relevant supporting details and a logical organizational structure with varied transitions.",
+    "topics": [
+      "Expository Writing",
+      "Analysis",
+      "Organization"
+    ],
+    "dok": 3,
+    "item_specs": "Students write expository texts that explain and analyze information from multiple sources using relevant details, logical organization, and varied transitions.",
+    "essential_questions": [
+      "How do you analyze and synthesize information from multiple sources?",
+      "What organizational patterns best support expository writing?"
+    ],
+    "learning_targets": [
+      "I can write expository texts that explain and analyze information.",
+      "I can synthesize information from multiple sources.",
+      "I can organize my writing logically with relevant supporting details and varied transitions."
+    ],
+    "vocabulary": [
+      "expository",
+      "analysis",
+      "synthesis",
+      "organizational structure",
+      "supporting details",
+      "transitions",
+      "multiple sources"
+    ],
+    "sample_assessment": "Using the three provided sources, write an expository essay analyzing the causes and effects of deforestation. Use a logical organizational structure and varied transitions."
+  },
+  {
+    "code": "ELA.7.C.1.5",
+    "benchmark": "Improve writing by planning, revising, and editing, considering feedback from adults and peers.",
+    "topics": [
+      "Writing Process",
+      "Revision",
+      "Editing"
+    ],
+    "dok": 2,
+    "item_specs": "Students demonstrate improvement of writing through planning, revising for content and clarity, and editing for conventions based on feedback.",
+    "essential_questions": [
+      "How does feedback improve the quality of writing?",
+      "What strategies help writers effectively revise and edit their work?"
+    ],
+    "learning_targets": [
+      "I can plan my writing using prewriting strategies.",
+      "I can revise my writing for content, organization, and clarity.",
+      "I can edit my writing for conventions using feedback from adults and peers."
+    ],
+    "vocabulary": [
+      "planning",
+      "revising",
+      "editing",
+      "feedback",
+      "peer review",
+      "conventions",
+      "clarity",
+      "coherence",
+      "drafting"
+    ],
+    "sample_assessment": "Review the student draft below. Using the peer feedback provided, identify three specific revisions and two edits that would improve the writing."
+  },
+  {
+    "code": "ELA.7.C.2.1",
+    "benchmark": "Present information orally, in a logical sequence, emphasizing key points that support the central idea.",
+    "topics": [
+      "Oral Presentation",
+      "Speaking Skills",
+      "Central Idea"
+    ],
+    "dok": 2,
+    "item_specs": "Students present information orally in a logical sequence, emphasizing key points and supporting the central idea of the presentation.",
+    "essential_questions": [
+      "How do you organize an oral presentation effectively?",
+      "How do you emphasize key points to support your central idea?"
+    ],
+    "learning_targets": [
+      "I can organize information in a logical sequence for oral presentation.",
+      "I can emphasize key points that support my central idea.",
+      "I can use appropriate speaking skills to engage my audience."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "logical sequence",
+      "key points",
+      "central idea",
+      "emphasis",
+      "delivery",
+      "audience engagement"
+    ],
+    "sample_assessment": "Prepare and deliver a 3-minute presentation on a current event. Organize your information logically and emphasize at least three key points that support your central idea."
+  },
+  {
+    "code": "ELA.7.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Mechanics"
+    ],
+    "dok": 1,
+    "item_specs": "Students demonstrate command of standard English grammar, punctuation, capitalization, and spelling conventions appropriate to grade 7.",
+    "essential_questions": [
+      "Why is it important to use correct grammar and conventions?",
+      "How do conventions support clear communication?"
+    ],
+    "learning_targets": [
+      "I can use correct grammar in my writing and speaking.",
+      "I can apply grade-level rules of punctuation and capitalization.",
+      "I can spell grade-level words correctly."
+    ],
+    "vocabulary": [
+      "grammar",
+      "punctuation",
+      "capitalization",
+      "spelling",
+      "conventions",
+      "clause",
+      "phrase",
+      "modifier",
+      "dangling modifier"
+    ],
+    "sample_assessment": "Read the paragraph below. Select the revision that corrects the error in grammar, punctuation, or spelling."
+  },
+  {
+    "code": "ELA.7.C.4.1",
+    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and generating additional questions for further research.",
+    "topics": [
+      "Research",
+      "Inquiry",
+      "Source Evaluation"
+    ],
+    "dok": 3,
+    "item_specs": "Students conduct research using multiple reliable sources, generate additional research questions, and evaluate the validity of sources.",
+    "essential_questions": [
+      "How do you evaluate the reliability and validity of sources?",
+      "How does research generate new questions for further inquiry?"
+    ],
+    "learning_targets": [
+      "I can develop a research question and conduct focused research.",
+      "I can draw on multiple reliable and valid sources.",
+      "I can generate additional questions for further research."
+    ],
+    "vocabulary": [
+      "research",
+      "inquiry",
+      "reliable sources",
+      "valid sources",
+      "additional questions",
+      "credibility",
+      "primary source",
+      "secondary source"
+    ],
+    "sample_assessment": "Research a topic of your choice using at least three reliable sources. Write a brief research report and include two additional questions your research generated."
+  },
+  {
+    "code": "ELA.7.C.5.1",
+    "benchmark": "Integrate diverse digital media to enhance audience engagement in oral or written tasks.",
+    "topics": [
+      "Digital Media",
+      "Technology",
+      "Multimedia"
+    ],
+    "dok": 2,
+    "item_specs": "Students integrate digital media elements to enhance engagement in presentations and written work.",
+    "essential_questions": [
+      "How can digital media enhance audience engagement?",
+      "What types of digital media are most effective for different purposes?"
+    ],
+    "learning_targets": [
+      "I can select diverse digital media to enhance my message.",
+      "I can integrate digital media effectively in oral or written tasks.",
+      "I can evaluate the impact of digital media on audience engagement."
+    ],
+    "vocabulary": [
+      "digital media",
+      "multimedia",
+      "audience engagement",
+      "visual aids",
+      "interactive media",
+      "presentation software"
+    ],
+    "sample_assessment": "Create a multimedia presentation on a social issue. Integrate at least three different types of digital media and explain how each enhances audience engagement."
+  },
+  {
+    "code": "ELA.7.C.5.2",
+    "benchmark": "Use digital tools to produce writing.",
+    "topics": [
+      "Digital Writing",
+      "Technology",
+      "Writing Production"
+    ],
+    "dok": 1,
+    "item_specs": "Students use digital tools to draft, revise, edit, and produce polished written work.",
+    "essential_questions": [
+      "How do digital tools improve the writing process?",
+      "What digital tools are most effective for different stages of writing?"
+    ],
+    "learning_targets": [
+      "I can use digital tools to produce and refine my writing.",
+      "I can collaborate with others using digital writing tools.",
+      "I can use technology to publish and share my writing."
+    ],
+    "vocabulary": [
+      "digital tools",
+      "word processor",
+      "collaboration",
+      "publishing",
+      "formatting",
+      "cloud document",
+      "revision history"
+    ],
+    "sample_assessment": "Using a digital writing tool, produce a final draft of your research report. Use features such as spell check, formatting tools, and comment features for peer review."
   },
   {
     "code": "ELA.7.R.1.1",
@@ -1121,282 +1397,6 @@
     "sample_assessment": "Identify a rhetorical device used in the speech. Explain its meaning and significance in helping the speaker convey their message."
   },
   {
-    "code": "ELA.7.C.1.2",
-    "benchmark": "Write personal or fictional narratives using narrative techniques, a recognizable point of view, precise words and phrases, and figurative language.",
-    "topics": [
-      "Narrative Writing",
-      "Point of View",
-      "Writing Techniques"
-    ],
-    "dok": 3,
-    "item_specs": "Students write narratives using techniques such as dialogue, pacing, and description, with a clear point of view and effective use of precise language and figurative language.",
-    "essential_questions": [
-      "How does a recognizable point of view strengthen narrative writing?",
-      "What narrative techniques make a story engaging and effective?"
-    ],
-    "learning_targets": [
-      "I can write narratives with a clear and consistent point of view.",
-      "I can use narrative techniques such as dialogue, pacing, and description.",
-      "I can use precise words, phrases, and figurative language effectively."
-    ],
-    "vocabulary": [
-      "narrative",
-      "point of view",
-      "dialogue",
-      "pacing",
-      "description",
-      "figurative language",
-      "precise language",
-      "sensory details"
-    ],
-    "sample_assessment": "Write a fictional narrative from the first-person point of view about a character who discovers something unexpected. Use narrative techniques, precise words, and figurative language."
-  },
-  {
-    "code": "ELA.7.C.1.3",
-    "benchmark": "Write and support a claim using logical reasoning, relevant evidence from sources, elaboration, a logical organizational structure with varied transitions, and acknowledging at least one counterclaim.",
-    "topics": [
-      "Argumentative Writing",
-      "Claims",
-      "Counterclaim"
-    ],
-    "dok": 3,
-    "item_specs": "Students write arguments with claims supported by reasoning and evidence, a logical structure with transitions, and acknowledgment of at least one counterclaim.",
-    "essential_questions": [
-      "How does acknowledging a counterclaim strengthen an argument?",
-      "What is the role of elaboration in argumentative writing?"
-    ],
-    "learning_targets": [
-      "I can write and support a clear claim with logical reasoning.",
-      "I can use relevant evidence from sources and elaboration.",
-      "I can acknowledge and respond to at least one counterclaim."
-    ],
-    "vocabulary": [
-      "claim",
-      "counterclaim",
-      "reasoning",
-      "evidence",
-      "elaboration",
-      "transitions",
-      "organizational structure",
-      "rebuttal"
-    ],
-    "sample_assessment": "Write an argumentative essay about whether students should be allowed to use phones in school. Support your claim with evidence, use a logical structure, and acknowledge at least one counterclaim."
-  },
-  {
-    "code": "ELA.7.C.1.4",
-    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using relevant supporting details and a logical organizational structure with varied transitions.",
-    "topics": [
-      "Expository Writing",
-      "Analysis",
-      "Organization"
-    ],
-    "dok": 3,
-    "item_specs": "Students write expository texts that explain and analyze information from multiple sources using relevant details, logical organization, and varied transitions.",
-    "essential_questions": [
-      "How do you analyze and synthesize information from multiple sources?",
-      "What organizational patterns best support expository writing?"
-    ],
-    "learning_targets": [
-      "I can write expository texts that explain and analyze information.",
-      "I can synthesize information from multiple sources.",
-      "I can organize my writing logically with relevant supporting details and varied transitions."
-    ],
-    "vocabulary": [
-      "expository",
-      "analysis",
-      "synthesis",
-      "organizational structure",
-      "supporting details",
-      "transitions",
-      "multiple sources"
-    ],
-    "sample_assessment": "Using the three provided sources, write an expository essay analyzing the causes and effects of deforestation. Use a logical organizational structure and varied transitions."
-  },
-  {
-    "code": "ELA.7.C.1.5",
-    "benchmark": "Improve writing by planning, revising, and editing, considering feedback from adults and peers.",
-    "topics": [
-      "Writing Process",
-      "Revision",
-      "Editing"
-    ],
-    "dok": 2,
-    "item_specs": "Students demonstrate improvement of writing through planning, revising for content and clarity, and editing for conventions based on feedback.",
-    "essential_questions": [
-      "How does feedback improve the quality of writing?",
-      "What strategies help writers effectively revise and edit their work?"
-    ],
-    "learning_targets": [
-      "I can plan my writing using prewriting strategies.",
-      "I can revise my writing for content, organization, and clarity.",
-      "I can edit my writing for conventions using feedback from adults and peers."
-    ],
-    "vocabulary": [
-      "planning",
-      "revising",
-      "editing",
-      "feedback",
-      "peer review",
-      "conventions",
-      "clarity",
-      "coherence",
-      "drafting"
-    ],
-    "sample_assessment": "Review the student draft below. Using the peer feedback provided, identify three specific revisions and two edits that would improve the writing."
-  },
-  {
-    "code": "ELA.7.C.2.1",
-    "benchmark": "Present information orally, in a logical sequence, emphasizing key points that support the central idea.",
-    "topics": [
-      "Oral Presentation",
-      "Speaking Skills",
-      "Central Idea"
-    ],
-    "dok": 2,
-    "item_specs": "Students present information orally in a logical sequence, emphasizing key points and supporting the central idea of the presentation.",
-    "essential_questions": [
-      "How do you organize an oral presentation effectively?",
-      "How do you emphasize key points to support your central idea?"
-    ],
-    "learning_targets": [
-      "I can organize information in a logical sequence for oral presentation.",
-      "I can emphasize key points that support my central idea.",
-      "I can use appropriate speaking skills to engage my audience."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "logical sequence",
-      "key points",
-      "central idea",
-      "emphasis",
-      "delivery",
-      "audience engagement"
-    ],
-    "sample_assessment": "Prepare and deliver a 3-minute presentation on a current event. Organize your information logically and emphasize at least three key points that support your central idea."
-  },
-  {
-    "code": "ELA.7.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Mechanics"
-    ],
-    "dok": 1,
-    "item_specs": "Students demonstrate command of standard English grammar, punctuation, capitalization, and spelling conventions appropriate to grade 7.",
-    "essential_questions": [
-      "Why is it important to use correct grammar and conventions?",
-      "How do conventions support clear communication?"
-    ],
-    "learning_targets": [
-      "I can use correct grammar in my writing and speaking.",
-      "I can apply grade-level rules of punctuation and capitalization.",
-      "I can spell grade-level words correctly."
-    ],
-    "vocabulary": [
-      "grammar",
-      "punctuation",
-      "capitalization",
-      "spelling",
-      "conventions",
-      "clause",
-      "phrase",
-      "modifier",
-      "dangling modifier"
-    ],
-    "sample_assessment": "Read the paragraph below. Select the revision that corrects the error in grammar, punctuation, or spelling."
-  },
-  {
-    "code": "ELA.7.C.4.1",
-    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and generating additional questions for further research.",
-    "topics": [
-      "Research",
-      "Inquiry",
-      "Source Evaluation"
-    ],
-    "dok": 3,
-    "item_specs": "Students conduct research using multiple reliable sources, generate additional research questions, and evaluate the validity of sources.",
-    "essential_questions": [
-      "How do you evaluate the reliability and validity of sources?",
-      "How does research generate new questions for further inquiry?"
-    ],
-    "learning_targets": [
-      "I can develop a research question and conduct focused research.",
-      "I can draw on multiple reliable and valid sources.",
-      "I can generate additional questions for further research."
-    ],
-    "vocabulary": [
-      "research",
-      "inquiry",
-      "reliable sources",
-      "valid sources",
-      "additional questions",
-      "credibility",
-      "primary source",
-      "secondary source"
-    ],
-    "sample_assessment": "Research a topic of your choice using at least three reliable sources. Write a brief research report and include two additional questions your research generated."
-  },
-  {
-    "code": "ELA.7.C.5.1",
-    "benchmark": "Integrate diverse digital media to enhance audience engagement in oral or written tasks.",
-    "topics": [
-      "Digital Media",
-      "Technology",
-      "Multimedia"
-    ],
-    "dok": 2,
-    "item_specs": "Students integrate digital media elements to enhance engagement in presentations and written work.",
-    "essential_questions": [
-      "How can digital media enhance audience engagement?",
-      "What types of digital media are most effective for different purposes?"
-    ],
-    "learning_targets": [
-      "I can select diverse digital media to enhance my message.",
-      "I can integrate digital media effectively in oral or written tasks.",
-      "I can evaluate the impact of digital media on audience engagement."
-    ],
-    "vocabulary": [
-      "digital media",
-      "multimedia",
-      "audience engagement",
-      "visual aids",
-      "interactive media",
-      "presentation software"
-    ],
-    "sample_assessment": "Create a multimedia presentation on a social issue. Integrate at least three different types of digital media and explain how each enhances audience engagement."
-  },
-  {
-    "code": "ELA.7.C.5.2",
-    "benchmark": "Use digital tools to produce writing.",
-    "topics": [
-      "Digital Writing",
-      "Technology",
-      "Writing Production"
-    ],
-    "dok": 1,
-    "item_specs": "Students use digital tools to draft, revise, edit, and produce polished written work.",
-    "essential_questions": [
-      "How do digital tools improve the writing process?",
-      "What digital tools are most effective for different stages of writing?"
-    ],
-    "learning_targets": [
-      "I can use digital tools to produce and refine my writing.",
-      "I can collaborate with others using digital writing tools.",
-      "I can use technology to publish and share my writing."
-    ],
-    "vocabulary": [
-      "digital tools",
-      "word processor",
-      "collaboration",
-      "publishing",
-      "formatting",
-      "cloud document",
-      "revision history"
-    ],
-    "sample_assessment": "Using a digital writing tool, produce a final draft of your research report. Use features such as spell check, formatting tools, and comment features for peer review."
-  },
-  {
     "code": "ELA.7.V.1.1",
     "benchmark": "Integrate academic vocabulary appropriate to grade level in speaking and writing.",
     "topics": [
@@ -1488,6 +1488,287 @@
       "nuance"
     ],
     "sample_assessment": "Read the passage. Based on the context, the word 'industrious' MOST closely means: A) Lazy B) Hardworking C) Wealthy D) Creative. Explain which context clues helped you determine the answer."
+  },
+  {
+    "code": "ELA.8.C.1.2",
+    "benchmark": "Write personal or fictional narratives using narrative techniques, varied transitions, and a clearly established point of view.",
+    "topics": [
+      "Narrative Writing",
+      "Point of View",
+      "Transitions"
+    ],
+    "dok": 3,
+    "item_specs": "Students write narratives with clearly established point of view, narrative techniques (dialogue, pacing, description), and varied transitions.",
+    "essential_questions": [
+      "How does a clearly established point of view strengthen narrative writing?",
+      "How do varied transitions improve the flow of a narrative?"
+    ],
+    "learning_targets": [
+      "I can write narratives with a clearly established point of view.",
+      "I can use narrative techniques effectively in my writing.",
+      "I can use varied transitions to create smooth flow in my narrative."
+    ],
+    "vocabulary": [
+      "narrative",
+      "point of view",
+      "transitions",
+      "dialogue",
+      "pacing",
+      "description",
+      "sensory details",
+      "narrative arc"
+    ],
+    "sample_assessment": "Write a fictional narrative with a clearly established point of view about a character who must make a difficult decision. Use narrative techniques and varied transitions."
+  },
+  {
+    "code": "ELA.8.C.1.3",
+    "benchmark": "Write to argue a position, supporting at least one claim and rebutting at least one counterclaim with logical reasoning, credible evidence from sources, elaboration, and using a logical organizational structure.",
+    "topics": [
+      "Argumentative Writing",
+      "Claims",
+      "Counterclaim",
+      "Rebuttal"
+    ],
+    "dok": 3,
+    "item_specs": "Students write arguments supporting claims and rebutting counterclaims with logical reasoning, credible evidence, and clear organizational structure.",
+    "essential_questions": [
+      "How do you effectively rebut a counterclaim?",
+      "What is the role of credible evidence in argumentative writing?"
+    ],
+    "learning_targets": [
+      "I can write and support at least one claim with logical reasoning.",
+      "I can rebut at least one counterclaim with evidence.",
+      "I can use a logical organizational structure with credible evidence and elaboration."
+    ],
+    "vocabulary": [
+      "argument",
+      "claim",
+      "counterclaim",
+      "rebuttal",
+      "credible evidence",
+      "logical reasoning",
+      "elaboration",
+      "organizational structure"
+    ],
+    "sample_assessment": "Write an argumentative essay about whether community service should be required for graduation. Support your claim, rebut at least one counterclaim, and use credible evidence from provided sources."
+  },
+  {
+    "code": "ELA.8.C.1.4",
+    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using relevant supporting details, logical organization, and varied purposeful transitions.",
+    "topics": [
+      "Expository Writing",
+      "Analysis",
+      "Organization",
+      "Transitions"
+    ],
+    "dok": 3,
+    "item_specs": "Students write expository texts that explain and analyze information from multiple sources with supporting details, logical organization, and purposeful transitions.",
+    "essential_questions": [
+      "How do you analyze and synthesize information from multiple sources in expository writing?",
+      "How do purposeful transitions improve expository writing?"
+    ],
+    "learning_targets": [
+      "I can write expository texts that explain and analyze information from multiple sources.",
+      "I can use relevant supporting details and logical organization.",
+      "I can use varied purposeful transitions to connect ideas."
+    ],
+    "vocabulary": [
+      "expository",
+      "analysis",
+      "synthesis",
+      "supporting details",
+      "logical organization",
+      "purposeful transitions",
+      "multiple sources"
+    ],
+    "sample_assessment": "Using the three provided sources, write an expository essay analyzing the effects of climate change on coastal communities. Use relevant details, logical organization, and purposeful transitions."
+  },
+  {
+    "code": "ELA.8.C.1.5",
+    "benchmark": "Improve writing by planning, revising, and editing, considering feedback from adults and peers, and revising for clarity and cohesiveness.",
+    "topics": [
+      "Writing Process",
+      "Revision",
+      "Editing",
+      "Cohesiveness"
+    ],
+    "dok": 2,
+    "item_specs": "Students improve writing through planning, revising for clarity and cohesiveness, and editing for conventions based on feedback.",
+    "essential_questions": [
+      "How do revision and editing improve the clarity and cohesiveness of writing?",
+      "How can feedback help writers strengthen their work?"
+    ],
+    "learning_targets": [
+      "I can plan my writing using effective prewriting strategies.",
+      "I can revise my writing for clarity and cohesiveness.",
+      "I can edit my writing for conventions using feedback from adults and peers."
+    ],
+    "vocabulary": [
+      "planning",
+      "revising",
+      "editing",
+      "clarity",
+      "cohesiveness",
+      "feedback",
+      "conventions",
+      "coherence",
+      "unity"
+    ],
+    "sample_assessment": "Read the student draft and the peer feedback provided. Revise the draft to improve clarity and cohesiveness, and edit for at least three convention errors."
+  },
+  {
+    "code": "ELA.8.C.2.1",
+    "benchmark": "Present information orally, in a logical sequence, supporting the central idea with credible evidence.",
+    "topics": [
+      "Oral Presentation",
+      "Speaking Skills",
+      "Evidence"
+    ],
+    "dok": 2,
+    "item_specs": "Students present information orally in a logical sequence, supporting the central idea with credible evidence and appropriate delivery.",
+    "essential_questions": [
+      "How do you support a central idea with credible evidence in an oral presentation?",
+      "What makes an oral presentation logical and convincing?"
+    ],
+    "learning_targets": [
+      "I can organize an oral presentation in a logical sequence.",
+      "I can support my central idea with credible evidence.",
+      "I can deliver a presentation with appropriate speaking skills."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "logical sequence",
+      "central idea",
+      "credible evidence",
+      "delivery",
+      "audience",
+      "supporting evidence"
+    ],
+    "sample_assessment": "Prepare and deliver a 3-5 minute presentation on a topic you have researched. Support your central idea with at least three pieces of credible evidence."
+  },
+  {
+    "code": "ELA.8.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Mechanics"
+    ],
+    "dok": 1,
+    "item_specs": "Students demonstrate command of standard English grammar, punctuation, capitalization, and spelling conventions appropriate to grade 8.",
+    "essential_questions": [
+      "How do grammar and conventions affect the quality of writing?",
+      "Why is mastery of standard English important for effective communication?"
+    ],
+    "learning_targets": [
+      "I can use correct grammar in my writing and speaking.",
+      "I can apply grade-level rules of punctuation and capitalization.",
+      "I can spell grade-level words correctly."
+    ],
+    "vocabulary": [
+      "grammar",
+      "punctuation",
+      "capitalization",
+      "spelling",
+      "conventions",
+      "active voice",
+      "passive voice",
+      "subjunctive mood",
+      "verbals"
+    ],
+    "sample_assessment": "Read the paragraph below. Identify and correct all errors in grammar, punctuation, capitalization, and spelling."
+  },
+  {
+    "code": "ELA.8.C.4.1",
+    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and generating additional questions for further research.",
+    "topics": [
+      "Research",
+      "Inquiry",
+      "Source Evaluation"
+    ],
+    "dok": 3,
+    "item_specs": "Students conduct research using multiple reliable and valid sources, generate additional questions, and evaluate source credibility.",
+    "essential_questions": [
+      "How do you evaluate sources for reliability and validity?",
+      "How does research lead to new questions and deeper inquiry?"
+    ],
+    "learning_targets": [
+      "I can conduct research using multiple reliable and valid sources.",
+      "I can evaluate the credibility and relevance of sources.",
+      "I can generate additional questions for further research."
+    ],
+    "vocabulary": [
+      "research",
+      "inquiry",
+      "reliable sources",
+      "valid sources",
+      "credibility",
+      "bibliography",
+      "citation",
+      "primary source",
+      "secondary source"
+    ],
+    "sample_assessment": "Conduct research on a topic of your choice using at least four reliable sources. Write a research report and include three additional questions your research generated."
+  },
+  {
+    "code": "ELA.8.C.5.1",
+    "benchmark": "Integrate diverse digital media to enhance audience engagement in oral or written tasks.",
+    "topics": [
+      "Digital Media",
+      "Technology",
+      "Multimedia"
+    ],
+    "dok": 2,
+    "item_specs": "Students integrate diverse digital media to enhance engagement and effectively communicate ideas in presentations and written work.",
+    "essential_questions": [
+      "How can diverse digital media enhance communication?",
+      "What criteria help you select the most effective digital media for a task?"
+    ],
+    "learning_targets": [
+      "I can select and integrate diverse digital media to enhance my message.",
+      "I can use digital media effectively in oral and written tasks.",
+      "I can evaluate the effectiveness of digital media choices."
+    ],
+    "vocabulary": [
+      "digital media",
+      "multimedia",
+      "audience engagement",
+      "interactive media",
+      "visual media",
+      "audio media",
+      "presentation tools"
+    ],
+    "sample_assessment": "Create a multimedia presentation on a historical event. Integrate at least four different types of digital media and explain how each enhances audience engagement and understanding."
+  },
+  {
+    "code": "ELA.8.C.5.2",
+    "benchmark": "Use digital tools to produce writing.",
+    "topics": [
+      "Digital Writing",
+      "Technology",
+      "Writing Production"
+    ],
+    "dok": 1,
+    "item_specs": "Students use digital tools to produce, refine, and publish written work.",
+    "essential_questions": [
+      "How do digital tools support effective writing production?",
+      "What digital tools and features best support the writing process?"
+    ],
+    "learning_targets": [
+      "I can use digital tools to produce polished writing.",
+      "I can collaborate with others using digital writing platforms.",
+      "I can use technology to publish and distribute my writing."
+    ],
+    "vocabulary": [
+      "digital tools",
+      "word processor",
+      "collaboration",
+      "publishing",
+      "formatting",
+      "cloud-based writing",
+      "peer editing tools"
+    ],
+    "sample_assessment": "Using a digital writing tool, produce a final draft of your argumentative essay. Demonstrate use of formatting features, spell check, and collaboration tools."
   },
   {
     "code": "ELA.8.R.1.1",
@@ -1873,287 +2154,6 @@
     "sample_assessment": "Identify two rhetorical devices the author uses in the speech. Explain how each device supports or advances the author's appeal to the audience."
   },
   {
-    "code": "ELA.8.C.1.2",
-    "benchmark": "Write personal or fictional narratives using narrative techniques, varied transitions, and a clearly established point of view.",
-    "topics": [
-      "Narrative Writing",
-      "Point of View",
-      "Transitions"
-    ],
-    "dok": 3,
-    "item_specs": "Students write narratives with clearly established point of view, narrative techniques (dialogue, pacing, description), and varied transitions.",
-    "essential_questions": [
-      "How does a clearly established point of view strengthen narrative writing?",
-      "How do varied transitions improve the flow of a narrative?"
-    ],
-    "learning_targets": [
-      "I can write narratives with a clearly established point of view.",
-      "I can use narrative techniques effectively in my writing.",
-      "I can use varied transitions to create smooth flow in my narrative."
-    ],
-    "vocabulary": [
-      "narrative",
-      "point of view",
-      "transitions",
-      "dialogue",
-      "pacing",
-      "description",
-      "sensory details",
-      "narrative arc"
-    ],
-    "sample_assessment": "Write a fictional narrative with a clearly established point of view about a character who must make a difficult decision. Use narrative techniques and varied transitions."
-  },
-  {
-    "code": "ELA.8.C.1.3",
-    "benchmark": "Write to argue a position, supporting at least one claim and rebutting at least one counterclaim with logical reasoning, credible evidence from sources, elaboration, and using a logical organizational structure.",
-    "topics": [
-      "Argumentative Writing",
-      "Claims",
-      "Counterclaim",
-      "Rebuttal"
-    ],
-    "dok": 3,
-    "item_specs": "Students write arguments supporting claims and rebutting counterclaims with logical reasoning, credible evidence, and clear organizational structure.",
-    "essential_questions": [
-      "How do you effectively rebut a counterclaim?",
-      "What is the role of credible evidence in argumentative writing?"
-    ],
-    "learning_targets": [
-      "I can write and support at least one claim with logical reasoning.",
-      "I can rebut at least one counterclaim with evidence.",
-      "I can use a logical organizational structure with credible evidence and elaboration."
-    ],
-    "vocabulary": [
-      "argument",
-      "claim",
-      "counterclaim",
-      "rebuttal",
-      "credible evidence",
-      "logical reasoning",
-      "elaboration",
-      "organizational structure"
-    ],
-    "sample_assessment": "Write an argumentative essay about whether community service should be required for graduation. Support your claim, rebut at least one counterclaim, and use credible evidence from provided sources."
-  },
-  {
-    "code": "ELA.8.C.1.4",
-    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using relevant supporting details, logical organization, and varied purposeful transitions.",
-    "topics": [
-      "Expository Writing",
-      "Analysis",
-      "Organization",
-      "Transitions"
-    ],
-    "dok": 3,
-    "item_specs": "Students write expository texts that explain and analyze information from multiple sources with supporting details, logical organization, and purposeful transitions.",
-    "essential_questions": [
-      "How do you analyze and synthesize information from multiple sources in expository writing?",
-      "How do purposeful transitions improve expository writing?"
-    ],
-    "learning_targets": [
-      "I can write expository texts that explain and analyze information from multiple sources.",
-      "I can use relevant supporting details and logical organization.",
-      "I can use varied purposeful transitions to connect ideas."
-    ],
-    "vocabulary": [
-      "expository",
-      "analysis",
-      "synthesis",
-      "supporting details",
-      "logical organization",
-      "purposeful transitions",
-      "multiple sources"
-    ],
-    "sample_assessment": "Using the three provided sources, write an expository essay analyzing the effects of climate change on coastal communities. Use relevant details, logical organization, and purposeful transitions."
-  },
-  {
-    "code": "ELA.8.C.1.5",
-    "benchmark": "Improve writing by planning, revising, and editing, considering feedback from adults and peers, and revising for clarity and cohesiveness.",
-    "topics": [
-      "Writing Process",
-      "Revision",
-      "Editing",
-      "Cohesiveness"
-    ],
-    "dok": 2,
-    "item_specs": "Students improve writing through planning, revising for clarity and cohesiveness, and editing for conventions based on feedback.",
-    "essential_questions": [
-      "How do revision and editing improve the clarity and cohesiveness of writing?",
-      "How can feedback help writers strengthen their work?"
-    ],
-    "learning_targets": [
-      "I can plan my writing using effective prewriting strategies.",
-      "I can revise my writing for clarity and cohesiveness.",
-      "I can edit my writing for conventions using feedback from adults and peers."
-    ],
-    "vocabulary": [
-      "planning",
-      "revising",
-      "editing",
-      "clarity",
-      "cohesiveness",
-      "feedback",
-      "conventions",
-      "coherence",
-      "unity"
-    ],
-    "sample_assessment": "Read the student draft and the peer feedback provided. Revise the draft to improve clarity and cohesiveness, and edit for at least three convention errors."
-  },
-  {
-    "code": "ELA.8.C.2.1",
-    "benchmark": "Present information orally, in a logical sequence, supporting the central idea with credible evidence.",
-    "topics": [
-      "Oral Presentation",
-      "Speaking Skills",
-      "Evidence"
-    ],
-    "dok": 2,
-    "item_specs": "Students present information orally in a logical sequence, supporting the central idea with credible evidence and appropriate delivery.",
-    "essential_questions": [
-      "How do you support a central idea with credible evidence in an oral presentation?",
-      "What makes an oral presentation logical and convincing?"
-    ],
-    "learning_targets": [
-      "I can organize an oral presentation in a logical sequence.",
-      "I can support my central idea with credible evidence.",
-      "I can deliver a presentation with appropriate speaking skills."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "logical sequence",
-      "central idea",
-      "credible evidence",
-      "delivery",
-      "audience",
-      "supporting evidence"
-    ],
-    "sample_assessment": "Prepare and deliver a 3-5 minute presentation on a topic you have researched. Support your central idea with at least three pieces of credible evidence."
-  },
-  {
-    "code": "ELA.8.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Mechanics"
-    ],
-    "dok": 1,
-    "item_specs": "Students demonstrate command of standard English grammar, punctuation, capitalization, and spelling conventions appropriate to grade 8.",
-    "essential_questions": [
-      "How do grammar and conventions affect the quality of writing?",
-      "Why is mastery of standard English important for effective communication?"
-    ],
-    "learning_targets": [
-      "I can use correct grammar in my writing and speaking.",
-      "I can apply grade-level rules of punctuation and capitalization.",
-      "I can spell grade-level words correctly."
-    ],
-    "vocabulary": [
-      "grammar",
-      "punctuation",
-      "capitalization",
-      "spelling",
-      "conventions",
-      "active voice",
-      "passive voice",
-      "subjunctive mood",
-      "verbals"
-    ],
-    "sample_assessment": "Read the paragraph below. Identify and correct all errors in grammar, punctuation, capitalization, and spelling."
-  },
-  {
-    "code": "ELA.8.C.4.1",
-    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and generating additional questions for further research.",
-    "topics": [
-      "Research",
-      "Inquiry",
-      "Source Evaluation"
-    ],
-    "dok": 3,
-    "item_specs": "Students conduct research using multiple reliable and valid sources, generate additional questions, and evaluate source credibility.",
-    "essential_questions": [
-      "How do you evaluate sources for reliability and validity?",
-      "How does research lead to new questions and deeper inquiry?"
-    ],
-    "learning_targets": [
-      "I can conduct research using multiple reliable and valid sources.",
-      "I can evaluate the credibility and relevance of sources.",
-      "I can generate additional questions for further research."
-    ],
-    "vocabulary": [
-      "research",
-      "inquiry",
-      "reliable sources",
-      "valid sources",
-      "credibility",
-      "bibliography",
-      "citation",
-      "primary source",
-      "secondary source"
-    ],
-    "sample_assessment": "Conduct research on a topic of your choice using at least four reliable sources. Write a research report and include three additional questions your research generated."
-  },
-  {
-    "code": "ELA.8.C.5.1",
-    "benchmark": "Integrate diverse digital media to enhance audience engagement in oral or written tasks.",
-    "topics": [
-      "Digital Media",
-      "Technology",
-      "Multimedia"
-    ],
-    "dok": 2,
-    "item_specs": "Students integrate diverse digital media to enhance engagement and effectively communicate ideas in presentations and written work.",
-    "essential_questions": [
-      "How can diverse digital media enhance communication?",
-      "What criteria help you select the most effective digital media for a task?"
-    ],
-    "learning_targets": [
-      "I can select and integrate diverse digital media to enhance my message.",
-      "I can use digital media effectively in oral and written tasks.",
-      "I can evaluate the effectiveness of digital media choices."
-    ],
-    "vocabulary": [
-      "digital media",
-      "multimedia",
-      "audience engagement",
-      "interactive media",
-      "visual media",
-      "audio media",
-      "presentation tools"
-    ],
-    "sample_assessment": "Create a multimedia presentation on a historical event. Integrate at least four different types of digital media and explain how each enhances audience engagement and understanding."
-  },
-  {
-    "code": "ELA.8.C.5.2",
-    "benchmark": "Use digital tools to produce writing.",
-    "topics": [
-      "Digital Writing",
-      "Technology",
-      "Writing Production"
-    ],
-    "dok": 1,
-    "item_specs": "Students use digital tools to produce, refine, and publish written work.",
-    "essential_questions": [
-      "How do digital tools support effective writing production?",
-      "What digital tools and features best support the writing process?"
-    ],
-    "learning_targets": [
-      "I can use digital tools to produce polished writing.",
-      "I can collaborate with others using digital writing platforms.",
-      "I can use technology to publish and distribute my writing."
-    ],
-    "vocabulary": [
-      "digital tools",
-      "word processor",
-      "collaboration",
-      "publishing",
-      "formatting",
-      "cloud-based writing",
-      "peer editing tools"
-    ],
-    "sample_assessment": "Using a digital writing tool, produce a final draft of your argumentative essay. Demonstrate use of formatting features, spell check, and collaboration tools."
-  },
-  {
     "code": "ELA.8.V.1.1",
     "benchmark": "Integrate academic vocabulary appropriate to grade level in speaking and writing.",
     "topics": [
@@ -2247,6 +2247,286 @@
       "shade of meaning"
     ],
     "sample_assessment": "Read the passage. The author describes the old house as 'decrepit.' What does 'decrepit' mean in this context, and what connotation does it carry? Use context clues and word relationships to explain."
+  },
+  {
+    "code": "ELA.9.C.1.2",
+    "benchmark": "Write narratives using narrative techniques, varied transitions, and a clearly established point of view.",
+    "topics": [
+      "Narrative Writing",
+      "Point of View",
+      "Writing Techniques"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write narratives that incorporate narrative techniques (dialogue, pacing, description, reflection), varied transitions, and a clearly established point of view.",
+    "essential_questions": [
+      "How do narrative techniques enhance storytelling?",
+      "How does point of view affect a narrative?"
+    ],
+    "learning_targets": [
+      "I can write narratives using effective narrative techniques.",
+      "I can use varied transitions to connect events and ideas.",
+      "I can establish and maintain a clear point of view."
+    ],
+    "vocabulary": [
+      "narrative",
+      "point of view",
+      "dialogue",
+      "pacing",
+      "description",
+      "reflection",
+      "transitions",
+      "narrative arc"
+    ],
+    "sample_assessment": "Write a narrative about a moment of discovery. Use at least two narrative techniques (such as dialogue, pacing, or description), varied transitions, and a clearly established point of view."
+  },
+  {
+    "code": "ELA.9.C.1.3",
+    "benchmark": "Write to argue a position, supporting claims using logical reasoning and credible evidence from multiple sources, rebutting counterclaims with relevant evidence, using a logical organizational structure, elaboration, purposeful transitions, and a tone appropriate to the task.",
+    "topics": [
+      "Argumentative Writing",
+      "Claims",
+      "Evidence",
+      "Counterclaims"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write argumentative texts that state a clear claim, support it with logical reasoning and credible evidence, address counterclaims, and use appropriate organization and tone.",
+    "essential_questions": [
+      "How do you construct a convincing argument in writing?",
+      "Why is it important to address counterclaims in an argument?"
+    ],
+    "learning_targets": [
+      "I can write a clear claim and support it with credible evidence.",
+      "I can rebut counterclaims with relevant evidence.",
+      "I can organize an argument logically with purposeful transitions.",
+      "I can maintain an appropriate tone for argumentative writing."
+    ],
+    "vocabulary": [
+      "argument",
+      "claim",
+      "counterclaim",
+      "rebuttal",
+      "credible evidence",
+      "logical reasoning",
+      "elaboration",
+      "tone"
+    ],
+    "sample_assessment": "Write an argumentative essay taking a position on whether high schools should require community service for graduation. Support your claim with evidence from at least two sources and address at least one counterclaim."
+  },
+  {
+    "code": "ELA.9.C.1.4",
+    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using a logical organization, varied purposeful transitions, and a tone appropriate to the task.",
+    "topics": [
+      "Expository Writing",
+      "Analysis",
+      "Organization",
+      "Multiple Sources"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write expository texts that explain and analyze information drawn from multiple sources, using logical organization and appropriate tone.",
+    "essential_questions": [
+      "How do you effectively explain and analyze information from multiple sources?",
+      "What organizational strategies best support expository writing?"
+    ],
+    "learning_targets": [
+      "I can synthesize information from multiple sources.",
+      "I can write expository texts with logical organization.",
+      "I can use varied transitions to connect ideas.",
+      "I can maintain an appropriate tone for expository writing."
+    ],
+    "vocabulary": [
+      "expository",
+      "analysis",
+      "synthesis",
+      "organization",
+      "transitions",
+      "multiple sources",
+      "informational writing"
+    ],
+    "sample_assessment": "Using the three provided sources about climate change impacts, write an expository essay that explains and analyzes the effects of climate change on coastal communities."
+  },
+  {
+    "code": "ELA.9.C.1.5",
+    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising for clarity and cohesiveness.",
+    "topics": [
+      "Revision",
+      "Writing Process",
+      "Feedback",
+      "Editing"
+    ],
+    "dok": 2,
+    "item_specs": "Students must demonstrate the ability to revise writing based on feedback, improving clarity, cohesiveness, and overall quality.",
+    "essential_questions": [
+      "How does feedback improve writing?",
+      "What strategies help writers revise for clarity and cohesiveness?"
+    ],
+    "learning_targets": [
+      "I can use feedback from multiple sources to improve my writing.",
+      "I can revise writing for clarity and cohesiveness.",
+      "I can evaluate and apply editing suggestions effectively."
+    ],
+    "vocabulary": [
+      "revision",
+      "feedback",
+      "clarity",
+      "cohesiveness",
+      "editing",
+      "peer review",
+      "drafting"
+    ],
+    "sample_assessment": "Read the following student draft. Identify two areas that need revision for clarity and explain how you would revise each area to improve the writing."
+  },
+  {
+    "code": "ELA.9.C.2.1",
+    "benchmark": "Present information orally, with a logical organization and coherent focus, with credible evidence, creating a clear perspective.",
+    "topics": [
+      "Oral Presentation",
+      "Public Speaking",
+      "Organization",
+      "Evidence"
+    ],
+    "dok": 2,
+    "item_specs": "Students must present information orally using logical organization, maintaining a coherent focus, incorporating credible evidence, and establishing a clear perspective.",
+    "essential_questions": [
+      "What makes an oral presentation effective?",
+      "How do you organize information for an oral presentation?"
+    ],
+    "learning_targets": [
+      "I can organize information logically for an oral presentation.",
+      "I can maintain a coherent focus throughout a presentation.",
+      "I can incorporate credible evidence to support my perspective."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "coherent",
+      "perspective",
+      "credible evidence",
+      "logical organization",
+      "public speaking"
+    ],
+    "sample_assessment": "Prepare and deliver a 3-5 minute presentation on a topic of your choice, using logical organization, at least two pieces of credible evidence, and a clearly stated perspective."
+  },
+  {
+    "code": "ELA.9.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Punctuation",
+      "Spelling"
+    ],
+    "dok": 1,
+    "item_specs": "Students must apply the conventions of standard English grammar, punctuation, capitalization, and spelling in their writing at grade level.",
+    "essential_questions": [
+      "Why is it important to follow the conventions of standard English?",
+      "How do grammar and mechanics affect the clarity of writing?"
+    ],
+    "learning_targets": [
+      "I can apply standard English grammar rules in my writing.",
+      "I can use correct punctuation, capitalization, and spelling.",
+      "I can edit my writing for conventions errors."
+    ],
+    "vocabulary": [
+      "grammar",
+      "punctuation",
+      "capitalization",
+      "conventions",
+      "standard English",
+      "syntax",
+      "mechanics"
+    ],
+    "sample_assessment": "Which sentence demonstrates CORRECT use of a semicolon? A) The team won the game; they celebrated all night. B) The team won the game; and they celebrated. C) The team; won the game they celebrated. D) The team won; the game, they celebrated."
+  },
+  {
+    "code": "ELA.9.C.4.1",
+    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and refining the scope of the question to align with findings.",
+    "topics": [
+      "Research",
+      "Source Evaluation",
+      "Inquiry",
+      "Information Literacy"
+    ],
+    "dok": 3,
+    "item_specs": "Students must conduct research by formulating a question, drawing on multiple reliable and valid sources, and refining the research question based on findings.",
+    "essential_questions": [
+      "How do you conduct effective research?",
+      "How do you evaluate sources for reliability and validity?"
+    ],
+    "learning_targets": [
+      "I can formulate a research question.",
+      "I can identify and use multiple reliable and valid sources.",
+      "I can refine the scope of my research question based on findings."
+    ],
+    "vocabulary": [
+      "research",
+      "reliable sources",
+      "valid sources",
+      "scope",
+      "inquiry",
+      "refine",
+      "credibility",
+      "bibliography"
+    ],
+    "sample_assessment": "Given the broad research question 'How does social media affect teenagers?', explain how you would refine this question and identify at least three reliable and valid sources you would consult."
+  },
+  {
+    "code": "ELA.9.C.5.1",
+    "benchmark": "Create digital presentations with coherent ideas and a clear perspective.",
+    "topics": [
+      "Digital Literacy",
+      "Presentations",
+      "Technology",
+      "Communication"
+    ],
+    "dok": 2,
+    "item_specs": "Students must create digital presentations that convey coherent ideas and establish a clear perspective using appropriate digital tools.",
+    "essential_questions": [
+      "How do you create an effective digital presentation?",
+      "What makes a digital presentation coherent and focused?"
+    ],
+    "learning_targets": [
+      "I can create a digital presentation with coherent ideas.",
+      "I can establish a clear perspective in a digital format.",
+      "I can use digital tools effectively to communicate ideas."
+    ],
+    "vocabulary": [
+      "digital presentation",
+      "coherent",
+      "perspective",
+      "multimedia",
+      "visual aids",
+      "slide design"
+    ],
+    "sample_assessment": "Create a digital presentation on a literary work studied in class that includes a clear thesis, supporting evidence, and multimedia elements to enhance the audience's understanding."
+  },
+  {
+    "code": "ELA.9.C.5.2",
+    "benchmark": "Use online collaborative platforms to create and export publication-ready quality writing tailored to a specific audience.",
+    "topics": [
+      "Digital Writing",
+      "Collaboration",
+      "Publishing",
+      "Audience Awareness"
+    ],
+    "dok": 2,
+    "item_specs": "Students must use online collaborative platforms to produce and publish writing that is tailored to a specific audience and meets publication-ready standards.",
+    "essential_questions": [
+      "How do collaborative platforms enhance the writing process?",
+      "How do you tailor writing for a specific audience?"
+    ],
+    "learning_targets": [
+      "I can use online collaborative platforms for writing.",
+      "I can tailor my writing to a specific audience.",
+      "I can produce publication-ready quality writing."
+    ],
+    "vocabulary": [
+      "collaborative platform",
+      "publication-ready",
+      "audience",
+      "digital writing",
+      "export",
+      "format"
+    ],
+    "sample_assessment": "Using a collaborative writing platform, work with a partner to create a publication-ready article on a current event, tailored for a student newspaper audience."
   },
   {
     "code": "ELA.9.R.1.1",
@@ -2620,286 +2900,6 @@
     "sample_assessment": "The speaker repeats the phrase 'We must act now' at the beginning of three consecutive paragraphs. This use of anaphora MOST LIKELY serves to: A) fill space in the speech B) create a sense of urgency and emphasize the call to action C) confuse the audience D) demonstrate vocabulary"
   },
   {
-    "code": "ELA.9.C.1.2",
-    "benchmark": "Write narratives using narrative techniques, varied transitions, and a clearly established point of view.",
-    "topics": [
-      "Narrative Writing",
-      "Point of View",
-      "Writing Techniques"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write narratives that incorporate narrative techniques (dialogue, pacing, description, reflection), varied transitions, and a clearly established point of view.",
-    "essential_questions": [
-      "How do narrative techniques enhance storytelling?",
-      "How does point of view affect a narrative?"
-    ],
-    "learning_targets": [
-      "I can write narratives using effective narrative techniques.",
-      "I can use varied transitions to connect events and ideas.",
-      "I can establish and maintain a clear point of view."
-    ],
-    "vocabulary": [
-      "narrative",
-      "point of view",
-      "dialogue",
-      "pacing",
-      "description",
-      "reflection",
-      "transitions",
-      "narrative arc"
-    ],
-    "sample_assessment": "Write a narrative about a moment of discovery. Use at least two narrative techniques (such as dialogue, pacing, or description), varied transitions, and a clearly established point of view."
-  },
-  {
-    "code": "ELA.9.C.1.3",
-    "benchmark": "Write to argue a position, supporting claims using logical reasoning and credible evidence from multiple sources, rebutting counterclaims with relevant evidence, using a logical organizational structure, elaboration, purposeful transitions, and a tone appropriate to the task.",
-    "topics": [
-      "Argumentative Writing",
-      "Claims",
-      "Evidence",
-      "Counterclaims"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write argumentative texts that state a clear claim, support it with logical reasoning and credible evidence, address counterclaims, and use appropriate organization and tone.",
-    "essential_questions": [
-      "How do you construct a convincing argument in writing?",
-      "Why is it important to address counterclaims in an argument?"
-    ],
-    "learning_targets": [
-      "I can write a clear claim and support it with credible evidence.",
-      "I can rebut counterclaims with relevant evidence.",
-      "I can organize an argument logically with purposeful transitions.",
-      "I can maintain an appropriate tone for argumentative writing."
-    ],
-    "vocabulary": [
-      "argument",
-      "claim",
-      "counterclaim",
-      "rebuttal",
-      "credible evidence",
-      "logical reasoning",
-      "elaboration",
-      "tone"
-    ],
-    "sample_assessment": "Write an argumentative essay taking a position on whether high schools should require community service for graduation. Support your claim with evidence from at least two sources and address at least one counterclaim."
-  },
-  {
-    "code": "ELA.9.C.1.4",
-    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using a logical organization, varied purposeful transitions, and a tone appropriate to the task.",
-    "topics": [
-      "Expository Writing",
-      "Analysis",
-      "Organization",
-      "Multiple Sources"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write expository texts that explain and analyze information drawn from multiple sources, using logical organization and appropriate tone.",
-    "essential_questions": [
-      "How do you effectively explain and analyze information from multiple sources?",
-      "What organizational strategies best support expository writing?"
-    ],
-    "learning_targets": [
-      "I can synthesize information from multiple sources.",
-      "I can write expository texts with logical organization.",
-      "I can use varied transitions to connect ideas.",
-      "I can maintain an appropriate tone for expository writing."
-    ],
-    "vocabulary": [
-      "expository",
-      "analysis",
-      "synthesis",
-      "organization",
-      "transitions",
-      "multiple sources",
-      "informational writing"
-    ],
-    "sample_assessment": "Using the three provided sources about climate change impacts, write an expository essay that explains and analyzes the effects of climate change on coastal communities."
-  },
-  {
-    "code": "ELA.9.C.1.5",
-    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising for clarity and cohesiveness.",
-    "topics": [
-      "Revision",
-      "Writing Process",
-      "Feedback",
-      "Editing"
-    ],
-    "dok": 2,
-    "item_specs": "Students must demonstrate the ability to revise writing based on feedback, improving clarity, cohesiveness, and overall quality.",
-    "essential_questions": [
-      "How does feedback improve writing?",
-      "What strategies help writers revise for clarity and cohesiveness?"
-    ],
-    "learning_targets": [
-      "I can use feedback from multiple sources to improve my writing.",
-      "I can revise writing for clarity and cohesiveness.",
-      "I can evaluate and apply editing suggestions effectively."
-    ],
-    "vocabulary": [
-      "revision",
-      "feedback",
-      "clarity",
-      "cohesiveness",
-      "editing",
-      "peer review",
-      "drafting"
-    ],
-    "sample_assessment": "Read the following student draft. Identify two areas that need revision for clarity and explain how you would revise each area to improve the writing."
-  },
-  {
-    "code": "ELA.9.C.2.1",
-    "benchmark": "Present information orally, with a logical organization and coherent focus, with credible evidence, creating a clear perspective.",
-    "topics": [
-      "Oral Presentation",
-      "Public Speaking",
-      "Organization",
-      "Evidence"
-    ],
-    "dok": 2,
-    "item_specs": "Students must present information orally using logical organization, maintaining a coherent focus, incorporating credible evidence, and establishing a clear perspective.",
-    "essential_questions": [
-      "What makes an oral presentation effective?",
-      "How do you organize information for an oral presentation?"
-    ],
-    "learning_targets": [
-      "I can organize information logically for an oral presentation.",
-      "I can maintain a coherent focus throughout a presentation.",
-      "I can incorporate credible evidence to support my perspective."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "coherent",
-      "perspective",
-      "credible evidence",
-      "logical organization",
-      "public speaking"
-    ],
-    "sample_assessment": "Prepare and deliver a 3-5 minute presentation on a topic of your choice, using logical organization, at least two pieces of credible evidence, and a clearly stated perspective."
-  },
-  {
-    "code": "ELA.9.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Punctuation",
-      "Spelling"
-    ],
-    "dok": 1,
-    "item_specs": "Students must apply the conventions of standard English grammar, punctuation, capitalization, and spelling in their writing at grade level.",
-    "essential_questions": [
-      "Why is it important to follow the conventions of standard English?",
-      "How do grammar and mechanics affect the clarity of writing?"
-    ],
-    "learning_targets": [
-      "I can apply standard English grammar rules in my writing.",
-      "I can use correct punctuation, capitalization, and spelling.",
-      "I can edit my writing for conventions errors."
-    ],
-    "vocabulary": [
-      "grammar",
-      "punctuation",
-      "capitalization",
-      "conventions",
-      "standard English",
-      "syntax",
-      "mechanics"
-    ],
-    "sample_assessment": "Which sentence demonstrates CORRECT use of a semicolon? A) The team won the game; they celebrated all night. B) The team won the game; and they celebrated. C) The team; won the game they celebrated. D) The team won; the game, they celebrated."
-  },
-  {
-    "code": "ELA.9.C.4.1",
-    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and refining the scope of the question to align with findings.",
-    "topics": [
-      "Research",
-      "Source Evaluation",
-      "Inquiry",
-      "Information Literacy"
-    ],
-    "dok": 3,
-    "item_specs": "Students must conduct research by formulating a question, drawing on multiple reliable and valid sources, and refining the research question based on findings.",
-    "essential_questions": [
-      "How do you conduct effective research?",
-      "How do you evaluate sources for reliability and validity?"
-    ],
-    "learning_targets": [
-      "I can formulate a research question.",
-      "I can identify and use multiple reliable and valid sources.",
-      "I can refine the scope of my research question based on findings."
-    ],
-    "vocabulary": [
-      "research",
-      "reliable sources",
-      "valid sources",
-      "scope",
-      "inquiry",
-      "refine",
-      "credibility",
-      "bibliography"
-    ],
-    "sample_assessment": "Given the broad research question 'How does social media affect teenagers?', explain how you would refine this question and identify at least three reliable and valid sources you would consult."
-  },
-  {
-    "code": "ELA.9.C.5.1",
-    "benchmark": "Create digital presentations with coherent ideas and a clear perspective.",
-    "topics": [
-      "Digital Literacy",
-      "Presentations",
-      "Technology",
-      "Communication"
-    ],
-    "dok": 2,
-    "item_specs": "Students must create digital presentations that convey coherent ideas and establish a clear perspective using appropriate digital tools.",
-    "essential_questions": [
-      "How do you create an effective digital presentation?",
-      "What makes a digital presentation coherent and focused?"
-    ],
-    "learning_targets": [
-      "I can create a digital presentation with coherent ideas.",
-      "I can establish a clear perspective in a digital format.",
-      "I can use digital tools effectively to communicate ideas."
-    ],
-    "vocabulary": [
-      "digital presentation",
-      "coherent",
-      "perspective",
-      "multimedia",
-      "visual aids",
-      "slide design"
-    ],
-    "sample_assessment": "Create a digital presentation on a literary work studied in class that includes a clear thesis, supporting evidence, and multimedia elements to enhance the audience's understanding."
-  },
-  {
-    "code": "ELA.9.C.5.2",
-    "benchmark": "Use online collaborative platforms to create and export publication-ready quality writing tailored to a specific audience.",
-    "topics": [
-      "Digital Writing",
-      "Collaboration",
-      "Publishing",
-      "Audience Awareness"
-    ],
-    "dok": 2,
-    "item_specs": "Students must use online collaborative platforms to produce and publish writing that is tailored to a specific audience and meets publication-ready standards.",
-    "essential_questions": [
-      "How do collaborative platforms enhance the writing process?",
-      "How do you tailor writing for a specific audience?"
-    ],
-    "learning_targets": [
-      "I can use online collaborative platforms for writing.",
-      "I can tailor my writing to a specific audience.",
-      "I can produce publication-ready quality writing."
-    ],
-    "vocabulary": [
-      "collaborative platform",
-      "publication-ready",
-      "audience",
-      "digital writing",
-      "export",
-      "format"
-    ],
-    "sample_assessment": "Using a collaborative writing platform, work with a partner to create a publication-ready article on a current event, tailored for a student newspaper audience."
-  },
-  {
     "code": "ELA.9.V.1.1",
     "benchmark": "Integrate academic vocabulary appropriate to grade level in speaking and writing.",
     "topics": [
@@ -2989,6 +2989,274 @@
       "reference materials"
     ],
     "sample_assessment": "The word 'consumed' in the phrase 'She was consumed by her ambition' MOST LIKELY means: A) eaten B) completely absorbed C) destroyed by fire D) purchased"
+  },
+  {
+    "code": "ELA.10.C.1.2",
+    "benchmark": "Write narratives using appropriate pace to establish tension, mood, and/or tone.",
+    "topics": [
+      "Narrative Writing",
+      "Pacing",
+      "Tension",
+      "Mood",
+      "Tone"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write narratives that use pacing effectively to establish tension, mood, and/or tone, creating engaging and well-crafted stories.",
+    "essential_questions": [
+      "How does pacing affect tension, mood, and tone in a narrative?",
+      "How do writers control pace to engage readers?"
+    ],
+    "learning_targets": [
+      "I can use pacing to establish tension in a narrative.",
+      "I can control pace to create mood and tone.",
+      "I can write narratives that engage readers through effective pacing."
+    ],
+    "vocabulary": [
+      "pacing",
+      "tension",
+      "mood",
+      "tone",
+      "narrative pace",
+      "suspense",
+      "climax"
+    ],
+    "sample_assessment": "Write a narrative scene in which you use pacing to build tension toward a climax. Vary the pace of your writing to create a specific mood."
+  },
+  {
+    "code": "ELA.10.C.1.3",
+    "benchmark": "Write to argue a position, supporting claims using logical reasoning and credible evidence from multiple sources, rebutting counterclaims with relevant evidence, using a logical organizational structure, elaboration, purposeful transitions, and maintaining a formal tone.",
+    "topics": [
+      "Argumentative Writing",
+      "Formal Tone",
+      "Evidence-Based Writing"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write arguments with formal tone, supporting claims with logical reasoning and credible evidence, while addressing counterclaims and using purposeful transitions.",
+    "essential_questions": [
+      "How do you maintain a formal tone in argumentative writing?",
+      "How do you address counterclaims effectively?"
+    ],
+    "learning_targets": [
+      "I can argue a position with logical reasoning and credible evidence.",
+      "I can rebut counterclaims with relevant evidence.",
+      "I can maintain a formal tone appropriate for argumentative writing.",
+      "I can use logical organization and purposeful transitions."
+    ],
+    "vocabulary": [
+      "argument",
+      "formal tone",
+      "claim",
+      "counterclaim",
+      "rebuttal",
+      "logical reasoning",
+      "credible evidence"
+    ],
+    "sample_assessment": "Write an argumentative essay on a current social issue, maintaining a formal tone throughout. Support your position with evidence from at least three credible sources and address at least two counterclaims."
+  },
+  {
+    "code": "ELA.10.C.1.4",
+    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using a logical organization, purposeful transitions, and a tone appropriate to the task.",
+    "topics": [
+      "Expository Writing",
+      "Multi-Source Analysis",
+      "Organization"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write expository texts that explain and analyze information synthesized from multiple sources with logical organization and appropriate tone.",
+    "essential_questions": [
+      "How do you synthesize information from multiple sources in expository writing?",
+      "How does organization support the analysis of complex information?"
+    ],
+    "learning_targets": [
+      "I can synthesize and analyze information from multiple sources.",
+      "I can organize expository writing logically.",
+      "I can use purposeful transitions and appropriate tone."
+    ],
+    "vocabulary": [
+      "expository",
+      "synthesis",
+      "analysis",
+      "organization",
+      "transitions",
+      "tone",
+      "multi-source"
+    ],
+    "sample_assessment": "Using three sources about the American Revolution, write an expository essay that analyzes the key factors that led to independence. Synthesize information across sources."
+  },
+  {
+    "code": "ELA.10.C.1.5",
+    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising to address the needs of a specific audience.",
+    "topics": [
+      "Revision",
+      "Audience Awareness",
+      "Writing Process"
+    ],
+    "dok": 2,
+    "item_specs": "Students must revise writing based on feedback, with a focus on addressing the needs of a specific audience.",
+    "essential_questions": [
+      "How does understanding your audience improve your writing?",
+      "How do you effectively incorporate feedback from multiple sources?"
+    ],
+    "learning_targets": [
+      "I can revise writing based on feedback from multiple sources.",
+      "I can tailor my writing to meet the needs of a specific audience.",
+      "I can evaluate and apply suggestions to improve clarity and effectiveness."
+    ],
+    "vocabulary": [
+      "revision",
+      "audience",
+      "feedback",
+      "tailoring",
+      "clarity",
+      "effectiveness"
+    ],
+    "sample_assessment": "Revise the following draft to better address a teenage audience. Explain the specific changes you made and why they improve the writing for that audience."
+  },
+  {
+    "code": "ELA.10.C.2.1",
+    "benchmark": "Present information orally, with a logical organization, coherent focus, credible evidence, and a clear perspective.",
+    "topics": [
+      "Oral Presentation",
+      "Public Speaking",
+      "Evidence",
+      "Organization"
+    ],
+    "dok": 2,
+    "item_specs": "Students must deliver oral presentations with logical organization, coherent focus, credible supporting evidence, and a clearly articulated perspective.",
+    "essential_questions": [
+      "How do you effectively organize and deliver an oral presentation?",
+      "How does credible evidence strengthen an oral presentation?"
+    ],
+    "learning_targets": [
+      "I can organize an oral presentation logically.",
+      "I can support my perspective with credible evidence.",
+      "I can maintain a coherent focus throughout a presentation."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "logical organization",
+      "credible evidence",
+      "perspective",
+      "coherent focus"
+    ],
+    "sample_assessment": "Deliver a 5-minute oral presentation analyzing a historical American speech, presenting a clear perspective supported by credible evidence."
+  },
+  {
+    "code": "ELA.10.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Standard English"
+    ],
+    "dok": 1,
+    "item_specs": "Students must demonstrate command of standard English conventions including grammar, punctuation, capitalization, and spelling at grade level.",
+    "essential_questions": [
+      "How do conventions of standard English support clear communication?",
+      "What grammar and mechanics skills are essential for grade-level writing?"
+    ],
+    "learning_targets": [
+      "I can apply standard English grammar rules consistently.",
+      "I can use correct punctuation, capitalization, and spelling.",
+      "I can identify and correct errors in grammar and mechanics."
+    ],
+    "vocabulary": [
+      "grammar",
+      "conventions",
+      "punctuation",
+      "capitalization",
+      "standard English",
+      "syntax"
+    ],
+    "sample_assessment": "Identify and correct all grammar, punctuation, and spelling errors in the following paragraph from a student essay about the American Revolution."
+  },
+  {
+    "code": "ELA.10.C.4.1",
+    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and refining the scope of the question to align with findings.",
+    "topics": [
+      "Research",
+      "Source Evaluation",
+      "Inquiry"
+    ],
+    "dok": 3,
+    "item_specs": "Students must conduct research using multiple reliable and valid sources, refining their research question based on findings and synthesizing information.",
+    "essential_questions": [
+      "How do you refine a research question based on your findings?",
+      "How do you synthesize information from multiple sources?"
+    ],
+    "learning_targets": [
+      "I can conduct research using reliable and valid sources.",
+      "I can refine my research question based on findings.",
+      "I can synthesize information from multiple sources to answer a research question."
+    ],
+    "vocabulary": [
+      "research",
+      "synthesis",
+      "reliable sources",
+      "valid sources",
+      "refine",
+      "scope"
+    ],
+    "sample_assessment": "Conduct research on a topic related to historical American literature. Begin with a broad question, then refine it based on your findings. Present your refined question and a synthesis of information from at least four sources."
+  },
+  {
+    "code": "ELA.10.C.5.1",
+    "benchmark": "Create digital presentations to communicate findings, reasoning, and evidence.",
+    "topics": [
+      "Digital Presentations",
+      "Communication",
+      "Technology"
+    ],
+    "dok": 2,
+    "item_specs": "Students must create digital presentations that effectively communicate research findings, reasoning, and supporting evidence.",
+    "essential_questions": [
+      "How do you effectively communicate findings through digital presentations?",
+      "What elements make a digital presentation compelling?"
+    ],
+    "learning_targets": [
+      "I can create digital presentations that communicate findings clearly.",
+      "I can present reasoning and evidence in a digital format.",
+      "I can use multimedia elements to enhance my presentation."
+    ],
+    "vocabulary": [
+      "digital presentation",
+      "findings",
+      "reasoning",
+      "evidence",
+      "multimedia",
+      "communication"
+    ],
+    "sample_assessment": "Create a digital presentation that communicates the findings of your research project on historical American rhetoric. Include evidence, reasoning, and multimedia elements."
+  },
+  {
+    "code": "ELA.10.C.5.2",
+    "benchmark": "Use online collaborative platforms to create and export publication-ready quality writing tailored to a specific audience, integrating multimedia elements.",
+    "topics": [
+      "Digital Writing",
+      "Collaboration",
+      "Multimedia",
+      "Publishing"
+    ],
+    "dok": 2,
+    "item_specs": "Students must use collaborative online platforms to produce publication-ready writing that integrates multimedia elements and addresses a specific audience.",
+    "essential_questions": [
+      "How do multimedia elements enhance written communication?",
+      "How do you produce publication-ready writing using collaborative tools?"
+    ],
+    "learning_targets": [
+      "I can use collaborative platforms to produce quality writing.",
+      "I can integrate multimedia elements into written work.",
+      "I can tailor publication-ready writing to a specific audience."
+    ],
+    "vocabulary": [
+      "collaborative platform",
+      "multimedia",
+      "publication-ready",
+      "audience",
+      "integration",
+      "digital writing"
+    ],
+    "sample_assessment": "Collaborate with peers on an online platform to produce a publication-ready multimedia article about a significant event in American history, tailored for a general audience."
   },
   {
     "code": "ELA.10.R.1.1",
@@ -3348,274 +3616,6 @@
     "sample_assessment": "Analyze the author's use of rhetoric in this historical American speech. Identify at least three rhetorical strategies and evaluate their effectiveness in achieving the author's purpose."
   },
   {
-    "code": "ELA.10.C.1.2",
-    "benchmark": "Write narratives using appropriate pace to establish tension, mood, and/or tone.",
-    "topics": [
-      "Narrative Writing",
-      "Pacing",
-      "Tension",
-      "Mood",
-      "Tone"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write narratives that use pacing effectively to establish tension, mood, and/or tone, creating engaging and well-crafted stories.",
-    "essential_questions": [
-      "How does pacing affect tension, mood, and tone in a narrative?",
-      "How do writers control pace to engage readers?"
-    ],
-    "learning_targets": [
-      "I can use pacing to establish tension in a narrative.",
-      "I can control pace to create mood and tone.",
-      "I can write narratives that engage readers through effective pacing."
-    ],
-    "vocabulary": [
-      "pacing",
-      "tension",
-      "mood",
-      "tone",
-      "narrative pace",
-      "suspense",
-      "climax"
-    ],
-    "sample_assessment": "Write a narrative scene in which you use pacing to build tension toward a climax. Vary the pace of your writing to create a specific mood."
-  },
-  {
-    "code": "ELA.10.C.1.3",
-    "benchmark": "Write to argue a position, supporting claims using logical reasoning and credible evidence from multiple sources, rebutting counterclaims with relevant evidence, using a logical organizational structure, elaboration, purposeful transitions, and maintaining a formal tone.",
-    "topics": [
-      "Argumentative Writing",
-      "Formal Tone",
-      "Evidence-Based Writing"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write arguments with formal tone, supporting claims with logical reasoning and credible evidence, while addressing counterclaims and using purposeful transitions.",
-    "essential_questions": [
-      "How do you maintain a formal tone in argumentative writing?",
-      "How do you address counterclaims effectively?"
-    ],
-    "learning_targets": [
-      "I can argue a position with logical reasoning and credible evidence.",
-      "I can rebut counterclaims with relevant evidence.",
-      "I can maintain a formal tone appropriate for argumentative writing.",
-      "I can use logical organization and purposeful transitions."
-    ],
-    "vocabulary": [
-      "argument",
-      "formal tone",
-      "claim",
-      "counterclaim",
-      "rebuttal",
-      "logical reasoning",
-      "credible evidence"
-    ],
-    "sample_assessment": "Write an argumentative essay on a current social issue, maintaining a formal tone throughout. Support your position with evidence from at least three credible sources and address at least two counterclaims."
-  },
-  {
-    "code": "ELA.10.C.1.4",
-    "benchmark": "Write expository texts to explain and analyze information from multiple sources, using a logical organization, purposeful transitions, and a tone appropriate to the task.",
-    "topics": [
-      "Expository Writing",
-      "Multi-Source Analysis",
-      "Organization"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write expository texts that explain and analyze information synthesized from multiple sources with logical organization and appropriate tone.",
-    "essential_questions": [
-      "How do you synthesize information from multiple sources in expository writing?",
-      "How does organization support the analysis of complex information?"
-    ],
-    "learning_targets": [
-      "I can synthesize and analyze information from multiple sources.",
-      "I can organize expository writing logically.",
-      "I can use purposeful transitions and appropriate tone."
-    ],
-    "vocabulary": [
-      "expository",
-      "synthesis",
-      "analysis",
-      "organization",
-      "transitions",
-      "tone",
-      "multi-source"
-    ],
-    "sample_assessment": "Using three sources about the American Revolution, write an expository essay that analyzes the key factors that led to independence. Synthesize information across sources."
-  },
-  {
-    "code": "ELA.10.C.1.5",
-    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising to address the needs of a specific audience.",
-    "topics": [
-      "Revision",
-      "Audience Awareness",
-      "Writing Process"
-    ],
-    "dok": 2,
-    "item_specs": "Students must revise writing based on feedback, with a focus on addressing the needs of a specific audience.",
-    "essential_questions": [
-      "How does understanding your audience improve your writing?",
-      "How do you effectively incorporate feedback from multiple sources?"
-    ],
-    "learning_targets": [
-      "I can revise writing based on feedback from multiple sources.",
-      "I can tailor my writing to meet the needs of a specific audience.",
-      "I can evaluate and apply suggestions to improve clarity and effectiveness."
-    ],
-    "vocabulary": [
-      "revision",
-      "audience",
-      "feedback",
-      "tailoring",
-      "clarity",
-      "effectiveness"
-    ],
-    "sample_assessment": "Revise the following draft to better address a teenage audience. Explain the specific changes you made and why they improve the writing for that audience."
-  },
-  {
-    "code": "ELA.10.C.2.1",
-    "benchmark": "Present information orally, with a logical organization, coherent focus, credible evidence, and a clear perspective.",
-    "topics": [
-      "Oral Presentation",
-      "Public Speaking",
-      "Evidence",
-      "Organization"
-    ],
-    "dok": 2,
-    "item_specs": "Students must deliver oral presentations with logical organization, coherent focus, credible supporting evidence, and a clearly articulated perspective.",
-    "essential_questions": [
-      "How do you effectively organize and deliver an oral presentation?",
-      "How does credible evidence strengthen an oral presentation?"
-    ],
-    "learning_targets": [
-      "I can organize an oral presentation logically.",
-      "I can support my perspective with credible evidence.",
-      "I can maintain a coherent focus throughout a presentation."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "logical organization",
-      "credible evidence",
-      "perspective",
-      "coherent focus"
-    ],
-    "sample_assessment": "Deliver a 5-minute oral presentation analyzing a historical American speech, presenting a clear perspective supported by credible evidence."
-  },
-  {
-    "code": "ELA.10.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Standard English"
-    ],
-    "dok": 1,
-    "item_specs": "Students must demonstrate command of standard English conventions including grammar, punctuation, capitalization, and spelling at grade level.",
-    "essential_questions": [
-      "How do conventions of standard English support clear communication?",
-      "What grammar and mechanics skills are essential for grade-level writing?"
-    ],
-    "learning_targets": [
-      "I can apply standard English grammar rules consistently.",
-      "I can use correct punctuation, capitalization, and spelling.",
-      "I can identify and correct errors in grammar and mechanics."
-    ],
-    "vocabulary": [
-      "grammar",
-      "conventions",
-      "punctuation",
-      "capitalization",
-      "standard English",
-      "syntax"
-    ],
-    "sample_assessment": "Identify and correct all grammar, punctuation, and spelling errors in the following paragraph from a student essay about the American Revolution."
-  },
-  {
-    "code": "ELA.10.C.4.1",
-    "benchmark": "Conduct research to answer a question, drawing on multiple reliable and valid sources, and refining the scope of the question to align with findings.",
-    "topics": [
-      "Research",
-      "Source Evaluation",
-      "Inquiry"
-    ],
-    "dok": 3,
-    "item_specs": "Students must conduct research using multiple reliable and valid sources, refining their research question based on findings and synthesizing information.",
-    "essential_questions": [
-      "How do you refine a research question based on your findings?",
-      "How do you synthesize information from multiple sources?"
-    ],
-    "learning_targets": [
-      "I can conduct research using reliable and valid sources.",
-      "I can refine my research question based on findings.",
-      "I can synthesize information from multiple sources to answer a research question."
-    ],
-    "vocabulary": [
-      "research",
-      "synthesis",
-      "reliable sources",
-      "valid sources",
-      "refine",
-      "scope"
-    ],
-    "sample_assessment": "Conduct research on a topic related to historical American literature. Begin with a broad question, then refine it based on your findings. Present your refined question and a synthesis of information from at least four sources."
-  },
-  {
-    "code": "ELA.10.C.5.1",
-    "benchmark": "Create digital presentations to communicate findings, reasoning, and evidence.",
-    "topics": [
-      "Digital Presentations",
-      "Communication",
-      "Technology"
-    ],
-    "dok": 2,
-    "item_specs": "Students must create digital presentations that effectively communicate research findings, reasoning, and supporting evidence.",
-    "essential_questions": [
-      "How do you effectively communicate findings through digital presentations?",
-      "What elements make a digital presentation compelling?"
-    ],
-    "learning_targets": [
-      "I can create digital presentations that communicate findings clearly.",
-      "I can present reasoning and evidence in a digital format.",
-      "I can use multimedia elements to enhance my presentation."
-    ],
-    "vocabulary": [
-      "digital presentation",
-      "findings",
-      "reasoning",
-      "evidence",
-      "multimedia",
-      "communication"
-    ],
-    "sample_assessment": "Create a digital presentation that communicates the findings of your research project on historical American rhetoric. Include evidence, reasoning, and multimedia elements."
-  },
-  {
-    "code": "ELA.10.C.5.2",
-    "benchmark": "Use online collaborative platforms to create and export publication-ready quality writing tailored to a specific audience, integrating multimedia elements.",
-    "topics": [
-      "Digital Writing",
-      "Collaboration",
-      "Multimedia",
-      "Publishing"
-    ],
-    "dok": 2,
-    "item_specs": "Students must use collaborative online platforms to produce publication-ready writing that integrates multimedia elements and addresses a specific audience.",
-    "essential_questions": [
-      "How do multimedia elements enhance written communication?",
-      "How do you produce publication-ready writing using collaborative tools?"
-    ],
-    "learning_targets": [
-      "I can use collaborative platforms to produce quality writing.",
-      "I can integrate multimedia elements into written work.",
-      "I can tailor publication-ready writing to a specific audience."
-    ],
-    "vocabulary": [
-      "collaborative platform",
-      "multimedia",
-      "publication-ready",
-      "audience",
-      "integration",
-      "digital writing"
-    ],
-    "sample_assessment": "Collaborate with peers on an online platform to produce a publication-ready multimedia article about a significant event in American history, tailored for a general audience."
-  },
-  {
     "code": "ELA.10.V.1.1",
     "benchmark": "Integrate academic vocabulary appropriate to grade level in speaking and writing.",
     "topics": [
@@ -3702,6 +3702,272 @@
       "reference materials"
     ],
     "sample_assessment": "In the sentence 'The politician's inflammatory remarks ignited a firestorm of controversy,' the word 'inflammatory' connotes: A) medical inflammation B) deliberately provocative C) physically hot D) brightly colored"
+  },
+  {
+    "code": "ELA.11.C.1.2",
+    "benchmark": "Write complex narratives using appropriate techniques to establish multiple perspectives.",
+    "topics": [
+      "Narrative Writing",
+      "Multiple Perspectives",
+      "Complex Narratives"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write complex narratives that use sophisticated techniques to establish and develop multiple perspectives within the story.",
+    "essential_questions": [
+      "How do you create complex narratives with multiple perspectives?",
+      "What techniques help establish distinct perspectives in a narrative?"
+    ],
+    "learning_targets": [
+      "I can write complex narratives with multiple perspectives.",
+      "I can use appropriate techniques to distinguish between perspectives.",
+      "I can develop a complex narrative structure effectively."
+    ],
+    "vocabulary": [
+      "complex narrative",
+      "multiple perspectives",
+      "narrative technique",
+      "voice",
+      "point of view",
+      "characterization"
+    ],
+    "sample_assessment": "Write a narrative that tells the same event from two different perspectives. Use narrative techniques to clearly establish each character's unique viewpoint."
+  },
+  {
+    "code": "ELA.11.C.1.3",
+    "benchmark": "Write literary analyses to support claims, using logical reasoning, credible evidence from sources, and elaboration, demonstrating an understanding of literary elements.",
+    "topics": [
+      "Literary Analysis",
+      "Analytical Writing",
+      "Evidence-Based Writing"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write literary analyses that make claims about texts and support those claims with logical reasoning, credible evidence, and elaboration demonstrating knowledge of literary elements.",
+    "essential_questions": [
+      "How do you construct an effective literary analysis?",
+      "How do literary elements support claims in analytical writing?"
+    ],
+    "learning_targets": [
+      "I can write literary analyses with clear claims.",
+      "I can support analytical claims with credible evidence and logical reasoning.",
+      "I can demonstrate understanding of literary elements in my analysis."
+    ],
+    "vocabulary": [
+      "literary analysis",
+      "claim",
+      "evidence",
+      "elaboration",
+      "literary elements",
+      "interpretation",
+      "thesis"
+    ],
+    "sample_assessment": "Write a literary analysis of a novel studied in class, making a claim about how the author uses symbolism to develop a theme. Support your claim with at least three pieces of textual evidence."
+  },
+  {
+    "code": "ELA.11.C.1.4",
+    "benchmark": "Write an analysis of complex texts using logical organization and a tone and voice appropriate to the task and audience, demonstrating an understanding of the subject.",
+    "topics": [
+      "Text Analysis",
+      "Tone",
+      "Voice",
+      "Analytical Writing"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write analyses of complex texts using logical organization, appropriate tone and voice, and demonstrating thorough understanding of the subject.",
+    "essential_questions": [
+      "How do tone and voice contribute to effective analytical writing?",
+      "How do you demonstrate understanding of a subject through analysis?"
+    ],
+    "learning_targets": [
+      "I can write analyses of complex texts with logical organization.",
+      "I can maintain appropriate tone and voice for the task and audience.",
+      "I can demonstrate understanding of the subject through my analysis."
+    ],
+    "vocabulary": [
+      "analysis",
+      "tone",
+      "voice",
+      "audience",
+      "organization",
+      "complex texts",
+      "subject understanding"
+    ],
+    "sample_assessment": "Write an analysis of a complex essay from the Classical Period, using logical organization and a tone appropriate for an academic audience. Demonstrate your understanding of the author's ideas and techniques."
+  },
+  {
+    "code": "ELA.11.C.1.5",
+    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising to improve clarity, structure, and style.",
+    "topics": [
+      "Revision",
+      "Writing Process",
+      "Style"
+    ],
+    "dok": 2,
+    "item_specs": "Students must revise their writing based on feedback, focusing on improvements to clarity, structure, and style.",
+    "essential_questions": [
+      "How do you use feedback to improve clarity, structure, and style?",
+      "What revision strategies are most effective for improving writing quality?"
+    ],
+    "learning_targets": [
+      "I can use feedback to improve my writing.",
+      "I can revise for clarity, structure, and style.",
+      "I can evaluate revision suggestions and apply the most effective ones."
+    ],
+    "vocabulary": [
+      "revision",
+      "clarity",
+      "structure",
+      "style",
+      "feedback",
+      "drafting",
+      "editing"
+    ],
+    "sample_assessment": "Review the feedback provided on your literary analysis draft. Revise the essay to improve clarity, structure, and style, and write a brief reflection explaining the changes you made."
+  },
+  {
+    "code": "ELA.11.C.2.1",
+    "benchmark": "Present information orally, with a logical organization, coherent focus, and credible evidence, while employing effective rhetorical devices where appropriate.",
+    "topics": [
+      "Oral Presentation",
+      "Rhetorical Devices",
+      "Public Speaking"
+    ],
+    "dok": 2,
+    "item_specs": "Students must present information orally with logical organization, coherent focus, credible evidence, and employ effective rhetorical devices where appropriate.",
+    "essential_questions": [
+      "How do rhetorical devices enhance an oral presentation?",
+      "How do you effectively employ rhetorical strategies in public speaking?"
+    ],
+    "learning_targets": [
+      "I can present information with logical organization and coherent focus.",
+      "I can support my presentation with credible evidence.",
+      "I can employ effective rhetorical devices in oral presentations."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "rhetorical devices",
+      "public speaking",
+      "credible evidence",
+      "organization",
+      "audience engagement"
+    ],
+    "sample_assessment": "Deliver a 5-7 minute presentation analyzing a classical text, employing at least two rhetorical devices and supporting your analysis with credible evidence."
+  },
+  {
+    "code": "ELA.11.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Standard English"
+    ],
+    "dok": 1,
+    "item_specs": "Students must demonstrate mastery of standard English conventions in their writing at grade level.",
+    "essential_questions": [
+      "How do conventions of standard English enhance the clarity and credibility of writing?",
+      "What advanced grammar skills are essential for academic writing?"
+    ],
+    "learning_targets": [
+      "I can consistently apply standard English grammar rules.",
+      "I can use punctuation, capitalization, and spelling correctly.",
+      "I can edit writing for advanced grammar and mechanics errors."
+    ],
+    "vocabulary": [
+      "grammar",
+      "conventions",
+      "standard English",
+      "punctuation",
+      "syntax",
+      "mechanics"
+    ],
+    "sample_assessment": "Edit the following passage for errors in grammar, punctuation, capitalization, and spelling. Explain the rule that applies to each correction."
+  },
+  {
+    "code": "ELA.11.C.4.1",
+    "benchmark": "Conduct literary research to answer a question, refining the scope of the question to align with interpretations of texts, and synthesizing information from primary and secondary sources.",
+    "topics": [
+      "Literary Research",
+      "Primary Sources",
+      "Secondary Sources",
+      "Synthesis"
+    ],
+    "dok": 3,
+    "item_specs": "Students must conduct literary research by formulating questions, refining scope based on textual interpretations, and synthesizing information from both primary and secondary sources.",
+    "essential_questions": [
+      "How does literary research differ from general research?",
+      "How do you synthesize primary and secondary sources in literary research?"
+    ],
+    "learning_targets": [
+      "I can conduct literary research to answer a question.",
+      "I can refine research scope based on textual interpretations.",
+      "I can synthesize information from primary and secondary sources."
+    ],
+    "vocabulary": [
+      "literary research",
+      "primary source",
+      "secondary source",
+      "synthesis",
+      "interpretation",
+      "scope",
+      "literary criticism"
+    ],
+    "sample_assessment": "Conduct literary research on the influence of historical events on a specific author's work. Use at least two primary sources and three secondary sources. Present a synthesis of your findings."
+  },
+  {
+    "code": "ELA.11.C.5.1",
+    "benchmark": "Create digital presentations to improve the experience of the audience.",
+    "topics": [
+      "Digital Presentations",
+      "Audience Experience",
+      "Technology"
+    ],
+    "dok": 2,
+    "item_specs": "Students must create digital presentations designed to enhance and improve the audience's experience through effective use of digital tools and design principles.",
+    "essential_questions": [
+      "How can digital presentations enhance the audience's experience?",
+      "What design principles make digital presentations effective?"
+    ],
+    "learning_targets": [
+      "I can create digital presentations that enhance audience experience.",
+      "I can apply design principles to improve presentation effectiveness.",
+      "I can select appropriate digital tools for my presentation goals."
+    ],
+    "vocabulary": [
+      "digital presentation",
+      "audience experience",
+      "design principles",
+      "multimedia",
+      "visual communication"
+    ],
+    "sample_assessment": "Create a digital presentation about a literary research project that is designed to engage your audience. Include multimedia elements and explain your design choices."
+  },
+  {
+    "code": "ELA.11.C.5.2",
+    "benchmark": "Create and export quality writing tailored to a specific audience, integrating multimedia elements, publishing to an online or LAN site.",
+    "topics": [
+      "Digital Publishing",
+      "Multimedia Writing",
+      "Online Publishing"
+    ],
+    "dok": 2,
+    "item_specs": "Students must create and publish quality writing that integrates multimedia elements and is tailored to a specific audience, using online or LAN platforms.",
+    "essential_questions": [
+      "How do you publish quality writing for an online audience?",
+      "How do multimedia elements enhance published writing?"
+    ],
+    "learning_targets": [
+      "I can create quality writing tailored to a specific audience.",
+      "I can integrate multimedia elements into published writing.",
+      "I can publish writing to an online or LAN site."
+    ],
+    "vocabulary": [
+      "digital publishing",
+      "multimedia",
+      "audience",
+      "online publication",
+      "LAN",
+      "quality writing"
+    ],
+    "sample_assessment": "Publish a literary analysis to an online platform, integrating multimedia elements such as images, audio, or video that enhance your analysis. Tailor your writing for a peer audience."
   },
   {
     "code": "ELA.11.R.1.1",
@@ -4055,272 +4321,6 @@
     "sample_assessment": "Evaluate the author's use of rhetoric in a Classical Period speech. Is the rhetoric effective in achieving the author's purpose? Support your evaluation with specific examples."
   },
   {
-    "code": "ELA.11.C.1.2",
-    "benchmark": "Write complex narratives using appropriate techniques to establish multiple perspectives.",
-    "topics": [
-      "Narrative Writing",
-      "Multiple Perspectives",
-      "Complex Narratives"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write complex narratives that use sophisticated techniques to establish and develop multiple perspectives within the story.",
-    "essential_questions": [
-      "How do you create complex narratives with multiple perspectives?",
-      "What techniques help establish distinct perspectives in a narrative?"
-    ],
-    "learning_targets": [
-      "I can write complex narratives with multiple perspectives.",
-      "I can use appropriate techniques to distinguish between perspectives.",
-      "I can develop a complex narrative structure effectively."
-    ],
-    "vocabulary": [
-      "complex narrative",
-      "multiple perspectives",
-      "narrative technique",
-      "voice",
-      "point of view",
-      "characterization"
-    ],
-    "sample_assessment": "Write a narrative that tells the same event from two different perspectives. Use narrative techniques to clearly establish each character's unique viewpoint."
-  },
-  {
-    "code": "ELA.11.C.1.3",
-    "benchmark": "Write literary analyses to support claims, using logical reasoning, credible evidence from sources, and elaboration, demonstrating an understanding of literary elements.",
-    "topics": [
-      "Literary Analysis",
-      "Analytical Writing",
-      "Evidence-Based Writing"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write literary analyses that make claims about texts and support those claims with logical reasoning, credible evidence, and elaboration demonstrating knowledge of literary elements.",
-    "essential_questions": [
-      "How do you construct an effective literary analysis?",
-      "How do literary elements support claims in analytical writing?"
-    ],
-    "learning_targets": [
-      "I can write literary analyses with clear claims.",
-      "I can support analytical claims with credible evidence and logical reasoning.",
-      "I can demonstrate understanding of literary elements in my analysis."
-    ],
-    "vocabulary": [
-      "literary analysis",
-      "claim",
-      "evidence",
-      "elaboration",
-      "literary elements",
-      "interpretation",
-      "thesis"
-    ],
-    "sample_assessment": "Write a literary analysis of a novel studied in class, making a claim about how the author uses symbolism to develop a theme. Support your claim with at least three pieces of textual evidence."
-  },
-  {
-    "code": "ELA.11.C.1.4",
-    "benchmark": "Write an analysis of complex texts using logical organization and a tone and voice appropriate to the task and audience, demonstrating an understanding of the subject.",
-    "topics": [
-      "Text Analysis",
-      "Tone",
-      "Voice",
-      "Analytical Writing"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write analyses of complex texts using logical organization, appropriate tone and voice, and demonstrating thorough understanding of the subject.",
-    "essential_questions": [
-      "How do tone and voice contribute to effective analytical writing?",
-      "How do you demonstrate understanding of a subject through analysis?"
-    ],
-    "learning_targets": [
-      "I can write analyses of complex texts with logical organization.",
-      "I can maintain appropriate tone and voice for the task and audience.",
-      "I can demonstrate understanding of the subject through my analysis."
-    ],
-    "vocabulary": [
-      "analysis",
-      "tone",
-      "voice",
-      "audience",
-      "organization",
-      "complex texts",
-      "subject understanding"
-    ],
-    "sample_assessment": "Write an analysis of a complex essay from the Classical Period, using logical organization and a tone appropriate for an academic audience. Demonstrate your understanding of the author's ideas and techniques."
-  },
-  {
-    "code": "ELA.11.C.1.5",
-    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising to improve clarity, structure, and style.",
-    "topics": [
-      "Revision",
-      "Writing Process",
-      "Style"
-    ],
-    "dok": 2,
-    "item_specs": "Students must revise their writing based on feedback, focusing on improvements to clarity, structure, and style.",
-    "essential_questions": [
-      "How do you use feedback to improve clarity, structure, and style?",
-      "What revision strategies are most effective for improving writing quality?"
-    ],
-    "learning_targets": [
-      "I can use feedback to improve my writing.",
-      "I can revise for clarity, structure, and style.",
-      "I can evaluate revision suggestions and apply the most effective ones."
-    ],
-    "vocabulary": [
-      "revision",
-      "clarity",
-      "structure",
-      "style",
-      "feedback",
-      "drafting",
-      "editing"
-    ],
-    "sample_assessment": "Review the feedback provided on your literary analysis draft. Revise the essay to improve clarity, structure, and style, and write a brief reflection explaining the changes you made."
-  },
-  {
-    "code": "ELA.11.C.2.1",
-    "benchmark": "Present information orally, with a logical organization, coherent focus, and credible evidence, while employing effective rhetorical devices where appropriate.",
-    "topics": [
-      "Oral Presentation",
-      "Rhetorical Devices",
-      "Public Speaking"
-    ],
-    "dok": 2,
-    "item_specs": "Students must present information orally with logical organization, coherent focus, credible evidence, and employ effective rhetorical devices where appropriate.",
-    "essential_questions": [
-      "How do rhetorical devices enhance an oral presentation?",
-      "How do you effectively employ rhetorical strategies in public speaking?"
-    ],
-    "learning_targets": [
-      "I can present information with logical organization and coherent focus.",
-      "I can support my presentation with credible evidence.",
-      "I can employ effective rhetorical devices in oral presentations."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "rhetorical devices",
-      "public speaking",
-      "credible evidence",
-      "organization",
-      "audience engagement"
-    ],
-    "sample_assessment": "Deliver a 5-7 minute presentation analyzing a classical text, employing at least two rhetorical devices and supporting your analysis with credible evidence."
-  },
-  {
-    "code": "ELA.11.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Standard English"
-    ],
-    "dok": 1,
-    "item_specs": "Students must demonstrate mastery of standard English conventions in their writing at grade level.",
-    "essential_questions": [
-      "How do conventions of standard English enhance the clarity and credibility of writing?",
-      "What advanced grammar skills are essential for academic writing?"
-    ],
-    "learning_targets": [
-      "I can consistently apply standard English grammar rules.",
-      "I can use punctuation, capitalization, and spelling correctly.",
-      "I can edit writing for advanced grammar and mechanics errors."
-    ],
-    "vocabulary": [
-      "grammar",
-      "conventions",
-      "standard English",
-      "punctuation",
-      "syntax",
-      "mechanics"
-    ],
-    "sample_assessment": "Edit the following passage for errors in grammar, punctuation, capitalization, and spelling. Explain the rule that applies to each correction."
-  },
-  {
-    "code": "ELA.11.C.4.1",
-    "benchmark": "Conduct literary research to answer a question, refining the scope of the question to align with interpretations of texts, and synthesizing information from primary and secondary sources.",
-    "topics": [
-      "Literary Research",
-      "Primary Sources",
-      "Secondary Sources",
-      "Synthesis"
-    ],
-    "dok": 3,
-    "item_specs": "Students must conduct literary research by formulating questions, refining scope based on textual interpretations, and synthesizing information from both primary and secondary sources.",
-    "essential_questions": [
-      "How does literary research differ from general research?",
-      "How do you synthesize primary and secondary sources in literary research?"
-    ],
-    "learning_targets": [
-      "I can conduct literary research to answer a question.",
-      "I can refine research scope based on textual interpretations.",
-      "I can synthesize information from primary and secondary sources."
-    ],
-    "vocabulary": [
-      "literary research",
-      "primary source",
-      "secondary source",
-      "synthesis",
-      "interpretation",
-      "scope",
-      "literary criticism"
-    ],
-    "sample_assessment": "Conduct literary research on the influence of historical events on a specific author's work. Use at least two primary sources and three secondary sources. Present a synthesis of your findings."
-  },
-  {
-    "code": "ELA.11.C.5.1",
-    "benchmark": "Create digital presentations to improve the experience of the audience.",
-    "topics": [
-      "Digital Presentations",
-      "Audience Experience",
-      "Technology"
-    ],
-    "dok": 2,
-    "item_specs": "Students must create digital presentations designed to enhance and improve the audience's experience through effective use of digital tools and design principles.",
-    "essential_questions": [
-      "How can digital presentations enhance the audience's experience?",
-      "What design principles make digital presentations effective?"
-    ],
-    "learning_targets": [
-      "I can create digital presentations that enhance audience experience.",
-      "I can apply design principles to improve presentation effectiveness.",
-      "I can select appropriate digital tools for my presentation goals."
-    ],
-    "vocabulary": [
-      "digital presentation",
-      "audience experience",
-      "design principles",
-      "multimedia",
-      "visual communication"
-    ],
-    "sample_assessment": "Create a digital presentation about a literary research project that is designed to engage your audience. Include multimedia elements and explain your design choices."
-  },
-  {
-    "code": "ELA.11.C.5.2",
-    "benchmark": "Create and export quality writing tailored to a specific audience, integrating multimedia elements, publishing to an online or LAN site.",
-    "topics": [
-      "Digital Publishing",
-      "Multimedia Writing",
-      "Online Publishing"
-    ],
-    "dok": 2,
-    "item_specs": "Students must create and publish quality writing that integrates multimedia elements and is tailored to a specific audience, using online or LAN platforms.",
-    "essential_questions": [
-      "How do you publish quality writing for an online audience?",
-      "How do multimedia elements enhance published writing?"
-    ],
-    "learning_targets": [
-      "I can create quality writing tailored to a specific audience.",
-      "I can integrate multimedia elements into published writing.",
-      "I can publish writing to an online or LAN site."
-    ],
-    "vocabulary": [
-      "digital publishing",
-      "multimedia",
-      "audience",
-      "online publication",
-      "LAN",
-      "quality writing"
-    ],
-    "sample_assessment": "Publish a literary analysis to an online platform, integrating multimedia elements such as images, audio, or video that enhance your analysis. Tailor your writing for a peer audience."
-  },
-  {
     "code": "ELA.11.V.1.1",
     "benchmark": "Integrate academic vocabulary appropriate to grade level in speaking and writing.",
     "topics": [
@@ -4405,6 +4405,270 @@
       "interpretation"
     ],
     "sample_assessment": "In the Classical Period text, the author describes a leader as 'magnanimous.' Using context clues and your knowledge of Latin roots, explain both the denotative and connotative meanings of this word."
+  },
+  {
+    "code": "ELA.12.C.1.2",
+    "benchmark": "Write complex narratives using appropriate techniques to establish multiple perspectives and convey universal themes.",
+    "topics": [
+      "Narrative Writing",
+      "Multiple Perspectives",
+      "Universal Themes"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write sophisticated narratives that use complex techniques to establish multiple perspectives and convey universal themes.",
+    "essential_questions": [
+      "How do you craft narratives that convey universal themes through multiple perspectives?",
+      "What techniques create the most effective complex narratives?"
+    ],
+    "learning_targets": [
+      "I can write complex narratives with multiple perspectives.",
+      "I can use narrative techniques to convey universal themes.",
+      "I can create sophisticated stories with layered meaning."
+    ],
+    "vocabulary": [
+      "complex narrative",
+      "multiple perspectives",
+      "universal themes",
+      "narrative technique",
+      "layered meaning"
+    ],
+    "sample_assessment": "Write a narrative that tells a story from at least two perspectives and conveys a universal theme. Use techniques such as dialogue, pacing, and description to create a complex, layered narrative."
+  },
+  {
+    "code": "ELA.12.C.1.3",
+    "benchmark": "Write arguments to support claims based on an in-depth analysis of topics or texts using valid reasoning and credible evidence from sources, elaboration, and demonstrating a thorough understanding of the subject.",
+    "topics": [
+      "Argumentative Writing",
+      "In-Depth Analysis",
+      "Evidence-Based Writing"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write sophisticated arguments based on in-depth analysis, using valid reasoning, credible evidence, and elaboration that demonstrates thorough subject understanding.",
+    "essential_questions": [
+      "How do you construct an argument based on in-depth analysis?",
+      "How does thorough understanding of a subject strengthen argumentative writing?"
+    ],
+    "learning_targets": [
+      "I can write arguments based on in-depth analysis of topics or texts.",
+      "I can support claims with valid reasoning and credible evidence.",
+      "I can demonstrate thorough understanding of the subject in my writing."
+    ],
+    "vocabulary": [
+      "argument",
+      "in-depth analysis",
+      "valid reasoning",
+      "credible evidence",
+      "elaboration",
+      "thesis"
+    ],
+    "sample_assessment": "Write an argumentative essay based on an in-depth analysis of a contemporary issue. Support your claims with evidence from at least four credible sources, demonstrating thorough understanding of the subject."
+  },
+  {
+    "code": "ELA.12.C.1.4",
+    "benchmark": "Write an in-depth analysis of complex texts using logical organization and appropriate tone and voice, demonstrating a thorough understanding of the subject.",
+    "topics": [
+      "Text Analysis",
+      "In-Depth Analysis",
+      "Tone",
+      "Voice"
+    ],
+    "dok": 3,
+    "item_specs": "Students must write in-depth analyses of complex texts with logical organization, appropriate tone and voice, and thorough subject understanding.",
+    "essential_questions": [
+      "How do you write an in-depth analysis of complex texts?",
+      "How do tone and voice reflect thorough understanding of a subject?"
+    ],
+    "learning_targets": [
+      "I can write in-depth analyses of complex texts.",
+      "I can use logical organization in analytical writing.",
+      "I can demonstrate thorough understanding through appropriate tone and voice."
+    ],
+    "vocabulary": [
+      "in-depth analysis",
+      "complex texts",
+      "tone",
+      "voice",
+      "logical organization",
+      "subject mastery"
+    ],
+    "sample_assessment": "Write an in-depth analysis of a complex literary work, demonstrating thorough understanding of the text's themes, techniques, and significance. Use logical organization and maintain an appropriate academic tone."
+  },
+  {
+    "code": "ELA.12.C.1.5",
+    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising to enhance purpose, clarity, structure, and style.",
+    "topics": [
+      "Revision",
+      "Writing Process",
+      "Purpose",
+      "Style"
+    ],
+    "dok": 2,
+    "item_specs": "Students must revise writing based on feedback, focusing on enhancing purpose, clarity, structure, and style at the highest level.",
+    "essential_questions": [
+      "How do you revise writing to enhance purpose, clarity, structure, and style?",
+      "What distinguishes effective revision from superficial editing?"
+    ],
+    "learning_targets": [
+      "I can use feedback to enhance my writing's purpose and clarity.",
+      "I can revise to improve structure and style.",
+      "I can distinguish between surface-level editing and substantive revision."
+    ],
+    "vocabulary": [
+      "revision",
+      "purpose",
+      "clarity",
+      "structure",
+      "style",
+      "feedback",
+      "substantive revision"
+    ],
+    "sample_assessment": "Using feedback from peers and a rubric, revise your analytical essay to enhance purpose, clarity, structure, and style. Write a reflection describing your revision process and the improvements made."
+  },
+  {
+    "code": "ELA.12.C.2.1",
+    "benchmark": "Present information orally, with a logical organization, coherent focus, and credible evidence while employing effective rhetorical devices where appropriate.",
+    "topics": [
+      "Oral Presentation",
+      "Rhetorical Devices",
+      "Public Speaking"
+    ],
+    "dok": 2,
+    "item_specs": "Students must deliver polished oral presentations with logical organization, coherent focus, credible evidence, and effective rhetorical devices.",
+    "essential_questions": [
+      "How do you deliver a polished oral presentation with rhetorical devices?",
+      "What rhetorical devices are most effective in public speaking?"
+    ],
+    "learning_targets": [
+      "I can present information with logical organization and coherent focus.",
+      "I can employ effective rhetorical devices in oral presentations.",
+      "I can support my presentations with credible evidence."
+    ],
+    "vocabulary": [
+      "oral presentation",
+      "rhetorical devices",
+      "public speaking",
+      "credible evidence",
+      "organization"
+    ],
+    "sample_assessment": "Deliver a 7-10 minute presentation on a topic of literary or cultural significance, employing at least three rhetorical devices and supporting your claims with credible evidence."
+  },
+  {
+    "code": "ELA.12.C.3.1",
+    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
+    "topics": [
+      "Grammar",
+      "Conventions",
+      "Standard English"
+    ],
+    "dok": 1,
+    "item_specs": "Students must demonstrate mastery of all standard English conventions appropriate to grade 12 in their writing.",
+    "essential_questions": [
+      "How does mastery of conventions enhance the credibility and clarity of writing?",
+      "What conventions are essential for college-ready writing?"
+    ],
+    "learning_targets": [
+      "I can demonstrate mastery of standard English grammar rules.",
+      "I can apply all conventions of punctuation, capitalization, and spelling.",
+      "I can produce writing that is virtually free of convention errors."
+    ],
+    "vocabulary": [
+      "grammar",
+      "conventions",
+      "standard English",
+      "punctuation",
+      "syntax",
+      "college-ready writing"
+    ],
+    "sample_assessment": "Edit the following college application essay for all errors in grammar, punctuation, capitalization, and spelling. Explain the rule behind each correction."
+  },
+  {
+    "code": "ELA.12.C.4.1",
+    "benchmark": "Conduct research on a topical issue to answer a question and synthesize information from a variety of sources.",
+    "topics": [
+      "Research",
+      "Synthesis",
+      "Current Issues",
+      "Source Variety"
+    ],
+    "dok": 3,
+    "item_specs": "Students must conduct research on topical issues, synthesizing information from a variety of sources to answer complex questions.",
+    "essential_questions": [
+      "How do you conduct research on complex topical issues?",
+      "How do you synthesize information from diverse sources?"
+    ],
+    "learning_targets": [
+      "I can conduct research on topical issues effectively.",
+      "I can synthesize information from a variety of sources.",
+      "I can answer complex questions through research and analysis."
+    ],
+    "vocabulary": [
+      "research",
+      "topical issue",
+      "synthesis",
+      "variety of sources",
+      "analysis",
+      "inquiry"
+    ],
+    "sample_assessment": "Conduct research on a current topical issue. Synthesize information from at least five diverse sources (academic journals, news articles, primary documents, etc.) and present your findings in a research paper."
+  },
+  {
+    "code": "ELA.12.C.5.1",
+    "benchmark": "Design and evaluate digital presentations for effectiveness.",
+    "topics": [
+      "Digital Presentations",
+      "Design",
+      "Evaluation",
+      "Technology"
+    ],
+    "dok": 3,
+    "item_specs": "Students must both design effective digital presentations and evaluate digital presentations for their effectiveness.",
+    "essential_questions": [
+      "What makes a digital presentation effective?",
+      "How do you evaluate the design and effectiveness of digital presentations?"
+    ],
+    "learning_targets": [
+      "I can design effective digital presentations.",
+      "I can evaluate digital presentations for effectiveness.",
+      "I can apply design principles to create compelling visual communication."
+    ],
+    "vocabulary": [
+      "digital presentation",
+      "design",
+      "evaluation",
+      "effectiveness",
+      "visual communication",
+      "multimedia"
+    ],
+    "sample_assessment": "Design a digital presentation on a complex literary or social topic. Then, evaluate a peer's digital presentation using a provided rubric, providing specific feedback on effectiveness."
+  },
+  {
+    "code": "ELA.12.C.5.2",
+    "benchmark": "Create, publish, and share multimedia texts through a variety of digital formats.",
+    "topics": [
+      "Multimedia",
+      "Digital Publishing",
+      "Digital Formats"
+    ],
+    "dok": 2,
+    "item_specs": "Students must create, publish, and share multimedia texts using a variety of digital formats appropriate to purpose and audience.",
+    "essential_questions": [
+      "How do you select the most appropriate digital format for your purpose?",
+      "How do multimedia elements enhance published texts?"
+    ],
+    "learning_targets": [
+      "I can create multimedia texts using digital formats.",
+      "I can publish and share work through appropriate digital platforms.",
+      "I can select the best digital format for my purpose and audience."
+    ],
+    "vocabulary": [
+      "multimedia",
+      "digital formats",
+      "publishing",
+      "sharing",
+      "digital literacy",
+      "platform"
+    ],
+    "sample_assessment": "Create a multimedia text on a topic of literary or cultural significance and publish it through an appropriate digital platform. Include at least three different media types and explain your format choices."
   },
   {
     "code": "ELA.12.R.1.1",
@@ -4759,270 +5023,6 @@
       "context"
     ],
     "sample_assessment": "Evaluate the rhetorical choices in three speeches from different eras addressing the theme of freedom. Compare the strategies used and judge which is most effective for its intended audience."
-  },
-  {
-    "code": "ELA.12.C.1.2",
-    "benchmark": "Write complex narratives using appropriate techniques to establish multiple perspectives and convey universal themes.",
-    "topics": [
-      "Narrative Writing",
-      "Multiple Perspectives",
-      "Universal Themes"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write sophisticated narratives that use complex techniques to establish multiple perspectives and convey universal themes.",
-    "essential_questions": [
-      "How do you craft narratives that convey universal themes through multiple perspectives?",
-      "What techniques create the most effective complex narratives?"
-    ],
-    "learning_targets": [
-      "I can write complex narratives with multiple perspectives.",
-      "I can use narrative techniques to convey universal themes.",
-      "I can create sophisticated stories with layered meaning."
-    ],
-    "vocabulary": [
-      "complex narrative",
-      "multiple perspectives",
-      "universal themes",
-      "narrative technique",
-      "layered meaning"
-    ],
-    "sample_assessment": "Write a narrative that tells a story from at least two perspectives and conveys a universal theme. Use techniques such as dialogue, pacing, and description to create a complex, layered narrative."
-  },
-  {
-    "code": "ELA.12.C.1.3",
-    "benchmark": "Write arguments to support claims based on an in-depth analysis of topics or texts using valid reasoning and credible evidence from sources, elaboration, and demonstrating a thorough understanding of the subject.",
-    "topics": [
-      "Argumentative Writing",
-      "In-Depth Analysis",
-      "Evidence-Based Writing"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write sophisticated arguments based on in-depth analysis, using valid reasoning, credible evidence, and elaboration that demonstrates thorough subject understanding.",
-    "essential_questions": [
-      "How do you construct an argument based on in-depth analysis?",
-      "How does thorough understanding of a subject strengthen argumentative writing?"
-    ],
-    "learning_targets": [
-      "I can write arguments based on in-depth analysis of topics or texts.",
-      "I can support claims with valid reasoning and credible evidence.",
-      "I can demonstrate thorough understanding of the subject in my writing."
-    ],
-    "vocabulary": [
-      "argument",
-      "in-depth analysis",
-      "valid reasoning",
-      "credible evidence",
-      "elaboration",
-      "thesis"
-    ],
-    "sample_assessment": "Write an argumentative essay based on an in-depth analysis of a contemporary issue. Support your claims with evidence from at least four credible sources, demonstrating thorough understanding of the subject."
-  },
-  {
-    "code": "ELA.12.C.1.4",
-    "benchmark": "Write an in-depth analysis of complex texts using logical organization and appropriate tone and voice, demonstrating a thorough understanding of the subject.",
-    "topics": [
-      "Text Analysis",
-      "In-Depth Analysis",
-      "Tone",
-      "Voice"
-    ],
-    "dok": 3,
-    "item_specs": "Students must write in-depth analyses of complex texts with logical organization, appropriate tone and voice, and thorough subject understanding.",
-    "essential_questions": [
-      "How do you write an in-depth analysis of complex texts?",
-      "How do tone and voice reflect thorough understanding of a subject?"
-    ],
-    "learning_targets": [
-      "I can write in-depth analyses of complex texts.",
-      "I can use logical organization in analytical writing.",
-      "I can demonstrate thorough understanding through appropriate tone and voice."
-    ],
-    "vocabulary": [
-      "in-depth analysis",
-      "complex texts",
-      "tone",
-      "voice",
-      "logical organization",
-      "subject mastery"
-    ],
-    "sample_assessment": "Write an in-depth analysis of a complex literary work, demonstrating thorough understanding of the text's themes, techniques, and significance. Use logical organization and maintain an appropriate academic tone."
-  },
-  {
-    "code": "ELA.12.C.1.5",
-    "benchmark": "Improve writing by considering feedback from adults, peers, and/or online editing tools, revising to enhance purpose, clarity, structure, and style.",
-    "topics": [
-      "Revision",
-      "Writing Process",
-      "Purpose",
-      "Style"
-    ],
-    "dok": 2,
-    "item_specs": "Students must revise writing based on feedback, focusing on enhancing purpose, clarity, structure, and style at the highest level.",
-    "essential_questions": [
-      "How do you revise writing to enhance purpose, clarity, structure, and style?",
-      "What distinguishes effective revision from superficial editing?"
-    ],
-    "learning_targets": [
-      "I can use feedback to enhance my writing's purpose and clarity.",
-      "I can revise to improve structure and style.",
-      "I can distinguish between surface-level editing and substantive revision."
-    ],
-    "vocabulary": [
-      "revision",
-      "purpose",
-      "clarity",
-      "structure",
-      "style",
-      "feedback",
-      "substantive revision"
-    ],
-    "sample_assessment": "Using feedback from peers and a rubric, revise your analytical essay to enhance purpose, clarity, structure, and style. Write a reflection describing your revision process and the improvements made."
-  },
-  {
-    "code": "ELA.12.C.2.1",
-    "benchmark": "Present information orally, with a logical organization, coherent focus, and credible evidence while employing effective rhetorical devices where appropriate.",
-    "topics": [
-      "Oral Presentation",
-      "Rhetorical Devices",
-      "Public Speaking"
-    ],
-    "dok": 2,
-    "item_specs": "Students must deliver polished oral presentations with logical organization, coherent focus, credible evidence, and effective rhetorical devices.",
-    "essential_questions": [
-      "How do you deliver a polished oral presentation with rhetorical devices?",
-      "What rhetorical devices are most effective in public speaking?"
-    ],
-    "learning_targets": [
-      "I can present information with logical organization and coherent focus.",
-      "I can employ effective rhetorical devices in oral presentations.",
-      "I can support my presentations with credible evidence."
-    ],
-    "vocabulary": [
-      "oral presentation",
-      "rhetorical devices",
-      "public speaking",
-      "credible evidence",
-      "organization"
-    ],
-    "sample_assessment": "Deliver a 7-10 minute presentation on a topic of literary or cultural significance, employing at least three rhetorical devices and supporting your claims with credible evidence."
-  },
-  {
-    "code": "ELA.12.C.3.1",
-    "benchmark": "Follow the rules of standard English grammar, punctuation, capitalization, and spelling appropriate to grade level.",
-    "topics": [
-      "Grammar",
-      "Conventions",
-      "Standard English"
-    ],
-    "dok": 1,
-    "item_specs": "Students must demonstrate mastery of all standard English conventions appropriate to grade 12 in their writing.",
-    "essential_questions": [
-      "How does mastery of conventions enhance the credibility and clarity of writing?",
-      "What conventions are essential for college-ready writing?"
-    ],
-    "learning_targets": [
-      "I can demonstrate mastery of standard English grammar rules.",
-      "I can apply all conventions of punctuation, capitalization, and spelling.",
-      "I can produce writing that is virtually free of convention errors."
-    ],
-    "vocabulary": [
-      "grammar",
-      "conventions",
-      "standard English",
-      "punctuation",
-      "syntax",
-      "college-ready writing"
-    ],
-    "sample_assessment": "Edit the following college application essay for all errors in grammar, punctuation, capitalization, and spelling. Explain the rule behind each correction."
-  },
-  {
-    "code": "ELA.12.C.4.1",
-    "benchmark": "Conduct research on a topical issue to answer a question and synthesize information from a variety of sources.",
-    "topics": [
-      "Research",
-      "Synthesis",
-      "Current Issues",
-      "Source Variety"
-    ],
-    "dok": 3,
-    "item_specs": "Students must conduct research on topical issues, synthesizing information from a variety of sources to answer complex questions.",
-    "essential_questions": [
-      "How do you conduct research on complex topical issues?",
-      "How do you synthesize information from diverse sources?"
-    ],
-    "learning_targets": [
-      "I can conduct research on topical issues effectively.",
-      "I can synthesize information from a variety of sources.",
-      "I can answer complex questions through research and analysis."
-    ],
-    "vocabulary": [
-      "research",
-      "topical issue",
-      "synthesis",
-      "variety of sources",
-      "analysis",
-      "inquiry"
-    ],
-    "sample_assessment": "Conduct research on a current topical issue. Synthesize information from at least five diverse sources (academic journals, news articles, primary documents, etc.) and present your findings in a research paper."
-  },
-  {
-    "code": "ELA.12.C.5.1",
-    "benchmark": "Design and evaluate digital presentations for effectiveness.",
-    "topics": [
-      "Digital Presentations",
-      "Design",
-      "Evaluation",
-      "Technology"
-    ],
-    "dok": 3,
-    "item_specs": "Students must both design effective digital presentations and evaluate digital presentations for their effectiveness.",
-    "essential_questions": [
-      "What makes a digital presentation effective?",
-      "How do you evaluate the design and effectiveness of digital presentations?"
-    ],
-    "learning_targets": [
-      "I can design effective digital presentations.",
-      "I can evaluate digital presentations for effectiveness.",
-      "I can apply design principles to create compelling visual communication."
-    ],
-    "vocabulary": [
-      "digital presentation",
-      "design",
-      "evaluation",
-      "effectiveness",
-      "visual communication",
-      "multimedia"
-    ],
-    "sample_assessment": "Design a digital presentation on a complex literary or social topic. Then, evaluate a peer's digital presentation using a provided rubric, providing specific feedback on effectiveness."
-  },
-  {
-    "code": "ELA.12.C.5.2",
-    "benchmark": "Create, publish, and share multimedia texts through a variety of digital formats.",
-    "topics": [
-      "Multimedia",
-      "Digital Publishing",
-      "Digital Formats"
-    ],
-    "dok": 2,
-    "item_specs": "Students must create, publish, and share multimedia texts using a variety of digital formats appropriate to purpose and audience.",
-    "essential_questions": [
-      "How do you select the most appropriate digital format for your purpose?",
-      "How do multimedia elements enhance published texts?"
-    ],
-    "learning_targets": [
-      "I can create multimedia texts using digital formats.",
-      "I can publish and share work through appropriate digital platforms.",
-      "I can select the best digital format for my purpose and audience."
-    ],
-    "vocabulary": [
-      "multimedia",
-      "digital formats",
-      "publishing",
-      "sharing",
-      "digital literacy",
-      "platform"
-    ],
-    "sample_assessment": "Create a multimedia text on a topic of literary or cultural significance and publish it through an appropriate digital platform. Include at least three different media types and explain your format choices."
   },
   {
     "code": "ELA.12.V.1.1",

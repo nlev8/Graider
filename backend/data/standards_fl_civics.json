@@ -1024,6 +1024,1268 @@
     "sample_assessment": "The United Nations was created primarily to: A) Control world trade B) Maintain international peace and security C) Establish a world government D) Regulate the Internet"
   },
   {
+    "code": "SS.7.CG.1.1",
+    "benchmark": "Analyze the influences of ancient Greece, ancient Rome and the Judeo-Christian tradition on America's constitutional republic. Classical Athens: government and culture (7-U.2) The Roman Republic: part I (7-V.4)",
+    "topics": [
+      "Ancient Greece",
+      "Ancient Rome",
+      "Judeo-Christian Tradition",
+      "Constitutional Republic"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and compare the influences of ancient Greece, ancient Rome, and the Judeo-Christian tradition on the development of America's constitutional republic. Items may include scenarios, primary source excerpts, and comparative essays that encourage critical thinking.",
+    "essential_questions": [
+      "How did the political systems of ancient Greece and Rome influence modern democracy?",
+      "In what ways did Judeo-Christian values shape the principles of American governance?",
+      "What lessons can contemporary governments learn from ancient civilizations?"
+    ],
+    "learning_targets": [
+      "I can identify key contributions of ancient Greece to American government.",
+      "I can explain the impact of Roman governance on the U.S. Constitution.",
+      "I can discuss how Judeo-Christian traditions influenced American political values."
+    ],
+    "vocabulary": [
+      "democracy",
+      "republic",
+      "philosophy",
+      "law",
+      "tradition",
+      "influence",
+      "government",
+      "citizenship",
+      "values",
+      "principles"
+    ],
+    "sample_assessment": "Which ancient civilization is credited with the concept of democracy that influenced the United States? A) Ancient Rome B) Ancient Greece C) Ancient Egypt D) Ancient China"
+  },
+  {
+    "code": "SS.7.CG.1.2",
+    "benchmark": "Trace the principles underlying America's founding ideas on law and government. The Enlightenment: origins and natural rights (7-AA.5) The Enlightenment: influences on government (7-AA.6) Purposes of government (7-EE.1) The Constitution: structure and principles (7-FF.1) Source analysis: the Declaration of Independence (7-MM.10)",
+    "topics": [
+      "Founding Principles",
+      "Enlightenment",
+      "Law and Government",
+      "Constitution"
+    ],
+    "dok": 2,
+    "item_specs": "Items should focus on tracing the foundational principles of American law and government, emphasizing the Enlightenment's role. Assessments may include multiple-choice questions, short answers, and source analysis that require students to connect historical ideas to modern governance.",
+    "essential_questions": [
+      "What are the key principles that shaped the founding of the United States?",
+      "How did Enlightenment thinkers influence the Constitution?",
+      "What role does the concept of natural rights play in American law?"
+    ],
+    "learning_targets": [
+      "I can describe the key principles of American government.",
+      "I can explain how Enlightenment ideas influenced the Constitution.",
+      "I can analyze the significance of the Declaration of Independence."
+    ],
+    "vocabulary": [
+      "Enlightenment",
+      "natural rights",
+      "government",
+      "Constitution",
+      "law",
+      "principles",
+      "founding",
+      "democracy",
+      "liberty",
+      "social contract"
+    ],
+    "sample_assessment": "Which Enlightenment thinker is known for the idea of natural rights that influenced the Declaration of Independence? A) Montesquieu B) Rousseau C) Locke D) Hobbes"
+  },
+  {
+    "code": "SS.7.CG.1.3",
+    "benchmark": "Trace the impact that the Magna Carta, Mayflower Compact, English Bill of Rights and Thomas Paine's Common Sense had on colonists' views of government.",
+    "topics": [
+      "Magna Carta",
+      "Mayflower Compact",
+      "Colonial Views",
+      "Government"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to trace the historical significance of key documents like the Magna Carta and the Mayflower Compact, focusing on their impact on colonial views of government. Items may include document analysis, comparative essays, and scenario-based questions.",
+    "essential_questions": [
+      "How did the Magna Carta influence the development of constitutional government?",
+      "What role did the Mayflower Compact play in shaping colonial governance?",
+      "In what ways did these documents reflect the colonists' views on rights and government?"
+    ],
+    "learning_targets": [
+      "I can explain the significance of the Magna Carta in American history.",
+      "I can analyze the impact of the Mayflower Compact on colonial governance.",
+      "I can discuss how these documents influenced colonists' views on government."
+    ],
+    "vocabulary": [
+      "Magna Carta",
+      "Mayflower Compact",
+      "rights",
+      "government",
+      "colonial",
+      "influence",
+      "document",
+      "constitutional",
+      "freedom",
+      "representation"
+    ],
+    "sample_assessment": "What was a key principle established by the Magna Carta that influenced American government? A) Absolute monarchy B) Rule of law C) Divine right D) Totalitarianism"
+  },
+  {
+    "code": "SS.7.CG.1.4",
+    "benchmark": "Analyze how Enlightenment ideas, including Montesquieu's view of separation of powers and John Locke's theories related to natural law and Locke's social contract, influenced the Founding. The Enlightenment: origins and natural rights (7-AA.5) The Enlightenment: influences on government (7-AA.6)",
+    "topics": [
+      "Enlightenment Ideas",
+      "Separation of Powers",
+      "Social Contract",
+      "Influence"
+    ],
+    "dok": 4,
+    "item_specs": "Items should challenge students to analyze how Enlightenment ideas, particularly those of Montesquieu and Locke, influenced the Founding Fathers. Assessments may include essays, debates, and critical analysis of primary sources that require deep understanding and application of these concepts.",
+    "essential_questions": [
+      "How did Montesquieu's idea of separation of powers shape the U.S. government?",
+      "In what ways did John Locke's theories influence the Founding Fathers?",
+      "What is the significance of the social contract in the context of American democracy?"
+    ],
+    "learning_targets": [
+      "I can analyze Montesquieu's influence on the structure of the U.S. government.",
+      "I can explain John Locke's theories and their impact on American political thought.",
+      "I can evaluate the importance of the social contract in the founding of the United States."
+    ],
+    "vocabulary": [
+      "Montesquieu",
+      "separation of powers",
+      "John Locke",
+      "social contract",
+      "influence",
+      "government",
+      "theory",
+      "democracy",
+      "rights",
+      "philosophy"
+    ],
+    "sample_assessment": "Which concept introduced by Montesquieu is fundamental to the structure of the U.S. government? A) Checks and balances B) Natural rights C) Popular sovereignty D) Federalism"
+  },
+  {
+    "code": "SS.7.CG.1.5",
+    "benchmark": "Describe how English policies and responses to colonial concerns led to the writing of the Declaration of Independence. Causes of the American Revolution: the French and Indian War (7-MM.1) Causes of the American Revolution: politics and society (7-MM.2) Causes of the American Revolution: introduction to mercantilism and the Navigation Acts (7-MM.3) Causes of the American Revolution: new taxes and colonial response (7-MM.4) Source analysis: the Declaration of Independence (7-MM.10)",
+    "topics": [
+      "Colonial Policies",
+      "Declaration of Independence",
+      "American Revolution",
+      "Government"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the relationship between English policies and colonial responses leading to the Declaration of Independence. Items may include case studies, document analysis, and multiple-choice questions that require students to connect historical events to the writing of the Declaration.",
+    "essential_questions": [
+      "How did English policies contribute to colonial dissatisfaction?",
+      "What were the key events that led to the writing of the Declaration of Independence?",
+      "How did colonial responses shape the ideas expressed in the Declaration?"
+    ],
+    "learning_targets": [
+      "I can describe how English policies affected colonial attitudes towards government.",
+      "I can analyze the events leading up to the Declaration of Independence.",
+      "I can explain the significance of the Declaration in the context of colonial grievances."
+    ],
+    "vocabulary": [
+      "colonial",
+      "policies",
+      "Declaration of Independence",
+      "American Revolution",
+      "grievances",
+      "taxation",
+      "response",
+      "government",
+      "liberty",
+      "rights"
+    ],
+    "sample_assessment": "Which event was a direct response to British taxation that contributed to the writing of the Declaration of Independence? A) Boston Tea Party B) Battle of Lexington C) Signing of the Magna Carta D) Mayflower Compact"
+  },
+  {
+    "code": "SS.7.CG.1.6",
+    "benchmark": "Analyze the ideas and grievances set forth in the Declaration of Independence. Source analysis: the Declaration of Independence (7-MM.10)",
+    "topics": [
+      "Declaration of Independence",
+      "Grievances",
+      "Historical Analysis"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze specific grievances listed in the Declaration of Independence, comparing them to the context of the time and their significance in shaping American ideals. Items may include source-based questions, requiring students to interpret and evaluate the text.",
+    "essential_questions": [
+      "What were the main grievances expressed in the Declaration of Independence?",
+      "How did these grievances reflect the colonists' desire for independence?",
+      "In what ways did the Declaration of Independence influence future democratic principles?"
+    ],
+    "learning_targets": [
+      "I can identify key grievances in the Declaration of Independence.",
+      "I can analyze the significance of the Declaration of Independence in American history.",
+      "I can explain how the Declaration of Independence reflects Enlightenment ideas."
+    ],
+    "vocabulary": [
+      "grievance",
+      "independence",
+      "tyranny",
+      "unalienable rights",
+      "Enlightenment"
+    ],
+    "sample_assessment": "Which of the following grievances in the Declaration of Independence addresses the issue of taxation without representation?"
+  },
+  {
+    "code": "SS.7.CG.1.7",
+    "benchmark": "Explain how the weaknesses of the Articles of Confederation led to the writing of the U.S. Constitution. The Articles of Confederation (7-NN.1) The Constitutional Convention (7-NN.2)",
+    "topics": [
+      "Articles of Confederation",
+      "U.S. Constitution",
+      "Historical Context"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the weaknesses of the Articles of Confederation and how they prompted the creation of the U.S. Constitution. Items may require students to analyze historical documents and make connections between the Articles and the Constitution.",
+    "essential_questions": [
+      "What were the key weaknesses of the Articles of Confederation?",
+      "How did these weaknesses lead to the Constitutional Convention?",
+      "In what ways did the U.S. Constitution address the failures of the Articles of Confederation?"
+    ],
+    "learning_targets": [
+      "I can explain the weaknesses of the Articles of Confederation.",
+      "I can describe how these weaknesses influenced the drafting of the U.S. Constitution.",
+      "I can analyze the changes made in the U.S. Constitution to strengthen the federal government."
+    ],
+    "vocabulary": [
+      "federalism",
+      "ratification",
+      "sovereignty",
+      "convention",
+      "amendment"
+    ],
+    "sample_assessment": "Which of the following was a major weakness of the Articles of Confederation?"
+  },
+  {
+    "code": "SS.7.CG.1.8",
+    "benchmark": "Explain the purpose of the Preamble to the U.S. Constitution. The Constitution: structure and principles (7-FF.1)",
+    "topics": [
+      "Preamble",
+      "U.S. Constitution",
+      "Purpose"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should assess students' understanding of the Preamble's purpose and its role in the Constitution. Items may include multiple-choice questions that ask students to identify the main goals outlined in the Preamble.",
+    "essential_questions": [
+      "What is the purpose of the Preamble to the U.S. Constitution?",
+      "How does the Preamble reflect the values of the American government?",
+      "In what ways does the Preamble set the stage for the rest of the Constitution?"
+    ],
+    "learning_targets": [
+      "I can explain the purpose of the Preamble.",
+      "I can identify the key goals outlined in the Preamble.",
+      "I can analyze how the Preamble reflects the principles of democracy."
+    ],
+    "vocabulary": [
+      "Preamble",
+      "goals",
+      "justice",
+      "liberty",
+      "common good"
+    ],
+    "sample_assessment": "What is one of the main purposes stated in the Preamble of the U.S. Constitution?"
+  },
+  {
+    "code": "SS.7.CG.1.9",
+    "benchmark": "Describe how the U.S. Constitution limits the powers of government through separation of powers, checks and balances, individual rights, rule of law and due process of law. The Legislative Branch (7-EE.2) The Executive Branch (7-EE.3) The Judicial Branch (7-EE.4) Checks and balances (7-EE.5) The Bill of Rights (7-FF.4)",
+    "topics": [
+      "Separation of Powers",
+      "Checks and Balances",
+      "Constitutional Principles"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to evaluate how the U.S. Constitution limits government powers through various mechanisms. Items may involve case studies or scenarios where students must apply their understanding of constitutional principles to real-world situations.",
+    "essential_questions": [
+      "How does the Constitution limit government powers?",
+      "What are the roles of separation of powers and checks and balances in the U.S. government?",
+      "How do individual rights and the rule of law protect citizens?"
+    ],
+    "learning_targets": [
+      "I can describe the separation of powers within the U.S. government.",
+      "I can explain how checks and balances work to limit government authority.",
+      "I can analyze the importance of individual rights as outlined in the Constitution."
+    ],
+    "vocabulary": [
+      "separation of powers",
+      "checks and balances",
+      "individual rights",
+      "rule of law",
+      "due process"
+    ],
+    "sample_assessment": "Which principle of the Constitution ensures that no one branch of government becomes too powerful?"
+  },
+  {
+    "code": "SS.7.CG.1.10",
+    "benchmark": "Compare the viewpoints of the Federalists and the Anti-Federalists regarding ratification of the U.S. Constitution and including a bill of rights.",
+    "topics": [
+      "Federalists",
+      "Anti-Federalists",
+      "Constitution Ratification"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should explore the differing viewpoints of Federalists and Anti-Federalists regarding the ratification of the Constitution. Items may include analysis of primary source documents and require students to compare and contrast these perspectives.",
+    "essential_questions": [
+      "What were the main arguments of the Federalists in favor of ratification?",
+      "What concerns did the Anti-Federalists raise about the Constitution?",
+      "How did the debate between Federalists and Anti-Federalists shape the final Constitution?"
+    ],
+    "learning_targets": [
+      "I can compare the viewpoints of Federalists and Anti-Federalists.",
+      "I can explain the significance of the Bill of Rights in the ratification debate.",
+      "I can analyze how differing perspectives influenced the Constitution."
+    ],
+    "vocabulary": [
+      "Federalists",
+      "Anti-Federalists",
+      "ratification",
+      "Bill of Rights",
+      "debate"
+    ],
+    "sample_assessment": "Which of the following was a primary concern of the Anti-Federalists regarding the Constitution?"
+  },
+  {
+    "code": "SS.7.CG.1.11",
+    "benchmark": "Define the rule of law and recognize its influence on the development of legal, political and governmental systems in the United States. Purposes of government (7-EE.1) The Judicial Branch (7-EE.4) Laws and courts (7-GG.1)",
+    "topics": [
+      "rule of law",
+      "government systems",
+      "political influence"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to define the rule of law and analyze its impact on U.S. legal and governmental systems. Items may include multiple-choice questions, short answer prompts, or scenario-based questions that ask students to apply their understanding.",
+    "essential_questions": [
+      "What is the rule of law and why is it important?",
+      "How does the rule of law influence government systems in the U.S.?",
+      "In what ways does the rule of law affect citizens' rights?"
+    ],
+    "learning_targets": [
+      "I can define the rule of law.",
+      "I can explain how the rule of law influences government systems.",
+      "I can identify examples of the rule of law in action."
+    ],
+    "vocabulary": [
+      "rule of law",
+      "government",
+      "legal system",
+      "political system",
+      "justice",
+      "authority",
+      "rights",
+      "citizenship"
+    ],
+    "sample_assessment": "Which of the following best describes the rule of law? A) The idea that laws apply equally to all individuals B) The belief that government leaders are above the law C) The concept that laws can be changed at any time by the government D) The notion that citizens have no legal rights."
+  },
+  {
+    "code": "SS.7.CG.2.1",
+    "benchmark": "Define the term \"citizen,\" and explain the constitutional means of becoming a U.S. citizen. Citizenship and the naturalization process (7-HH.1) Rights and responsibilities of active citizenship (7-HH.2)",
+    "topics": [
+      "citizenship",
+      "naturalization",
+      "constitutional rights"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on defining citizenship and explaining the naturalization process. Items may include multiple-choice questions, matching terms with definitions, or short answer questions that require students to describe the steps to becoming a U.S. citizen.",
+    "essential_questions": [
+      "What does it mean to be a citizen?",
+      "What are the steps involved in the naturalization process?",
+      "What rights and responsibilities come with U.S. citizenship?"
+    ],
+    "learning_targets": [
+      "I can define what a citizen is.",
+      "I can explain the naturalization process.",
+      "I can identify the rights and responsibilities of U.S. citizens."
+    ],
+    "vocabulary": [
+      "citizen",
+      "naturalization",
+      "immigration",
+      "rights",
+      "responsibilities",
+      "constitution",
+      "oath",
+      "application"
+    ],
+    "sample_assessment": "What is the first step in the naturalization process for becoming a U.S. citizen? A) Taking the citizenship test B) Submitting an application C) Attending an interview D) Swearing an oath of allegiance."
+  },
+  {
+    "code": "SS.7.CG.2.2",
+    "benchmark": "Differentiate between obligations and responsibilities of U.S. citizenship, and evaluate their impact on society. Rights and responsibilities of active citizenship (7-HH.2)",
+    "topics": [
+      "citizenship obligations",
+      "responsibilities",
+      "societal impact"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to differentiate between obligations and responsibilities of citizenship and evaluate their societal impact. Items may include case studies, scenario analysis, or essay prompts that ask students to reflect on the importance of these concepts.",
+    "essential_questions": [
+      "What are the key obligations and responsibilities of U.S. citizens?",
+      "How do obligations and responsibilities impact society?",
+      "Why is it important for citizens to fulfill their responsibilities?"
+    ],
+    "learning_targets": [
+      "I can differentiate between obligations and responsibilities of citizenship.",
+      "I can evaluate the impact of citizenship responsibilities on society.",
+      "I can explain why fulfilling obligations is important for citizens."
+    ],
+    "vocabulary": [
+      "obligation",
+      "responsibility",
+      "citizenship",
+      "participation",
+      "society",
+      "engagement",
+      "rights",
+      "law"
+    ],
+    "sample_assessment": "Which of the following is considered a responsibility of U.S. citizenship? A) Paying taxes B) Voting in elections C) Serving on a jury D) All of the above."
+  },
+  {
+    "code": "SS.7.CG.2.3",
+    "benchmark": "Identify and apply the rights contained in the Bill of Rights and other amendments to the U.S. Constitution. The Constitution: amendments (7-FF.2) The Bill of Rights (7-FF.4)",
+    "topics": [
+      "Bill of Rights",
+      "constitutional rights",
+      "amendments"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying and applying rights from the Bill of Rights and other constitutional amendments. Items may include multiple-choice questions, true/false statements, or short answer questions that ask students to apply specific rights to hypothetical situations.",
+    "essential_questions": [
+      "What rights are guaranteed by the Bill of Rights?",
+      "How do amendments to the Constitution protect individual rights?",
+      "In what ways can citizens exercise their rights?"
+    ],
+    "learning_targets": [
+      "I can identify the rights contained in the Bill of Rights.",
+      "I can apply constitutional rights to real-life scenarios.",
+      "I can explain the significance of amendments to the Constitution."
+    ],
+    "vocabulary": [
+      "Bill of Rights",
+      "amendment",
+      "freedom",
+      "speech",
+      "assembly",
+      "press",
+      "due process",
+      "rights"
+    ],
+    "sample_assessment": "Which amendment in the Bill of Rights protects the freedom of speech? A) First Amendment B) Second Amendment C) Fourth Amendment D) Eighth Amendment."
+  },
+  {
+    "code": "SS.7.CG.2.4",
+    "benchmark": "Explain how the U.S. Constitution and the Bill of Rights safeguard individual rights. The Constitution: amendments (7-FF.2) The Constitution: interpretation (7-FF.3) The Bill of Rights (7-FF.4)",
+    "topics": [
+      "individual rights",
+      "Constitution",
+      "Bill of Rights"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to explain how the U.S. Constitution and the Bill of Rights safeguard individual rights. Items may include scenario-based questions, essays, or projects that ask students to analyze the effectiveness of these documents in protecting rights.",
+    "essential_questions": [
+      "How does the Constitution safeguard individual rights?",
+      "What role does the Bill of Rights play in protecting citizens?",
+      "Why are individual rights important in a democratic society?"
+    ],
+    "learning_targets": [
+      "I can explain how the Constitution protects individual rights.",
+      "I can analyze the role of the Bill of Rights in safeguarding freedoms.",
+      "I can discuss the importance of individual rights in democracy."
+    ],
+    "vocabulary": [
+      "safeguard",
+      "individual rights",
+      "Constitution",
+      "Bill of Rights",
+      "freedom",
+      "protection",
+      "liberty",
+      "justice"
+    ],
+    "sample_assessment": "Which of the following statements best describes how the Bill of Rights protects individual rights? A) It allows the government to limit freedoms B) It guarantees specific freedoms to individuals C) It is only applicable to certain citizens D) It has no impact on individual rights."
+  },
+  {
+    "code": "SS.7.CG.2.5",
+    "benchmark": "Describe the trial process and the role of juries in the administration of justice at the state and federal levels. Laws and courts (7-GG.1)",
+    "topics": [
+      "trial process",
+      "juries",
+      "justice system"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should include scenarios that require students to explain the roles of juries and the steps in the trial process, as well as compare state and federal systems. Items may include multiple-choice questions, short answer prompts, and case studies.",
+    "essential_questions": [
+      "What are the key steps in the trial process?",
+      "How do juries contribute to the justice system?",
+      "What are the differences between state and federal trials?"
+    ],
+    "learning_targets": [
+      "I can describe the steps involved in a trial.",
+      "I can explain the role of juries in the justice system.",
+      "I can compare the trial processes at state and federal levels."
+    ],
+    "vocabulary": [
+      "trial",
+      "jury",
+      "defendant",
+      "prosecution",
+      "verdict",
+      "appeal",
+      "due process",
+      "justice",
+      "court",
+      "evidence"
+    ],
+    "sample_assessment": "Which of the following best describes the role of a jury in a trial? A) To determine the guilt or innocence of the defendant B) To represent the prosecution C) To provide legal advice to the judge D) To set the trial date"
+  },
+  {
+    "code": "SS.7.CG.2.6",
+    "benchmark": "Examine the election and voting process at the local, state and national levels.",
+    "topics": [
+      "election process",
+      "voting",
+      "civic engagement"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze various aspects of the election and voting processes, including voter registration, ballot design, and the roles of different levels of government. Items may include case studies and scenario-based questions.",
+    "essential_questions": [
+      "How does the election process differ at local, state, and national levels?",
+      "What factors influence voter participation?",
+      "How do elections impact government policies?"
+    ],
+    "learning_targets": [
+      "I can explain the steps involved in the election process.",
+      "I can identify the differences in voting procedures across different levels of government.",
+      "I can analyze factors that affect voter turnout."
+    ],
+    "vocabulary": [
+      "election",
+      "voting",
+      "ballot",
+      "polling place",
+      "registration",
+      "candidates",
+      "referendum",
+      "primary",
+      "general election",
+      "civic duty"
+    ],
+    "sample_assessment": "What is the primary purpose of voter registration? A) To collect taxes B) To ensure only eligible citizens can vote C) To organize political parties D) To schedule elections"
+  },
+  {
+    "code": "SS.7.CG.2.7",
+    "benchmark": "Identify the constitutional qualifications required to hold state and national office.",
+    "topics": [
+      "constitutional qualifications",
+      "government offices",
+      "civic knowledge"
+    ],
+    "dok": 1,
+    "item_specs": "Assessment items should focus on identifying and recalling the constitutional qualifications for holding state and national office. Items may include multiple-choice questions and matching exercises.",
+    "essential_questions": [
+      "What are the basic qualifications to run for state and national office?",
+      "Why are these qualifications important?",
+      "How do these qualifications reflect the values of democracy?"
+    ],
+    "learning_targets": [
+      "I can list the qualifications required to hold state office.",
+      "I can list the qualifications required to hold national office.",
+      "I can explain the significance of these qualifications."
+    ],
+    "vocabulary": [
+      "qualification",
+      "officeholder",
+      "constitution",
+      "senator",
+      "representative",
+      "governor",
+      "eligibility",
+      "democracy",
+      "voter",
+      "civic responsibility"
+    ],
+    "sample_assessment": "Which of the following is a requirement to be elected to the U.S. Senate? A) Must be at least 30 years old B) Must be a natural-born citizen C) Must have a college degree D) Must have prior political experience"
+  },
+  {
+    "code": "SS.7.CG.2.8",
+    "benchmark": "Examine the impact of media, individuals, and interest groups on monitoring and influencing government.",
+    "topics": [
+      "media influence",
+      "interest groups",
+      "government monitoring"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to evaluate the roles of media, individuals, and interest groups in influencing government actions and policies. Items may include analysis of case studies and real-world examples.",
+    "essential_questions": [
+      "How do media and interest groups influence government decisions?",
+      "What role do individuals play in monitoring government actions?",
+      "In what ways can media serve as a watchdog for democracy?"
+    ],
+    "learning_targets": [
+      "I can analyze the influence of media on government.",
+      "I can evaluate the role of interest groups in shaping policy.",
+      "I can discuss how individuals can monitor government actions."
+    ],
+    "vocabulary": [
+      "media",
+      "interest groups",
+      "advocacy",
+      "lobbying",
+      "government accountability",
+      "public opinion",
+      "transparency",
+      "watchdog",
+      "influence",
+      "civic engagement"
+    ],
+    "sample_assessment": "Which of the following best describes the role of interest groups in the political process? A) To create laws B) To influence policymakers C) To conduct elections D) To enforce laws"
+  },
+  {
+    "code": "SS.7.CG.2.9",
+    "benchmark": "Analyze media and political communications and identify examples of bias, symbolism and propaganda.",
+    "topics": [
+      "media analysis",
+      "political communication",
+      "bias"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should challenge students to critically analyze media and political communications for bias, symbolism, and propaganda. Items may include comparative analyses, essays, and multimedia presentations.",
+    "essential_questions": [
+      "How can we identify bias in media reporting?",
+      "What are the effects of propaganda on public opinion?",
+      "How does symbolism play a role in political communication?"
+    ],
+    "learning_targets": [
+      "I can identify examples of bias in media.",
+      "I can analyze the use of symbolism in political messages.",
+      "I can evaluate the impact of propaganda on society."
+    ],
+    "vocabulary": [
+      "bias",
+      "propaganda",
+      "symbolism",
+      "media literacy",
+      "political communication",
+      "advertising",
+      "persuasion",
+      "critical analysis",
+      "stereotype",
+      "framing"
+    ],
+    "sample_assessment": "Which of the following is an example of bias in media? A) Reporting only one side of a story B) Providing balanced viewpoints C) Using statistics to support an argument D) Conducting interviews with multiple sources"
+  },
+  {
+    "code": "SS.7.CG.2.10",
+    "benchmark": "Explain the process for citizens to address a state or local problem by researching public policy alternatives, identifying appropriate government agencies to address the issue and determining a course of action. State and local government (7-EE.6)",
+    "topics": [
+      "public policy",
+      "citizen engagement",
+      "government agencies"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze scenarios where citizens identify local problems and research public policy alternatives. Items may include case studies or role-playing situations where students must determine appropriate government agencies and propose a course of action.",
+    "essential_questions": [
+      "How can citizens effectively address local issues through government channels?",
+      "What steps are involved in researching public policy alternatives?",
+      "Why is it important to identify the correct government agency for a specific issue?"
+    ],
+    "learning_targets": [
+      "I can identify a local problem and research possible solutions.",
+      "I can determine which government agency to approach for a specific issue.",
+      "I can propose a course of action to address a local problem."
+    ],
+    "vocabulary": [
+      "public policy",
+      "government agency",
+      "research",
+      "citizen engagement",
+      "course of action",
+      "local problem",
+      "advocacy",
+      "stakeholder"
+    ],
+    "sample_assessment": "Which of the following steps is the first action a citizen should take when addressing a local issue?"
+  },
+  {
+    "code": "SS.7.CG.3.1",
+    "benchmark": "Analyze the advantages of the United States' constitutional republic over other forms of government in safeguarding liberty, freedom and a representative government. The Constitutional Convention (7-NN.2)",
+    "topics": [
+      "constitutional republic",
+      "government forms",
+      "liberty"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should prompt students to compare and contrast the U.S. constitutional republic with other forms of government. Items may include essays, debates, or multiple-choice questions that require students to analyze specific advantages related to liberty and representation.",
+    "essential_questions": [
+      "What are the key features of a constitutional republic?",
+      "How does a constitutional republic protect individual freedoms?",
+      "In what ways does representation in government enhance liberty?"
+    ],
+    "learning_targets": [
+      "I can explain the key features of a constitutional republic.",
+      "I can analyze how a constitutional republic safeguards individual freedoms.",
+      "I can compare the U.S. government to other forms of government."
+    ],
+    "vocabulary": [
+      "constitutional republic",
+      "liberty",
+      "representation",
+      "government",
+      "democracy",
+      "freedom",
+      "authoritarianism",
+      "checks and balances"
+    ],
+    "sample_assessment": "Which advantage of a constitutional republic helps to safeguard individual liberties?"
+  },
+  {
+    "code": "SS.7.CG.3.2",
+    "benchmark": "Explain the advantages of a federal system of government over other systems in balancing local sovereignty with national unity and protecting against authoritarianism.",
+    "topics": [
+      "federal system",
+      "local sovereignty",
+      "national unity"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should encourage students to evaluate the benefits of a federal system of government. Items may include scenario-based questions or comparative analyses that illustrate how federalism balances local and national interests while preventing authoritarianism.",
+    "essential_questions": [
+      "What are the benefits of a federal system in governance?",
+      "How does federalism protect local sovereignty?",
+      "In what ways does a federal system prevent authoritarianism?"
+    ],
+    "learning_targets": [
+      "I can explain the advantages of a federal system of government.",
+      "I can describe how federalism balances local and national interests.",
+      "I can identify ways federalism protects against authoritarianism."
+    ],
+    "vocabulary": [
+      "federalism",
+      "sovereignty",
+      "national unity",
+      "authoritarianism",
+      "balance of power",
+      "government structure",
+      "local government",
+      "central government"
+    ],
+    "sample_assessment": "Which of the following best describes an advantage of a federal system of government?"
+  },
+  {
+    "code": "SS.7.CG.3.3",
+    "benchmark": "Describe the structure and function of the three branches of government established in the U.S. Constitution. The Legislative Branch (7-EE.2) The Executive Branch (7-EE.3) The Judicial Branch (7-EE.4) Checks and balances (7-EE.5) The Constitution: structure and principles (7-FF.1)",
+    "topics": [
+      "branches of government",
+      "checks and balances",
+      "U.S. Constitution"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the structure and function of the three branches of government as outlined in the U.S. Constitution. Items may include matching, fill-in-the-blank, or multiple-choice questions that assess students' understanding of each branch's role and the system of checks and balances.",
+    "essential_questions": [
+      "What are the primary functions of each branch of government?",
+      "How do checks and balances work to prevent abuse of power?",
+      "What role does the Constitution play in defining government structure?"
+    ],
+    "learning_targets": [
+      "I can describe the structure of the three branches of government.",
+      "I can explain the functions of each branch of government.",
+      "I can identify how checks and balances operate within the government."
+    ],
+    "vocabulary": [
+      "legislative branch",
+      "executive branch",
+      "judicial branch",
+      "checks and balances",
+      "U.S. Constitution",
+      "separation of powers",
+      "government structure",
+      "federalism"
+    ],
+    "sample_assessment": "Which branch of government is responsible for making laws?"
+  },
+  {
+    "code": "SS.7.CG.3.4",
+    "benchmark": "Explain the relationship between state and national governments as written in Article IV of the U.S. Constitution and the 10th Amendment. State and local government (7-EE.6)",
+    "topics": [
+      "state and national government",
+      "Article IV",
+      "10th Amendment"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should assess students' understanding of the relationship between state and national governments as defined in Article IV of the U.S. Constitution and the 10th Amendment. Items may include true/false questions, short answer, or multiple-choice questions that highlight key concepts of state and national powers.",
+    "essential_questions": [
+      "What does Article IV of the U.S. Constitution state about state and national governments?",
+      "How does the 10th Amendment define the powers of state governments?",
+      "What is the significance of the relationship between state and national governments?"
+    ],
+    "learning_targets": [
+      "I can explain the relationship between state and national governments.",
+      "I can describe the significance of Article IV and the 10th Amendment.",
+      "I can identify examples of state and national government powers."
+    ],
+    "vocabulary": [
+      "Article IV",
+      "10th Amendment",
+      "state government",
+      "national government",
+      "federalism",
+      "powers",
+      "sovereignty",
+      "relationship"
+    ],
+    "sample_assessment": "What does the 10th Amendment primarily address regarding state powers?"
+  },
+  {
+    "code": "SS.7.CG.3.5",
+    "benchmark": "Explain the amendment process outlined in Article V of the U.S. Constitution. The Constitution: amendments (7-FF.2)",
+    "topics": [
+      "amendment process",
+      "U.S. Constitution",
+      "Article V"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to explain the steps involved in the amendment process as outlined in Article V of the U.S. Constitution. Items may include multiple-choice questions, short answer prompts, or matching exercises that assess understanding of the process and its significance.",
+    "essential_questions": [
+      "What are the steps involved in amending the Constitution?",
+      "Why is the amendment process important for democracy?",
+      "How does the amendment process reflect the principles of federalism?"
+    ],
+    "learning_targets": [
+      "I can describe the steps of the amendment process.",
+      "I can explain the significance of Article V in the Constitution.",
+      "I can identify the roles of different entities in the amendment process."
+    ],
+    "vocabulary": [
+      "amendment",
+      "ratification",
+      "proposal",
+      "federalism",
+      "Constitution",
+      "legislature",
+      "supermajority",
+      "convention"
+    ],
+    "sample_assessment": "Which of the following is the first step in the amendment process outlined in Article V of the U.S. Constitution? A) Ratification by the states B) Proposal by Congress C) Approval by the President D) National convention"
+  },
+  {
+    "code": "SS.7.CG.3.6",
+    "benchmark": "Analyze how the 13th, 14th, 15th, 19th, 24th and 26th Amendments broadened participation in the political process. The Constitution: amendments (7-FF.2) Radical Reconstruction (7-RR.1)",
+    "topics": [
+      "constitutional amendments",
+      "political participation",
+      "civil rights"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze the impact of specific amendments on political participation and civil rights. Items may include case studies, comparative analysis, and multiple-choice questions that assess understanding of how these amendments expanded rights and participation.",
+    "essential_questions": [
+      "How did the 13th, 14th, 15th, 19th, 24th, and 26th Amendments change the political landscape of the United States?",
+      "In what ways did these amendments address issues of equality and representation?",
+      "What role did social movements play in the ratification of these amendments?"
+    ],
+    "learning_targets": [
+      "I can analyze the effects of key amendments on political participation.",
+      "I can explain how these amendments addressed civil rights issues.",
+      "I can discuss the historical context surrounding each amendment."
+    ],
+    "vocabulary": [
+      "amendment",
+      "civil rights",
+      "suffrage",
+      "discrimination",
+      "ratification",
+      "equality",
+      "representation",
+      "political process"
+    ],
+    "sample_assessment": "Which amendment abolished slavery in the United States? A) 14th Amendment B) 15th Amendment C) 13th Amendment D) 19th Amendment"
+  },
+  {
+    "code": "SS.7.CG.3.7",
+    "benchmark": "Explain the structure, functions and processes of the legislative branch of government. The Legislative Branch (7-EE.2)",
+    "topics": [
+      "legislative branch",
+      "government structure",
+      "law-making process"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the structure, functions, and processes of the legislative branch. Items may include multiple-choice questions, fill-in-the-blank exercises, and short answer questions that assess understanding of how laws are made and the roles of different legislative bodies.",
+    "essential_questions": [
+      "What are the main functions of the legislative branch?",
+      "How does the legislative process work from proposal to law?",
+      "What roles do the House of Representatives and the Senate play in the legislative branch?"
+    ],
+    "learning_targets": [
+      "I can explain the structure of the legislative branch.",
+      "I can describe the law-making process.",
+      "I can identify the roles of the House and Senate."
+    ],
+    "vocabulary": [
+      "legislative branch",
+      "Congress",
+      "Senate",
+      "House of Representatives",
+      "bill",
+      "law",
+      "committee",
+      "debate"
+    ],
+    "sample_assessment": "What is the primary function of the legislative branch? A) Enforce laws B) Interpret laws C) Make laws D) Review laws"
+  },
+  {
+    "code": "SS.7.CG.3.8",
+    "benchmark": "Explain the structure, functions and processes of the executive branch of government. The Executive Branch (7-EE.3)",
+    "topics": [
+      "executive branch",
+      "government functions",
+      "presidential powers"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the structure, functions, and processes of the executive branch. Items may include multiple-choice questions, scenario-based questions, and short answer prompts that assess understanding of the President's roles and responsibilities.",
+    "essential_questions": [
+      "What are the main responsibilities of the executive branch?",
+      "How does the executive branch interact with the other branches of government?",
+      "What powers are granted to the President by the Constitution?"
+    ],
+    "learning_targets": [
+      "I can explain the structure of the executive branch.",
+      "I can describe the roles of the President and the Cabinet.",
+      "I can identify the powers of the executive branch."
+    ],
+    "vocabulary": [
+      "executive branch",
+      "President",
+      "Cabinet",
+      "executive order",
+      "veto",
+      "enforcement",
+      "federal agencies",
+      "administration"
+    ],
+    "sample_assessment": "Which of the following is a power of the President? A) Declare war B) Create laws C) Appoint federal judges D) Ratify treaties"
+  },
+  {
+    "code": "SS.7.CG.3.9",
+    "benchmark": "Explain the structure, functions and processes of the judicial branch of government. The Judicial Branch (7-EE.4)",
+    "topics": [
+      "judicial branch",
+      "court system",
+      "legal processes"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the structure, functions, and processes of the judicial branch. Items may include multiple-choice questions, case study analyses, and short answer questions that assess understanding of how the judicial system operates and its role in interpreting laws.",
+    "essential_questions": [
+      "What is the structure of the judicial branch?",
+      "How do courts interpret laws and ensure justice?",
+      "What is the role of the Supreme Court in the judicial system?"
+    ],
+    "learning_targets": [
+      "I can explain the structure of the judicial branch.",
+      "I can describe the functions of different courts.",
+      "I can identify the role of the Supreme Court."
+    ],
+    "vocabulary": [
+      "judicial branch",
+      "Supreme Court",
+      "court system",
+      "judicial review",
+      "case law",
+      "litigation",
+      "appeal",
+      "jurisdiction"
+    ],
+    "sample_assessment": "What is the highest court in the United States? A) Circuit Court B) District Court C) Supreme Court D) Court of Appeals"
+  },
+  {
+    "code": "SS.7.CG.3.10",
+    "benchmark": "Identify sources and types of law. The Legislative Branch (7-EE.2) Laws and courts (7-GG.1)",
+    "topics": [
+      "law sources",
+      "types of law",
+      "legislative branch"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to identify and categorize different sources and types of law, including statutory, common, and constitutional law. Items may include matching, multiple-choice, or short answer formats that assess understanding of how these laws are created and applied.",
+    "essential_questions": [
+      "What are the different sources of law in the United States?",
+      "How do various types of law impact citizens' rights?",
+      "In what ways does the legislative branch contribute to the creation of laws?"
+    ],
+    "learning_targets": [
+      "I can identify different sources of law.",
+      "I can categorize types of law.",
+      "I can explain the role of the legislative branch in law-making."
+    ],
+    "vocabulary": [
+      "statutory law",
+      "common law",
+      "constitutional law",
+      "legislation",
+      "judicial review",
+      "precedent",
+      "administrative law",
+      "case law"
+    ],
+    "sample_assessment": "Which of the following is a source of statutory law? A) Supreme Court decisions B) State legislatures C) International treaties D) Executive orders"
+  },
+  {
+    "code": "SS.7.CG.3.11",
+    "benchmark": "Analyze the effects of landmark Supreme Court decisions on law, liberty and the interpretation of the U.S. Constitution. The Constitution: interpretation (7-FF.3) The Marshall Court (7-NN.6)",
+    "topics": [
+      "Supreme Court",
+      "landmark decisions",
+      "constitutional interpretation"
+    ],
+    "dok": 3,
+    "item_specs": "Items should require students to analyze the implications of landmark Supreme Court decisions on individual rights and the interpretation of the Constitution. This may include case studies, scenario-based questions, or essays that encourage critical thinking about the effects of these decisions.",
+    "essential_questions": [
+      "How have landmark Supreme Court decisions shaped American law?",
+      "What is the relationship between Supreme Court rulings and individual liberties?",
+      "In what ways does the interpretation of the Constitution evolve over time?"
+    ],
+    "learning_targets": [
+      "I can analyze landmark Supreme Court cases.",
+      "I can explain the impact of these decisions on law and liberty.",
+      "I can discuss how the Constitution is interpreted differently over time."
+    ],
+    "vocabulary": [
+      "landmark case",
+      "judicial review",
+      "precedent",
+      "civil rights",
+      "due process",
+      "First Amendment",
+      "equal protection",
+      "constitutional law"
+    ],
+    "sample_assessment": "Which landmark Supreme Court case established the principle of judicial review? A) Marbury v. Madison B) Brown v. Board of Education C) Roe v. Wade D) Miranda v. Arizona"
+  },
+  {
+    "code": "SS.7.CG.3.12",
+    "benchmark": "Compare the U.S. and Florida constitutions.",
+    "topics": [
+      "U.S. Constitution",
+      "Florida Constitution",
+      "comparison"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on comparing and contrasting key features of the U.S. Constitution and the Florida Constitution. This may include Venn diagrams, multiple-choice questions, or short answer prompts that require students to identify similarities and differences.",
+    "essential_questions": [
+      "What are the main similarities and differences between the U.S. and Florida constitutions?",
+      "How do the constitutions reflect the values of their respective societies?",
+      "In what ways do state constitutions differ from federal constitutions?"
+    ],
+    "learning_targets": [
+      "I can compare the U.S. Constitution and the Florida Constitution.",
+      "I can identify key features of both constitutions.",
+      "I can explain how state constitutions serve their citizens."
+    ],
+    "vocabulary": [
+      "federalism",
+      "amendment",
+      "bill of rights",
+      "separation of powers",
+      "checks and balances",
+      "state constitution",
+      "legislative process",
+      "judicial branch"
+    ],
+    "sample_assessment": "Which of the following is a key difference between the U.S. Constitution and the Florida Constitution? A) Both have a Bill of Rights B) The Florida Constitution can be amended more easily C) Both are supreme laws of the land D) Both establish a federal system"
+  },
+  {
+    "code": "SS.7.CG.3.13",
+    "benchmark": "Explain government obligations to its citizens and the services provided at the local, state and national levels. Purposes of government (7-EE.1) State and local government (7-EE.6) Identify levels and branches of government (7-EE.7)",
+    "topics": [
+      "government obligations",
+      "citizen services",
+      "levels of government"
+    ],
+    "dok": 2,
+    "item_specs": "Items should assess students' understanding of the obligations of government to its citizens and the services provided at various levels. This can include multiple-choice questions, matching items, or short answer questions that require students to explain these obligations and services.",
+    "essential_questions": [
+      "What are the primary obligations of government to its citizens?",
+      "How do local, state, and national governments provide services?",
+      "In what ways do citizens participate in their government?"
+    ],
+    "learning_targets": [
+      "I can explain the obligations of government to its citizens.",
+      "I can identify services provided by local, state, and national governments.",
+      "I can describe how different levels of government work together."
+    ],
+    "vocabulary": [
+      "government obligations",
+      "public services",
+      "local government",
+      "state government",
+      "national government",
+      "citizen participation",
+      "taxation",
+      "representation"
+    ],
+    "sample_assessment": "Which of the following is a service typically provided by local government? A) National defense B) Public schooling C) Foreign diplomacy D) Immigration control"
+  },
+  {
+    "code": "SS.7.CG.3.14",
+    "benchmark": "Explain the purpose and function of the Electoral College in electing the President of the United States.",
+    "topics": [
+      "Electoral College",
+      "presidential elections",
+      "function"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to explain the purpose and function of the Electoral College in the context of presidential elections. This may include scenario-based questions, essays, or multiple-choice questions that assess understanding of the Electoral College's role and its implications for democracy.",
+    "essential_questions": [
+      "What is the purpose of the Electoral College in U.S. elections?",
+      "How does the Electoral College impact the outcome of presidential elections?",
+      "What are the arguments for and against the Electoral College?"
+    ],
+    "learning_targets": [
+      "I can explain the function of the Electoral College.",
+      "I can analyze the impact of the Electoral College on elections.",
+      "I can discuss the pros and cons of the Electoral College system."
+    ],
+    "vocabulary": [
+      "Electoral College",
+      "popular vote",
+      "electors",
+      "presidential election",
+      "majority",
+      "swing state",
+      "winner-takes-all",
+      "democracy"
+    ],
+    "sample_assessment": "What is the primary function of the Electoral College in U.S. presidential elections? A) To directly elect the president B) To provide a system of checks and balances C) To formally elect the president based on state votes D) To determine the popular vote"
+  },
+  {
+    "code": "SS.7.CG.3.15",
+    "benchmark": "Analyze the advantages of capitalism and the free market in the United States over government-controlled economic systems (e.g., socialism and communism) in regard to economic freedom and raising the standard of living for citizens.",
+    "topics": [
+      "capitalism",
+      "economic systems",
+      "free market"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to compare and contrast capitalism with government-controlled economic systems, analyzing the implications on economic freedom and living standards. Items may include scenarios, graphs, or case studies that prompt critical thinking and application of concepts.",
+    "essential_questions": [
+      "What are the key characteristics of capitalism?",
+      "How does a free market economy impact individual economic freedom?",
+      "In what ways can government-controlled systems affect the standard of living?"
+    ],
+    "learning_targets": [
+      "I can identify the main features of capitalism.",
+      "I can analyze the advantages of a free market over government-controlled economies.",
+      "I can evaluate how economic systems influence citizens' quality of life."
+    ],
+    "vocabulary": [
+      "capitalism",
+      "socialism",
+      "communism",
+      "economic freedom",
+      "standard of living",
+      "market economy",
+      "government control",
+      "profit",
+      "entrepreneurship"
+    ],
+    "sample_assessment": "Which of the following is an advantage of capitalism over socialism? A) Increased government control over resources B) Limited consumer choices C) Greater economic freedom for individuals D) Equal distribution of wealth"
+  },
+  {
+    "code": "SS.7.CG.4.1",
+    "benchmark": "Explain the relationship between U.S. foreign and domestic policy.",
+    "topics": [
+      "foreign policy",
+      "domestic policy",
+      "U.S. relations"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the connections between U.S. foreign and domestic policies, requiring students to explain how one influences the other. Items may include matching exercises, short answer questions, or scenario-based questions.",
+    "essential_questions": [
+      "How do domestic policies affect U.S. foreign relations?",
+      "What role does foreign policy play in shaping domestic issues?",
+      "Can you provide examples of how U.S. foreign policy has impacted domestic policy?"
+    ],
+    "learning_targets": [
+      "I can explain the connection between foreign and domestic policies.",
+      "I can identify examples of how U.S. policies influence each other.",
+      "I can analyze the impact of foreign decisions on domestic affairs."
+    ],
+    "vocabulary": [
+      "foreign policy",
+      "domestic policy",
+      "diplomacy",
+      "trade agreements",
+      "national security",
+      "international relations",
+      "policy influence",
+      "government",
+      "legislation"
+    ],
+    "sample_assessment": "Which statement best describes the relationship between U.S. foreign and domestic policy? A) They are completely independent of each other. B) Domestic policy can influence foreign policy decisions. C) Foreign policy is only affected by international events. D) Domestic policy has no impact on international relations."
+  },
+  {
+    "code": "SS.7.CG.4.2",
+    "benchmark": "Describe the United States' and citizen participation in international organizations. International organizations (7-EE.8)",
+    "topics": [
+      "international organizations",
+      "citizen participation",
+      "global governance"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to describe the role of the U.S. and its citizens in international organizations. Items may include multiple-choice questions, fill-in-the-blank, or short answer questions that focus on participation and contributions.",
+    "essential_questions": [
+      "What are some key international organizations the U.S. is part of?",
+      "How do citizens participate in international organizations?",
+      "What impact does U.S. participation have on global issues?"
+    ],
+    "learning_targets": [
+      "I can identify major international organizations the U.S. is involved in.",
+      "I can describe ways citizens can engage with these organizations.",
+      "I can analyze the significance of U.S. participation in global governance."
+    ],
+    "vocabulary": [
+      "international organizations",
+      "United Nations",
+      "NATO",
+      "citizen engagement",
+      "global governance",
+      "multilateral",
+      "diplomatic relations",
+      "human rights",
+      "peacekeeping"
+    ],
+    "sample_assessment": "Which of the following is an example of U.S. participation in an international organization? A) Voting in local elections B) Joining the United Nations C) Participating in state legislation D) Attending a town hall meeting"
+  },
+  {
+    "code": "SS.7.CG.4.3",
+    "benchmark": "Describe examples of the United States' actions and reactions in international conflicts.",
+    "topics": [
+      "international conflicts",
+      "U.S. actions",
+      "foreign relations"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze specific examples of U.S. actions and reactions in international conflicts. Items may include case studies, scenario analysis, or essay questions that encourage critical thinking and synthesis of information.",
+    "essential_questions": [
+      "What are some historical examples of U.S. involvement in international conflicts?",
+      "How does the U.S. respond to international crises?",
+      "What factors influence U.S. actions in foreign conflicts?"
+    ],
+    "learning_targets": [
+      "I can describe key U.S. actions in international conflicts.",
+      "I can analyze the reasons behind U.S. responses to global issues.",
+      "I can evaluate the effectiveness of U.S. foreign policy in conflict situations."
+    ],
+    "vocabulary": [
+      "international conflict",
+      "diplomacy",
+      "military intervention",
+      "foreign policy",
+      "negotiation",
+      "treaty",
+      "sanctions",
+      "peacekeeping",
+      "alliance"
+    ],
+    "sample_assessment": "Which of the following actions did the U.S. take in response to the Gulf War? A) Initiated a trade embargo B) Conducted military operations C) Signed a peace treaty D) Withdrew all diplomatic relations"
+  },
+  {
     "code": "SS.7.E.1.1",
     "benchmark": "Explain how the principles of a market and mixed economy helped to develop the United States into a democratic nation.",
     "topics": [
@@ -1305,6 +2567,73 @@
     "sample_assessment": "Antitrust laws were created to: A) Protect monopolies B) Prevent unfair business practices and promote competition C) Increase taxes on businesses D) Reduce international trade"
   },
   {
+    "code": "SS.7.E.2.4",
+    "benchmark": "Identify entrepreneurs from various gender, social, and ethnic backgrounds who started a business seeking to make a profit.",
+    "topics": [
+      "entrepreneurship",
+      "diversity",
+      "business"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying diverse entrepreneurs and their contributions to business. Items may include matching entrepreneurs to their achievements, multiple-choice questions, or short answer prompts that highlight the importance of diversity in entrepreneurship.",
+    "essential_questions": [
+      "Who are some notable entrepreneurs from diverse backgrounds?",
+      "How does diversity contribute to innovation in business?",
+      "What challenges do diverse entrepreneurs face in starting their businesses?"
+    ],
+    "learning_targets": [
+      "I can identify entrepreneurs from various backgrounds.",
+      "I can explain the significance of diversity in entrepreneurship.",
+      "I can analyze the impact of diverse entrepreneurs on the economy."
+    ],
+    "vocabulary": [
+      "entrepreneur",
+      "diversity",
+      "innovation",
+      "business ownership",
+      "profit",
+      "startup",
+      "economic impact",
+      "gender",
+      "ethnicity"
+    ],
+    "sample_assessment": "Which of the following entrepreneurs is known for starting a successful business in the tech industry? A) Oprah Winfrey B) Steve Jobs C) Madam C.J. Walker D) Henry Ford"
+  },
+  {
+    "code": "SS.7.E.2.5",
+    "benchmark": "Explain how economic institutions impact the national economy.",
+    "topics": [
+      "economic institutions",
+      "national economy",
+      "impact analysis"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to analyze the roles of various economic institutions and their effects on the national economy. Items may include scenarios or case studies where students must identify and explain the influence of specific institutions.",
+    "essential_questions": [
+      "How do economic institutions shape the national economy?",
+      "What roles do banks and financial systems play in economic stability?",
+      "In what ways can government policies influence economic institutions?"
+    ],
+    "learning_targets": [
+      "I can explain the role of banks in the economy.",
+      "I can identify different economic institutions and their functions.",
+      "I can analyze the impact of economic institutions on national economic trends."
+    ],
+    "vocabulary": [
+      "economy",
+      "institution",
+      "banking",
+      "financial system",
+      "monetary policy",
+      "fiscal policy",
+      "regulation",
+      "investment",
+      "market",
+      "GDP"
+    ],
+    "sample_assessment": "Which of the following best describes the role of the Federal Reserve in the national economy? A) It regulates the stock market. B) It manages the country's monetary policy. C) It sets tax rates for individuals. D) It provides loans to foreign governments."
+  },
+  {
     "code": "SS.7.E.3.1",
     "benchmark": "Explain how international trade requires a system for exchanging currency between and among nations.",
     "topics": [
@@ -1423,5 +2752,1267 @@
       "life expectancy"
     ],
     "sample_assessment": "GDP per capita is calculated by dividing a country's GDP by its: A) Land area B) Number of businesses C) Population D) Number of exports"
+  },
+  {
+    "code": "SS.912.CG.1.1",
+    "benchmark": "Examine how intellectual influences in primary documents contributed to the ideas in the Declaration of Independence, the U.S. Constitution and the Bill of Rights. Influences on U.S. government (CG-B.1)",
+    "topics": [
+      "intellectual influences",
+      "primary documents",
+      "founding principles"
+    ],
+    "dok": 3,
+    "item_specs": "Items should focus on evaluating primary documents and their intellectual influences on American founding principles. Students may be asked to compare and contrast ideas from different documents and analyze their contributions to the Declaration of Independence and the Constitution.",
+    "essential_questions": [
+      "What intellectual influences shaped the ideas in the Declaration of Independence?",
+      "How do primary documents reflect the values of their time?",
+      "In what ways did Enlightenment thinkers influence American democracy?"
+    ],
+    "learning_targets": [
+      "I can identify key intellectual influences on the Declaration of Independence.",
+      "I can analyze the contributions of primary documents to American government.",
+      "I can compare the ideas presented in the Declaration of Independence and the Constitution."
+    ],
+    "vocabulary": [
+      "Enlightenment",
+      "philosophy",
+      "natural rights",
+      "social contract",
+      "liberty",
+      "equality",
+      "democracy",
+      "sovereignty",
+      "republic",
+      "federalism"
+    ],
+    "sample_assessment": "Which Enlightenment thinker is most closely associated with the idea of natural rights that influenced the Declaration of Independence? A) Thomas Hobbes B) John Locke C) Jean-Jacques Rousseau D) Montesquieu",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.1.2",
+    "benchmark": "Explain the influence of Enlightenment ideas on the Declaration of Independence. Influences on U.S. government (CG-B.1)",
+    "topics": [
+      "Enlightenment ideas",
+      "Declaration of Independence",
+      "influence analysis"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to explain how specific Enlightenment ideas are reflected in the Declaration of Independence. Items may include matching Enlightenment thinkers with their ideas and analyzing excerpts from the Declaration.",
+    "essential_questions": [
+      "What Enlightenment ideas are evident in the Declaration of Independence?",
+      "How did Enlightenment thought challenge traditional authority?",
+      "In what ways did Enlightenment ideas promote individual rights?"
+    ],
+    "learning_targets": [
+      "I can explain how Enlightenment ideas influenced the Declaration of Independence.",
+      "I can identify key Enlightenment thinkers and their contributions.",
+      "I can analyze excerpts from the Declaration for Enlightenment principles."
+    ],
+    "vocabulary": [
+      "natural rights",
+      "social contract",
+      "reason",
+      "liberty",
+      "equality",
+      "consent of the governed",
+      "government",
+      "revolution",
+      "justice",
+      "philosophy"
+    ],
+    "sample_assessment": "Which of the following concepts from the Declaration of Independence reflects John Locke's idea of the social contract? A) The right to bear arms B) The pursuit of happiness C) The separation of powers D) The right to vote",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.1.3",
+    "benchmark": "Explain arguments presented in the Federalist Papers in support of ratifying the U.S. Constitution and a republican form of government. Source analysis: the Federalist Papers (CG-B.5)",
+    "topics": [
+      "Federalist Papers",
+      "U.S. Constitution",
+      "arguments for ratification"
+    ],
+    "dok": 3,
+    "item_specs": "Items should focus on evaluating the arguments presented in the Federalist Papers regarding the ratification of the U.S. Constitution. Students may be asked to analyze specific essays and their arguments in support of a republican form of government.",
+    "essential_questions": [
+      "What arguments did the Federalist Papers present in favor of the Constitution?",
+      "How did the Federalist Papers address concerns about a strong central government?",
+      "What role did the Federalist Papers play in the ratification debate?"
+    ],
+    "learning_targets": [
+      "I can summarize the main arguments of the Federalist Papers.",
+      "I can analyze how the Federalist Papers supported the Constitution.",
+      "I can compare Federalist and Anti-Federalist viewpoints."
+    ],
+    "vocabulary": [
+      "Federalist",
+      "Anti-Federalist",
+      "ratification",
+      "republicanism",
+      "central government",
+      "checks and balances",
+      "separation of powers",
+      "liberty",
+      "faction",
+      "public good"
+    ],
+    "sample_assessment": "What was one of the main arguments made in Federalist No. 10? A) A strong central government is necessary to control factions. B) States should have more power than the federal government. C) The Constitution should include a Bill of Rights. D) The judiciary should be elected by the people.",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.1.4",
+    "benchmark": "Analyze how the ideals and principles expressed in the founding documents shape America as a constitutional republic. Influences on U.S. government (CG-B.1) Source analysis: the Declaration of Independence (CG-B.2) The Articles of Confederation (CG-B.3) The Constitutional Convention (CG-B.4) Source analysis: the Federalist Papers (CG-B.5)",
+    "topics": [
+      "founding documents",
+      "constitutional principles",
+      "American identity"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to analyze how the ideals and principles in founding documents shape the identity of America as a constitutional republic. Items may include comparative analysis of different documents and their lasting impact on American governance.",
+    "essential_questions": [
+      "How do the ideals in the founding documents define American identity?",
+      "In what ways do the principles of the Constitution continue to influence modern governance?",
+      "How do the founding documents reflect the values of a constitutional republic?"
+    ],
+    "learning_targets": [
+      "I can analyze the principles expressed in the founding documents.",
+      "I can evaluate the impact of these documents on American governance.",
+      "I can discuss how the founding documents shape contemporary American identity."
+    ],
+    "vocabulary": [
+      "constitutional republic",
+      "founding documents",
+      "democracy",
+      "liberty",
+      "justice",
+      "equality",
+      "sovereignty",
+      "rights",
+      "governance",
+      "federalism"
+    ],
+    "sample_assessment": "Which of the following documents outlines the principles of a constitutional republic? A) The Declaration of Independence B) The Articles of Confederation C) The U.S. Constitution D) The Federalist Papers",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.1.5",
+    "benchmark": "Explain how the U.S. Constitution and its amendments uphold the following political principles: checks and balances, consent of the governed, democracy, due process of law, federalism, individual rights, limited government, representative government, republicanism, rule of law and separation of powers. Introduction to the Constitution (CG-C.1) The Bill of Rights (CG-C.4)",
+    "topics": [
+      "U.S. Constitution",
+      "Political Principles",
+      "Checks and Balances"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze scenarios or historical examples that illustrate the political principles outlined in the U.S. Constitution and its amendments. Items may include multiple-choice questions, short answer responses, or essays that ask students to explain how these principles are applied in real-world contexts.",
+    "essential_questions": [
+      "How do the principles of the Constitution protect individual rights?",
+      "In what ways do checks and balances prevent the abuse of power?",
+      "Why is the concept of consent of the governed fundamental to democracy?"
+    ],
+    "learning_targets": [
+      "I can explain the principle of checks and balances.",
+      "I can identify how the Bill of Rights protects individual rights.",
+      "I can analyze the impact of federalism on state and national governance."
+    ],
+    "vocabulary": [
+      "checks and balances",
+      "federalism",
+      "due process",
+      "individual rights",
+      "democracy",
+      "limited government",
+      "representative government",
+      "republicanism",
+      "rule of law",
+      "separation of powers"
+    ],
+    "sample_assessment": "Which principle of the Constitution prevents one branch of government from becoming too powerful? A) Federalism B) Checks and Balances C) Democracy D) Due Process",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.1",
+    "benchmark": "Explain the constitutional provisions that establish and affect citizenship. Constitutional amendments (CG-C.3) What are civil liberties and civil rights? (CG-F.1)",
+    "topics": [
+      "Citizenship",
+      "Constitutional Provisions",
+      "Civil Rights"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying and explaining the constitutional provisions that define citizenship and civil rights. This may include multiple-choice questions, matching exercises, or short answer questions that require students to demonstrate understanding of key amendments and their implications for citizenship.",
+    "essential_questions": [
+      "What constitutional amendments define and protect citizenship?",
+      "How do civil liberties differ from civil rights?",
+      "What role does the Constitution play in establishing citizenship?"
+    ],
+    "learning_targets": [
+      "I can identify key amendments that affect citizenship.",
+      "I can explain the difference between civil liberties and civil rights.",
+      "I can analyze how the Constitution impacts the rights of citizens."
+    ],
+    "vocabulary": [
+      "citizenship",
+      "civil liberties",
+      "civil rights",
+      "amendments",
+      "Constitution",
+      "naturalization",
+      "due process",
+      "equal protection",
+      "discrimination",
+      "fundamental rights"
+    ],
+    "sample_assessment": "Which amendment abolished the poll tax in federal elections? A) 15th B) 19th C) 24th D) 26th",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.2",
+    "benchmark": "Explain the importance of political and civic participation to the success of the United States' constitutional republic. Rights and responsibilities of active citizenship (CG-G.1) Political participation (CG-H.3)",
+    "topics": [
+      "Political Participation",
+      "Civic Engagement",
+      "Constitutional Republic"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should challenge students to evaluate the significance of political and civic participation in a constitutional republic. This can include case studies, scenario-based questions, or essays that require students to argue the importance of civic engagement and its impact on governance.",
+    "essential_questions": [
+      "Why is civic participation essential for a functioning democracy?",
+      "How do citizens influence government policies?",
+      "What are the consequences of low voter turnout?"
+    ],
+    "learning_targets": [
+      "I can explain the importance of civic engagement.",
+      "I can analyze how political participation affects government decisions.",
+      "I can evaluate the role of citizens in a constitutional republic."
+    ],
+    "vocabulary": [
+      "political participation",
+      "civic engagement",
+      "voter turnout",
+      "democracy",
+      "advocacy",
+      "public policy",
+      "grassroots",
+      "elections",
+      "representation",
+      "activism"
+    ],
+    "sample_assessment": "What is one way citizens can participate in their government? A) Voting B) Ignoring laws C) Only paying taxes D) None of the above",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.3",
+    "benchmark": "Explain the responsibilities of citizens at the local, state and national levels. Rights and responsibilities of active citizenship (CG-G.1) Political participation (CG-H.3)",
+    "topics": [
+      "Citizenship Responsibilities",
+      "Local Government",
+      "National Government"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to identify and explain the responsibilities of citizens at various levels of government. This may include multiple-choice questions, fill-in-the-blank exercises, or short answer questions that assess students' understanding of civic duties.",
+    "essential_questions": [
+      "What responsibilities do citizens have at the local level?",
+      "How do civic duties differ between local, state, and national governments?",
+      "Why is it important for citizens to fulfill their responsibilities?"
+    ],
+    "learning_targets": [
+      "I can identify responsibilities of citizens at different government levels.",
+      "I can explain the importance of civic duties.",
+      "I can analyze how citizen participation impacts local governance."
+    ],
+    "vocabulary": [
+      "citizenship",
+      "responsibilities",
+      "local government",
+      "state government",
+      "national government",
+      "civic duties",
+      "community service",
+      "voting",
+      "jury duty",
+      "advocacy"
+    ],
+    "sample_assessment": "Which of the following is a responsibility of U.S. citizens? A) Voting B) Traveling freely C) Paying taxes D) All of the above",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.4",
+    "benchmark": "Evaluate, take and defend objective, evidence-based positions on issues that cause the government to balance the interests of individuals with the public good. Supreme Court cases on the Bill of Rights (CG-F.2) Supreme Court cases on the Fourteenth Amendment: incorporation (CG-F.3) Economic systems (CG-J.1) Free trade and protectionism (CG-J.2) Government services and taxes (CG-J.3)",
+    "topics": [
+      "Government Balance",
+      "Public Good",
+      "Supreme Court"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to evaluate and defend positions on issues where government interests must balance individual rights with the public good. This may include case studies, argumentative essays, or scenario analyses that require critical thinking and evidence-based reasoning.",
+    "essential_questions": [
+      "How does the government balance individual rights with the public good?",
+      "What role does the Supreme Court play in protecting individual rights?",
+      "How can citizens advocate for their rights while considering the public good?"
+    ],
+    "learning_targets": [
+      "I can evaluate Supreme Court cases that impact individual rights.",
+      "I can defend a position on a controversial issue regarding government interests.",
+      "I can analyze the balance between individual rights and the public good."
+    ],
+    "vocabulary": [
+      "public good",
+      "individual rights",
+      "Supreme Court",
+      "Bill of Rights",
+      "Fourteenth Amendment",
+      "incorporation",
+      "evidence-based",
+      "economic systems",
+      "free trade",
+      "protectionism"
+    ],
+    "sample_assessment": "Which Supreme Court case established the principle of incorporation of the Bill of Rights? A) Marbury v. Madison B) Brown v. Board of Education C) Gitlow v. New York D) Roe v. Wade",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.5",
+    "benchmark": "Analyze contemporary and historical examples of government-imposed restrictions on rights. What are civil liberties and civil rights? (CG-F.1) Supreme Court cases on the Bill of Rights (CG-F.2) Supreme Court cases on the Fourteenth Amendment: incorporation (CG-F.3)",
+    "topics": [
+      "civil liberties",
+      "Supreme Court",
+      "Bill of Rights",
+      "rights analysis"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze specific historical and contemporary examples of government-imposed restrictions on rights, encouraging critical thinking and evaluation of the implications of these restrictions on civil liberties and rights.",
+    "essential_questions": [
+      "What are the key differences between civil liberties and civil rights?",
+      "How have Supreme Court cases shaped our understanding of the Bill of Rights?",
+      "In what ways do government restrictions on rights reflect societal values?"
+    ],
+    "learning_targets": [
+      "I can analyze historical examples of government restrictions on rights.",
+      "I can evaluate contemporary issues related to civil liberties.",
+      "I can explain the significance of Supreme Court cases on civil rights."
+    ],
+    "vocabulary": [
+      "civil liberties",
+      "civil rights",
+      "Supreme Court",
+      "Bill of Rights",
+      "incorporation",
+      "government restrictions",
+      "precedent",
+      "constitutional rights",
+      "judicial review",
+      "due process"
+    ],
+    "sample_assessment": "Which Supreme Court case established the precedent for the incorporation of the Bill of Rights to state governments?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.6",
+    "benchmark": "Explain how the principles contained in foundational documents contributed to the expansion of civil rights and liberties over time. Source analysis: the Declaration of Independence (CG-B.2) Introduction to the Constitution (CG-C.1) Constitutional amendments (CG-C.3) The Bill of Rights (CG-C.4) What are civil liberties and civil rights? (CG-F.1) Supreme Court cases on the Bill of Rights (CG-F.2) Supreme Court cases on the Fourteenth Amendment: incorporation (CG-F.3)",
+    "topics": [
+      "foundational documents",
+      "civil rights expansion",
+      "historical analysis",
+      "constitutional amendments"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on evaluating how foundational documents have influenced the expansion of civil rights and liberties, requiring students to analyze texts and historical contexts to draw connections.",
+    "essential_questions": [
+      "How did the Declaration of Independence influence civil rights in America?",
+      "What role do constitutional amendments play in expanding civil liberties?",
+      "How have historical documents shaped modern interpretations of rights?"
+    ],
+    "learning_targets": [
+      "I can explain the significance of the Declaration of Independence in civil rights.",
+      "I can analyze how amendments to the Constitution have expanded civil liberties.",
+      "I can evaluate the impact of foundational documents on contemporary rights."
+    ],
+    "vocabulary": [
+      "foundational documents",
+      "civil rights",
+      "Declaration of Independence",
+      "Constitution",
+      "amendments",
+      "Bill of Rights",
+      "liberties",
+      "historical context",
+      "judicial interpretation",
+      "social movements"
+    ],
+    "sample_assessment": "Which amendment to the Constitution is primarily responsible for the abolition of slavery?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.7",
+    "benchmark": "Analyze the impact of civic engagement as a means of preserving or reforming institutions.",
+    "topics": [
+      "civic engagement",
+      "institution reform",
+      "impact analysis",
+      "social change"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to analyze case studies of civic engagement and its impact on institutions, encouraging them to evaluate the effectiveness of various forms of civic participation in promoting reform.",
+    "essential_questions": [
+      "In what ways can civic engagement lead to institutional reform?",
+      "How do different forms of civic participation impact democracy?",
+      "What are the challenges faced by citizens in engaging with their government?"
+    ],
+    "learning_targets": [
+      "I can analyze the role of civic engagement in promoting social change.",
+      "I can evaluate the effectiveness of various civic actions.",
+      "I can explain how civic engagement preserves democratic institutions."
+    ],
+    "vocabulary": [
+      "civic engagement",
+      "institutional reform",
+      "democracy",
+      "social change",
+      "advocacy",
+      "participation",
+      "activism",
+      "community organizing",
+      "public policy",
+      "grassroots movements"
+    ],
+    "sample_assessment": "Which of the following is an example of civic engagement aimed at reforming government policies?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.8",
+    "benchmark": "Explain the impact of political parties, interest groups, media and individuals on determining and shaping public policy. How a bill becomes a law (CG-D.2) The two-party system (CG-H.1) Presidential elections (CG-H.2) Political participation (CG-H.3) Role of the media (CG-I.1)",
+    "topics": [
+      "public policy",
+      "political influence",
+      "media role",
+      "interest groups"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should challenge students to explain the roles of various entities in shaping public policy, requiring them to analyze case studies and evaluate the effectiveness of these influences.",
+    "essential_questions": [
+      "How do political parties influence public policy decisions?",
+      "What role does the media play in shaping public opinion and policy?",
+      "How do interest groups affect the legislative process?"
+    ],
+    "learning_targets": [
+      "I can explain how political parties shape public policy.",
+      "I can analyze the influence of media on political decisions.",
+      "I can evaluate the role of interest groups in the policy-making process."
+    ],
+    "vocabulary": [
+      "public policy",
+      "political parties",
+      "interest groups",
+      "media influence",
+      "legislation",
+      "advocacy",
+      "lobbying",
+      "public opinion",
+      "campaigns",
+      "elections"
+    ],
+    "sample_assessment": "Which of the following best describes the role of interest groups in the legislative process?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.9",
+    "benchmark": "Explain the process and procedures of elections at the state and national levels. Presidential elections (CG-H.2)",
+    "topics": [
+      "election processes",
+      "state and national elections",
+      "civic participation",
+      "voting rights"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on explaining the processes and procedures of elections, requiring students to demonstrate understanding of how elections are conducted at both state and national levels.",
+    "essential_questions": [
+      "What are the key steps in the election process?",
+      "How do state and national elections differ?",
+      "What factors influence voter turnout in elections?"
+    ],
+    "learning_targets": [
+      "I can explain the process of how elections are conducted.",
+      "I can compare state and national election procedures.",
+      "I can identify factors that affect voter participation."
+    ],
+    "vocabulary": [
+      "election process",
+      "voting rights",
+      "polling places",
+      "ballots",
+      "electoral college",
+      "voter turnout",
+      "registration",
+      "campaigns",
+      "primary elections",
+      "general elections"
+    ],
+    "sample_assessment": "What is the purpose of the Electoral College in U.S. presidential elections?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.10",
+    "benchmark": "Analyze factors that contribute to voter turnout in local, state and national elections. Political participation (CG-H.3)",
+    "topics": [
+      "voter turnout",
+      "elections",
+      "political participation"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze data and case studies related to voter turnout, encouraging them to draw connections between various factors such as demographics, socioeconomic status, and election laws.",
+    "essential_questions": [
+      "What factors most significantly influence voter turnout in different elections?",
+      "How do local, state, and national contexts affect voter participation?",
+      "In what ways can voter turnout impact the outcomes of elections?"
+    ],
+    "learning_targets": [
+      "I can identify factors that influence voter turnout.",
+      "I can analyze the impact of voter turnout on election results.",
+      "I can compare voter turnout across different elections."
+    ],
+    "vocabulary": [
+      "voter turnout",
+      "demographics",
+      "election laws",
+      "participation",
+      "engagement",
+      "socioeconomic status",
+      "polling",
+      "registration",
+      "civic duty",
+      "electoral process"
+    ],
+    "sample_assessment": "Which of the following factors is most likely to increase voter turnout in an election? A) Lack of information B) High levels of civic engagement C) Strict voter ID laws D) Low socioeconomic status",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.11",
+    "benchmark": "Evaluate political communication for bias, factual accuracy, omission and emotional appeal. Role of the media (CG-I.1) Media literacy: credibility (CG-I.)",
+    "topics": [
+      "media literacy",
+      "political communication",
+      "bias evaluation"
+    ],
+    "dok": 4,
+    "item_specs": "Items should challenge students to critically evaluate various media sources for bias, accuracy, and emotional appeal, requiring them to analyze specific examples and articulate their reasoning.",
+    "essential_questions": [
+      "How can we determine if a news source is biased?",
+      "What role does emotional appeal play in political communication?",
+      "Why is it important to evaluate the factual accuracy of political messages?"
+    ],
+    "learning_targets": [
+      "I can identify bias in political communication.",
+      "I can evaluate the factual accuracy of media sources.",
+      "I can analyze the emotional appeal in political messages."
+    ],
+    "vocabulary": [
+      "bias",
+      "factual accuracy",
+      "emotional appeal",
+      "media literacy",
+      "credibility",
+      "omission",
+      "source evaluation",
+      "persuasion",
+      "propaganda",
+      "disinformation"
+    ],
+    "sample_assessment": "Which of the following statements best describes a biased news article? A) It presents multiple viewpoints B) It only includes facts C) It uses emotionally charged language D) It cites reputable sources",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.12",
+    "benchmark": "Explain how interest groups, the media and public opinion influence local, state and national decision-making related to public issues. Presidential elections (CG-H.2) Political participation (CG-H.3) Role of the media (CG-I.1) Media literacy: credibility (CG-I.)",
+    "topics": [
+      "interest groups",
+      "media influence",
+      "public opinion"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should ask students to explain and analyze the roles of interest groups, media, and public opinion in shaping decision-making processes, using real-world examples to illustrate their points.",
+    "essential_questions": [
+      "How do interest groups influence public policy?",
+      "In what ways does media coverage shape public opinion?",
+      "What is the relationship between public opinion and political decision-making?"
+    ],
+    "learning_targets": [
+      "I can explain the role of interest groups in politics.",
+      "I can analyze how media influences public opinion.",
+      "I can discuss the impact of public opinion on decision-making."
+    ],
+    "vocabulary": [
+      "interest groups",
+      "public opinion",
+      "media influence",
+      "decision-making",
+      "advocacy",
+      "lobbying",
+      "political agenda",
+      "policy",
+      "representation",
+      "civic engagement"
+    ],
+    "sample_assessment": "Which of the following best describes how interest groups influence political decisions? A) By providing unbiased information B) By lobbying government officials C) By ignoring public opinion D) By promoting voter registration",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.2.13",
+    "benchmark": "Analyze the influence and effects of various forms of media and the internet in political communication. Role of the media (CG-I.1) Media literacy: credibility (CG-I.)",
+    "topics": [
+      "media effects",
+      "political communication",
+      "internet influence"
+    ],
+    "dok": 4,
+    "item_specs": "Items should require students to analyze the effects of various media forms, including social media, on political communication, encouraging them to evaluate both positive and negative impacts through case studies.",
+    "essential_questions": [
+      "What are the positive and negative effects of social media on political communication?",
+      "How does the internet change the way political messages are disseminated?",
+      "In what ways can media shape political discourse?"
+    ],
+    "learning_targets": [
+      "I can analyze the effects of social media on political communication.",
+      "I can evaluate different forms of media in political contexts.",
+      "I can discuss the implications of internet use in politics."
+    ],
+    "vocabulary": [
+      "media effects",
+      "political communication",
+      "social media",
+      "internet",
+      "discourse",
+      "information dissemination",
+      "digital literacy",
+      "engagement",
+      "influence",
+      "communication strategies"
+    ],
+    "sample_assessment": "Which of the following statements best describes a negative effect of social media on political communication? A) It allows for rapid information sharing B) It can spread misinformation C) It encourages civic engagement D) It connects diverse viewpoints",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.1",
+    "benchmark": "Analyze how certain political ideologies conflict with the principles of freedom and democracy. Identify types of government (CG-A.2) Economic systems (CG-J.1)",
+    "topics": [
+      "political ideologies",
+      "freedom",
+      "democracy"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and compare different political ideologies, focusing on how they align or conflict with democratic principles, using examples from history and current events.",
+    "essential_questions": [
+      "How do different political ideologies challenge democratic principles?",
+      "What are the core values of freedom and democracy?",
+      "In what ways can ideologies shape government policies?"
+    ],
+    "learning_targets": [
+      "I can analyze how political ideologies conflict with democracy.",
+      "I can identify key principles of freedom.",
+      "I can compare different types of government based on their ideologies."
+    ],
+    "vocabulary": [
+      "political ideologies",
+      "democracy",
+      "freedom",
+      "totalitarianism",
+      "liberalism",
+      "conservatism",
+      "socialism",
+      "governance",
+      "human rights",
+      "civil liberties"
+    ],
+    "sample_assessment": "Which of the following ideologies is most likely to conflict with democratic principles? A) Liberalism B) Conservatism C) Totalitarianism D) Socialism",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.2",
+    "benchmark": "Explain how the U.S. Constitution safeguards and limits individual rights. Constitutional amendments (CG-C.3) The Bill of Rights (CG-C.4) What are civil liberties and civil rights? (CG-F.1) Supreme Court cases on the Bill of Rights (CG-F.2)",
+    "topics": [
+      "U.S. Constitution",
+      "Individual Rights",
+      "Civil Liberties"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and explain the implications of the U.S. Constitution on individual rights, including the Bill of Rights and relevant Supreme Court cases. Items may include scenario-based questions, requiring students to apply their understanding of constitutional protections and limitations.",
+    "essential_questions": [
+      "How does the U.S. Constitution protect individual rights?",
+      "In what ways can individual rights be limited?",
+      "What role do Supreme Court cases play in interpreting the Bill of Rights?"
+    ],
+    "learning_targets": [
+      "I can explain how the Constitution safeguards individual rights.",
+      "I can identify key amendments in the Bill of Rights.",
+      "I can analyze Supreme Court cases related to civil liberties."
+    ],
+    "vocabulary": [
+      "Constitution",
+      "Bill of Rights",
+      "Civil Liberties",
+      "Civil Rights",
+      "Supreme Court",
+      "Amendment",
+      "Due Process",
+      "Equal Protection",
+      "Precedent",
+      "Judicial Review"
+    ],
+    "sample_assessment": "Which amendment in the Bill of Rights protects the freedom of speech?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.3",
+    "benchmark": "Analyze the structures, functions and processes of the legislative branch as described in Article I of the U.S. Constitution. The legislative branch (CG-D.1) How a bill becomes a law (CG-D.2) Checks and balances (CG-D.6)",
+    "topics": [
+      "Legislative Branch",
+      "U.S. Constitution",
+      "Checks and Balances"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the structures and functions of the legislative branch as outlined in Article I of the U.S. Constitution. Items may include analyzing the law-making process, the roles of Congress, and the system of checks and balances, using case studies or hypothetical scenarios.",
+    "essential_questions": [
+      "What are the main functions of the legislative branch?",
+      "How does a bill become a law?",
+      "What checks exist to limit the power of Congress?"
+    ],
+    "learning_targets": [
+      "I can describe the structure of the legislative branch.",
+      "I can explain how a bill becomes a law.",
+      "I can analyze the system of checks and balances."
+    ],
+    "vocabulary": [
+      "Legislative Branch",
+      "Congress",
+      "Bill",
+      "Law",
+      "Checks and Balances",
+      "Senate",
+      "House of Representatives",
+      "Committee",
+      "Veto",
+      "Filibuster"
+    ],
+    "sample_assessment": "What is the first step in the process of how a bill becomes a law?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.4",
+    "benchmark": "Analyze the structures, functions and processes of the executive branch as described in Article II of the U.S. Constitution. The executive branch (CG-D.3) Checks and balances (CG-D.6) Presidential elections (CG-H.2)",
+    "topics": [
+      "Executive Branch",
+      "U.S. Constitution",
+      "Presidential Elections"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze the structures and functions of the executive branch as described in Article II of the U.S. Constitution. Items may involve evaluating the powers of the President, the election process, and the system of checks and balances.",
+    "essential_questions": [
+      "What are the main responsibilities of the executive branch?",
+      "How are presidential elections conducted?",
+      "In what ways can the executive branch be checked by the other branches?"
+    ],
+    "learning_targets": [
+      "I can describe the functions of the executive branch.",
+      "I can explain the presidential election process.",
+      "I can analyze the checks on presidential power."
+    ],
+    "vocabulary": [
+      "Executive Branch",
+      "President",
+      "Election",
+      "Veto",
+      "Cabinet",
+      "Executive Order",
+      "Impeachment",
+      "Constitutional Powers",
+      "Campaign",
+      "Electoral College"
+    ],
+    "sample_assessment": "What is one power of the President as outlined in the U.S. Constitution?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.5",
+    "benchmark": "Describe how independent regulatory agencies interact with the three branches of government and with citizens. Executive departments and independent agencies (CG-D.4)",
+    "topics": [
+      "Regulatory Agencies",
+      "Government Interaction",
+      "Citizen Engagement"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the role of independent regulatory agencies and their interactions with the three branches of government and citizens. Items may include case studies or scenarios that illustrate the functions and impacts of these agencies.",
+    "essential_questions": [
+      "What is the role of independent regulatory agencies?",
+      "How do these agencies interact with the branches of government?",
+      "In what ways do regulatory agencies affect citizens?"
+    ],
+    "learning_targets": [
+      "I can describe the functions of independent regulatory agencies.",
+      "I can explain how these agencies interact with government branches.",
+      "I can analyze the impact of regulatory agencies on citizens."
+    ],
+    "vocabulary": [
+      "Regulatory Agency",
+      "Independent Agency",
+      "Government",
+      "Oversight",
+      "Policy",
+      "Citizen Engagement",
+      "Accountability",
+      "Regulation",
+      "Enforcement",
+      "Public Interest"
+    ],
+    "sample_assessment": "Which of the following is an example of an independent regulatory agency?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.6",
+    "benchmark": "Explain expressed, implied, concurrent and reserved powers in the U.S. Constitution. Federalism (CG-C.2) The legislative branch (CG-D.1) Supreme Court cases on the balance of power (CG-D.7) Introduction to state and local government (CG-E.1)",
+    "topics": [
+      "Constitutional Powers",
+      "Federalism",
+      "Balance of Power"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the concepts of expressed, implied, concurrent, and reserved powers as outlined in the U.S. Constitution. Items may involve comparisons, case studies, and scenarios that require students to analyze the balance of power between federal and state governments.",
+    "essential_questions": [
+      "What are the different types of powers in the U.S. Constitution?",
+      "How do federal and state powers interact?",
+      "What is the significance of the balance of power?"
+    ],
+    "learning_targets": [
+      "I can explain the different types of powers in the Constitution.",
+      "I can analyze the relationship between federal and state powers.",
+      "I can evaluate the significance of the balance of power."
+    ],
+    "vocabulary": [
+      "Expressed Powers",
+      "Implied Powers",
+      "Concurrent Powers",
+      "Reserved Powers",
+      "Federalism",
+      "State Government",
+      "Supreme Court",
+      "Constitutional Law",
+      "Separation of Powers",
+      "Checks and Balances"
+    ],
+    "sample_assessment": "Which of the following is an example of a reserved power?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.7",
+    "benchmark": "Analyze the structures, functions and processes of the judicial branch as described in Article III of the U.S. Constitution. The judicial branch (CG-D.5) Checks and balances (CG-D.6)",
+    "topics": [
+      "judicial branch",
+      "checks and balances",
+      "U.S. Constitution"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and explain the structures and functions of the judicial branch, including its role in the system of checks and balances as established in Article III of the U.S. Constitution. Items may include scenarios or case studies that require critical thinking and application of knowledge.",
+    "essential_questions": [
+      "What are the main functions of the judicial branch as outlined in the Constitution?",
+      "How does the judicial branch interact with the other branches of government?",
+      "In what ways do checks and balances protect against the abuse of power?"
+    ],
+    "learning_targets": [
+      "I can explain the structure of the judicial branch.",
+      "I can describe the functions of the judicial branch.",
+      "I can analyze the concept of checks and balances."
+    ],
+    "vocabulary": [
+      "judicial branch",
+      "checks and balances",
+      "Article III",
+      "Supreme Court",
+      "federal courts",
+      "judicial review",
+      "case law",
+      "due process",
+      "jurisdiction",
+      "precedent"
+    ],
+    "sample_assessment": "Which article of the U.S. Constitution establishes the judicial branch?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.8",
+    "benchmark": "Describe the purpose and function of judicial review in the American constitutional government. Interpreting the Constitution (CG-C.5) The judicial branch (CG-D.5) Supreme Court cases on the balance of power (CG-D.7)",
+    "topics": [
+      "judicial review",
+      "constitutional government",
+      "Supreme Court"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on the purpose and function of judicial review within the American constitutional framework. Items may include definitions, explanations of landmark cases, and the implications of judicial review on legislation and executive actions.",
+    "essential_questions": [
+      "What is judicial review and why is it important?",
+      "How does judicial review impact the balance of power among branches of government?",
+      "What role does the Supreme Court play in judicial review?"
+    ],
+    "learning_targets": [
+      "I can describe the concept of judicial review.",
+      "I can explain the significance of judicial review in government.",
+      "I can identify key Supreme Court cases related to judicial review."
+    ],
+    "vocabulary": [
+      "judicial review",
+      "Supreme Court",
+      "constitutional interpretation",
+      "Marbury v. Madison",
+      "checks and balances",
+      "legislation",
+      "executive action",
+      "precedent",
+      "unconstitutional",
+      "judicial activism"
+    ],
+    "sample_assessment": "What landmark case established the principle of judicial review?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.9",
+    "benchmark": "Compare the role of state and federal judges with other elected officials. The judicial branch (CG-D.5) State courts (CG-E.3)",
+    "topics": [
+      "state judges",
+      "federal judges",
+      "elected officials"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to compare and contrast the roles and responsibilities of state and federal judges with those of other elected officials. Items may include charts, Venn diagrams, or scenario-based questions that highlight differences and similarities.",
+    "essential_questions": [
+      "How do the roles of state judges differ from those of federal judges?",
+      "What are the similarities between judges and other elected officials?",
+      "Why is the election of judges significant in the judicial system?"
+    ],
+    "learning_targets": [
+      "I can compare the roles of state and federal judges.",
+      "I can explain how judges are elected or appointed.",
+      "I can analyze the responsibilities of judges in the judicial system."
+    ],
+    "vocabulary": [
+      "state judges",
+      "federal judges",
+      "elected officials",
+      "judicial appointment",
+      "judicial election",
+      "court system",
+      "jurisdiction",
+      "legal authority",
+      "case law",
+      "judicial independence"
+    ],
+    "sample_assessment": "Which of the following best describes a key difference between state and federal judges?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.10",
+    "benchmark": "Analyze the levels and responsibilities of state and federal courts. The judicial branch (CG-D.5) State courts (CG-E.3)",
+    "topics": [
+      "state courts",
+      "federal courts",
+      "court responsibilities"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should involve analyzing the levels and responsibilities of both state and federal courts. Items may include case studies, flowcharts, or comparative analyses that require students to demonstrate their understanding of the court systems and their functions.",
+    "essential_questions": [
+      "What are the different levels of state and federal courts?",
+      "How do the responsibilities of state courts differ from those of federal courts?",
+      "What role do courts play in interpreting laws?"
+    ],
+    "learning_targets": [
+      "I can identify the levels of state and federal courts.",
+      "I can describe the responsibilities of different courts.",
+      "I can analyze how court systems function within the government."
+    ],
+    "vocabulary": [
+      "state courts",
+      "federal courts",
+      "court hierarchy",
+      "jurisdiction",
+      "trial court",
+      "appellate court",
+      "Supreme Court",
+      "court responsibilities",
+      "legal proceedings",
+      "case management"
+    ],
+    "sample_assessment": "Which of the following is a responsibility of federal courts?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.11",
+    "benchmark": "Evaluate how landmark Supreme Court decisions affect law, liberty and the interpretation of the U.S. Constitution. Supreme Court cases on the balance of power (CG-D.7) Supreme Court cases on the Bill of Rights (CG-F.2) Supreme Court cases on the Fourteenth Amendment: incorporation (CG-F.3)",
+    "topics": [
+      "landmark decisions",
+      "Supreme Court",
+      "constitutional interpretation"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to evaluate the impact of landmark Supreme Court decisions on law, liberty, and constitutional interpretation. Items may include analysis of specific cases, their outcomes, and their broader implications for society and government.",
+    "essential_questions": [
+      "How have landmark Supreme Court decisions shaped American law?",
+      "In what ways do Supreme Court rulings affect individual liberties?",
+      "How do landmark cases influence the interpretation of the Constitution?"
+    ],
+    "learning_targets": [
+      "I can evaluate the impact of landmark Supreme Court decisions.",
+      "I can analyze how these decisions affect law and liberty.",
+      "I can discuss the implications of Supreme Court rulings on constitutional interpretation."
+    ],
+    "vocabulary": [
+      "landmark decisions",
+      "Supreme Court",
+      "constitutional interpretation",
+      "Bill of Rights",
+      "Fourteenth Amendment",
+      "incorporation",
+      "precedent",
+      "civil rights",
+      "judicial review",
+      "liberty"
+    ],
+    "sample_assessment": "Which Supreme Court case is known for establishing the principle of incorporation through the Fourteenth Amendment?",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.12",
+    "benchmark": "Analyze the concept of federalism in the United States and its role in establishing the relationship between the state and national governments. Federalism (CG-C.2) Introduction to state and local government (CG-E.1) Identify levels and branches of government (CG-E.2) State courts (CG-E.3)",
+    "topics": [
+      "Federalism",
+      "Government Relations",
+      "State and National Government"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze scenarios that illustrate the relationship between state and national governments, including the division of powers and responsibilities. Items may include case studies, comparative analyses, or real-world examples that prompt critical thinking about federalism.",
+    "essential_questions": [
+      "How does federalism shape the relationship between state and national governments?",
+      "What are the advantages and disadvantages of federalism in the U.S.?"
+    ],
+    "learning_targets": [
+      "I can explain the concept of federalism.",
+      "I can analyze the roles of state and national governments."
+    ],
+    "vocabulary": [
+      "Federalism",
+      "State Government",
+      "National Government",
+      "Constitution",
+      "Separation of Powers"
+    ],
+    "sample_assessment": "Which of the following best describes the concept of federalism? A) A system where the national government holds all power B) A system that divides power between national and state governments C) A system that eliminates state governments D) A system that only applies to local governments.",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.13",
+    "benchmark": "Explain how issues between Florida, other states and the national government are resolved. Federalism (CG-C.2)",
+    "topics": [
+      "Intergovernmental Relations",
+      "Conflict Resolution",
+      "Federalism"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on explaining the mechanisms and processes through which conflicts between Florida, other states, and the national government are resolved. Items may include multiple-choice questions, short answer prompts, or scenario-based questions that require students to identify resolution methods.",
+    "essential_questions": [
+      "What processes are in place to resolve conflicts between states and the national government?",
+      "How does federalism influence the resolution of intergovernmental issues?"
+    ],
+    "learning_targets": [
+      "I can describe how conflicts between states and the national government are resolved.",
+      "I can identify key processes involved in intergovernmental relations."
+    ],
+    "vocabulary": [
+      "Intergovernmental Relations",
+      "Conflict Resolution",
+      "Federalism",
+      "Negotiation",
+      "Compromise"
+    ],
+    "sample_assessment": "What is one way that conflicts between states and the national government can be resolved? A) Through the Supreme Court B) By state governors C) By public opinion D) Through state legislatures.",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.14",
+    "benchmark": "Explain the judicial decision-making process in interpreting law at the state and national levels. Interpreting the Constitution (CG-C.5) State courts (CG-E.3)",
+    "topics": [
+      "Judicial Process",
+      "Law Interpretation",
+      "State and National Courts"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to explain the judicial decision-making process, including how laws are interpreted at both state and national levels. Items may include case studies, analysis of court decisions, or hypothetical scenarios that require application of legal principles.",
+    "essential_questions": [
+      "How do courts interpret laws at the state and national levels?",
+      "What factors influence judicial decision-making?"
+    ],
+    "learning_targets": [
+      "I can explain the judicial decision-making process.",
+      "I can analyze how laws are interpreted in different courts."
+    ],
+    "vocabulary": [
+      "Judicial Review",
+      "Constitutional Interpretation",
+      "Precedent",
+      "State Courts",
+      "Supreme Court"
+    ],
+    "sample_assessment": "Which of the following best describes judicial review? A) The process by which courts interpret laws B) The ability of the executive branch to veto laws C) The legislative process of creating laws D) The enforcement of laws by law enforcement agencies.",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.3.15",
+    "benchmark": "Explain how citizens are affected by the local, state and national governments. Federalism (CG-C.2) Introduction to state and local government (CG-E.1) Identify levels and branches of government (CG-E.2) State courts (CG-E.3)",
+    "topics": [
+      "Citizen Impact",
+      "Government Levels",
+      "Federalism"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on how local, state, and national governments affect citizens' lives. Items may include scenarios, multiple-choice questions, or short answer prompts that require students to connect government actions to citizen experiences.",
+    "essential_questions": [
+      "In what ways do local, state, and national governments impact citizens' daily lives?",
+      "How does federalism affect the rights and responsibilities of citizens?"
+    ],
+    "learning_targets": [
+      "I can explain how government decisions affect citizens.",
+      "I can identify the roles of different government levels in my life."
+    ],
+    "vocabulary": [
+      "Local Government",
+      "State Government",
+      "National Government",
+      "Citizen Rights",
+      "Public Policy"
+    ],
+    "sample_assessment": "How does local government impact your community? A) By setting national laws B) By managing local resources and services C) By influencing international relations D) By controlling state budgets.",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.4.1",
+    "benchmark": "Analyze how liberty and economic freedom generate broad-based opportunity and prosperity in the United States. Government and politics (CG-A.) Identify types of government (CG-A.2) Economic systems (CG-J.1)",
+    "topics": [
+      "Economic Freedom",
+      "Liberty",
+      "Opportunity"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to analyze and evaluate the relationship between liberty, economic freedom, and prosperity. Items may include essays, case studies, or project-based assessments that encourage critical thinking and synthesis of ideas.",
+    "essential_questions": [
+      "How do liberty and economic freedom contribute to prosperity?",
+      "What are the implications of economic systems on individual opportunities?"
+    ],
+    "learning_targets": [
+      "I can analyze the relationship between economic freedom and opportunity.",
+      "I can evaluate how liberty influences economic prosperity."
+    ],
+    "vocabulary": [
+      "Economic Freedom",
+      "Liberty",
+      "Prosperity",
+      "Opportunity",
+      "Capitalism"
+    ],
+    "sample_assessment": "Which statement best describes the relationship between economic freedom and prosperity? A) Economic freedom restricts opportunity B) Economic freedom promotes innovation and growth C) Economic freedom has no impact on prosperity D) Economic freedom only benefits the wealthy.",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.4.2",
+    "benchmark": "Explain how the United States uses foreign policy to influence other nations.",
+    "topics": [
+      "foreign policy",
+      "international relations",
+      "influence"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze various foreign policy strategies employed by the United States and evaluate their effectiveness in influencing other nations. Items may include case studies, scenarios, or data interpretation.",
+    "essential_questions": [
+      "How does U.S. foreign policy shape global relationships?",
+      "What strategies does the U.S. use to influence other nations?",
+      "In what ways can foreign policy lead to both positive and negative outcomes?"
+    ],
+    "learning_targets": [
+      "I can explain the key components of U.S. foreign policy.",
+      "I can analyze case studies of U.S. foreign policy in action.",
+      "I can evaluate the effectiveness of different foreign policy strategies."
+    ],
+    "vocabulary": [
+      "diplomacy",
+      "sanctions",
+      "treaties",
+      "alliances",
+      "soft power",
+      "hard power",
+      "influence",
+      "negotiation",
+      "intervention"
+    ],
+    "sample_assessment": "Which of the following best describes a strategy used by the U.S. to influence foreign nations? A) Economic sanctions B) Military intervention C) Diplomatic negotiations D) All of the above",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.4.3",
+    "benchmark": "Explain how U.S. foreign policy supports democratic principles and protects human rights around the world.",
+    "topics": [
+      "democracy",
+      "human rights",
+      "foreign policy"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the relationship between U.S. foreign policy and the promotion of democratic values and human rights. Items may include analysis of specific policies, historical examples, and current events.",
+    "essential_questions": [
+      "How does U.S. foreign policy promote democracy around the world?",
+      "What role does the U.S. play in protecting human rights globally?",
+      "How can foreign policy both support and undermine democratic principles?"
+    ],
+    "learning_targets": [
+      "I can identify key U.S. foreign policies that support democracy.",
+      "I can analyze the impact of U.S. actions on human rights in other countries.",
+      "I can discuss the challenges faced by the U.S. in promoting democracy abroad."
+    ],
+    "vocabulary": [
+      "human rights",
+      "democracy",
+      "foreign aid",
+      "intervention",
+      "advocacy",
+      "diplomatic relations",
+      "sovereignty",
+      "international law",
+      "civil liberties"
+    ],
+    "sample_assessment": "Which of the following is an example of U.S. foreign policy aimed at promoting human rights? A) Supporting authoritarian regimes B) Imposing trade tariffs C) Providing humanitarian aid D) Ignoring human rights abuses",
+    "course": "American Government"
+  },
+  {
+    "code": "SS.912.CG.4.4",
+    "benchmark": "Identify indicators of democratization in foreign countries.",
+    "topics": [
+      "democratization",
+      "indicators",
+      "global politics"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should ask students to identify and explain various indicators of democratization in foreign countries. Items may include matching definitions, multiple-choice questions, or short answer responses.",
+    "essential_questions": [
+      "What are the key indicators of democratization?",
+      "How can we assess the progress of democracy in different nations?",
+      "What factors contribute to successful democratization?"
+    ],
+    "learning_targets": [
+      "I can identify indicators of democratization.",
+      "I can explain how these indicators reflect the state of democracy in a country.",
+      "I can analyze case studies of democratization efforts."
+    ],
+    "vocabulary": [
+      "democratization",
+      "civil society",
+      "political participation",
+      "free elections",
+      "rule of law",
+      "transparency",
+      "accountability",
+      "political rights",
+      "social movements"
+    ],
+    "sample_assessment": "Which of the following is NOT an indicator of democratization? A) Free and fair elections B) Strong civil society C) Censorship of the press D) Political pluralism",
+    "course": "American Government"
   }
 ]

@@ -77,7 +77,16 @@ def check_new_files():
     if not assignments_folder or not os.path.exists(assignments_folder):
         return jsonify({"error": f"Folder not found: {assignments_folder}", "new_files": 0})
 
-    # Load already graded files from master CSV
+    # Stage files first — canonicalize and deduplicate
+    from backend.staging import stage_files, MANIFEST_NAME
+    try:
+        stage_result = stage_files(assignments_folder)
+        staging_folder = stage_result["staging_folder"]
+    except Exception:
+        staging_folder = assignments_folder  # fallback to raw folder
+
+    # Load already graded files from master CSV (canonicalize so they match staged names)
+    from backend.staging import canonicalize_filename as _canon
     already_graded = set()
     master_file = os.path.join(output_folder, "master_grades.csv")
     if os.path.exists(master_file):
@@ -88,7 +97,8 @@ def check_new_files():
                     filename = row.get('Filename', '')
                     if filename:
                         already_graded.add(filename)
-        except:
+                        already_graded.add(_canon(filename))
+        except Exception:
             pass
 
     # Also check in-memory results (from per-teacher grading_state)
@@ -98,11 +108,14 @@ def check_new_files():
         for r in grading_state["results"]:
             if r.get("filename"):
                 already_graded.add(r["filename"])
+                already_graded.add(_canon(r["filename"]))
 
-    # Count new files
+    # Count new files from staged folder (canonical names match graded results)
     all_files = []
-    for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png']:
-        all_files.extend(Path(assignments_folder).glob(ext))
+    for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
+        all_files.extend(Path(staging_folder).glob(ext))
+    # Exclude manifest
+    all_files = [f for f in all_files if f.name != MANIFEST_NAME]
 
     new_files = [f for f in all_files if f.name not in already_graded]
 

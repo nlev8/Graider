@@ -2233,6 +2233,181 @@ def get_standards():
     return jsonify({"standards": [], "grade": grade, "subject": subject})
 
 
+@planner_bp.route('/api/align-document-to-standards', methods=['POST'])
+def align_document_to_standards():
+    """Analyze a document and identify which standards it aligns to."""
+    data = request.json
+    doc_text = data.get('documentText', '')
+    state = data.get('state', 'FL')
+    grade = data.get('grade', '7')
+    subject = data.get('subject', '')
+
+    if not doc_text or not doc_text.strip():
+        return jsonify({"error": "No document text provided"})
+    if not subject:
+        return jsonify({"error": "Subject is required. Set it in Settings."})
+
+    standards = load_standards(state, subject, grade)
+    if not standards:
+        return jsonify({"error": f"No standards found for {state} {subject} grade {grade}. Check that a standards file exists in backend/data/."})
+
+    # Build condensed standards reference for AI prompt (limit token usage)
+    standards_ref = []
+    for s in standards:
+        standards_ref.append({
+            "code": s.get("code", ""),
+            "benchmark": s.get("benchmark", "")[:200],
+            "topics": s.get("topics", []),
+            "vocabulary": s.get("vocabulary", []),
+            "dok": s.get("dok", ""),
+        })
+
+    try:
+        from openai import OpenAI
+        from backend.api_keys import get_api_key as _gak
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        api_key = _gak('openai', teacher_id)
+
+        if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+            return jsonify({"error": "Missing or placeholder OpenAI API Key"})
+
+        client = OpenAI(api_key=api_key)
+
+        # Truncate document to fit in context with standards
+        truncated_doc = doc_text[:8000]
+
+        system_prompt = (
+            "You are an expert curriculum alignment specialist. "
+            "Analyze the educational document against the provided standards and return a detailed alignment analysis. "
+            "Be specific about what content in the document maps to each standard. "
+            "Only include standards with at least some relevance (confidence > 0.2). "
+            "Sort matched_standards by confidence descending."
+        )
+
+        user_prompt = json.dumps({
+            "task": "Analyze this educational document and identify which standards it aligns to.",
+            "document_text": truncated_doc,
+            "available_standards": standards_ref,
+            "return_format": {
+                "matched_standards": [{"code": "str", "benchmark": "str", "confidence": "float 0.0-1.0", "evidence": "brief quote or description from document", "alignment_notes": "what is well-covered vs missing"}],
+                "unmatched_standards": ["standard codes not covered"],
+                "overall_alignment_score": "float 0.0-1.0",
+                "suggestions": ["improvement suggestion strings"],
+                "question_analysis": [{"question_text": "truncated question", "aligned_standard": "code or null", "alignment_quality": "strong|partial|weak|none", "rewrite_suggestion": "optional string or null"}]
+            }
+        })
+
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+        )
+
+        raw_content = completion.choices[0].message.content
+        try:
+            result = json.loads(raw_content)
+        except json.JSONDecodeError:
+            print(f"[align-standards] Non-JSON response: {raw_content[:500]}")
+            return jsonify({"error": "AI returned non-JSON response. Possibly rate limited."})
+
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+
+        return jsonify({**result, "usage": usage})
+
+    except Exception as e:
+        return jsonify({"error": f"Standards alignment failed: {str(e)}"})
+
+
+@planner_bp.route('/api/rewrite-for-alignment', methods=['POST'])
+def rewrite_for_alignment():
+    """Rewrite specific questions to better align with selected standards."""
+    data = request.json
+    questions = data.get('questions', [])
+    doc_text = data.get('documentText', '')
+    grade = data.get('grade', '7')
+    subject = data.get('subject', '')
+    state = data.get('state', 'FL')
+
+    if not questions:
+        return jsonify({"error": "No questions provided for rewriting"})
+
+    standards = load_standards(state, subject, grade)
+    standards_by_code = {s.get("code"): s for s in standards} if standards else {}
+
+    # Enrich questions with full standard details
+    enriched_questions = []
+    for q in questions:
+        std_code = q.get('target_standard', '')
+        std_detail = standards_by_code.get(std_code, {})
+        enriched_questions.append({
+            "original_text": q.get('original_text', ''),
+            "target_standard_code": std_code,
+            "target_benchmark": std_detail.get('benchmark', ''),
+            "target_topics": std_detail.get('topics', []),
+            "target_vocabulary": std_detail.get('vocabulary', []),
+            "essential_questions": std_detail.get('essential_questions', []),
+            "rewrite_goal": q.get('rewrite_goal', ''),
+        })
+
+    try:
+        from openai import OpenAI
+        from backend.api_keys import get_api_key as _gak
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        api_key = _gak('openai', teacher_id)
+
+        if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+            return jsonify({"error": "Missing or placeholder OpenAI API Key"})
+
+        client = OpenAI(api_key=api_key)
+
+        system_prompt = (
+            f"You are an expert curriculum specialist for grade {grade} {subject}. "
+            "Rewrite the given questions to better align with the target standards. "
+            "Preserve the general topic and difficulty level but adjust the focus, "
+            "vocabulary, and cognitive demand to match the standard's benchmark. "
+            "Keep the question appropriate for the grade level."
+        )
+
+        user_prompt = json.dumps({
+            "task": "Rewrite each question to better align with its target standard.",
+            "document_context": doc_text[:3000],
+            "questions": enriched_questions,
+            "return_format": {
+                "rewrites": [{"original_text": "str", "rewritten_text": "str", "standard_code": "str", "change_explanation": "brief explanation of what changed and why"}]
+            }
+        })
+
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+        )
+
+        raw_content = completion.choices[0].message.content
+        try:
+            result = json.loads(raw_content)
+        except json.JSONDecodeError:
+            print(f"[rewrite-alignment] Non-JSON response: {raw_content[:500]}")
+            return jsonify({"error": "AI returned non-JSON response. Possibly rate limited."})
+
+        usage = _extract_usage(completion, "gpt-4o-mini")
+        _record_planner_cost(usage)
+
+        return jsonify({**result, "usage": usage})
+
+    except Exception as e:
+        return jsonify({"error": f"Rewrite failed: {str(e)}"})
+
+
 @planner_bp.route('/api/get-lesson-templates', methods=['POST'])
 def get_lesson_templates():
     """Get subject-specific lesson activity templates."""

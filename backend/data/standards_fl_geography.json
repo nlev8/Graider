@@ -366,6 +366,171 @@
     "sample_assessment": "The Sahara Desert served as a geographic barrier that: A) Connected North Africa to sub-Saharan Africa easily B) Limited interaction between North and sub-Saharan Africa C) Had no effect on trade D) Encouraged migration southward"
   },
   {
+    "code": "SS.6.G.2.6",
+    "benchmark": "Explain the concept of cultural diffusion, and identify the influences of different ancient cultures on one another. The ancient Silk Road: geography and transportation (6-G.1) The ancient Silk Road: goods and ideas (6-G.2) Pax Romana (6-J.8) Roman legacies (6-J.11)",
+    "topics": [
+      "cultural diffusion",
+      "ancient cultures",
+      "Silk Road"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and explain the interactions between different ancient cultures, focusing on the Silk Road's role in cultural diffusion. Items may include scenario-based questions, requiring students to identify specific examples of cultural exchange and their impacts.",
+    "essential_questions": [
+      "How did the Silk Road facilitate cultural exchange among ancient civilizations?",
+      "What are some examples of cultural diffusion that occurred due to trade?",
+      "In what ways did the Pax Romana influence cultural interactions?"
+    ],
+    "learning_targets": [
+      "I can explain the concept of cultural diffusion.",
+      "I can identify influences of different ancient cultures on one another.",
+      "I can describe the significance of the Silk Road in ancient trade."
+    ],
+    "vocabulary": [
+      "cultural diffusion",
+      "Silk Road",
+      "Pax Romana",
+      "trade",
+      "influence",
+      "goods",
+      "ideas",
+      "transportation",
+      "ancient cultures"
+    ],
+    "sample_assessment": "Which of the following best describes how the Silk Road contributed to cultural diffusion among ancient civilizations?"
+  },
+  {
+    "code": "SS.6.G.2.7",
+    "benchmark": "Interpret choropleths or dot-density maps to explain the distribution of population in the ancient world.",
+    "topics": [
+      "choropleth maps",
+      "population distribution",
+      "ancient world"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should involve interpreting choropleth and dot-density maps that depict population distribution in the ancient world. Students should analyze data presented in maps and answer questions that require them to draw conclusions based on visual information.",
+    "essential_questions": [
+      "What patterns can be observed in the population distribution of ancient civilizations?",
+      "How do maps help us understand historical demographics?",
+      "What factors might have influenced population distribution in the ancient world?"
+    ],
+    "learning_targets": [
+      "I can interpret choropleth maps to analyze population distribution.",
+      "I can explain the significance of population density in ancient societies.",
+      "I can compare different regions based on their population data."
+    ],
+    "vocabulary": [
+      "choropleth map",
+      "dot-density map",
+      "population distribution",
+      "density",
+      "ancient civilizations",
+      "demographics",
+      "data analysis",
+      "geography",
+      "visual representation"
+    ],
+    "sample_assessment": "Based on the choropleth map provided, which region had the highest population density in the ancient world?"
+  },
+  {
+    "code": "SS.6.G.3.1",
+    "benchmark": "Explain how the physical landscape has affected the development of agriculture and industry in the ancient world. Early Mesopotamia (6-B.1) Ancient Egypt: the Old Kingdom (6-C.1) Ancient China (6-D.1) The Indus Civilization (6-E.1) Compare ancient river civilizations: geography and society (6-F.1)",
+    "topics": [
+      "physical landscape",
+      "agriculture",
+      "ancient civilizations"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze how the physical landscape influenced agricultural and industrial development in various ancient civilizations. Items may include case studies or comparative analyses of different regions and their adaptations to their environments.",
+    "essential_questions": [
+      "How did the geography of ancient Mesopotamia support agriculture?",
+      "In what ways did the physical landscape shape the industries of ancient Egypt?",
+      "What similarities and differences can be found in the agricultural practices of ancient river civilizations?"
+    ],
+    "learning_targets": [
+      "I can explain how geography affected agriculture in ancient civilizations.",
+      "I can analyze the relationship between the physical landscape and industry.",
+      "I can compare agricultural practices across different ancient cultures."
+    ],
+    "vocabulary": [
+      "landscape",
+      "agriculture",
+      "industry",
+      "Mesopotamia",
+      "Egypt",
+      "river civilizations",
+      "geography",
+      "adaptation",
+      "resources"
+    ],
+    "sample_assessment": "How did the physical landscape of the Indus Civilization contribute to its agricultural practices?"
+  },
+  {
+    "code": "SS.6.G.3.2",
+    "benchmark": "Analyze the impact of human populations on the ancient world's ecosystems.",
+    "topics": [
+      "human impact",
+      "ecosystems",
+      "ancient world"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should challenge students to analyze the effects of human populations on ancient ecosystems. Items may involve evaluating case studies or historical scenarios where human activity significantly altered the environment, requiring critical thinking and synthesis of information.",
+    "essential_questions": [
+      "What were the ecological impacts of human settlements in ancient civilizations?",
+      "How did agriculture change the ecosystems of ancient societies?",
+      "In what ways did human activity contribute to environmental changes in the ancient world?"
+    ],
+    "learning_targets": [
+      "I can analyze the impact of human populations on ecosystems.",
+      "I can evaluate historical examples of human-environment interactions.",
+      "I can discuss the consequences of agricultural practices on ancient ecosystems."
+    ],
+    "vocabulary": [
+      "ecosystem",
+      "human impact",
+      "agriculture",
+      "environment",
+      "settlements",
+      "sustainability",
+      "resource management",
+      "biodiversity",
+      "alteration"
+    ],
+    "sample_assessment": "Which of the following best describes a significant impact of agriculture on the ecosystems of ancient civilizations?"
+  },
+  {
+    "code": "SS.6.G.4.1",
+    "benchmark": "Explain how family and ethnic relationships influenced ancient cultures.",
+    "topics": [
+      "family relationships",
+      "ethnic influences",
+      "ancient cultures"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on explaining how family and ethnic relationships influenced cultural practices and societal structures in ancient cultures. Items may include identification of key relationships and their effects on social norms and traditions.",
+    "essential_questions": [
+      "How did family structures shape the cultures of ancient societies?",
+      "What role did ethnic diversity play in the development of ancient cultures?",
+      "In what ways did family and ethnic relationships influence governance in ancient civilizations?"
+    ],
+    "learning_targets": [
+      "I can explain the influence of family relationships on ancient cultures.",
+      "I can identify the impact of ethnic diversity in historical societies.",
+      "I can discuss how family and ethnic ties affected social structures."
+    ],
+    "vocabulary": [
+      "family relationships",
+      "ethnic influences",
+      "cultural practices",
+      "societal structures",
+      "traditions",
+      "governance",
+      "diversity",
+      "social norms",
+      "heritage"
+    ],
+    "sample_assessment": "Which statement best describes the influence of family relationships on the culture of ancient Rome?"
+  },
+  {
     "code": "SS.6.G.4.2",
     "benchmark": "Use maps to trace significant migrations, and analyze their results.",
     "topics": [
@@ -394,6 +559,237 @@
       "route"
     ],
     "sample_assessment": "A push factor for migration would be: A) Better farmland B) Job opportunities C) Drought and famine D) Religious freedom"
+  },
+  {
+    "code": "SS.6.G.4.3",
+    "benchmark": "Locate sites in Africa and Asia where archaeologists have found evidence of early human societies, and trace their migration patterns to other parts of the world. The Neolithic Period (6-A.1)",
+    "topics": [
+      "archaeology",
+      "migration",
+      "early humans"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to identify and locate key archaeological sites in Africa and Asia, as well as trace migration patterns using maps and timelines. Items may include multiple-choice questions, short answer responses, and map analysis tasks.",
+    "essential_questions": [
+      "What evidence do archaeologists use to understand early human societies?",
+      "How did early human migration patterns shape the world?",
+      "What factors influenced the movement of early humans?"
+    ],
+    "learning_targets": [
+      "I can locate important archaeological sites in Africa and Asia.",
+      "I can trace the migration patterns of early human societies.",
+      "I can explain the significance of the Neolithic Period."
+    ],
+    "vocabulary": [
+      "archaeology",
+      "migration",
+      "Neolithic",
+      "evidence",
+      "society",
+      "patterns",
+      "Africa",
+      "Asia",
+      "prehistoric",
+      "civilization"
+    ],
+    "sample_assessment": "Which of the following regions is known for significant archaeological findings related to early human societies? A) Amazon Rainforest B) Sahara Desert C) Great Plains D) Himalayan Mountains"
+  },
+  {
+    "code": "SS.6.G.4.4",
+    "benchmark": "Map and analyze the impact of the spread of various belief systems in the ancient world. The teachings of Confucius (6-D.6) The ancient Silk Road: goods and ideas (6-G.2) Origins of Judaism (6-H.1) Origins of Christianity (6-H.2) Origins of Islam (6-H.3) Origins of Hinduism (6-H.4) Origins of Buddhism (6-H.5) Early Islamic conquests (6-K.1)",
+    "topics": [
+      "belief systems",
+      "ancient world",
+      "Silk Road"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should encourage students to map the spread of various belief systems and analyze their impacts on ancient civilizations. Items may include case studies, map interpretation, and comparative analysis questions.",
+    "essential_questions": [
+      "How did belief systems influence ancient societies?",
+      "What role did the Silk Road play in the exchange of ideas?",
+      "In what ways did the teachings of Confucius shape Chinese culture?"
+    ],
+    "learning_targets": [
+      "I can map the spread of major belief systems in the ancient world.",
+      "I can analyze the impact of the Silk Road on trade and culture.",
+      "I can compare the origins of different religions."
+    ],
+    "vocabulary": [
+      "belief systems",
+      "Silk Road",
+      "Confucianism",
+      "Judaism",
+      "Christianity",
+      "Islam",
+      "Hinduism",
+      "Buddhism",
+      "ancient civilizations",
+      "cultural exchange"
+    ],
+    "sample_assessment": "Which belief system originated in the Middle East and emphasizes monotheism? A) Buddhism B) Hinduism C) Judaism D) Confucianism"
+  },
+  {
+    "code": "SS.6.G.5.1",
+    "benchmark": "Identify the methods used to compensate for the scarcity of resources in the ancient world.",
+    "topics": [
+      "resource management",
+      "ancient civilizations",
+      "scarcity"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying methods used by ancient civilizations to address resource scarcity. Items may include multiple-choice questions, short answer explanations, and scenario-based questions.",
+    "essential_questions": [
+      "What strategies did ancient civilizations use to manage scarce resources?",
+      "How did resource scarcity affect the development of societies?",
+      "What innovations arose in response to resource limitations?"
+    ],
+    "learning_targets": [
+      "I can identify methods used to compensate for resource scarcity.",
+      "I can explain the impact of resource availability on ancient civilizations.",
+      "I can analyze how scarcity influenced societal development."
+    ],
+    "vocabulary": [
+      "scarcity",
+      "resources",
+      "compensation",
+      "innovation",
+      "civilization",
+      "agriculture",
+      "trade",
+      "survival",
+      "economy",
+      "infrastructure"
+    ],
+    "sample_assessment": "Which of the following was a common method used by ancient civilizations to deal with resource scarcity? A) Importing goods B) Increasing taxes C) Expanding territory D) Reducing population"
+  },
+  {
+    "code": "SS.6.G.5.2",
+    "benchmark": "Use geographic terms and tools to explain why ancient civilizations developed networks of highways, waterways, and other transportation linkages.",
+    "topics": [
+      "geography",
+      "transportation",
+      "ancient civilizations"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to use geographic terms and tools to explain the development of transportation networks in ancient civilizations. Items may include map analysis, short answer questions, and project-based assessments.",
+    "essential_questions": [
+      "Why were transportation networks crucial for ancient civilizations?",
+      "How did geography influence the development of trade routes?",
+      "What geographic features facilitated the growth of highways and waterways?"
+    ],
+    "learning_targets": [
+      "I can explain the importance of transportation networks in ancient civilizations.",
+      "I can analyze how geography shaped trade and communication.",
+      "I can identify key geographic features that influenced transportation."
+    ],
+    "vocabulary": [
+      "geography",
+      "transportation",
+      "networks",
+      "highways",
+      "waterways",
+      "civilization",
+      "trade routes",
+      "infrastructure",
+      "communication",
+      "landforms"
+    ],
+    "sample_assessment": "Which geographic feature most likely influenced the development of trade routes in ancient civilizations? A) Mountains B) Deserts C) Rivers D) Forests"
+  },
+  {
+    "code": "SS.6.G.5.3",
+    "benchmark": "Use geographic tools and terms to analyze how famine, drought, and natural disasters plagued many ancient civilizations.",
+    "topics": [
+      "natural disasters",
+      "famine",
+      "ancient civilizations"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on analyzing the impact of natural disasters on ancient civilizations using geographic tools and terms. Items may include case studies, map analysis, and comparative questions.",
+    "essential_questions": [
+      "How did natural disasters affect the stability of ancient civilizations?",
+      "What were the common responses of societies to famine and drought?",
+      "In what ways did geography contribute to the vulnerability of civilizations to disasters?"
+    ],
+    "learning_targets": [
+      "I can analyze the effects of famine and drought on ancient societies.",
+      "I can use geographic tools to assess the impact of natural disasters.",
+      "I can explain how ancient civilizations adapted to environmental challenges."
+    ],
+    "vocabulary": [
+      "famine",
+      "drought",
+      "natural disasters",
+      "civilization",
+      "geography",
+      "vulnerability",
+      "adaptation",
+      "environment",
+      "impact",
+      "resilience"
+    ],
+    "sample_assessment": "Which of the following natural disasters is most likely to lead to famine in an ancient civilization? A) Earthquake B) Flood C) Drought D) Volcanic eruption"
+  },
+  {
+    "code": "SS.6.G.6.1",
+    "benchmark": "Describe the Six Essential Elements of Geography (The World in Spatial Terms, Places and Regions, Physical Systems, Human Systems, Environment, The Uses of Geography) as the organizing framework for understanding the world and its people.",
+    "topics": [
+      "Geography",
+      "Essential Elements",
+      "Spatial Terms"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to identify and explain the Six Essential Elements of Geography, providing examples for each element. Items may include multiple-choice questions, short answer prompts, and matching exercises to assess understanding.",
+    "essential_questions": [
+      "What are the Six Essential Elements of Geography?",
+      "How do these elements help us understand our world?",
+      "In what ways do these elements interact with each other?"
+    ],
+    "learning_targets": [
+      "I can identify the Six Essential Elements of Geography.",
+      "I can explain the significance of each element.",
+      "I can provide examples of how these elements relate to real-world scenarios."
+    ],
+    "vocabulary": [
+      "Geography",
+      "Spatial Terms",
+      "Regions",
+      "Physical Systems",
+      "Human Systems",
+      "Environment",
+      "Uses of Geography"
+    ],
+    "sample_assessment": "Which of the following is NOT one of the Six Essential Elements of Geography? A) Places and Regions B) Human Systems C) Climate D) Economic Systems"
+  },
+  {
+    "code": "SS.6.G.6.2",
+    "benchmark": "Compare maps of the world in ancient times with current political maps.",
+    "topics": [
+      "Ancient Maps",
+      "Political Maps",
+      "Comparative Analysis"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze and compare ancient maps with current political maps, focusing on differences in geographical representation and political boundaries. Items may include visual analysis, short essays, and multiple-choice questions.",
+    "essential_questions": [
+      "How do ancient maps differ from modern political maps?",
+      "What can we learn about a civilization by studying its maps?",
+      "In what ways do maps reflect the political and cultural context of their time?"
+    ],
+    "learning_targets": [
+      "I can compare ancient maps to modern political maps.",
+      "I can identify key differences in geographical representation.",
+      "I can explain the significance of map changes over time."
+    ],
+    "vocabulary": [
+      "Ancient Maps",
+      "Political Maps",
+      "Geographical Representation",
+      "Boundaries",
+      "Civilization",
+      "Cultural Context"
+    ],
+    "sample_assessment": "Which of the following best describes a key difference between ancient maps and modern political maps? A) Ancient maps are more accurate B) Modern maps include political boundaries C) Ancient maps show only physical features D) Modern maps do not show cultural regions"
   },
   {
     "code": "SS.7.G.1.1",
@@ -545,6 +941,232 @@
     "sample_assessment": "Which physical landmark forms a natural boundary between several U.S. states and flows into the Gulf of Mexico? A) The Rocky Mountains B) The Mississippi River C) The Great Lakes D) The Grand Canyon"
   },
   {
+    "code": "SS.7.G.2.3",
+    "benchmark": "Explain how major physical characteristics, natural resources, climate, and absolute and relative location have influenced settlement, economies, and inter-governmental relations in North America.",
+    "topics": [
+      "Physical Characteristics",
+      "Natural Resources",
+      "Settlement Patterns"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to synthesize information about how physical characteristics, natural resources, and climate influence settlement and economies. Items may include case studies, research projects, and analytical essays.",
+    "essential_questions": [
+      "How do physical characteristics influence where people choose to settle?",
+      "What role do natural resources play in the economy of a region?",
+      "How does climate affect inter-governmental relations in North America?"
+    ],
+    "learning_targets": [
+      "I can explain how physical characteristics influence settlement patterns.",
+      "I can analyze the impact of natural resources on economies.",
+      "I can evaluate the effects of climate on inter-governmental relations."
+    ],
+    "vocabulary": [
+      "Physical Characteristics",
+      "Natural Resources",
+      "Climate",
+      "Settlement",
+      "Economy",
+      "Inter-Governmental Relations"
+    ],
+    "sample_assessment": "Which factor most significantly influences where people settle in North America? A) Climate B) Political boundaries C) Cultural practices D) Historical events"
+  },
+  {
+    "code": "SS.7.G.2.4",
+    "benchmark": "Describe current major cultural regions of North America.",
+    "topics": [
+      "Cultural Regions",
+      "North America",
+      "Diversity"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on identifying and describing the major cultural regions of North America, including their characteristics and significance. Items may include multiple-choice questions, short answer prompts, and map labeling exercises.",
+    "essential_questions": [
+      "What are the major cultural regions of North America?",
+      "How do cultural regions reflect the diversity of the population?",
+      "In what ways do cultural regions influence social and economic interactions?"
+    ],
+    "learning_targets": [
+      "I can identify the major cultural regions of North America.",
+      "I can describe the characteristics of each cultural region.",
+      "I can explain the significance of cultural diversity in North America."
+    ],
+    "vocabulary": [
+      "Cultural Regions",
+      "Diversity",
+      "Population",
+      "Social Interactions",
+      "Economic Interactions",
+      "North America"
+    ],
+    "sample_assessment": "Which of the following is a major cultural region of North America? A) The Sahara Desert B) The Midwest C) The Amazon Rainforest D) The Himalayas"
+  },
+  {
+    "code": "SS.7.G.3.1",
+    "benchmark": "Use maps to describe the location, abundance, and variety of natural resources in North America.",
+    "topics": [
+      "Natural Resources",
+      "Maps",
+      "Geographical Distribution"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to use maps to analyze the location, abundance, and variety of natural resources in North America. Items may include map interpretation, data analysis, and short essays.",
+    "essential_questions": [
+      "How are natural resources distributed across North America?",
+      "What factors influence the abundance of natural resources in different regions?",
+      "How do maps help us understand the availability of natural resources?"
+    ],
+    "learning_targets": [
+      "I can use maps to identify natural resources in North America.",
+      "I can analyze the abundance of resources in different regions.",
+      "I can describe the variety of natural resources found in North America."
+    ],
+    "vocabulary": [
+      "Natural Resources",
+      "Geographical Distribution",
+      "Abundance",
+      "Maps",
+      "Resource Management",
+      "North America"
+    ],
+    "sample_assessment": "Which of the following natural resources is most abundant in the western region of North America? A) Oil B) Coal C) Timber D) Freshwater"
+  },
+  {
+    "code": "SS.7.G.4.1",
+    "benchmark": "Use geographic terms and tools to explain cultural diffusion throughout North America.",
+    "topics": [
+      "cultural diffusion",
+      "geographic tools",
+      "North America"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to analyze maps, diagrams, or case studies that illustrate cultural diffusion. Items may include multiple-choice questions that ask students to identify examples of cultural diffusion or to explain the significance of geographic tools in understanding cultural exchanges.",
+    "essential_questions": [
+      "How do geographic tools help us understand cultural diffusion?",
+      "What are some examples of cultural diffusion in North America?",
+      "In what ways does geography influence cultural interactions?"
+    ],
+    "learning_targets": [
+      "I can identify examples of cultural diffusion in North America.",
+      "I can explain how geographic tools are used to study cultural diffusion.",
+      "I can analyze the impact of geography on cultural exchanges."
+    ],
+    "vocabulary": [
+      "cultural diffusion",
+      "geography",
+      "maps",
+      "migration",
+      "trade",
+      "interaction",
+      "diversity",
+      "region",
+      "settlement",
+      "influence"
+    ],
+    "sample_assessment": "Which of the following best describes an example of cultural diffusion in North America?"
+  },
+  {
+    "code": "SS.7.G.4.2",
+    "benchmark": "Use maps and other geographic tools to examine the importance of demographics within political divisions of the United States.",
+    "topics": [
+      "demographics",
+      "political divisions",
+      "geographic tools"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the interpretation of demographic data presented in maps or charts. Students should be asked to analyze the implications of demographic trends on political divisions, with items that require them to draw conclusions based on the data presented.",
+    "essential_questions": [
+      "How do demographics influence political divisions in the United States?",
+      "What tools can be used to analyze demographic data?",
+      "Why is it important to understand demographics in political contexts?"
+    ],
+    "learning_targets": [
+      "I can analyze demographic data using geographic tools.",
+      "I can explain the relationship between demographics and political divisions.",
+      "I can interpret maps to understand demographic trends."
+    ],
+    "vocabulary": [
+      "demographics",
+      "political division",
+      "map",
+      "population",
+      "census",
+      "data analysis",
+      "region",
+      "voting patterns",
+      "representation",
+      "geographic tools"
+    ],
+    "sample_assessment": "What demographic factor is most likely to influence voting patterns in a given political division?"
+  },
+  {
+    "code": "SS.7.G.5.1",
+    "benchmark": "Use a choropleth or other map to geographically represent current information about issues of conservation or ecology in the local community.",
+    "topics": [
+      "conservation",
+      "ecology",
+      "local community"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should require students to interpret choropleth maps or other visual representations of ecological data. Items may include questions that ask students to identify areas of concern or to evaluate the effectiveness of conservation efforts based on the data presented.",
+    "essential_questions": [
+      "How can maps help us understand local ecological issues?",
+      "What current conservation issues are represented in our community?",
+      "Why is it important to visually represent ecological data?"
+    ],
+    "learning_targets": [
+      "I can use maps to identify conservation issues in my community.",
+      "I can explain the significance of ecological data representation.",
+      "I can analyze choropleth maps to draw conclusions about local ecology."
+    ],
+    "vocabulary": [
+      "conservation",
+      "ecology",
+      "choropleth map",
+      "data representation",
+      "environment",
+      "biodiversity",
+      "local community",
+      "sustainability",
+      "resources",
+      "impact"
+    ],
+    "sample_assessment": "Which area on the choropleth map indicates the highest level of conservation concern?"
+  },
+  {
+    "code": "SS.7.G.6.1",
+    "benchmark": "Use Geographic Information Systems (GIS) or other technology to view maps of current information about the United States.",
+    "topics": [
+      "GIS",
+      "technology",
+      "current information"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should focus on the application of Geographic Information Systems (GIS) to analyze current data about the United States. Items may include scenarios where students must interpret GIS data to make informed decisions or predictions about geographical trends.",
+    "essential_questions": [
+      "How does GIS technology enhance our understanding of geographic data?",
+      "What types of information can be analyzed using GIS?",
+      "In what ways can GIS impact decision-making in geography?"
+    ],
+    "learning_targets": [
+      "I can use GIS to analyze current geographic information.",
+      "I can explain the benefits of using technology in geography.",
+      "I can interpret data from GIS to make informed conclusions."
+    ],
+    "vocabulary": [
+      "GIS",
+      "geographic information",
+      "technology",
+      "data analysis",
+      "mapping",
+      "spatial analysis",
+      "visualization",
+      "trends",
+      "decision-making",
+      "information systems"
+    ],
+    "sample_assessment": "What advantage does GIS provide when analyzing geographic data compared to traditional maps?"
+  },
+  {
     "code": "SS.8.G.1.1",
     "benchmark": "Use maps to describe the physical and cultural attributes of major regions of North America.",
     "topics": [
@@ -636,6 +1258,135 @@
     "sample_assessment": "Which factor MOST contributed to the economic differences between the Northern and Southern states before the Civil War? A) Climate and geography B) Population size C) Access to the ocean D) Proximity to Canada"
   },
   {
+    "code": "SS.8.G.2.2",
+    "benchmark": "Use geographic terms and tools to analyze case studies of regional issues in different parts of the United States that have had critical economic, physical, or political ramifications.",
+    "topics": [
+      "regional issues",
+      "economic ramifications",
+      "political analysis"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should require students to engage in higher-order thinking by analyzing case studies of regional issues. Items may ask students to evaluate the economic, physical, or political ramifications of these issues and to propose solutions based on their analysis.",
+    "essential_questions": [
+      "What are the critical regional issues affecting different parts of the United States?",
+      "How do economic and political factors interact in regional issues?",
+      "What solutions can be proposed for addressing regional challenges?"
+    ],
+    "learning_targets": [
+      "I can analyze case studies of regional issues in the U.S.",
+      "I can evaluate the economic and political impacts of these issues.",
+      "I can propose solutions to regional challenges based on my analysis."
+    ],
+    "vocabulary": [
+      "regional issues",
+      "economic ramifications",
+      "political analysis",
+      "case study",
+      "impact",
+      "solution",
+      "evaluation",
+      "geography",
+      "conflict",
+      "collaboration"
+    ],
+    "sample_assessment": "Which of the following best describes the economic impact of the regional issue presented in the case study?"
+  },
+  {
+    "code": "SS.8.G.2.3",
+    "benchmark": "Use geographic terms and tools to analyze case studies of how selected regions of the United States have changed over time.",
+    "topics": [
+      "geography",
+      "case studies",
+      "change over time"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze case studies using geographic tools and terms, focusing on how specific regions in the United States have transformed over time. Items may include map analysis, data interpretation, and comparative essays.",
+    "essential_questions": [
+      "How have geographic factors influenced the development of regions in the United States?",
+      "What tools can we use to assess changes in a region over time?",
+      "In what ways do case studies help us understand geographic change?"
+    ],
+    "learning_targets": [
+      "I can identify key geographic terms related to regional changes.",
+      "I can analyze case studies to understand historical transformations.",
+      "I can use geographic tools to illustrate changes in regions."
+    ],
+    "vocabulary": [
+      "region",
+      "geographic tools",
+      "case study",
+      "transformation",
+      "analysis",
+      "map",
+      "data",
+      "historical change"
+    ],
+    "sample_assessment": "Which geographic tool would best help analyze the population growth in a specific U.S. region over the last century?"
+  },
+  {
+    "code": "SS.8.G.3.1",
+    "benchmark": "Locate and describe in geographic terms the major ecosystems of the United States.",
+    "topics": [
+      "ecosystems",
+      "geography",
+      "United States"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on locating and describing major ecosystems in the United States using geographic terms. Items may include map labeling, ecosystem identification, and short answer questions.",
+    "essential_questions": [
+      "What are the major ecosystems found in the United States?",
+      "How do geographic features influence the distribution of ecosystems?",
+      "In what ways do ecosystems interact with human activities?"
+    ],
+    "learning_targets": [
+      "I can locate major ecosystems on a map of the United States.",
+      "I can describe the characteristics of different ecosystems.",
+      "I can explain the relationship between geography and ecosystems."
+    ],
+    "vocabulary": [
+      "ecosystem",
+      "geography",
+      "habitat",
+      "biodiversity",
+      "climate",
+      "flora",
+      "fauna",
+      "distribution"
+    ],
+    "sample_assessment": "Which of the following ecosystems is primarily found in the southeastern United States? A) Desert B) Tundra C) Wetlands D) Grasslands"
+  },
+  {
+    "code": "SS.8.G.3.2",
+    "benchmark": "Use geographic terms and tools to explain differing perspectives on the use of renewable and non-renewable resources in the United States and Florida over time.",
+    "topics": [
+      "resources",
+      "perspectives",
+      "geography"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to use geographic terms and tools to explain differing perspectives on renewable and non-renewable resources. Items may include debates, case studies, and analysis of resource management.",
+    "essential_questions": [
+      "What are the differing perspectives on resource use in the U.S.?",
+      "How do geographic factors influence resource management decisions?",
+      "What role do renewable resources play in sustainable development?"
+    ],
+    "learning_targets": [
+      "I can explain the differences between renewable and non-renewable resources.",
+      "I can analyze perspectives on resource use in the U.S.",
+      "I can use geographic tools to illustrate resource distribution."
+    ],
+    "vocabulary": [
+      "renewable resources",
+      "non-renewable resources",
+      "geographic perspective",
+      "sustainability",
+      "resource management",
+      "analysis",
+      "tools"
+    ],
+    "sample_assessment": "Which statement best represents a perspective on renewable resources? A) They are finite and will run out. B) They can be replenished naturally. C) They are more expensive to use. D) They cause environmental harm."
+  },
+  {
     "code": "SS.8.G.4.1",
     "benchmark": "Interpret population density maps and other data to analyze demographic patterns in North America.",
     "topics": [
@@ -666,6 +1417,68 @@
     "sample_assessment": "Population density is HIGHEST in areas that: A) Have harsh climates B) Are near water and transportation C) Are mountainous D) Have limited resources"
   },
   {
+    "code": "SS.8.G.4.2",
+    "benchmark": "Use geographic terms and tools to analyze the effects throughout American history of migration to and within the United States, both on the place of origin and destination. Antebellum immigration (8-O.4) Cities in the Gilded Age (8-R.2)",
+    "topics": [
+      "migration",
+      "geography",
+      "American history"
+    ],
+    "dok": 4,
+    "item_specs": "Assessment items should analyze the effects of migration on both the place of origin and destination throughout American history. Items may include research projects, essays, and geographic analysis.",
+    "essential_questions": [
+      "How has migration shaped the cultural landscape of the United States?",
+      "What are the historical impacts of migration on different regions?",
+      "In what ways do geographic tools help us understand migration patterns?"
+    ],
+    "learning_targets": [
+      "I can analyze the effects of migration on cultural and geographic changes.",
+      "I can use geographic tools to map migration patterns.",
+      "I can evaluate the historical significance of migration events."
+    ],
+    "vocabulary": [
+      "migration",
+      "geographic impact",
+      "cultural landscape",
+      "origin",
+      "destination",
+      "historical significance",
+      "analysis"
+    ],
+    "sample_assessment": "What was one major effect of migration during the Gilded Age on urban areas? A) Decreased population B) Cultural diversity C) Economic decline D) Rural expansion"
+  },
+  {
+    "code": "SS.8.G.4.3",
+    "benchmark": "Use geographic terms and tools to explain cultural diffusion throughout the United States as it expanded its territory.",
+    "topics": [
+      "cultural diffusion",
+      "geography",
+      "territorial expansion"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to explain cultural diffusion as the United States expanded its territory. Items may include case studies, map analysis, and essays discussing the impact of cultural exchanges.",
+    "essential_questions": [
+      "How has territorial expansion influenced cultural diffusion in the U.S.?",
+      "What are examples of cultural diffusion resulting from migration?",
+      "In what ways do geographic tools help illustrate cultural changes?"
+    ],
+    "learning_targets": [
+      "I can explain how cultural diffusion occurs during territorial expansion.",
+      "I can identify examples of cultural exchange in U.S. history.",
+      "I can use geographic tools to analyze cultural diffusion."
+    ],
+    "vocabulary": [
+      "cultural diffusion",
+      "territorial expansion",
+      "exchange",
+      "influence",
+      "geographic tools",
+      "migration",
+      "history"
+    ],
+    "sample_assessment": "Which of the following is an example of cultural diffusion in the United States? A) The establishment of national parks B) The spread of jazz music from New Orleans C) The construction of highways D) The founding of new states"
+  },
+  {
     "code": "SS.8.G.4.4",
     "benchmark": "Interpret databases, case studies, and maps to describe the role that regions play in influencing trade, migration patterns, and cultural/political interaction in North America throughout time.",
     "topics": [
@@ -693,6 +1506,74 @@
       "interdependence"
     ],
     "sample_assessment": "The development of railroads in the 1800s MOST affected regional interaction by: A) Reducing trade B) Connecting regions for faster trade and migration C) Isolating communities D) Replacing water transportation entirely"
+  },
+  {
+    "code": "SS.8.G.4.5",
+    "benchmark": "Use geographic terms and tools to analyze case studies of the development, growth, and changing nature of cities and urban centers in the United States over time.",
+    "topics": [
+      "urban development",
+      "geographic analysis",
+      "case studies"
+    ],
+    "dok": 3,
+    "item_specs": "Assessment items should require students to analyze case studies of urban centers, utilizing geographic terms and tools. Items may include interpreting maps, graphs, or data sets, and making connections between urban growth and historical events.",
+    "essential_questions": [
+      "How have geographic factors influenced the growth of cities in the United States?",
+      "What tools can we use to analyze urban development over time?",
+      "In what ways do case studies help us understand the changing nature of urban centers?"
+    ],
+    "learning_targets": [
+      "I can identify key geographic terms related to urban development.",
+      "I can analyze case studies to understand the growth of cities.",
+      "I can use geographic tools to interpret data about urban centers."
+    ],
+    "vocabulary": [
+      "urbanization",
+      "infrastructure",
+      "demographics",
+      "case study",
+      "geographic tools",
+      "city planning",
+      "migration",
+      "zoning",
+      "suburbanization",
+      "gentrification"
+    ],
+    "sample_assessment": "Which geographic factor most significantly contributed to the growth of New York City in the 19th century? A) Climate B) Natural resources C) Transportation networks D) Political stability"
+  },
+  {
+    "code": "SS.8.G.4.6",
+    "benchmark": "Use political maps to describe changes in boundaries and governance throughout American history. The Louisiana Purchase (8-M.7) Texas independence and annexation (8-O.7) Causes of the Civil War: Missouri Compromise to Bleeding Kansas (8-O.9)",
+    "topics": [
+      "political maps",
+      "historical boundaries",
+      "governance changes"
+    ],
+    "dok": 2,
+    "item_specs": "Assessment items should focus on students' ability to interpret political maps and understand historical changes in boundaries and governance. Items may include map analysis, identifying key events, and explaining their significance in American history.",
+    "essential_questions": [
+      "How have political boundaries changed throughout American history?",
+      "What role did key events play in shaping governance in the United States?",
+      "How can maps help us understand historical changes in territory?"
+    ],
+    "learning_targets": [
+      "I can describe changes in political boundaries using maps.",
+      "I can explain the significance of historical events on governance.",
+      "I can analyze political maps to identify key changes over time."
+    ],
+    "vocabulary": [
+      "political map",
+      "boundary",
+      "governance",
+      "Louisiana Purchase",
+      "annexation",
+      "Civil War",
+      "Missouri Compromise",
+      "territory",
+      "sovereignty",
+      "expansionism"
+    ],
+    "sample_assessment": "What was a significant outcome of the Louisiana Purchase in terms of political boundaries? A) It doubled the size of the United States B) It led to the Civil War C) It established new governance structures D) It ended westward expansion"
   },
   {
     "code": "SS.8.G.5.1",

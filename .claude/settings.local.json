@@ -60,7 +60,18 @@
       "Bash(gh api:*)",
       "Bash(pdftoppm -v)",
       "Bash(pdftotext:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "mcp__gitnexus__query",
+      "mcp__gitnexus__cypher",
+      "mcp__gitnexus__impact",
+      "mcp__gitnexus__detect_changes",
+      "Bash(npx gitnexus analyze 2>&1 | tail -5)",
+      "mcp__gitnexus__list_repos",
+      "Bash(cd /Users/alexc/Downloads/Graider/backend/data && for f in standards_fl_*.json; do echo \"=== $f ===\" && python3 -c \"\nimport json\nwith open\\('$f'\\) as fh:\n    data = json.load\\(fh\\)\n    standards = data if isinstance\\(data, list\\) else data.get\\('standards', []\\)\n    codes = [s.get\\('code',''\\) for s in standards]\n    print\\(f'  Total standards: {len\\(codes\\)}'\\)\n    # Show unique prefixes \\(e.g. SS.8.A.1, SS.8.A.2, etc.\\)\n    prefixes = sorted\\(set\\('.'.join\\(c.split\\('.'\\)[:4]\\) for c in codes if c\\)\\)\n    print\\(f'  Code prefixes \\({len\\(prefixes\\)}\\): {prefixes[:20]}'\\)\n    if len\\(prefixes\\) > 20: print\\(f'    ... and {len\\(prefixes\\)-20} more'\\)\n    # Show all codes\n    print\\(f'  All codes: {sorted\\(codes\\)[:30]}'\\)\n    if len\\(codes\\) > 30: print\\(f'    ... and {len\\(codes\\)-30} more'\\)\n\"; done)",
+      "Bash(for f in backend/data/standards_fl_*.json; do echo \"=== $f ===\"; python3 -c \"\nimport json\nwith open\\('$f'\\) as fp:\n    data = json.load\\(fp\\)\nif isinstance\\(data, list\\):\n    standards = data\n    fmt = 'flat array'\nelse:\n    standards = data.get\\('standards', []\\)\n    fmt = f'wrapped dict \\(grade={data.get\\(\\\\\"grade\\\\\",\\\\\"?\\\\\"\\)}, subject={data.get\\(\\\\\"subject\\\\\",\\\\\"?\\\\\"\\)}\\)'\ncodes = [s.get\\('code',''\\) for s in standards]\n# Extract unique grade-level prefixes\ngrades = set\\(\\)\nfor c in codes:\n    parts = c.split\\('.'\\)\n    if len\\(parts\\) >= 2:\n        grades.add\\(parts[1]\\)\nhas_course = any\\(s.get\\('course'\\) for s in standards\\)\nprint\\(f'  Format: {fmt}'\\)\nprint\\(f'  Total standards: {len\\(standards\\)}'\\)\nprint\\(f'  Grade levels in codes: {sorted\\(grades\\)}'\\)\nprint\\(f'  Has course field: {has_course}'\\)\nprint\\(f'  First code: {codes[0] if codes else \\\\\"none\\\\\"}'\\)\nprint\\(f'  Last code: {codes[-1] if codes else \\\\\"none\\\\\"}'\\)\n\"; done)",
+      "WebFetch(domain:cpalmsmediaprod.blob.core.windows.net)",
+      "WebFetch(domain:study.com)",
+      "WebFetch(domain:gatorfast.com)"
     ]
   }
 }
