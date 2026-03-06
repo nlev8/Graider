@@ -1204,6 +1204,10 @@ def assistant_chat():
 
     _audit_log("assistant_query", f"session={session_id}")
 
+    # Capture teacher_id from request context BEFORE entering the generator,
+    # because g.user_id may not be accessible inside streaming generators
+    _teacher_id = getattr(g, 'user_id', 'local-dev')
+
     def generate():
         # Clear any stale cancel flag for this session
         cancelled_sessions.discard(session_id)
@@ -1544,7 +1548,8 @@ def assistant_chat():
 
                     _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
                     # Inject teacher_id for tools that need per-teacher context
-                    tool_input["teacher_id"] = getattr(g, 'user_id', 'local-dev')
+                    # Use pre-captured _teacher_id (g.user_id may be lost in streaming context)
+                    tool_input["teacher_id"] = _teacher_id
                     result = execute_tool(tb["name"], tool_input)
                     result_str = json.dumps(result)
                     if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
