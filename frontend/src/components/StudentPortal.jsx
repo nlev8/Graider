@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect } from "react";
 import * as api from "../services/api";
+import MatchingCards from "./MatchingCards";
 
 // Simple icon component for student portal
 const Icon = ({ name, size = 20, style = {} }) => {
@@ -495,68 +496,20 @@ export default function StudentPortal() {
                       </div>
                     )}
 
-                    {/* Matching - show if type is matching OR if terms and definitions arrays exist */}
+                    {/* Matching - interactive card game */}
                     {(q.type === "matching" || (q.terms && q.terms.length > 0 && q.definitions && q.definitions.length > 0)) && (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                        <div>
-                          <div style={{ fontWeight: 600, marginBottom: "10px", color: "#8b5cf6" }}>Terms</div>
-                          {q.terms.map((term, tIdx) => {
-                            const matchKey = `${sIdx}-${qIdx}-match-${tIdx}`;
-                            return (
-                              <div
-                                key={tIdx}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "10px",
-                                  padding: "10px 12px",
-                                  marginBottom: "8px",
-                                  background: "rgba(139, 92, 246, 0.1)",
-                                  borderRadius: "6px",
-                                }}
-                              >
-                                <span style={{ fontWeight: 600 }}>{tIdx + 1}.</span>
-                                <span style={{ flex: 1 }}>{term}</span>
-                                <select
-                                  value={answers[matchKey] || ""}
-                                  onChange={(e) => setAnswer(matchKey, e.target.value)}
-                                  style={{
-                                    padding: "6px 10px",
-                                    borderRadius: "4px",
-                                    border: "1px solid rgba(255,255,255,0.3)",
-                                    background: "rgba(0,0,0,0.3)",
-                                    color: "white",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  <option value="">--</option>
-                                  {q.definitions.map((_, dIdx) => (
-                                    <option key={dIdx} value={String.fromCharCode(65 + dIdx)}>
-                                      {String.fromCharCode(65 + dIdx)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, marginBottom: "10px", color: "#22c55e" }}>Definitions</div>
-                          {q.definitions.map((def, dIdx) => (
-                            <div
-                              key={dIdx}
-                              style={{
-                                padding: "10px 12px",
-                                marginBottom: "8px",
-                                background: "rgba(34, 197, 94, 0.1)",
-                                borderRadius: "6px",
-                              }}
-                            >
-                              <span style={{ fontWeight: 600 }}>{String.fromCharCode(65 + dIdx)}.</span> {def}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <MatchingCards
+                        terms={q.terms}
+                        definitions={q.definitions}
+                        onMatch={function(matches) {
+                          // Store matches as letter answers for grading compatibility
+                          Object.entries(matches).forEach(function(entry) {
+                            var tIdx = entry[0];
+                            var matchKey = sIdx + "-" + qIdx + "-match-" + tIdx;
+                            setAnswer(matchKey, String.fromCharCode(65 + parseInt(tIdx)));
+                          });
+                        }}
+                      />
                     )}
 
                     {/* Short Answer / Extended Response / Text Input Fallback */}

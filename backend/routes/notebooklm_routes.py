@@ -1,0 +1,286 @@
+"""
+NotebookLM API routes.
+Provides endpoints for authenticating with NotebookLM, creating notebooks
+from lesson plans, generating materials, and downloading results.
+"""
+import os
+import json
+import threading
+from flask import Blueprint, request, jsonify, send_file, g
+
+notebooklm_bp = Blueprint("notebooklm", __name__)
+
+# ── Lazy import guard (notebooklm-py is optional) ───────────────────────
+
+_nlm_available = None
+
+
+def _check_nlm_available():
+    global _nlm_available
+    if _nlm_available is None:
+        try:
+            import notebooklm  # noqa: F401
+            _nlm_available = True
+        except ImportError:
+            _nlm_available = False
+    return _nlm_available
+
+
+def _get_teacher_id():
+    return getattr(g, "user_id", "local-dev")
+
+
+# ── Startup hooks ───────────────────────────────────────────────────────
+
+@notebooklm_bp.record_once
+def _on_register(state):
+    """Run cleanup on blueprint registration."""
+    if _check_nlm_available():
+        from backend.services.notebooklm_service import (
+            cleanup_stale_states, cleanup_expired_materials
+        )
+        cleanup_stale_states()
+        cleanup_expired_materials()
+
+
+# ── Routes ───────────────────────────────────────────────────────────────
+
+@notebooklm_bp.route("/api/notebooklm/auth-status")
+def nlm_auth_status():
+    if not _check_nlm_available():
+        return jsonify({
+            "authenticated": False,
+            "available": False,
+            "error": "NotebookLM not installed. Run: pip install 'notebooklm-py[browser]'"
+        })
+    from backend.services.notebooklm_service import is_authenticated
+    teacher_id = _get_teacher_id()
+    return jsonify({"authenticated": is_authenticated(teacher_id), "available": True})
+
+
+@notebooklm_bp.route("/api/notebooklm/login", methods=["POST"])
+def nlm_login():
+    if not _check_nlm_available():
+        return jsonify({"error": "NotebookLM not installed"})
+    from backend.services.notebooklm_service import login_browser, is_authenticated
+
+    teacher_id = _get_teacher_id()
+    try:
+        login_browser(teacher_id)
+        return jsonify({"success": is_authenticated(teacher_id)})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@notebooklm_bp.route("/api/notebooklm/create-notebook", methods=["POST"])
+def nlm_create_notebook():
+    if not _check_nlm_available():
+        return jsonify({"error": "NotebookLM not installed"})
+    from backend.services.notebooklm_service import create_notebook, is_authenticated
+
+    teacher_id = _get_teacher_id()
+    if not is_authenticated(teacher_id):
+        return jsonify({"error": "session_expired", "needs_login": True})
+
+    data = request.json or {}
+    plan = data.get("plan", {})
+    standards = data.get("standards", [])
+    config = data.get("config", {})
+    support_doc_paths = data.get("support_doc_paths", [])
+
+    title = "Graider: " + plan.get("title", "Lesson Plan")
+
+    try:
+        notebook_id = create_notebook(
+            title, plan, standards, config,
+            teacher_id=teacher_id,
+            support_doc_paths=support_doc_paths
+        )
+        return jsonify({"notebook_id": notebook_id, "status": "created"})
+    except Exception as e:
+        error_msg = str(e)
+        if any(kw in error_msg.lower() for kw in ("auth", "login", "cookie", "session")):
+            return jsonify({"error": "session_expired", "needs_login": True})
+        return jsonify({"error": error_msg})
+
+
+@notebooklm_bp.route("/api/notebooklm/generate", methods=["POST"])
+def nlm_generate():
+    if not _check_nlm_available():
+        return jsonify({"error": "NotebookLM not installed"})
+    from backend.services.notebooklm_service import (
+        get_generation_state, run_generation_thread, is_authenticated, _save_state
+    )
+
+    teacher_id = _get_teacher_id()
+    if not is_authenticated(teacher_id):
+        return jsonify({"error": "session_expired", "needs_login": True})
+
+    data = request.json or {}
+    notebook_id = data.get("notebook_id")
+    material_types = data.get("materials", [])
+    options = data.get("options", {})
+
+    if not notebook_id:
+        return jsonify({"error": "Missing notebook_id"})
+    if not material_types:
+        return jsonify({"error": "No material types selected"})
+
+    state = get_generation_state(teacher_id)
+
+    if state.get("is_running"):
+        return jsonify({"error": "Generation already in progress"})
+
+    # Reset state
+    state.update({
+        "is_running": True,
+        "progress": [],
+        "completed": [],
+        "errors": [],
+        "notebook_id": notebook_id,
+        "materials": {},
+    })
+    _save_state(teacher_id, state)
+
+    thread = threading.Thread(
+        target=run_generation_thread,
+        args=(teacher_id, notebook_id, material_types, options),
+        daemon=True,
+    )
+    thread.start()
+
+    return jsonify({"status": "started", "materials": material_types})
+
+
+@notebooklm_bp.route("/api/notebooklm/status")
+def nlm_status():
+    if not _check_nlm_available():
+        return jsonify({"is_running": False, "progress": [], "completed": [], "errors": [], "materials": {}})
+    from backend.services.notebooklm_service import get_generation_state
+
+    teacher_id = _get_teacher_id()
+    state = get_generation_state(teacher_id)
+    return jsonify({
+        "is_running": state.get("is_running", False),
+        "progress": state.get("progress", []),
+        "completed": state.get("completed", []),
+        "errors": state.get("errors", []),
+        "materials": {k: os.path.basename(v) for k, v in state.get("materials", {}).items()},
+    })
+
+
+@notebooklm_bp.route("/api/notebooklm/download/<material_type>")
+def nlm_download(material_type):
+    if not _check_nlm_available():
+        return jsonify({"error": "NotebookLM not installed"}), 400
+    from backend.services.notebooklm_service import get_generation_state, MATERIAL_EXTENSIONS
+
+    teacher_id = _get_teacher_id()
+    state = get_generation_state(teacher_id)
+
+    file_path = state.get("materials", {}).get(material_type)
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({"error": "Material not found: " + material_type}), 404
+
+    ext = MATERIAL_EXTENSIONS.get(material_type, "bin")
+    mime_types = {
+        "mp3": "audio/mpeg",
+        "mp4": "video/mp4",
+        "json": "application/json",
+        "md": "text/markdown",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "png": "image/png",
+        "csv": "text/csv",
+    }
+    return send_file(
+        file_path,
+        mimetype=mime_types.get(ext, "application/octet-stream"),
+        as_attachment=True,
+        download_name=material_type + "." + ext
+    )
+
+
+@notebooklm_bp.route("/api/notebooklm/preview/<material_type>")
+def nlm_preview(material_type):
+    """Return preview data for JSON/markdown materials."""
+    if not _check_nlm_available():
+        return jsonify({"error": "NotebookLM not installed"}), 400
+    from backend.services.notebooklm_service import get_generation_state
+
+    teacher_id = _get_teacher_id()
+    state = get_generation_state(teacher_id)
+
+    file_path = state.get("materials", {}).get(material_type)
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({"error": "Material not found"}), 404
+
+    if material_type in ("quiz", "flashcards", "mind_map"):
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        return jsonify({"type": material_type, "data": data})
+    elif material_type == "study_guide":
+        with open(file_path, "r") as f:
+            content = f.read()
+        return jsonify({"type": material_type, "content": content})
+    else:
+        return jsonify({"error": "Preview not available for " + material_type}), 400
+
+
+@notebooklm_bp.route("/api/notebooklm/cancel", methods=["POST"])
+def nlm_cancel():
+    if not _check_nlm_available():
+        return jsonify({"status": "not_running"})
+    from backend.services.notebooklm_service import get_generation_state, _save_state
+
+    teacher_id = _get_teacher_id()
+    state = get_generation_state(teacher_id)
+    if state.get("is_running"):
+        state["is_running"] = False
+        state["errors"].append("Cancelled by user")
+        _save_state(teacher_id, state)
+        return jsonify({"status": "cancelled"})
+    return jsonify({"status": "not_running"})
+
+
+@notebooklm_bp.route("/api/notebooklm/retry", methods=["POST"])
+def nlm_retry():
+    if not _check_nlm_available():
+        return jsonify({"error": "NotebookLM not installed"})
+    from backend.services.notebooklm_service import (
+        get_generation_state, run_generation_thread, is_authenticated, _save_state
+    )
+
+    teacher_id = _get_teacher_id()
+    if not is_authenticated(teacher_id):
+        return jsonify({"error": "session_expired", "needs_login": True})
+
+    state = get_generation_state(teacher_id)
+
+    if state.get("is_running"):
+        return jsonify({"error": "Generation already in progress"})
+
+    # Extract failed types from error messages (format: "type: error msg")
+    failed_types = [e.split(":")[0].strip() for e in state.get("errors", [])
+                    if ":" in e and e.split(":")[0].strip() != "Cancelled by user"]
+    if not failed_types:
+        return jsonify({"error": "No failed materials to retry"})
+
+    notebook_id = state.get("notebook_id")
+    if not notebook_id:
+        return jsonify({"error": "No notebook to retry against"})
+
+    # Keep existing completed + materials, clear errors
+    state["is_running"] = True
+    state["errors"] = []
+    _save_state(teacher_id, state)
+
+    data = request.json or {}
+    options = data.get("options", {})
+
+    thread = threading.Thread(
+        target=run_generation_thread,
+        args=(teacher_id, notebook_id, failed_types, options),
+        daemon=True,
+    )
+    thread.start()
+    return jsonify({"status": "retrying", "materials": failed_types})

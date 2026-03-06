@@ -1085,6 +1085,71 @@ export async function stopElementPicker() {
   return fetchApi('/api/automations/picker/stop', { method: 'POST' })
 }
 
+// ============ NotebookLM Materials ============
+
+export async function notebookLMAuthStatus() {
+  return fetchApi('/api/notebooklm/auth-status')
+}
+
+export async function notebookLMLogin() {
+  return fetchApi('/api/notebooklm/login', { method: 'POST' })
+}
+
+export async function notebookLMCreateNotebook(plan, standards, config) {
+  return fetchApi('/api/notebooklm/create-notebook', {
+    method: 'POST',
+    body: JSON.stringify({ plan: plan, standards: standards, config: config }),
+  })
+}
+
+export async function notebookLMGenerate(notebookId, materials, options) {
+  return fetchApi('/api/notebooklm/generate', {
+    method: 'POST',
+    body: JSON.stringify({ notebook_id: notebookId, materials: materials, options: options }),
+  })
+}
+
+export async function notebookLMStatus() {
+  return fetchApi('/api/notebooklm/status')
+}
+
+export async function notebookLMDownload(materialType) {
+  var authHeaders = await getAuthHeaders()
+  var response = await fetch('/api/notebooklm/download/' + materialType, {
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new Error('Download failed')
+  var blob = await response.blob()
+  var url = URL.createObjectURL(blob)
+  var a = document.createElement('a')
+  a.href = url
+  var extMap = {
+    audio_overview: 'mp3', video_overview: 'mp4', quiz: 'json',
+    flashcards: 'json', study_guide: 'md', slide_deck: 'pptx',
+    mind_map: 'json', infographic: 'png', data_table: 'csv',
+  }
+  a.download = materialType + '.' + (extMap[materialType] || 'bin')
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+export async function notebookLMPreview(materialType) {
+  return fetchApi('/api/notebooklm/preview/' + materialType)
+}
+
+export async function notebookLMCancel() {
+  return fetchApi('/api/notebooklm/cancel', { method: 'POST' })
+}
+
+export async function notebookLMRetry(options) {
+  return fetchApi('/api/notebooklm/retry', {
+    method: 'POST',
+    body: JSON.stringify({ options: options || {} }),
+  })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -1235,4 +1300,14 @@ export default {
   getPickerEvents,
   stopElementPicker,
   checkApiKeys,
+  // NotebookLM Materials
+  notebookLMAuthStatus,
+  notebookLMLogin,
+  notebookLMCreateNotebook,
+  notebookLMGenerate,
+  notebookLMStatus,
+  notebookLMDownload,
+  notebookLMPreview,
+  notebookLMCancel,
+  notebookLMRetry,
 }
