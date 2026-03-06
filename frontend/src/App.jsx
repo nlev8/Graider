@@ -13367,11 +13367,35 @@ ${signature}`;
                               <button
                                 onClick={function() {
                                   if (!nlmAuthenticated) {
-                                    if (confirm("Connect your Google account to NotebookLM? A browser window will open for login.")) {
-                                      api.notebookLMLogin().then(function() {
-                                        setNlmAuthenticated(true);
-                                        setShowNlmPanel(true);
-                                        addToast("Connected to NotebookLM!", "success");
+                                    if (confirm("Connect your Google account to NotebookLM? A browser window will open for Google login.")) {
+                                      api.notebookLMLogin("start").then(function(res) {
+                                        if (res.already_authenticated) {
+                                          setNlmAuthenticated(true);
+                                          setShowNlmPanel(true);
+                                          addToast("Already connected to NotebookLM!", "success");
+                                        } else if (res.browser_opened) {
+                                          addToast("Complete Google login in the browser window, then come back here.", "info");
+                                          // Show a confirm dialog — when user clicks OK, complete the login
+                                          var checkLogin = function() {
+                                            if (confirm("Click OK after you have logged in to Google in the browser window.")) {
+                                              api.notebookLMLogin("complete").then(function(res2) {
+                                                if (res2.success) {
+                                                  setNlmAuthenticated(true);
+                                                  setShowNlmPanel(true);
+                                                  addToast("Connected to NotebookLM!", "success");
+                                                } else {
+                                                  addToast("Login not detected. Try again.", "error");
+                                                }
+                                              }).catch(function(e) { addToast("Login failed: " + e.message, "error"); });
+                                            } else {
+                                              api.notebookLMLogin("cancel").catch(function() {});
+                                            }
+                                          };
+                                          // Small delay to let browser open before showing confirm
+                                          setTimeout(checkLogin, 1500);
+                                        } else if (res.error) {
+                                          addToast("Login error: " + res.error, "error");
+                                        }
                                       }).catch(function(e) { addToast("Login failed: " + e.message, "error"); });
                                     }
                                   } else {

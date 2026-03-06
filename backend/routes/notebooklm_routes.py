@@ -62,12 +62,32 @@ def nlm_auth_status():
 def nlm_login():
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"})
-    from backend.services.notebooklm_service import login_browser, is_authenticated
+    from backend.services.notebooklm_service import (
+        login_browser, complete_login, cancel_login, is_authenticated
+    )
 
     teacher_id = _get_teacher_id()
+    data = request.json or {}
+    step = data.get("step", "start")
+
     try:
-        login_browser(teacher_id)
-        return jsonify({"success": is_authenticated(teacher_id)})
+        if step == "complete":
+            # User clicked "I'm logged in" — save cookies, close browser
+            complete_login(teacher_id)
+            return jsonify({"success": is_authenticated(teacher_id)})
+        elif step == "cancel":
+            cancel_login(teacher_id)
+            return jsonify({"status": "cancelled"})
+        else:
+            # Already authenticated?
+            if is_authenticated(teacher_id):
+                return jsonify({"success": True, "already_authenticated": True})
+            # Open Chromium for Google login
+            login_browser(teacher_id)
+            return jsonify({
+                "browser_opened": True,
+                "message": "Complete Google login in the browser window, then click 'I'm logged in'"
+            })
     except Exception as e:
         return jsonify({"error": str(e)})
 

@@ -57,16 +57,37 @@ def _get_storage_path(teacher_id="local-dev"):
     return os.path.join(STORAGE_STATE_DIR, teacher_id + "_storage_state.json")
 
 
+def _get_default_storage_path():
+    """Get the default notebooklm CLI storage path."""
+    try:
+        from notebooklm.auth import get_storage_path
+        return str(get_storage_path())
+    except ImportError:
+        return os.path.expanduser("~/.notebooklm/storage_state.json")
+
+
 def is_authenticated(teacher_id="local-dev"):
-    """Check session: env var (containers) or per-user storage file (local)."""
+    """Check session: env var (containers), per-user file, or default CLI path."""
     if os.environ.get("NOTEBOOKLM_AUTH_JSON"):
         return True
-    return os.path.exists(_get_storage_path(teacher_id))
+    # Check per-user session file
+    if os.path.exists(_get_storage_path(teacher_id)):
+        return True
+    # Fall back to default CLI auth (from `notebooklm login`)
+    return os.path.exists(_get_default_storage_path())
+
+
+# ── Playwright login management ──────────────────────────────────────────
+
+# Active login sessions: { teacher_id: { "context": BrowserContext, "playwright": Playwright } }
+_login_sessions = {}
+_login_lock = threading.Lock()
 
 
 def login_browser(teacher_id="local-dev"):
-    """Trigger Playwright browser login (blocking). Run from a thread.
-    Stores session per-teacher."""
+    """Open a Playwright Chromium browser for Google login.
+    Non-blocking — opens the browser and returns immediately.
+    Call complete_login() after the user finishes logging in."""
     import sys
     if sys.platform == "linux" and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
         raise RuntimeError(
@@ -75,16 +96,80 @@ def login_browser(teacher_id="local-dev"):
             "with the JSON contents of ~/.notebooklm/storage_state.json"
         )
 
-    storage_path = _get_storage_path(teacher_id)
+    with _login_lock:
+        if teacher_id in _login_sessions:
+            raise RuntimeError("Login already in progress")
 
-    async def _do_login():
-        from notebooklm import NotebookLMClient
-        client = await NotebookLMClient.from_browser_login(
-            storage_state_path=storage_path
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError(
+            "Playwright not installed. Run: pip install 'notebooklm-py[browser]' && playwright install chromium"
         )
-        await client.close()
 
-    asyncio.run(_do_login())
+    storage_path = _get_storage_path(teacher_id)
+    # Each teacher gets their own browser profile so sessions don't cross-contaminate
+    browser_profile = Path(STORAGE_STATE_DIR) / ("profile_" + teacher_id)
+    Path(storage_path).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    browser_profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    pw = sync_playwright().start()
+    context = pw.chromium.launch_persistent_context(
+        user_data_dir=str(browser_profile),
+        headless=False,
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--password-store=basic",
+        ],
+        ignore_default_args=["--enable-automation"],
+    )
+
+    page = context.pages[0] if context.pages else context.new_page()
+    page.goto("https://notebooklm.google.com/")
+
+    with _login_lock:
+        _login_sessions[teacher_id] = {
+            "context": context,
+            "playwright": pw,
+            "storage_path": storage_path,
+        }
+
+
+def complete_login(teacher_id="local-dev"):
+    """Save storage state and close the login browser.
+    Call after the user has completed Google login in the browser."""
+    with _login_lock:
+        session = _login_sessions.pop(teacher_id, None)
+
+    if not session:
+        raise RuntimeError("No login session in progress")
+
+    context = session["context"]
+    pw = session["playwright"]
+    storage_path = session["storage_path"]
+
+    try:
+        context.storage_state(path=storage_path)
+        Path(storage_path).chmod(0o600)
+    finally:
+        context.close()
+        pw.stop()
+
+
+def cancel_login(teacher_id="local-dev"):
+    """Close the login browser without saving credentials."""
+    with _login_lock:
+        session = _login_sessions.pop(teacher_id, None)
+
+    if session:
+        try:
+            session["context"].close()
+        except Exception:
+            pass
+        try:
+            session["playwright"].stop()
+        except Exception:
+            pass
 
 
 # ── File-backed generation state ─────────────────────────────────────────
@@ -314,7 +399,7 @@ async def _create_notebook_with_sources(title, sources_list, storage_path=None):
     from notebooklm import NotebookLMClient
 
     if storage_path:
-        client_ctx = await NotebookLMClient.from_storage(storage_state_path=storage_path)
+        client_ctx = await NotebookLMClient.from_storage(path=storage_path)
     else:
         client_ctx = await NotebookLMClient.from_storage()
 
@@ -330,6 +415,17 @@ async def _create_notebook_with_sources(title, sources_list, storage_path=None):
         return nb.id
 
 
+def _resolve_storage_path(teacher_id):
+    """Find the best available storage path for a teacher."""
+    per_user = _get_storage_path(teacher_id)
+    if os.path.exists(per_user):
+        return per_user
+    default = _get_default_storage_path()
+    if os.path.exists(default):
+        return default
+    return None
+
+
 def create_notebook(title, plan, standards, config, teacher_id="local-dev", support_doc_paths=None):
     """Create NotebookLM notebook with lesson plan as source. Synchronous wrapper."""
     source_text = format_lesson_plan_as_source(plan, standards, config)
@@ -341,7 +437,7 @@ def create_notebook(title, plan, standards, config, teacher_id="local-dev", supp
             if os.path.exists(doc_path):
                 sources.append({"type": "file", "path": doc_path})
 
-    storage_path = _get_storage_path(teacher_id)
+    storage_path = _resolve_storage_path(teacher_id)
     notebook_id = asyncio.run(
         _create_notebook_with_sources(title, sources, storage_path)
     )
@@ -375,7 +471,7 @@ async def _generate_single_material(notebook_id, material_type, options, output_
     out_path = os.path.join(output_dir, filename)
 
     if storage_path:
-        client_ctx = await NotebookLMClient.from_storage(storage_state_path=storage_path)
+        client_ctx = await NotebookLMClient.from_storage(path=storage_path)
     else:
         client_ctx = await NotebookLMClient.from_storage()
 
@@ -458,7 +554,7 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
     """Background thread: generate each material type sequentially, updating state."""
     state = get_generation_state(teacher_id)
     output_dir = os.path.join(NOTEBOOKLM_DATA_DIR, notebook_id)
-    storage_path = _get_storage_path(teacher_id)
+    storage_path = _resolve_storage_path(teacher_id)
 
     try:
         for mat_type in material_types:

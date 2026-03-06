@@ -1077,8 +1077,11 @@ export async function notebookLMAuthStatus() {
   return fetchApi('/api/notebooklm/auth-status')
 }
 
-export async function notebookLMLogin() {
-  return fetchApi('/api/notebooklm/login', { method: 'POST' })
+export async function notebookLMLogin(step) {
+  return fetchApi('/api/notebooklm/login', {
+    method: 'POST',
+    body: JSON.stringify({ step: step || 'start' }),
+  })
 }
 
 export async function notebookLMCreateNotebook(plan, standards, config) {
