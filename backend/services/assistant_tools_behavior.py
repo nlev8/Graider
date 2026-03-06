@@ -289,8 +289,8 @@ def debug_behavior(teacher_id='local-dev'):
     """Diagnostic: show what behavior data exists for the current teacher."""
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
-    if not teacher_id:
-        return {"error": "Not authenticated"}
+    if not teacher_id or teacher_id == 'local-dev':
+        return {"error": "Not authenticated. teacher_id resolved to '" + str(teacher_id) + "'. This means the auth middleware did not set a real user ID. Check that the JWT token is being sent with the request."}
 
     try:
         sb = _get_supabase()
@@ -324,8 +324,8 @@ def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='loc
     """Get behavior summary for a student or period."""
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
-    if not teacher_id:
-        return {"error": "Not authenticated"}
+    if not teacher_id or teacher_id == 'local-dev':
+        return {"error": "Not authenticated — teacher_id is 'local-dev'. The auth middleware did not resolve your user ID."}
 
     days = min(max(days or 7, 1), 90)
     cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
@@ -664,8 +664,8 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
     """Generate a professional behavior email draft using AI (with template fallback)."""
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
-    if not teacher_id:
-        return {"error": "Not authenticated"}
+    if not teacher_id or teacher_id == 'local-dev':
+        return {"error": "Not authenticated — teacher_id is 'local-dev'. The auth middleware did not resolve your user ID."}
 
     ctx = _gather_email_context(teacher_id, student_name)
     if not ctx:
