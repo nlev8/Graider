@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var isLoadingStudents = false
     @State private var showSession = false
     @State private var error: String?
+    @AppStorage("teacherName") private var teacherName = ""
 
     var body: some View {
         NavigationStack {
@@ -83,7 +84,11 @@ struct HomeView: View {
             }
             .navigationTitle("Graider")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink(destination: RosterView()) {
+                        Image(systemName: "person.3.sequence")
+                    }
+
                     Button {
                         Task { await authService.signOut() }
                     } label: {
@@ -93,6 +98,7 @@ struct HomeView: View {
             }
             .task {
                 await loadClasses()
+                await loadTeacherName()
             }
             .fullScreenCover(isPresented: $showSession) {
                 if let selectedClass {
@@ -107,14 +113,29 @@ struct HomeView: View {
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: .now)
-        let name = authService.userEmail?.components(separatedBy: "@").first ?? ""
-        let capitalizedName = name.prefix(1).uppercased() + name.dropFirst()
-        if hour < 12 {
-            return "Good morning, \(capitalizedName)!"
-        } else if hour < 17 {
-            return "Good afternoon, \(capitalizedName)!"
+        let name: String
+        if !teacherName.isEmpty {
+            name = teacherName
         } else {
-            return "Good evening, \(capitalizedName)!"
+            let email = authService.userEmail?.components(separatedBy: "@").first ?? ""
+            name = email.prefix(1).uppercased() + email.dropFirst()
+        }
+        if hour < 12 {
+            return "Good morning, \(name)!"
+        } else if hour < 17 {
+            return "Good afternoon, \(name)!"
+        } else {
+            return "Good evening, \(name)!"
+        }
+    }
+
+    private func loadTeacherName() async {
+        do {
+            if let name = try await syncService.fetchTeacherName(), !name.isEmpty {
+                teacherName = name
+            }
+        } catch {
+            // API call failed — silently use fallback
         }
     }
 

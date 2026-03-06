@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import ActivityKit
+import AVFoundation
 
 struct SessionView: View {
     @EnvironmentObject var authService: AuthService
@@ -21,6 +22,9 @@ struct SessionView: View {
     @State private var whisperService: WhisperService?
     @State private var isListening = false
     @State private var liveActivity: Activity<BehaviorActivityAttributes>?
+    @State private var selectedTallyStudent: TallyStudentWrapper?
+    @State private var showNameTraining = false
+    @Query private var allAliases: [NameAlias]
 
     var body: some View {
         NavigationStack {
@@ -110,6 +114,25 @@ struct SessionView: View {
                 SessionSummaryView(events: sessionEvents)
                     .onDisappear { dismiss() }
             }
+            .sheet(isPresented: $showNameTraining) {
+                if let whisperService {
+                    NameTrainingView(
+                        students: students,
+                        whisperService: whisperService
+                    )
+                    .presentationDetents([.large])
+                }
+            }
+            .sheet(item: $selectedTallyStudent) { wrapper in
+                StudentEventsSheet(
+                    studentName: wrapper.name,
+                    events: sessionEvents.filter { $0.studentName == wrapper.name },
+                    onDelete: { event in
+                        deleteEvent(event)
+                    }
+                )
+                .presentationDetents([.medium])
+            }
             .onAppear { startSession() }
             .onDisappear { stopTimer() }
         }
@@ -131,6 +154,15 @@ struct SessionView: View {
             Spacer()
 
             HStack(spacing: 8) {
+                Button {
+                    showNameTraining = true
+                } label: {
+                    Image(systemName: "waveform.and.person.filled")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
                 if isListening {
                     Image(systemName: "mic.fill")
                         .foregroundStyle(.green)
@@ -157,9 +189,9 @@ struct SessionView: View {
                 .foregroundStyle(.orange)
                 .padding(.horizontal)
 
-            ForEach(pendingEvents) { pending in
+            ForEach($pendingEvents) { $pending in
                 PendingEventCard(
-                    event: pending,
+                    event: $pending,
                     onApprove: { approvePending(pending) },
                     onSwitch: { switchPending(pending) },
                     onDismiss: { dismissPending(pending) }
@@ -204,6 +236,10 @@ struct SessionView: View {
                             )
                         }
                     )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedTallyStudent = TallyStudentWrapper(name: tally.name)
+                    }
                     .padding(.horizontal)
                 }
             }
@@ -272,15 +308,20 @@ struct SessionView: View {
         // Start Live Activity
         startLiveActivity()
 
-        // Init whisper
-        whisperService = WhisperService(students: students)
+        // Init whisper with learned aliases
+        var aliasMap: [UUID: [String]] = [:]
+        for alias in allAliases {
+            aliasMap[alias.studentId, default: []].append(alias.variant)
+        }
+        whisperService = WhisperService(students: students, aliases: aliasMap)
         whisperService?.onDetection = { detection in
             let pending = PendingEvent(
                 id: UUID(),
                 studentId: detection.studentId,
                 studentName: detection.studentName,
                 type: detection.type,
-                transcript: detection.transcript
+                transcript: detection.transcript,
+                audioClipPath: detection.audioClipPath
             )
             pendingEvents.append(pending)
             // Haptic feedback
@@ -310,7 +351,8 @@ struct SessionView: View {
         studentId: UUID? = nil,
         studentName: String,
         type: EventType,
-        note: String? = nil
+        note: String? = nil,
+        audioClipPath: String? = nil
     ) {
         guard let session else { return }
 
@@ -318,8 +360,9 @@ struct SessionView: View {
             studentId: studentId,
             studentName: studentName,
             type: type,
-            source: .manual,
-            note: note
+            source: audioClipPath != nil ? .stt : .manual,
+            note: note,
+            audioClipPath: audioClipPath
         )
         event.session = session
         modelContext.insert(event)
@@ -341,11 +384,17 @@ struct SessionView: View {
     }
 
     private func approvePending(_ pending: PendingEvent) {
+        // Combine transcript with teacher's context note
+        var note = pending.transcript
+        if !pending.contextNote.isEmpty {
+            note += " | Context: " + pending.contextNote
+        }
         addManualEvent(
             studentId: pending.studentId,
             studentName: pending.studentName,
             type: pending.type,
-            note: pending.transcript
+            note: note,
+            audioClipPath: pending.audioClipPath
         )
         pendingEvents.removeAll { $0.id == pending.id }
     }
@@ -357,7 +406,36 @@ struct SessionView: View {
     }
 
     private func dismissPending(_ pending: PendingEvent) {
+        // Clean up audio clip file
+        if let path = pending.audioClipPath {
+            try? FileManager.default.removeItem(atPath: path)
+        }
         pendingEvents.removeAll { $0.id == pending.id }
+    }
+
+    private func deleteEvent(_ event: LocalEvent) {
+        // Clean up audio clip file
+        if let path = event.audioClipPath {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+
+        // Remove from local list
+        sessionEvents.removeAll { $0.id == event.id }
+
+        // Delete from SwiftData
+        modelContext.delete(event)
+
+        // Delete from Supabase
+        Task {
+            do {
+                try await syncService.deleteEvent(event)
+            } catch {
+                // Local delete already done — remote will be orphaned but harmless
+            }
+        }
+
+        // Update Live Activity
+        updateLiveActivity()
     }
 
     private func endSession() {
@@ -463,15 +541,19 @@ struct PendingEvent: Identifiable {
     let studentName: String
     var type: EventType
     let transcript: String
+    let audioClipPath: String?
+    var contextNote: String = ""
 }
 
 // MARK: - Pending Event Card
 
 struct PendingEventCard: View {
-    let event: PendingEvent
+    @Binding var event: PendingEvent
     let onApprove: () -> Void
     let onSwitch: () -> Void
     let onDismiss: () -> Void
+
+    @State private var audioPlayer: AVAudioPlayer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -487,12 +569,31 @@ struct PendingEventCard: View {
                     .background(
                         Capsule().fill(event.type == .correction ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
                     )
+
+                Spacer()
+
+                if event.audioClipPath != nil {
+                    Button {
+                        playAudio()
+                    } label: {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             Text("\"\(event.transcript)\"")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .italic()
+                .lineLimit(3)
+
+            // Context note — teacher adds detail before approving
+            TextField("Add context (e.g. throwing paper at Jordan)", text: $event.contextNote)
+                .font(.caption)
+                .textFieldStyle(.roundedBorder)
 
             HStack(spacing: 12) {
                 Button("Approve", action: onApprove)
@@ -523,6 +624,15 @@ struct PendingEventCard: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.orange.opacity(0.3), lineWidth: 1)
         )
+    }
+
+    private func playAudio() {
+        guard let path = event.audioClipPath else { return }
+        let url = URL(fileURLWithPath: path)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        audioPlayer = try? AVAudioPlayer(contentsOf: url)
+        audioPlayer?.play()
     }
 }
 
@@ -608,5 +718,94 @@ struct ManualAddSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Tally Student Wrapper (for sheet binding)
+
+struct TallyStudentWrapper: Identifiable {
+    let id = UUID()
+    let name: String
+}
+
+// MARK: - Student Events Sheet
+
+struct StudentEventsSheet: View {
+    let studentName: String
+    let events: [LocalEvent]
+    let onDelete: (LocalEvent) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var audioPlayer: AVAudioPlayer?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(events) { event in
+                    HStack {
+                        Image(systemName: event.type == .correction ? "minus.circle.fill" : "plus.circle.fill")
+                            .foregroundStyle(event.type == .correction ? .red : .green)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(event.type == .correction ? "Correction" : "Praise")
+                                .font(.subheadline.bold())
+
+                            if let note = event.note, !note.isEmpty {
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(event.eventTime, format: .dateTime.month(.abbreviated).day().hour().minute())
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+
+                        Spacer()
+
+                        if event.audioClipPath != nil {
+                            Button {
+                                playAudio(for: event)
+                            } label: {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.blue)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if event.syncStatus == .synced {
+                            Image(systemName: "checkmark.icloud")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
+                }
+                .onDelete { offsets in
+                    for index in offsets {
+                        onDelete(events[index])
+                    }
+                    if events.count <= offsets.count {
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle(studentName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func playAudio(for event: LocalEvent) {
+        guard let path = event.audioClipPath else { return }
+        let url = URL(fileURLWithPath: path)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        audioPlayer = try? AVAudioPlayer(contentsOf: url)
+        audioPlayer?.play()
     }
 }

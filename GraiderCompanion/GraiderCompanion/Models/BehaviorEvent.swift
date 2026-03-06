@@ -28,6 +28,7 @@ class LocalEvent {
     var typeRaw: String
     var note: String?
     var transcript: String?
+    var audioClipPath: String?
     var sourceRaw: String
     var eventTime: Date
     var syncStatusRaw: String
@@ -55,7 +56,8 @@ class LocalEvent {
         type: EventType,
         source: EventSource = .manual,
         note: String? = nil,
-        transcript: String? = nil
+        transcript: String? = nil,
+        audioClipPath: String? = nil
     ) {
         self.id = UUID()
         self.remoteId = nil
@@ -64,6 +66,7 @@ class LocalEvent {
         self.typeRaw = type.rawValue
         self.note = note
         self.transcript = transcript
+        self.audioClipPath = audioClipPath
         self.sourceRaw = source.rawValue
         self.eventTime = .now
         self.syncStatusRaw = SyncStatus.pending.rawValue

@@ -33,6 +33,12 @@
 		D9732F83C5FB5909234A9268 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EB0897E96A85B2361D560F86 /* SwiftUI.framework */; };
 		DA1299086AC2B8B062A010BE /* Student.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0A0F03F8D3D48D932E1172 /* Student.swift */; };
 		F71857B8313EA2467DEED412 /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DD4A185AFF64215187F40FD /* SyncService.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* RosterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7A8B9C0D1E2F /* RosterView.swift */; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* ClassDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7A8B9C0D1E2F3A /* ClassDetailView.swift */; };
+		C3D4E5F6A7B8C9D0E1F2A3B4 /* AddClassSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4D5E6F7A8B9C0D1E2F3A4B /* AddClassSheet.swift */; };
+		D4E5F6A7B8C9D0E1F2A3B4C5 /* CSVImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5E6F7A8B9C0D1E2F3A4B5C /* CSVImportView.swift */; };
+		E5F6A7B8C9D0E1F2A3B4C5D6 /* NameAlias.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6F7A8B9C0D1E2F3A4B5C6D /* NameAlias.swift */; };
+		F6A7B8C9D0E1F2A3B4C5D6E7 /* NameTrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7A8B9C0D1E2F3A4B5C6D7E /* NameTrainingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +89,12 @@
 		EC41595A17C09BCBD78215E7 /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		F879814BDCEC2C0364422D82 /* BehaviorLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BehaviorLiveActivity.swift; sourceTree = "<group>"; };
 		FFA89A504A793D2E6F3DBA11 /* BehaviorEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BehaviorEvent.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7A8B9C0D1E2F /* RosterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RosterView.swift; sourceTree = "<group>"; };
+		2B3C4D5E6F7A8B9C0D1E2F3A /* ClassDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassDetailView.swift; sourceTree = "<group>"; };
+		3C4D5E6F7A8B9C0D1E2F3A4B /* AddClassSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddClassSheet.swift; sourceTree = "<group>"; };
+		4D5E6F7A8B9C0D1E2F3A4B5C /* CSVImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportView.swift; sourceTree = "<group>"; };
+		5E6F7A8B9C0D1E2F3A4B5C6D /* NameAlias.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameAlias.swift; sourceTree = "<group>"; };
+		6F7A8B9C0D1E2F3A4B5C6D7E /* NameTrainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameTrainingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +154,7 @@
 				FFA89A504A793D2E6F3DBA11 /* BehaviorEvent.swift */,
 				2E0F39FE6B3DC2A3C86D2955 /* BehaviorSession.swift */,
 				888888DA412C9DA389CC58E5 /* ClassPeriod.swift */,
+				5E6F7A8B9C0D1E2F3A4B5C6D /* NameAlias.swift */,
 				7D0A0F03F8D3D48D932E1172 /* Student.swift */,
 			);
 			path = Models;
@@ -197,8 +210,13 @@
 		C6D3090F064ACE36725F3034 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				3C4D5E6F7A8B9C0D1E2F3A4B /* AddClassSheet.swift */,
+				2B3C4D5E6F7A8B9C0D1E2F3A /* ClassDetailView.swift */,
+				4D5E6F7A8B9C0D1E2F3A4B5C /* CSVImportView.swift */,
 				19DC8B1E73EC8C7BC710C78A /* HomeView.swift */,
 				22680B13021155532CDC7967 /* LoginView.swift */,
+				6F7A8B9C0D1E2F3A4B5C6D7E /* NameTrainingView.swift */,
+				1A2B3C4D5E6F7A8B9C0D1E2F /* RosterView.swift */,
 				6F9A728E9C3B53FC511875B1 /* SessionSummaryView.swift */,
 				D843010CDAEF96DECCC68C64 /* SessionView.swift */,
 				4210F660104453F746EFCA3D /* StudentTallyRow.swift */,
@@ -270,10 +288,10 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					623C97F460E53FC0CAACE495 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 3VU95368RV;
 					};
 					FB7112D96F1E0B305D6A6722 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 3VU95368RV;
 					};
 				};
 			};
@@ -334,6 +352,12 @@
 				5C29BD968437FDCB03358DCB /* SupabaseManager.swift in Sources */,
 				F71857B8313EA2467DEED412 /* SyncService.swift in Sources */,
 				534259387081C9C21227AD15 /* WhisperService.swift in Sources */,
+				E5F6A7B8C9D0E1F2A3B4C5D6 /* NameAlias.swift in Sources */,
+				F6A7B8C9D0E1F2A3B4C5D6E7 /* NameTrainingView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* RosterView.swift in Sources */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* ClassDetailView.swift in Sources */,
+				C3D4E5F6A7B8C9D0E1F2A3B4 /* AddClassSheet.swift in Sources */,
+				D4E5F6A7B8C9D0E1F2A3B4C5 /* CSVImportView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -363,6 +387,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 3VU95368RV;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Graider;
@@ -385,16 +410,17 @@
 		428DE6E870469C002D306E39 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				DEVELOPMENT_TEAM = 3VU95368RV;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GraiderCompanionWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.graider.GraiderCompanionWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.graider.GraiderCompanion.Widget;
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -436,7 +462,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3VU95368RV;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -500,7 +526,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3VU95368RV;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -527,6 +553,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 3VU95368RV;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Graider;
@@ -549,16 +576,17 @@
 		D4E7720A6CD142A97341D43C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				DEVELOPMENT_TEAM = 3VU95368RV;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GraiderCompanionWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.graider.GraiderCompanionWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.graider.GraiderCompanion.Widget;
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";

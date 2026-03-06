@@ -9,6 +9,7 @@ struct GraiderCompanionApp: App {
         let schema = Schema([
             LocalSession.self,
             LocalEvent.self,
+            NameAlias.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
@@ -43,6 +44,7 @@ struct RootView: View {
             }
         }
         .task {
+            WhisperService.cleanupOldClips()
             await authService.restoreSession()
         }
     }
