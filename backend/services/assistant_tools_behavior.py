@@ -7,11 +7,14 @@ and sending them via Resend or Focus portal automation.
 Data source: Supabase (behavior_sessions + behavior_events tables).
 """
 import json
+import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 
 from flask import g
+
+logger = logging.getLogger(__name__)
 
 from backend.services.assistant_tools import (
     _load_roster, _fuzzy_name_match, _normalize_period,
@@ -56,22 +59,63 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
     """
     sb = _get_supabase()
 
-    query = sb.table('behavior_events').select(
-        'student_name, type, note, transcript, event_time, source, '
-        'behavior_sessions!inner(period, date)'
-    ).eq('teacher_id', teacher_id)
+    logger.info("_load_behavior_events: teacher_id=%s cutoff=%s period=%s student=%s",
+                teacher_id, cutoff_date, period, student_name)
 
-    if cutoff_date:
-        query = query.gte('behavior_sessions.date', cutoff_date)
-    if period:
-        query = query.eq('behavior_sessions.period', period)
+    rows = []
+    try:
+        query = sb.table('behavior_events').select(
+            'student_name, type, note, transcript, event_time, source, '
+            'behavior_sessions!inner(period, date)'
+        ).eq('teacher_id', teacher_id)
 
-    res = query.execute()
-    rows = res.data or []
+        if cutoff_date:
+            query = query.gte('behavior_sessions.date', cutoff_date)
+        if period:
+            query = query.eq('behavior_sessions.period', period)
+
+        res = query.execute()
+        rows = res.data or []
+        logger.info("_load_behavior_events: joined query returned %d rows", len(rows))
+    except Exception as e:
+        # Fallback: query without the session join if it fails
+        logger.warning("_load_behavior_events: joined query failed (%s), trying fallback", e)
+        try:
+            query = sb.table('behavior_events').select(
+                'student_name, type, note, transcript, event_time, source, session_id'
+            ).eq('teacher_id', teacher_id)
+            res = query.execute()
+            fallback_rows = res.data or []
+            logger.info("_load_behavior_events: fallback query returned %d rows", len(fallback_rows))
+
+            # Fetch session data separately
+            session_ids = list(set(r.get('session_id', '') for r in fallback_rows if r.get('session_id')))
+            sessions_map = {}
+            if session_ids:
+                ses_res = sb.table('behavior_sessions').select('id, period, date').in_('id', session_ids).execute()
+                for s in (ses_res.data or []):
+                    sessions_map[s['id']] = {'period': s.get('period', ''), 'date': s.get('date', '')}
+
+            for r in fallback_rows:
+                sid = r.get('session_id', '')
+                session_info = sessions_map.get(sid, {'period': '', 'date': ''})
+                # Apply date/period filters
+                if cutoff_date and session_info.get('date', '') < cutoff_date:
+                    continue
+                if period and session_info.get('period', '') != period:
+                    continue
+                r['behavior_sessions'] = session_info
+                rows.append(r)
+            logger.info("_load_behavior_events: after fallback filtering, %d rows", len(rows))
+        except Exception as e2:
+            logger.error("_load_behavior_events: fallback query also failed: %s", e2)
 
     # Filter by student name in Python (fuzzy match)
     if student_name:
+        before_count = len(rows)
         rows = [r for r in rows if _fuzzy_name_match(student_name, r.get('student_name', ''))]
+        logger.info("_load_behavior_events: fuzzy filter '%s' reduced %d -> %d rows",
+                    student_name, before_count, len(rows))
 
     # Aggregate into legacy shape
     students = defaultdict(lambda: {"name": "", "entries_map": {}})
@@ -254,8 +298,9 @@ def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='loc
 
     if not students_data:
         if student_name:
-            return {"error": f"No behavior data found for '{student_name}'. Check the name or start tracking."}
-        return {"status": "success", "data": "No behavior data recorded yet. Start a behavior tracking session in the Assistant tab to begin logging."}
+            hint = f" Try again with days=30 or days=90 for a wider window." if days <= 14 else ""
+            return {"error": f"No behavior data found for '{student_name}' in the last {days} days.{hint} The student name must match what was recorded in the Companion app."}
+        return {"status": "success", "data": "No behavior data recorded yet. Start a behavior tracking session in the Companion app to begin logging."}
 
     # If student name provided, return detailed view
     if student_name:
@@ -338,6 +383,16 @@ def _gather_email_context(teacher_id, student_name):
         student_name=student_name,
     )
     if not students_data:
+        # Try wider window (30 days) before giving up
+        logger.info("_gather_email_context: no data in 14 days, trying 30 days")
+        cutoff_30 = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        students_data = _load_behavior_events(
+            teacher_id=teacher_id,
+            cutoff_date=cutoff_30,
+            student_name=student_name,
+        )
+    if not students_data:
+        logger.warning("_gather_email_context: no behavior data for '%s' teacher=%s", student_name, teacher_id)
         return None
 
     match = next(iter(students_data.values()))
@@ -571,7 +626,7 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
 
     ctx = _gather_email_context(teacher_id, student_name)
     if not ctx:
-        return {"error": f"No behavior data found for '{student_name}'."}
+        return {"error": f"No behavior data found for '{student_name}' in the last 14 days. Call get_behavior_summary with days=30 or days=90 first to check if older data exists. The student name must match exactly what was recorded in the Companion app."}
 
     # Auto-detect tone
     if not tone:
