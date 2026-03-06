@@ -104,9 +104,12 @@ def init_auth(app):
     """
     @app.before_request
     def check_auth():
-        # Skip auth entirely on localhost (development)
+        # Skip auth on localhost ONLY if no JWT is present.
+        # Behind a reverse proxy (Railway/gunicorn), request.host may resolve
+        # to localhost even on production, so always prefer JWT when available.
         host = request.host.split(':')[0]
-        if host in ('localhost', '127.0.0.1'):
+        has_bearer = request.headers.get('Authorization', '').startswith('Bearer ')
+        if host in ('localhost', '127.0.0.1') and not has_bearer:
             g.user_id = 'local-dev'
             g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
             return None

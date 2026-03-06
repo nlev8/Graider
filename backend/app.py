@@ -78,6 +78,10 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 CORS(app)
 
+# Fix request.host behind reverse proxy (Railway/gunicorn)
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # ══════════════════════════════════════════════════════════════
 # AUTHENTICATION
 # ══════════════════════════════════════════════════════════════
