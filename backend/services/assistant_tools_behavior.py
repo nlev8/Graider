@@ -126,6 +126,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
         evt_type = row.get('type', 'correction')
         note = row.get('note', '')
         transcript = row.get('transcript', '')
+        source = row.get('source', 'manual')
         session = row.get('behavior_sessions', {})
         date_val = session.get('date', '')
         period_val = session.get('period', '')
@@ -151,6 +152,8 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
                 "type": evt_type,
                 "count": 0,
                 "notes": [],
+                "manual_notes": [],
+                "stt_notes": [],
                 "transcripts": [],
                 "timestamps": [],
             }
@@ -159,6 +162,10 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
         entry["count"] += 1
         if note and note not in entry["notes"]:
             entry["notes"].append(note)
+            if source == 'stt':
+                entry["stt_notes"].append(note)
+            else:
+                entry["manual_notes"].append(note)
         if transcript and transcript not in entry["transcripts"]:
             entry["transcripts"].append(transcript)
         if timestamp:
@@ -264,7 +271,7 @@ BEHAVIOR_TOOL_DEFINITIONS = [
                 "method": {
                     "type": "string",
                     "enum": ["email", "focus"],
-                    "description": "Send method: 'email' via Resend API, 'focus' via Focus portal automation. Default: email."
+                    "description": "Send method: 'focus' via Focus portal automation (default), 'email' via Resend API."
                 }
             },
             "required": ["student_name", "subject", "body"]
@@ -449,26 +456,38 @@ def _gather_email_context(teacher_id, student_name):
     corrections = sum(e.get("count", 0) for e in entries if e.get("type") == "correction")
     praise = sum(e.get("count", 0) for e in entries if e.get("type") == "praise")
 
-    # Collect notes and transcripts
+    # Collect notes — separate manual (reliable) from STT (approximate)
     correction_notes, praise_notes = [], []
-    all_transcripts = []
+    stt_context = []
     for e in entries:
-        for note in e.get("notes", []):
+        for note in e.get("manual_notes", []):
             if note:
                 (correction_notes if e.get("type") == "correction" else praise_notes).append(note)
-        for t in e.get("transcripts", []):
-            if t:
-                all_transcripts.append({"date": e.get("date", ""), "type": e.get("type", ""), "transcript": t})
+        # STT notes are rough speech transcripts — only use for general context
+        for note in e.get("stt_notes", []):
+            if note:
+                stt_context.append(note)
 
     correction_dates = sorted(set(e.get("date", "") for e in entries if e.get("type") == "correction"))
 
     # Look up parent contact
-    contacts = _load_parent_contacts()
+    contacts_raw = _load_parent_contacts()
+    # contacts_raw may be a dict (keyed by student ID) or a list
+    contacts_list = contacts_raw.values() if isinstance(contacts_raw, dict) else contacts_raw
     parent_email, parent_name = "", ""
-    for contact in contacts:
+    for contact in contacts_list:
+        if not isinstance(contact, dict):
+            continue
         if _fuzzy_name_match(name, contact.get("student_name", "")):
-            parent_email = contact.get("parent_email", "") or contact.get("email", "")
-            parent_name = contact.get("parent_name", "") or contact.get("contact_name", "")
+            # parent_emails may be a list; grab first one
+            emails = contact.get("parent_emails", [])
+            parent_email = emails[0] if isinstance(emails, list) and emails else contact.get("parent_email", "") or contact.get("email", "")
+            # Extract parent name from contacts array or top-level fields
+            clist = contact.get("contacts", [])
+            if clist and isinstance(clist[0], dict):
+                parent_name = f"{clist[0].get('first_name', '')} {clist[0].get('last_name', '')}".strip()
+            if not parent_name:
+                parent_name = contact.get("parent_name", "") or contact.get("contact_name", "")
             break
     if not parent_email:
         roster = _load_roster()
@@ -486,7 +505,7 @@ def _gather_email_context(teacher_id, student_name):
         "correction_notes": correction_notes,
         "praise_notes": praise_notes,
         "correction_dates": correction_dates,
-        "transcripts": all_transcripts[-15:],
+        "stt_context": stt_context[-10:],
         "parent_email": parent_email,
         "parent_name": parent_name,
         "teacher_name": config.get('teacher_name', 'Your Teacher'),
@@ -517,10 +536,13 @@ def _generate_email_ai(ctx, tone, custom_note, teacher_id):
             behavior_lines.append(f"Teacher notes (corrections): {'; '.join(ctx['correction_notes'][:8])}")
         if ctx['praise_notes']:
             behavior_lines.append(f"Teacher notes (praise): {'; '.join(ctx['praise_notes'][:5])}")
-        if ctx['transcripts']:
-            behavior_lines.append("Voice transcripts from class:")
-            for t in ctx['transcripts']:
-                behavior_lines.append(f"  [{t['date']}] ({t['type']}) \"{t['transcript'][:120]}\"")
+        if ctx.get('stt_context'):
+            behavior_lines.append("Approximate voice-detected context (rough speech-to-text, do NOT quote verbatim):")
+            for s in ctx['stt_context'][:5]:
+                # Strip common STT artifacts
+                cleaned = s.replace('[BLANK_AUDIO]', '').replace('[LAUGHTER]', '').replace('[laughter]', '').strip()
+                if cleaned:
+                    behavior_lines.append(f"  \"{cleaned[:120]}\"")
 
         behavior_data = "\n".join(behavior_lines)
 
@@ -550,7 +572,9 @@ DETAILS:
 INSTRUCTIONS:
 - Write a complete email body (no subject line — just the body)
 - Start with "Dear {parent_label},"
-- Reference specific behavioral incidents using the transcript and note data — don't just cite counts
+- Reference specific behavioral incidents using the teacher notes — don't just cite counts
+- Teacher notes are reliable and can be referenced directly
+- Voice-detected context (if any) is approximate speech-to-text — use it only to understand general patterns, NEVER quote it verbatim in the email
 - Keep it professional, constructive, and concise (150-250 words)
 - End with a signature using the teacher name{' and school' if ctx['school_name'] else ''}
 {f'- Use this exact signature block: {ctx["email_signature"]}' if ctx['email_signature'] else ''}
@@ -706,7 +730,7 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
     }
 
 
-def send_behavior_email(student_name, subject, body, method="email"):
+def send_behavior_email(student_name, subject, body, method="focus"):
     """Send a behavior email via Resend or Focus Communications automation."""
     teacher_id = _get_teacher_id() or 'local-dev'
 
@@ -748,11 +772,15 @@ def send_behavior_email(student_name, subject, body, method="email"):
             return {"error": "Email not configured. Add RESEND_API_KEY to .env file."}
 
         # Find parent email
-        contacts = _load_parent_contacts()
+        contacts_raw = _load_parent_contacts()
+        contacts_list = contacts_raw.values() if isinstance(contacts_raw, dict) else contacts_raw
         parent_email = ""
-        for contact in contacts:
+        for contact in contacts_list:
+            if not isinstance(contact, dict):
+                continue
             if _fuzzy_name_match(student_name, contact.get("student_name", "")):
-                parent_email = contact.get("parent_email", "") or contact.get("email", "")
+                emails = contact.get("parent_emails", [])
+                parent_email = emails[0] if isinstance(emails, list) and emails else contact.get("parent_email", "") or contact.get("email", "")
                 break
 
         if not parent_email:

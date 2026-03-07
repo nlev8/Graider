@@ -110,7 +110,7 @@ def init_auth(app):
         host = request.host.split(':')[0]
         has_bearer = request.headers.get('Authorization', '').startswith('Bearer ')
         if host in ('localhost', '127.0.0.1') and not has_bearer:
-            g.user_id = 'local-dev'
+            g.user_id = os.getenv('DEV_USER_ID', 'local-dev')
             g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
             return None
 
