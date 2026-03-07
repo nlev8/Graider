@@ -97,7 +97,7 @@ class WhisperService: ObservableObject {
         guard !isModelLoaded else { return }
 
         whisperKit = try await WhisperKit(
-            model: "base",
+            model: "small.en",
             verbose: false
         )
         isModelLoaded = true
@@ -231,6 +231,8 @@ class WhisperService: ObservableObject {
         do {
             // Build decoding options with student name prompt tokens for bias
             var options = DecodingOptions()
+            options.language = "en"
+            options.temperature = 0.0
             if !studentNamePrompt.isEmpty, let tokenizer = whisperKit.tokenizer {
                 options.promptTokens = tokenizer.encode(text: studentNamePrompt)
             }
