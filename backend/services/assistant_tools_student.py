@@ -342,6 +342,58 @@ def _remove_student_from_csv(student_name, filepath):
     return removed_count, len(rows_to_keep)
 
 
+def _delete_student_supabase(student_name):
+    """Fully delete a student from Supabase (cascade: behavior_events, class_students, students).
+
+    Returns a status message string, or empty string on skip/failure.
+    """
+    try:
+        from flask import g
+        teacher_id = getattr(g, 'user_id', None)
+        if not teacher_id or teacher_id == 'local-dev':
+            teacher_id = os.getenv('DEV_USER_ID')
+        if not teacher_id:
+            return ""
+
+        from backend.supabase_client import get_supabase
+        sb = get_supabase()
+        if not sb:
+            return ""
+
+        # Parse name into first/last for matching
+        parts = student_name.strip().split()
+        if not parts:
+            return ""
+
+        # Query all students for this teacher (including inactive)
+        res = sb.table('students').select('id, first_name, last_name').eq(
+            'teacher_id', teacher_id
+        ).execute()
+
+        if not res.data:
+            return ""
+
+        # Find matching student(s) by fuzzy name match
+        deleted = []
+        for s in res.data:
+            full_name = f"{s.get('first_name', '')} {s.get('last_name', '')}".strip()
+            if _fuzzy_name_match(student_name, full_name):
+                sid = s['id']
+                # Cascade delete: child tables first, then student
+                sb.table('behavior_events').delete().eq('student_id', sid).execute()
+                sb.table('class_students').delete().eq('student_id', sid).execute()
+                sb.table('students').delete().eq('id', sid).execute()
+                deleted.append(full_name)
+
+        if deleted:
+            return f"Deleted from Supabase: {', '.join(deleted)} (removed from Companion app)."
+        return ""
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Supabase student delete failed: %s", e)
+        return ""
+
+
 def remove_student_from_roster(student_name):
     """Remove a student from ALL roster CSV files where they appear."""
     if not student_name:
@@ -388,8 +440,13 @@ def remove_student_from_roster(student_name):
         except Exception as e:
             errors.append({"source": label, "error": str(e)})
 
+    # Deactivate in Supabase so the iPhone app stops showing them
+    supabase_msg = _delete_student_supabase(matched_name)
+
     sources = [r["source"] for r in results]
     msg = f"Removed {matched_name} from {len(results)} file(s): {', '.join(sources)}."
+    if supabase_msg:
+        msg += f" {supabase_msg}"
     if errors:
         msg += f" Failed on {len(errors)} file(s)."
 
