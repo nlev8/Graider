@@ -172,9 +172,13 @@ body {
         height: 60px;
     }
 
-    .logo-icon {
-        height: 100px;
-        margin: -20px 0;
+    .logo-brain {
+        width: 32px;
+        height: 32px;
+    }
+
+    .logo-wordmark {
+        height: 22px;
     }
 
     .nav-container {
@@ -194,10 +198,16 @@ body {
     z-index: 101;
 }
 
-.logo-icon {
+.logo-brain {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+}
+
+.logo-wordmark {
+    height: 28px;
     width: auto;
-    height: 168px;
-    margin: -44px 0;
+    object-fit: contain;
 }
 
 .nav-links {
