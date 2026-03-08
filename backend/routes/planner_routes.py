@@ -6451,3 +6451,82 @@ def get_planner_costs():
             return jsonify(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError):
         return jsonify({"total": {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}, "daily": {}})
+
+
+@planner_bp.route('/api/adjust-reading-level', methods=['POST'])
+def adjust_reading_level():
+    """Rewrite text at a target reading level while preserving key terms."""
+    from backend.api_keys import get_api_key as _gak
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    api_key = _gak('openai', teacher_id)
+
+    if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+        return jsonify({"error": "Missing or placeholder OpenAI API Key"})
+
+    data = request.json or {}
+    text = data.get('text', '').strip()
+    target_level = data.get('target_level', '6')
+    subject = data.get('subject', '')
+    preserve_terms = data.get('preserve_terms', [])
+
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+
+    preserve_instruction = ""
+    if preserve_terms:
+        preserve_instruction = (
+            "\n\nIMPORTANT: The following key terms MUST be preserved exactly as-is "
+            "(do NOT simplify or replace them): " + ", ".join(preserve_terms)
+        )
+
+    subject_context = ""
+    if subject:
+        subject_context = f" This is {subject} content, so maintain subject-specific accuracy."
+
+    prompt = f"""Rewrite the following text at a Flesch-Kincaid grade level of {target_level}.{subject_context}
+
+Rules:
+- Simplify vocabulary and sentence structure to match the target reading level
+- Maintain ALL factual content — do not remove or alter any information
+- Keep the same overall structure (paragraphs, lists, etc.)
+- Preserve proper nouns, names, and dates exactly{preserve_instruction}
+
+Respond with a JSON object containing:
+- "adjusted_text": the rewritten text
+- "reading_level_estimate": estimated Flesch-Kincaid grade level of the output (as a string like "6.2")
+- "vocabulary_changes": array of objects with "original" and "replacement" keys showing significant word substitutions made (max 15 entries)
+
+TEXT TO REWRITE:
+{text}"""
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a reading level adjustment specialist. Rewrite text at the requested grade level while preserving meaning and key terms. Always respond with valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+        )
+
+        usage = _extract_usage(completion, "gpt-4o")
+        _record_planner_cost(usage)
+
+        raw = completion.choices[0].message.content
+        result = json.loads(raw)
+
+        return jsonify({
+            "adjusted_text": result.get("adjusted_text", ""),
+            "reading_level_estimate": result.get("reading_level_estimate", ""),
+            "vocabulary_changes": result.get("vocabulary_changes", []),
+            "usage": usage,
+        })
+
+    except Exception as e:
+        print(f"Reading level adjustment error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500

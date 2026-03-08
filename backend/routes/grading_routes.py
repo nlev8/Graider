@@ -904,6 +904,120 @@ def export_focus_batch():
     return jsonify(manifest)
 
 
+CANVAS_EXPORTS_DIR = os.path.join(EXPORTS_DIR, "canvas")
+POWERSCHOOL_EXPORTS_DIR = os.path.join(EXPORTS_DIR, "powerschool")
+os.makedirs(CANVAS_EXPORTS_DIR, exist_ok=True)
+os.makedirs(POWERSCHOOL_EXPORTS_DIR, exist_ok=True)
+
+
+@grading_bp.route('/api/export-lms-csv', methods=['POST'])
+def export_lms_csv():
+    """
+    Export grades as CSV for Canvas or PowerSchool LMS import.
+
+    Canvas format:
+      Row 1: Student,ID,SIS User ID,SIS Login ID,Section,{Assignment}
+      Row 2: Points Possible,,,,,{total}
+      Data:  "Last, First",,,,,score
+
+    PowerSchool format:
+      Student_Number,Last_Name,First_Name,Score
+
+    Input JSON: { results[], assignment, total_points, format: "canvas"|"powerschool" }
+    """
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    grading_state = _get_state(teacher_id) if _get_state else None
+    data = request.json or {}
+    results = data.get('results') or (grading_state.get("results", []) if grading_state else [])
+    assignment = data.get('assignment', 'Assignment')
+    total_points = data.get('total_points', 100)
+    fmt = data.get('format', 'canvas')
+
+    if not results:
+        return jsonify({"error": "No results to export"}), 400
+
+    if fmt not in ('canvas', 'powerschool'):
+        return jsonify({"error": "Invalid format. Use 'canvas' or 'powerschool'."}), 400
+
+    safe_assignment = ''.join(
+        c if c.isalnum() or c in ' -_' else '' for c in assignment
+    ).strip().replace(' ', '_')
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    rows = []
+
+    if fmt == 'canvas':
+        export_dir = CANVAS_EXPORTS_DIR
+        filename = f"{safe_assignment}_{timestamp}.csv"
+        filepath = os.path.join(export_dir, filename)
+
+        # Canvas header
+        rows.append(f"Student,ID,SIS User ID,SIS Login ID,Section,{assignment}")
+        # Points Possible row
+        rows.append(f"    Points Possible,,,,,{total_points}")
+
+        for r in results:
+            name = r.get('student_name', 'Unknown')
+            score = r.get('score', 0)
+            # Canvas expects "Last, First" format
+            if ',' in name:
+                display_name = name.strip()
+            else:
+                parts = name.strip().split()
+                if len(parts) >= 2:
+                    display_name = parts[-1] + ", " + " ".join(parts[:-1])
+                else:
+                    display_name = name.strip()
+            student_id = r.get('student_id', '')
+            section = r.get('period', '')
+            rows.append(f'"{display_name}",{student_id},,,,{score}')
+
+    else:  # powerschool
+        export_dir = POWERSCHOOL_EXPORTS_DIR
+        filename = f"{safe_assignment}_{timestamp}.csv"
+        filepath = os.path.join(export_dir, filename)
+
+        rows.append("Student_Number,Last_Name,First_Name,Score")
+        for r in results:
+            name = r.get('student_name', 'Unknown')
+            student_id = r.get('student_id', '')
+            score = r.get('score', 0)
+            parts = name.strip().split()
+            if len(parts) >= 2:
+                first_name = " ".join(parts[:-1])
+                last_name = parts[-1]
+            else:
+                first_name = name.strip()
+                last_name = ''
+            rows.append(f'{student_id},{last_name},{first_name},{score}')
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(rows))
+
+    # Write manifest
+    manifest = {
+        "format": fmt,
+        "assignment": assignment,
+        "total_points": total_points,
+        "exported_at": datetime.now().isoformat(),
+        "file": filename,
+        "count": len(results),
+        "export_dir": export_dir,
+    }
+
+    manifest_path = os.path.join(export_dir, "manifest.json")
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+
+    # Open exports folder (local dev only)
+    try:
+        subprocess.Popen(['open', export_dir])
+    except Exception:
+        pass
+
+    return jsonify(manifest)
+
+
 @grading_bp.route('/api/export-focus-comments', methods=['POST'])
 def export_focus_comments():
     """

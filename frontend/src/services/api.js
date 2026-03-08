@@ -1012,6 +1012,34 @@ export async function createPortalSession() {
   return fetchApi('/api/stripe/create-portal-session', { method: 'POST' })
 }
 
+// ============ Reading Level Adjustment ============
+
+export async function adjustReadingLevel(text, targetLevel, subject, preserveTerms) {
+  return fetchApi('/api/adjust-reading-level', {
+    method: 'POST',
+    body: JSON.stringify({
+      text,
+      target_level: targetLevel,
+      subject: subject || '',
+      preserve_terms: preserveTerms || [],
+    }),
+  })
+}
+
+// ============ LMS Grade Export ============
+
+export async function exportLmsCsv(results, assignment, totalPoints, format) {
+  return fetchApi('/api/export-lms-csv', {
+    method: 'POST',
+    body: JSON.stringify({
+      results,
+      assignment,
+      total_points: totalPoints,
+      format,
+    }),
+  })
+}
+
 // ============ Cost Tracking ============
 
 export async function getPlannerCosts() {
@@ -1098,10 +1126,26 @@ export async function notebookLMLogin(step) {
   })
 }
 
-export async function notebookLMCreateNotebook(plan, standards, config) {
+export async function notebookLMUploadContext(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const authHeaders = await getAuthHeaders()
+  const response = await fetch('/api/notebooklm/upload-context', {
+    method: 'POST',
+    headers: { ...authHeaders },
+    body: formData,
+  })
+  return response.json()
+}
+
+export async function notebookLMCreateNotebook(plan, standards, config, supportDocPaths) {
+  const body = { plan: plan, standards: standards, config: config }
+  if (supportDocPaths && supportDocPaths.length > 0) {
+    body.support_doc_paths = supportDocPaths
+  }
   return fetchApi('/api/notebooklm/create-notebook', {
     method: 'POST',
-    body: JSON.stringify({ plan: plan, standards: standards, config: config }),
+    body: JSON.stringify(body),
   })
 }
 
@@ -1285,6 +1329,9 @@ export default {
   getSubscriptionStatus,
   createCheckoutSession,
   createPortalSession,
+  // Reading Level / LMS Export
+  adjustReadingLevel,
+  exportLmsCsv,
   // Cost Tracking
   getPlannerCosts,
   getAssistantCosts,
@@ -1306,6 +1353,7 @@ export default {
   // NotebookLM Materials
   notebookLMAuthStatus,
   notebookLMLogin,
+  notebookLMUploadContext,
   notebookLMCreateNotebook,
   notebookLMGenerate,
   notebookLMStatus,

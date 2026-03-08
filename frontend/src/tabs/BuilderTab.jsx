@@ -49,7 +49,7 @@ import * as api from "../services/api";
  *   - markerLibrary
  */
 
-export default function BuilderTab({
+export default React.memo(function BuilderTab({
   assignment,
   setAssignment,
   savedAssignments,
@@ -1863,4 +1863,4 @@ export default function BuilderTab({
                   </div>
                 </div>
   );
-}
+});

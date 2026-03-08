@@ -5,7 +5,7 @@ import { getAuthHeaders } from "../services/api";
 import { RUBRIC_PRESETS } from "../data/rubricPresets";
 import OnboardingWizard from "../components/OnboardingWizard";
 
-export default function SettingsTab({
+export default React.memo(function SettingsTab({
   settingsTab,
   setSettingsTab,
   config,
@@ -5964,4 +5964,4 @@ export default function SettingsTab({
       )}
     </>
   );
-}
+});

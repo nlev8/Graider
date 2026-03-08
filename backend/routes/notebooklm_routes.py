@@ -92,6 +92,43 @@ def nlm_login():
         return jsonify({"error": str(e)})
 
 
+ALLOWED_CONTEXT_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt"}
+
+
+@notebooklm_bp.route("/api/notebooklm/upload-context", methods=["POST"])
+def nlm_upload_context():
+    """Upload a reference document (PDF, image, docx) for NotebookLM context."""
+    teacher_id = _get_teacher_id()
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_CONTEXT_EXTENSIONS:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
+    upload_dir = os.path.expanduser(f"~/.graider_notebooklm/context_uploads/{teacher_id}")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Use original filename, avoid overwrites with a counter
+    base, extension = os.path.splitext(file.filename)
+    save_path = os.path.join(upload_dir, file.filename)
+    counter = 1
+    while os.path.exists(save_path):
+        save_path = os.path.join(upload_dir, f"{base}_{counter}{extension}")
+        counter += 1
+
+    file.save(save_path)
+    return jsonify({
+        "path": save_path,
+        "filename": os.path.basename(save_path),
+        "size": os.path.getsize(save_path),
+    })
+
+
 @notebooklm_bp.route("/api/notebooklm/create-notebook", methods=["POST"])
 def nlm_create_notebook():
     if not _check_nlm_available():
