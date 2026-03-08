@@ -173,12 +173,12 @@ body {
     }
 
     .logo-brain {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
     }
 
     .logo-wordmark {
-        height: 36px;
+        height: 32px;
     }
 
     .nav-container {
@@ -199,13 +199,13 @@ body {
 }
 
 .logo-brain {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
 }
 
 .logo-wordmark {
-    height: 44px;
+    height: 40px;
     width: auto;
     object-fit: contain;
 }
