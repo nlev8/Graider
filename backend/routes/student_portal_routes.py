@@ -375,6 +375,28 @@ def get_assessment_for_student(code):
         assessment = data.get('assessment', {})
         settings = data.get('settings', {})
 
+        # Shared material content (NotebookLM) — return directly
+        content_type = settings.get('content_type') or assessment.get('content_type')
+        if content_type and content_type != 'assessment':
+            resp = {
+                "content_type": content_type,
+                "title": assessment.get('title', data.get('title', content_type)),
+                "teacher": data.get('teacher_name', 'Teacher'),
+            }
+            # JSON types: quiz, flashcards, mind_map
+            if assessment.get('data'):
+                resp["data"] = assessment['data']
+            # Legacy flashcards format
+            if assessment.get('cards'):
+                resp["data"] = assessment['cards']
+            # Text types: study_guide
+            if assessment.get('content'):
+                resp["content"] = assessment['content']
+            # Media types: provide URL
+            if assessment.get('shared_file'):
+                resp["media_url"] = "/api/student/shared-media/" + code
+            return jsonify(resp)
+
         # Remove answers from questions before sending to student
         sanitized_sections = []
         for section in assessment.get('sections', []):

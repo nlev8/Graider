@@ -234,7 +234,7 @@ def cleanup_stale_states():
 
 
 def cleanup_expired_materials():
-    """Delete NotebookLM artifacts older than RETENTION_DAYS."""
+    """Delete NotebookLM artifacts older than RETENTION_DAYS (local + remote)."""
     if not os.path.exists(NOTEBOOKLM_DATA_DIR):
         return
     cutoff = time.time() - (RETENTION_DAYS * 86400)
@@ -245,6 +245,17 @@ def cleanup_expired_materials():
         meta_path = os.path.join(dirpath, "metadata.json")
         if os.path.exists(meta_path):
             if os.path.getmtime(meta_path) < cutoff:
+                # Try to delete remote notebook too
+                try:
+                    with open(meta_path, "r") as f:
+                        meta = json.load(f)
+                    nb_id = meta.get("notebook_id")
+                    teacher_id = meta.get("teacher_id", "local-dev")
+                    if nb_id:
+                        storage_path = _resolve_storage_path(teacher_id)
+                        asyncio.run(_delete_notebook(nb_id, storage_path))
+                except Exception:
+                    pass  # Best-effort
                 import shutil
                 shutil.rmtree(dirpath, ignore_errors=True)
 
@@ -486,6 +497,17 @@ async def _create_notebook_with_sources(title, sources_list, storage_path=None):
         return nb.id
 
 
+async def _delete_notebook(notebook_id, storage_path=None):
+    """Delete a notebook from Google NotebookLM."""
+    from notebooklm import NotebookLMClient
+    if storage_path:
+        client_ctx = await NotebookLMClient.from_storage(path=storage_path)
+    else:
+        client_ctx = await NotebookLMClient.from_storage()
+    async with client_ctx as client:
+        await client.notebooks.delete(notebook_id)
+
+
 def _resolve_storage_path(teacher_id):
     """Find the best available storage path for a teacher."""
     per_user = _get_storage_path(teacher_id)
@@ -499,14 +521,22 @@ def _resolve_storage_path(teacher_id):
 
 def create_notebook(title, plan, standards, config, teacher_id="local-dev", support_doc_paths=None):
     """Create NotebookLM notebook with lesson plan as source. Synchronous wrapper."""
-    source_text = format_lesson_plan_as_source(plan, standards, config)
-    sources = [{"type": "text", "title": title, "content": source_text}]
+    sources = []
+
+    # Only add lesson plan text if the plan has actual content
+    if plan and (plan.get("title") or plan.get("days") or plan.get("overview") or plan.get("sections") or plan.get("phases")):
+        source_text = format_lesson_plan_as_source(plan, standards, config)
+        sources.append({"type": "text", "title": title, "content": source_text})
 
     # Add support documents as file sources
     if support_doc_paths:
         for doc_path in support_doc_paths:
             if os.path.exists(doc_path):
                 sources.append({"type": "file", "path": doc_path})
+
+    # Must have at least one source
+    if not sources:
+        raise ValueError("No content provided. Upload reference documents or generate a lesson plan first.")
 
     storage_path = _resolve_storage_path(teacher_id)
     notebook_id = asyncio.run(
@@ -548,9 +578,10 @@ async def _generate_single_material(notebook_id, material_type, options, output_
 
     async with client_ctx as client:
         from notebooklm.rpc.types import (
-            AudioFormat, AudioLength, VideoStyle,
+            AudioFormat, AudioLength, VideoFormat, VideoStyle,
             QuizQuantity, QuizDifficulty, ReportFormat,
-            SlideDeckFormat, InfographicOrientation,
+            SlideDeckFormat, SlideDeckLength,
+            InfographicOrientation, InfographicDetail,
         )
 
         # Enum lookup helpers
@@ -561,22 +592,32 @@ async def _generate_single_material(notebook_id, material_type, options, output_
         _audio_len = {
             "short": AudioLength.SHORT, "medium": AudioLength.DEFAULT, "long": AudioLength.LONG,
         }
+        _video_fmt = {
+            "explainer": VideoFormat.EXPLAINER, "brief": VideoFormat.BRIEF,
+        }
         _video_style = {
-            "classic": VideoStyle.CLASSIC, "whiteboard": VideoStyle.WHITEBOARD,
-            "kawaii": VideoStyle.KAWAII, "anime": VideoStyle.ANIME,
-            "watercolor": VideoStyle.WATERCOLOR, "retro_print": VideoStyle.RETRO_PRINT,
+            "auto": VideoStyle.AUTO_SELECT, "classic": VideoStyle.CLASSIC,
+            "whiteboard": VideoStyle.WHITEBOARD, "kawaii": VideoStyle.KAWAII,
+            "anime": VideoStyle.ANIME, "watercolor": VideoStyle.WATERCOLOR,
+            "retro_print": VideoStyle.RETRO_PRINT, "heritage": VideoStyle.HERITAGE,
+            "paper_craft": VideoStyle.PAPER_CRAFT,
         }
         _quiz_qty = {"fewer": QuizQuantity.FEWER, "standard": QuizQuantity.STANDARD}
         _quiz_diff = {"easy": QuizDifficulty.EASY, "medium": QuizDifficulty.MEDIUM, "hard": QuizDifficulty.HARD}
         _report_fmt = {
             "study_guide": ReportFormat.STUDY_GUIDE, "briefing_doc": ReportFormat.BRIEFING_DOC,
-            "blog_post": ReportFormat.BLOG_POST,
+            "blog_post": ReportFormat.BLOG_POST, "custom": ReportFormat.CUSTOM,
         }
         _slide_fmt = {"detailed": SlideDeckFormat.DETAILED_DECK, "presenter": SlideDeckFormat.PRESENTER_SLIDES}
+        _slide_len = {"default": SlideDeckLength.DEFAULT, "short": SlideDeckLength.SHORT}
         _infographic_orient = {
             "portrait": InfographicOrientation.PORTRAIT,
             "landscape": InfographicOrientation.LANDSCAPE,
             "square": InfographicOrientation.SQUARE,
+        }
+        _infographic_detail = {
+            "concise": InfographicDetail.CONCISE, "standard": InfographicDetail.STANDARD,
+            "detailed": InfographicDetail.DETAILED,
         }
 
         if material_type == "audio_overview":
@@ -593,7 +634,8 @@ async def _generate_single_material(notebook_id, material_type, options, output_
         elif material_type == "video_overview":
             status = await client.artifacts.generate_video(
                 notebook_id,
-                video_style=_video_style.get(options.get("style", "classic"), VideoStyle.CLASSIC),
+                video_format=_video_fmt.get(options.get("video_format", "explainer"), VideoFormat.EXPLAINER),
+                video_style=_video_style.get(options.get("style", "auto"), VideoStyle.AUTO_SELECT),
                 language=options.get("language", "en"),
                 instructions=options.get("instructions") or None,
             )
@@ -628,6 +670,13 @@ async def _generate_single_material(notebook_id, material_type, options, output_
                     language=options.get("language", "en"),
                     extra_instructions=options.get("instructions") or None,
                 )
+            elif fmt == "custom":
+                status = await client.artifacts.generate_report(
+                    notebook_id,
+                    report_format=ReportFormat.CUSTOM,
+                    language=options.get("language", "en"),
+                    custom_prompt=options.get("custom_prompt") or options.get("instructions") or None,
+                )
             else:
                 status = await client.artifacts.generate_report(
                     notebook_id,
@@ -642,6 +691,7 @@ async def _generate_single_material(notebook_id, material_type, options, output_
             status = await client.artifacts.generate_slide_deck(
                 notebook_id,
                 slide_format=_slide_fmt.get(options.get("format", "detailed"), SlideDeckFormat.DETAILED_DECK),
+                slide_length=_slide_len.get(options.get("length", "default"), SlideDeckLength.DEFAULT),
                 language=options.get("language", "en"),
                 instructions=options.get("instructions") or None,
             )
@@ -659,6 +709,7 @@ async def _generate_single_material(notebook_id, material_type, options, output_
             status = await client.artifacts.generate_infographic(
                 notebook_id,
                 orientation=_infographic_orient.get(options.get("orientation", "portrait"), InfographicOrientation.PORTRAIT),
+                detail_level=_infographic_detail.get(options.get("detail_level", "standard"), InfographicDetail.STANDARD),
                 instructions=options.get("instructions") or None,
             )
             await client.artifacts.wait_for_completion(notebook_id, status.task_id)
@@ -694,18 +745,38 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
 
             try:
                 mat_options = dict(options.get(mat_type, {}))
-                # Merge global instructions into per-material options
-                global_instructions = options.get("_global", {}).get("instructions", "")
+                # Merge global settings into per-material options
+                global_opts = options.get("_global", {})
+                global_instructions = global_opts.get("instructions", "")
                 if global_instructions:
                     existing = mat_options.get("instructions", "")
                     mat_options["instructions"] = (global_instructions + ". " + existing).strip(". ") if existing else global_instructions
-                out_path = asyncio.run(
-                    _generate_single_material(
-                        notebook_id, mat_type, mat_options, output_dir, storage_path
-                    )
-                )
-                state["materials"][mat_type] = out_path
-                state["completed"].append(mat_type)
+                # Apply global language if not set per-material
+                if "language" not in mat_options and global_opts.get("language"):
+                    mat_options["language"] = global_opts["language"]
+
+                # Retry once on transient null-result / RPC errors
+                last_err = None
+                for attempt in range(2):
+                    try:
+                        out_path = asyncio.run(
+                            _generate_single_material(
+                                notebook_id, mat_type, mat_options, output_dir, storage_path
+                            )
+                        )
+                        state["materials"][mat_type] = out_path
+                        state["completed"].append(mat_type)
+                        last_err = None
+                        break
+                    except Exception as retry_err:
+                        last_err = retry_err
+                        if attempt == 0 and "returned null" in str(retry_err):
+                            import time as _time
+                            _time.sleep(3)  # Brief pause before retry
+                            continue
+                        raise
+                if last_err:
+                    raise last_err
             except Exception as e:
                 state["errors"].append(mat_type + ": " + str(e))
 
@@ -713,3 +784,9 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
     finally:
         state["is_running"] = False
         _save_state(teacher_id, state)
+
+        # Clean up remote notebook — all materials are downloaded locally
+        try:
+            asyncio.run(_delete_notebook(notebook_id, storage_path))
+        except Exception:
+            pass  # Best-effort cleanup; don't fail the generation

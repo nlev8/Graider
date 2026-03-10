@@ -1178,8 +1178,10 @@ export async function notebookLMDownload(materialType) {
   a.download = materialType + '.' + (extMap[materialType] || 'bin')
   document.body.appendChild(a)
   a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  setTimeout(function() {
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, 100)
 }
 
 export async function notebookLMPreview(materialType) {
@@ -1194,6 +1196,17 @@ export async function notebookLMRetry(options) {
   return fetchApi('/api/notebooklm/retry', {
     method: 'POST',
     body: JSON.stringify({ options: options || {} }),
+  })
+}
+
+export async function shareMaterial(materialType, title, teacherName) {
+  return fetchApi('/api/notebooklm/share-material', {
+    method: 'POST',
+    body: JSON.stringify({
+      material_type: materialType,
+      title: title || materialType,
+      teacher_name: teacherName || 'Teacher',
+    }),
   })
 }
 
@@ -1361,4 +1374,5 @@ export default {
   notebookLMPreview,
   notebookLMCancel,
   notebookLMRetry,
+  shareMaterial,
 }

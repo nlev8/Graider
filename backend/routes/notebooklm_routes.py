@@ -356,3 +356,137 @@ def nlm_retry():
     )
     thread.start()
     return jsonify({"status": "retrying", "materials": failed_types})
+
+
+@notebooklm_bp.route("/api/notebooklm/share-material", methods=["POST"])
+def share_material():
+    """Publish any NotebookLM material for students via join code."""
+    from backend.supabase_client import get_supabase_or_raise as get_supabase
+    from backend.routes.student_portal_routes import generate_join_code
+    from backend.services.notebooklm_service import (
+        get_generation_state, MATERIAL_EXTENSIONS
+    )
+    import shutil
+
+    data = request.json or {}
+    material_type = data.get("material_type")
+    title = data.get("title", material_type or "Material")
+
+    if not material_type:
+        return jsonify({"error": "No material_type provided"}), 400
+
+    teacher_id = _get_teacher_id()
+    state = get_generation_state(teacher_id)
+
+    # JSON-storable types: store data inline
+    json_types = ("quiz", "flashcards", "mind_map")
+    text_types = ("study_guide",)
+    # Media types: copy file and store path
+    media_types = ("audio_overview", "video_overview", "infographic",
+                   "data_table", "slide_deck")
+
+    assessment_data = {"content_type": material_type, "title": title}
+
+    if material_type in json_types:
+        file_path = state.get("materials", {}).get(material_type)
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "Material not generated yet"}), 404
+        with open(file_path, "r") as f:
+            assessment_data["data"] = json.load(f)
+
+    elif material_type in text_types:
+        file_path = state.get("materials", {}).get(material_type)
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "Material not generated yet"}), 404
+        with open(file_path, "r") as f:
+            assessment_data["content"] = f.read()
+
+    elif material_type in media_types:
+        file_path = state.get("materials", {}).get(material_type)
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "Material not generated yet"}), 404
+        # Copy file to shared directory keyed by a unique name
+        from backend.services.notebooklm_service import NOTEBOOKLM_DATA_DIR
+        shared_dir = os.path.join(NOTEBOOKLM_DATA_DIR, "shared")
+        os.makedirs(shared_dir, exist_ok=True)
+        ext = MATERIAL_EXTENSIONS.get(material_type, "bin")
+        # Use timestamp to avoid collisions
+        import time
+        shared_filename = f"{material_type}_{int(time.time())}.{ext}"
+        shared_path = os.path.join(shared_dir, shared_filename)
+        shutil.copy2(file_path, shared_path)
+        assessment_data["shared_file"] = shared_filename
+    else:
+        return jsonify({"error": f"Unknown material type: {material_type}"}), 400
+
+    try:
+        db = get_supabase()
+        code = generate_join_code()
+
+        db.table("published_assessments").insert({
+            "join_code": code,
+            "title": title,
+            "assessment": assessment_data,
+            "settings": {"content_type": material_type},
+            "teacher_name": data.get("teacher_name", "Teacher"),
+            "is_active": True,
+        }).execute()
+
+        host = request.host_url.rstrip("/")
+        return jsonify({
+            "success": True,
+            "join_code": code,
+            "join_link": host + "/join/" + code,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@notebooklm_bp.route("/api/student/shared-media/<code>")
+def serve_shared_media(code):
+    """Serve media files for shared materials (student-accessible)."""
+    from backend.supabase_client import get_supabase_or_raise as get_supabase
+    from backend.services.notebooklm_service import (
+        NOTEBOOKLM_DATA_DIR, MATERIAL_EXTENSIONS
+    )
+
+    try:
+        db = get_supabase()
+        result = db.table("published_assessments").select(
+            "assessment, settings, is_active"
+        ).eq("join_code", code.upper()).execute()
+
+        if not result.data:
+            return jsonify({"error": "Not found"}), 404
+
+        record = result.data[0]
+        if not record.get("is_active", True):
+            return jsonify({"error": "No longer available"}), 403
+
+        assessment = record.get("assessment", {})
+        shared_filename = assessment.get("shared_file")
+        if not shared_filename:
+            return jsonify({"error": "No media file"}), 404
+
+        shared_dir = os.path.join(NOTEBOOKLM_DATA_DIR, "shared")
+        file_path = os.path.join(shared_dir, shared_filename)
+
+        if not os.path.exists(file_path):
+            return jsonify({"error": "File not found"}), 404
+
+        material_type = assessment.get("content_type", "")
+        ext = MATERIAL_EXTENSIONS.get(material_type, "bin")
+        mime_types = {
+            "mp3": "audio/mpeg", "mp4": "video/mp4",
+            "json": "application/json", "md": "text/markdown",
+            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "png": "image/png", "csv": "text/csv",
+        }
+        return send_file(
+            file_path,
+            mimetype=mime_types.get(ext, "application/octet-stream"),
+            as_attachment=False,
+            download_name=material_type + "." + ext,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

@@ -38,6 +38,7 @@ import AutomationBuilder from "./components/AutomationBuilder";
 import BehaviorPanel from "./components/BehaviorPanel";
 import MatchingCards from "./components/MatchingCards";
 import MindMapView from "./components/MindMapView";
+import FlashcardView from "./components/FlashcardView";
 
 // Inline CSV table preview — fetches CSV from URL and renders as HTML table
 function DataTablePreview({ url }) {
@@ -1464,7 +1465,10 @@ function App() {
   const [nlmCompleted, setNlmCompleted] = useState([]);
   const [nlmErrors, setNlmErrors] = useState([]);
   const [nlmMaterials, setNlmMaterials] = useState({});
-  const [showNlmPanel, setShowNlmPanel] = useState(false);
+  const [nlmContextFiles, setNlmContextFiles] = useState([]);
+  const [nlmIncludePlan, setNlmIncludePlan] = useState(false);
+  const [nlmUploading, setNlmUploading] = useState(false);
+  const [nlmDownloading, setNlmDownloading] = useState(null);
   const [nlmSelectedMaterials, setNlmSelectedMaterials] = useState({
     audio_overview: false, video_overview: false, quiz: false,
     flashcards: false, study_guide: false, slide_deck: false,
@@ -1472,7 +1476,14 @@ function App() {
   });
   const [nlmOptions, setNlmOptions] = useState({});
   const [nlmPreviewData, setNlmPreviewData] = useState(null);
+  const [nlmShareResult, setNlmShareResult] = useState(null);
   const [nlmTotalSelected, setNlmTotalSelected] = useState(0);
+  const [rlInput, setRlInput] = useState('');
+  const [rlTargetLevel, setRlTargetLevel] = useState('6');
+  const [rlPreserveTerms, setRlPreserveTerms] = useState([]);
+  const [rlTermInput, setRlTermInput] = useState('');
+  const [rlLoading, setRlLoading] = useState(false);
+  const [rlResult, setRlResult] = useState(null);
 
   var NLM_MATERIAL_TYPES = [
     { id: "audio_overview", label: "Audio Overview", icon: "Headphones" },
@@ -1501,7 +1512,7 @@ function App() {
     setNlmCompleted([]);
     setNlmMaterials({});
     setNlmErrors([]);
-    setShowNlmPanel(false);
+    setNlmContextFiles([]);
     setEditingQuestion(null);
     setRegeneratingQuestions(new Set());
   }, [lessonPlan, generatedAssignment]);
@@ -2410,6 +2421,7 @@ function App() {
         setNlmMaterials(data.materials || {});
         if (!data.is_running) {
           setNlmGenerating(false);
+          setNlmNotebookId(null); // Remote notebook is deleted after generation
           clearInterval(interval);
           if (data.errors && data.errors.length > 0) {
             addToast("Some materials failed: " + data.errors.join(", "), "warning");
@@ -4432,6 +4444,13 @@ ${signature}`;
       return;
     }
 
+    // Must have a plan (when included) OR context files
+    var planToUse = nlmIncludePlan ? lessonPlan : null;
+    if (!planToUse && nlmContextFiles.length === 0) {
+      addToast("Upload reference documents or generate a lesson plan first", "warning");
+      return;
+    }
+
     try {
       setNlmGenerating(true);
       setNlmTotalSelected(selected.length);
@@ -4450,8 +4469,9 @@ ${signature}`;
           return std || { code: code };
         });
         var nbData = await api.notebookLMCreateNotebook(
-          lessonPlan, enrichedStandards,
-          { subject: config.subject, grade: config.grade_level }
+          planToUse || {}, enrichedStandards,
+          { subject: config.subject, grade: config.grade_level },
+          nlmContextFiles.map(function(f) { return f.path; })
         );
         if (nbData.error) {
           if (nbData.needs_login) {
@@ -9744,6 +9764,7 @@ ${signature}`;
                       display: "flex",
                       gap: "10px",
                       marginBottom: "20px",
+                      flexWrap: "wrap",
                     }}
                   >
                     <button
@@ -9846,6 +9867,31 @@ ${signature}`;
                     >
                       <Icon name="Calendar" size={18} />
                       Calendar
+                    </button>
+                    <button
+                      onClick={() => { setNlmIncludePlan(false); setPlannerMode("tools"); }}
+                      style={{
+                        padding: "10px 20px",
+                        cursor: "pointer",
+                        fontSize: "0.9rem",
+                        background:
+                          plannerMode === "tools"
+                            ? "linear-gradient(135deg, #06b6d4, #0891b2)"
+                            : "var(--glass-bg)",
+                        border:
+                          plannerMode === "tools"
+                            ? "none"
+                            : "1px solid var(--glass-border)",
+                        color: plannerMode === "tools" ? "#fff" : "var(--text-secondary)",
+                        fontWeight: 600,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="Wrench" size={18} />
+                      Tools
                     </button>
                   </div>
 
@@ -10934,47 +10980,10 @@ ${signature}`;
                               >
                                 <Icon name="FolderPlus" size={16} /> Save to Unit
                               </button>
-                              {/* NotebookLM Materials */}
                               <button
-                                onClick={function() {
-                                  if (!nlmAuthenticated) {
-                                    if (confirm("Connect your Google account to NotebookLM? A browser window will open for Google login.")) {
-                                      api.notebookLMLogin("start").then(function(res) {
-                                        if (res.already_authenticated) {
-                                          setNlmAuthenticated(true);
-                                          setShowNlmPanel(true);
-                                          addToast("Already connected to NotebookLM!", "success");
-                                        } else if (res.browser_opened) {
-                                          addToast("Complete Google login in the browser window, then come back here.", "info");
-                                          // Show a confirm dialog — when user clicks OK, complete the login
-                                          var checkLogin = function() {
-                                            if (confirm("Click OK after you have logged in to Google in the browser window.")) {
-                                              api.notebookLMLogin("complete").then(function(res2) {
-                                                if (res2.success) {
-                                                  setNlmAuthenticated(true);
-                                                  setShowNlmPanel(true);
-                                                  addToast("Connected to NotebookLM!", "success");
-                                                } else {
-                                                  addToast("Login not detected. Try again.", "error");
-                                                }
-                                              }).catch(function(e) { addToast("Login failed: " + e.message, "error"); });
-                                            } else {
-                                              api.notebookLMLogin("cancel").catch(function() {});
-                                            }
-                                          };
-                                          // Small delay to let browser open before showing confirm
-                                          setTimeout(checkLogin, 1500);
-                                        } else if (res.error) {
-                                          addToast("Login error: " + res.error, "error");
-                                        }
-                                      }).catch(function(e) { addToast("Login failed: " + e.message, "error"); });
-                                    }
-                                  } else {
-                                    setShowNlmPanel(function(prev) { return !prev; });
-                                  }
-                                }}
-                                className={showNlmPanel ? "btn btn-primary" : "btn btn-secondary"}
-                                style={{ padding: "8px 14px", ...(showNlmPanel ? { background: "linear-gradient(135deg, #ec4899, #8b5cf6)" } : {}) }}
+                                onClick={() => { setNlmIncludePlan(true); setNlmNotebookId(null); setPlannerMode("tools"); }}
+                                className="btn btn-secondary"
+                                style={{ padding: "8px 14px", background: "linear-gradient(135deg, rgba(236,72,153,0.15), rgba(139,92,246,0.15))", border: "1px solid rgba(139,92,246,0.3)" }}
                                 title="Generate study materials with NotebookLM"
                               >
                                 <Icon name="Sparkles" size={16} /> Materials
@@ -11038,330 +11047,6 @@ ${signature}`;
                             </div>
                           </div>
 
-                          {/* NotebookLM Materials Panel */}
-                          {showNlmPanel && lessonPlan && (
-                            <div className="glass-card" style={{ padding: "20px", marginTop: "15px" }}>
-                              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
-                                <Icon name="Sparkles" size={20} /> NotebookLM Materials
-                              </h3>
-                              <p style={{ color: "var(--text-secondary)", marginBottom: "15px", fontSize: "0.9rem" }}>
-                                Generate study materials from your lesson plan using Google NotebookLM.
-                              </p>
-
-                              {/* Material type checkboxes */}
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "15px" }}>
-                                {NLM_MATERIAL_TYPES.map(function(mt) {
-                                  return (
-                                    <label key={mt.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", padding: "8px 10px", borderRadius: "8px", background: nlmSelectedMaterials[mt.id] ? "var(--bg-hover)" : "transparent", transition: "background 0.2s" }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={nlmSelectedMaterials[mt.id]}
-                                        onChange={function() { setNlmSelectedMaterials(function(prev) { var next = Object.assign({}, prev); next[mt.id] = !prev[mt.id]; return next; }); }}
-                                      />
-                                      <Icon name={mt.icon} size={16} />
-                                      <span style={{ fontSize: "0.9rem" }}>{mt.label}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Audio options */}
-                              {nlmSelectedMaterials.audio_overview && (
-                                <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
-                                  <div>
-                                    <label className="label" style={{ fontSize: "0.8rem" }}>Audio Format</label>
-                                    <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.audio_overview || {}).format || "deep-dive"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { audio_overview: Object.assign({}, prev.audio_overview, { format: e.target.value }) }); }); }}>
-                                      <option value="deep-dive">Deep Dive</option>
-                                      <option value="brief">Brief Summary</option>
-                                      <option value="critique">Critique</option>
-                                      <option value="debate">Debate</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="label" style={{ fontSize: "0.8rem" }}>Length</label>
-                                    <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.audio_overview || {}).length || "medium"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { audio_overview: Object.assign({}, prev.audio_overview, { length: e.target.value }) }); }); }}>
-                                      <option value="short">Short</option>
-                                      <option value="medium">Medium</option>
-                                      <option value="long">Long</option>
-                                    </select>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Video options */}
-                              {nlmSelectedMaterials.video_overview && (
-                                <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-                                  <div>
-                                    <label className="label" style={{ fontSize: "0.8rem" }}>Visual Style</label>
-                                    <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.video_overview || {}).style || "classic"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { video_overview: Object.assign({}, prev.video_overview, { style: e.target.value }) }); }); }}>
-                                      <option value="classic">Classic</option>
-                                      <option value="whiteboard">Whiteboard</option>
-                                      <option value="kawaii">Kawaii</option>
-                                      <option value="anime">Anime</option>
-                                    </select>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Custom instructions */}
-                              <div style={{ marginBottom: "10px" }}>
-                                <label className="label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Custom Instructions (optional)</label>
-                                <textarea
-                                  className="input"
-                                  rows={2}
-                                  placeholder="e.g., Content is for 6th graders even though standards are 8th grade. Focus on vocabulary. Use simple language for ELL students."
-                                  value={(nlmOptions._global || {}).instructions || ""}
-                                  onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { _global: Object.assign({}, prev._global, { instructions: e.target.value }) }); }); }}
-                                  style={{ width: "100%", fontSize: "0.85rem", resize: "vertical", minHeight: "48px" }}
-                                />
-                              </div>
-
-                              {/* Generate / Cancel / Retry buttons */}
-                              <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "10px", flexWrap: "wrap" }}>
-                                <button
-                                  onClick={handleNlmGenerate}
-                                  className="btn btn-primary"
-                                  disabled={nlmGenerating || !Object.values(nlmSelectedMaterials).some(function(v) { return v; })}
-                                  style={{ background: "linear-gradient(135deg, #ec4899, #8b5cf6)", padding: "10px 20px" }}
-                                >
-                                  {nlmGenerating
-                                    ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Loader", size: 16, className: "spinning" }), " Generating...")
-                                    : React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Sparkles", size: 16 }), " Generate Materials")
-                                  }
-                                </button>
-                                {nlmGenerating && (
-                                  <button onClick={function() {
-                                    api.notebookLMCancel().then(function() {
-                                      setNlmGenerating(false);
-                                      addToast("Generation cancelled", "info");
-                                    });
-                                  }} className="btn btn-secondary" style={{ padding: "6px 12px" }}>
-                                    <Icon name="X" size={14} /> Cancel
-                                  </button>
-                                )}
-                                {!nlmGenerating && nlmErrors.length > 0 && (
-                                  <button onClick={function() {
-                                    setNlmGenerating(true);
-                                    api.notebookLMRetry(nlmOptions).then(function(data) {
-                                      if (data.error) {
-                                        addToast(data.error, "error");
-                                        setNlmGenerating(false);
-                                      }
-                                    });
-                                  }} className="btn btn-secondary" style={{ padding: "6px 12px", color: "var(--warning)" }}>
-                                    <Icon name="RefreshCw" size={14} /> Retry Failed
-                                  </button>
-                                )}
-                                {nlmGenerating && (
-                                  <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                                    {nlmCompleted.length} / {nlmTotalSelected} complete
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Progress */}
-                              {nlmProgress.length > 0 && (
-                                <div style={{ marginTop: "15px" }}>
-                                  {/* Progress bar */}
-                                  {nlmGenerating && (
-                                    <div style={{ marginBottom: "12px" }}>
-                                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                                        <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>
-                                          {nlmCompleted.length} of {nlmTotalSelected} materials complete
-                                        </span>
-                                        <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                                          {nlmTotalSelected > 0 ? Math.round((nlmCompleted.length / nlmTotalSelected) * 100) : 0}%
-                                        </span>
-                                      </div>
-                                      <div style={{ height: "8px", borderRadius: "4px", background: "rgba(139, 92, 246, 0.15)", overflow: "hidden" }}>
-                                        <div style={{
-                                          height: "100%",
-                                          borderRadius: "4px",
-                                          background: "linear-gradient(90deg, #8b5cf6, #ec4899)",
-                                          width: (nlmTotalSelected > 0 ? Math.round((nlmCompleted.length / nlmTotalSelected) * 100) : 0) + "%",
-                                          transition: "width 0.5s ease",
-                                        }} />
-                                      </div>
-                                    </div>
-                                  )}
-                                  {/* Per-material status */}
-                                  {nlmProgress.map(function(msg, i) {
-                                    var isDone = nlmCompleted.indexOf(msg.type) !== -1;
-                                    var hasError = nlmErrors.some(function(e) { return e.indexOf(msg.type) === 0; });
-                                    var isActive = nlmGenerating && !isDone && !hasError && i === nlmProgress.length - 1 + (nlmErrors.length > 0 ? -nlmErrors.length : 0);
-                                    var mt = NLM_MATERIAL_TYPES.find(function(m) { return m.id === msg.type; });
-                                    return (
-                                      <div key={i} style={{
-                                        display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.85rem", padding: "6px 10px", marginBottom: "4px", borderRadius: "8px",
-                                        background: isDone ? "rgba(34, 197, 94, 0.08)" : hasError ? "rgba(239, 68, 68, 0.08)" : isActive ? "rgba(139, 92, 246, 0.08)" : "transparent",
-                                        color: isDone ? "var(--success)" : hasError ? "var(--error)" : "var(--text-secondary)",
-                                      }}>
-                                        {isDone
-                                          ? React.createElement(Icon, { name: "CheckCircle", size: 16 })
-                                          : hasError
-                                          ? React.createElement(Icon, { name: "XCircle", size: 16 })
-                                          : isActive
-                                          ? React.createElement(Icon, { name: "Loader", size: 16, className: "spinning" })
-                                          : React.createElement(Icon, { name: "Clock", size: 16 })
-                                        }
-                                        <span style={{ fontWeight: isDone || isActive ? 600 : 400 }}>
-                                          {mt ? mt.label : msg.type.replace("_", " ")}
-                                        </span>
-                                        {isDone && (
-                                          <span style={{ marginLeft: "auto", fontSize: "0.75rem", opacity: 0.7 }}>Done</span>
-                                        )}
-                                        {isActive && (
-                                          <span style={{ marginLeft: "auto", fontSize: "0.75rem", opacity: 0.7 }}>Generating...</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                  {nlmErrors.length > 0 && nlmErrors.map(function(err, i) {
-                                    return (
-                                      <div key={"err-" + i} style={{
-                                        display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.85rem", padding: "6px 10px", marginBottom: "4px", borderRadius: "8px",
-                                        background: "rgba(239, 68, 68, 0.08)", color: "var(--error)",
-                                      }}>
-                                        <Icon name="AlertTriangle" size={16} />
-                                        <span>{err}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Completed materials — download/preview */}
-                              {nlmCompleted.length > 0 && !nlmGenerating && (
-                                <div style={{ marginTop: "15px", borderTop: "1px solid var(--border)", paddingTop: "15px" }}>
-                                  <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "10px" }}>Generated Materials</h4>
-                                  {nlmCompleted.map(function(type) {
-                                    var mt = NLM_MATERIAL_TYPES.find(function(m) { return m.id === type; });
-                                    var label = mt ? mt.label : type;
-                                    var icon = mt ? mt.icon : "File";
-                                    var jsonPreviewable = ["quiz", "flashcards", "mind_map", "study_guide"].indexOf(type) !== -1;
-                                    var mediaPreviewable = ["audio_overview", "video_overview", "infographic", "data_table"].indexOf(type) !== -1;
-                                    return (
-                                      <div key={type} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                                        <Icon name={icon} size={16} />
-                                        <span style={{ flex: 1, fontSize: "0.9rem" }}>{label}</span>
-                                        <button onClick={function() { api.notebookLMDownload(type); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
-                                          <Icon name="Download" size={14} /> Download
-                                        </button>
-                                        {jsonPreviewable && (
-                                          <button onClick={function() { handleNlmPreview(type); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
-                                            <Icon name="Eye" size={14} /> Preview
-                                          </button>
-                                        )}
-                                        {mediaPreviewable && (
-                                          <button onClick={function() {
-                                            setNlmPreviewData({ type: type, mediaUrl: "/api/notebooklm/download/" + type + "?inline=1" });
-                                          }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
-                                            <Icon name="Eye" size={14} /> Preview
-                                          </button>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Inline preview */}
-                              {nlmPreviewData && (
-                                <div style={{ marginTop: "15px", borderTop: "1px solid var(--border)", paddingTop: "15px" }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                                    <h4 style={{ fontSize: "1rem", fontWeight: 600 }}>Preview: {(nlmPreviewData.type || "").replace(/_/g, " ")}</h4>
-                                    <button onClick={function() { setNlmPreviewData(null); }} className="btn btn-secondary" style={{ padding: "4px 8px" }}>
-                                      <Icon name="X" size={14} />
-                                    </button>
-                                  </div>
-                                  {/* Mind map — visual tree */}
-                                  {nlmPreviewData.type === "mind_map" && nlmPreviewData.data && (
-                                    <div style={{ background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border)" }}>
-                                      <MindMapView data={nlmPreviewData.data} />
-                                    </div>
-                                  )}
-                                  {/* Study guide — rendered markdown */}
-                                  {nlmPreviewData.type === "study_guide" && nlmPreviewData.content && (
-                                    <div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", fontSize: "0.9rem", maxHeight: "500px", overflow: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                                      {nlmPreviewData.content}
-                                    </div>
-                                  )}
-                                  {/* Quiz / Flashcards — formatted cards */}
-                                  {(nlmPreviewData.type === "quiz" || nlmPreviewData.type === "flashcards") && nlmPreviewData.data && (
-                                    <div style={{ maxHeight: "500px", overflow: "auto" }}>
-                                      {(Array.isArray(nlmPreviewData.data) ? nlmPreviewData.data : nlmPreviewData.data.questions || nlmPreviewData.data.cards || [nlmPreviewData.data]).map(function(item, idx) {
-                                        return (
-                                          <div key={idx} style={{
-                                            background: "var(--bg-secondary)", padding: "14px 16px", borderRadius: "10px",
-                                            marginBottom: "8px", border: "1px solid var(--border)",
-                                          }}>
-                                            <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "6px" }}>
-                                              {nlmPreviewData.type === "flashcards" ? "Card " + (idx + 1) : "Q" + (idx + 1)}
-                                            </div>
-                                            <div style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
-                                              {item.question || item.front || item.term || item.text || JSON.stringify(item)}
-                                            </div>
-                                            {(item.answer || item.back || item.definition || item.correct_answer) && (
-                                              <div style={{ marginTop: "8px", padding: "8px 12px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.08)", fontSize: "0.85rem", color: "var(--success)" }}>
-                                                <strong>Answer:</strong> {item.answer || item.back || item.definition || item.correct_answer}
-                                              </div>
-                                            )}
-                                            {item.options && (
-                                              <div style={{ marginTop: "6px", fontSize: "0.83rem" }}>
-                                                {item.options.map(function(opt, oi) {
-                                                  var isCorrect = opt === item.answer || opt === item.correct_answer || oi === item.correct_index;
-                                                  return (
-                                                    <div key={oi} style={{ padding: "3px 0", color: isCorrect ? "var(--success)" : "var(--text-secondary)" }}>
-                                                      {String.fromCharCode(65 + oi)}) {typeof opt === "string" ? opt : opt.text || JSON.stringify(opt)}
-                                                      {isCorrect ? " " + String.fromCharCode(10003) : ""}
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                  {/* Audio player */}
-                                  {nlmPreviewData.type === "audio_overview" && nlmPreviewData.mediaUrl && (
-                                    <div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", textAlign: "center" }}>
-                                      <audio controls style={{ width: "100%" }} src={nlmPreviewData.mediaUrl}>
-                                        Your browser does not support the audio element.
-                                      </audio>
-                                    </div>
-                                  )}
-                                  {/* Video player */}
-                                  {nlmPreviewData.type === "video_overview" && nlmPreviewData.mediaUrl && (
-                                    <div style={{ background: "var(--bg-secondary)", padding: "12px", borderRadius: "12px", textAlign: "center" }}>
-                                      <video controls style={{ width: "100%", maxHeight: "400px", borderRadius: "8px" }} src={nlmPreviewData.mediaUrl}>
-                                        Your browser does not support the video element.
-                                      </video>
-                                    </div>
-                                  )}
-                                  {/* Infographic image */}
-                                  {nlmPreviewData.type === "infographic" && nlmPreviewData.mediaUrl && (
-                                    <div style={{ background: "var(--bg-secondary)", padding: "12px", borderRadius: "12px", textAlign: "center", maxHeight: "500px", overflow: "auto" }}>
-                                      <img src={nlmPreviewData.mediaUrl} alt="Infographic" style={{ maxWidth: "100%", borderRadius: "8px" }} />
-                                    </div>
-                                  )}
-                                  {/* Data table from CSV */}
-                                  {nlmPreviewData.type === "data_table" && nlmPreviewData.mediaUrl && (
-                                    <DataTablePreview url={nlmPreviewData.mediaUrl} />
-                                  )}
-                                  {/* Fallback — raw JSON */}
-                                  {!["mind_map", "study_guide", "quiz", "flashcards", "audio_overview", "video_overview", "infographic", "data_table"].includes(nlmPreviewData.type) && (
-                                    <pre style={{ background: "var(--bg-secondary)", padding: "15px", borderRadius: "8px", fontSize: "0.85rem", maxHeight: "400px", overflow: "auto", whiteSpace: "pre-wrap" }}>
-                                      {nlmPreviewData.content || JSON.stringify(nlmPreviewData.data, null, 2)}
-                                    </pre>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
 
                           {/* Standards aligned to this content */}
                           {selectedStandards.length > 0 && lessonPlan.sections && (
@@ -15110,6 +14795,543 @@ ${signature}`;
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Tools Mode */}
+                  {plannerMode === "tools" && (
+                    <div className="fade-in">
+                      <div className="glass-card" style={{ padding: "24px" }}>
+                        <h3 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Icon name="BookOpen" size={22} style={{ color: "#06b6d4" }} />
+                          Reading Level Adjuster
+                        </h3>
+                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                          Paste text and adjust it to a target reading level. Key terms you specify will be preserved exactly.
+                        </p>
+                        <textarea
+                          value={rlInput}
+                          onChange={e => setRlInput(e.target.value)}
+                          placeholder="Paste text here to adjust its reading level..."
+                          rows={8}
+                          style={{ width: "100%", padding: "12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem", resize: "vertical", marginBottom: "16px", fontFamily: "inherit" }}
+                        />
+                        <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap", marginBottom: "16px" }}>
+                          <div style={{ flex: "0 0 auto" }}>
+                            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Target Level</label>
+                            <select
+                              value={rlTargetLevel}
+                              onChange={e => setRlTargetLevel(e.target.value)}
+                              style={{ padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                            >
+                              <option value="2">Grade 2</option>
+                              <option value="3">Grade 3</option>
+                              <option value="4">Grade 4</option>
+                              <option value="5">Grade 5</option>
+                              <option value="6">Grade 6</option>
+                              <option value="7">Grade 7</option>
+                              <option value="8">Grade 8</option>
+                              <option value="9">Grade 9</option>
+                              <option value="10">Grade 10</option>
+                              <option value="11">Grade 11</option>
+                              <option value="12">Grade 12</option>
+                              <option value="Simplified">Simplified</option>
+                              <option value="Advanced/AP">Advanced / AP</option>
+                            </select>
+                          </div>
+                          <div style={{ flex: 1, minWidth: "200px" }}>
+                            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Key Terms to Preserve</label>
+                            <div style={{ display: "flex", gap: "6px" }}>
+                              <input
+                                type="text"
+                                value={rlTermInput}
+                                onChange={e => setRlTermInput(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' && rlTermInput.trim()) {
+                                    e.preventDefault()
+                                    setRlPreserveTerms(prev => prev.indexOf(rlTermInput.trim()) === -1 ? prev.concat([rlTermInput.trim()]) : prev)
+                                    setRlTermInput('')
+                                  }
+                                }}
+                                placeholder="Type term and press Enter"
+                                style={{ flex: 1, padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                              />
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!rlInput.trim()) return
+                              setRlLoading(true)
+                              setRlResult(null)
+                              try {
+                                var res = await api.adjustReadingLevel(rlInput, rlTargetLevel, config.subject || '', rlPreserveTerms)
+                                if (res.error) {
+                                  addToast(res.error, 'error')
+                                } else {
+                                  setRlResult(res)
+                                }
+                              } catch (err) {
+                                addToast('Error: ' + err.message, 'error')
+                              } finally {
+                                setRlLoading(false)
+                              }
+                            }}
+                            className="btn btn-primary"
+                            disabled={!rlInput.trim() || rlLoading}
+                            style={{ padding: "8px 20px", background: "linear-gradient(135deg, #06b6d4, #0891b2)" }}
+                          >
+                            {rlLoading ? (
+                              <><Icon name="Loader2" size={16} className="spin" /> Adjusting...</>
+                            ) : (
+                              <><Icon name="Wand2" size={16} /> Adjust</>
+                            )}
+                          </button>
+                        </div>
+                        {rlPreserveTerms.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
+                            {rlPreserveTerms.map(function(term, i) {
+                              return (
+                                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 10px", background: "rgba(6,182,212,0.12)", color: "#06b6d4", borderRadius: "12px", fontSize: "0.8rem", fontWeight: 500 }}>
+                                  {term}
+                                  <button
+                                    onClick={() => setRlPreserveTerms(prev => prev.filter(function(t) { return t !== term }))}
+                                    style={{ background: "none", border: "none", color: "#06b6d4", cursor: "pointer", padding: "0 2px", fontSize: "1rem", lineHeight: 1 }}
+                                  >
+                                    x
+                                  </button>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {rlResult && (
+                          <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "16px", marginTop: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                              <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                                Estimated reading level: <span style={{ color: "#06b6d4", fontWeight: 700 }}>{rlResult.reading_level_estimate}</span>
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(rlResult.adjusted_text)
+                                  addToast('Copied to clipboard', 'success')
+                                }}
+                                className="btn btn-secondary"
+                                style={{ padding: "4px 12px", fontSize: "0.8rem" }}
+                              >
+                                <Icon name="Copy" size={14} /> Copy
+                              </button>
+                            </div>
+                            <div style={{ padding: "12px", background: "var(--input-bg)", borderRadius: "8px", fontSize: "0.9rem", lineHeight: 1.6, color: "var(--text-primary)", whiteSpace: "pre-wrap", maxHeight: "300px", overflowY: "auto", marginBottom: "12px" }}>
+                              {rlResult.adjusted_text}
+                            </div>
+                            {rlResult.vocabulary_changes && rlResult.vocabulary_changes.length > 0 && (
+                              <div>
+                                <h4 style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px" }}>Vocabulary Changes</h4>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px", fontSize: "0.8rem" }}>
+                                  {rlResult.vocabulary_changes.map(function(vc, i) {
+                                    return (
+                                      <React.Fragment key={i}>
+                                        <span style={{ color: "var(--text-secondary)", textDecoration: "line-through" }}>{vc.original}</span>
+                                        <span style={{ color: "#06b6d4", fontWeight: 500 }}>{vc.replacement}</span>
+                                      </React.Fragment>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            {rlResult.usage && (
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "12px", textAlign: "right" }}>
+                                {rlResult.usage.cost_display}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* NotebookLM Materials */}
+                      <div className="glass-card" style={{ padding: "24px", marginTop: "20px" }}>
+                        <h3 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Icon name="Sparkles" size={22} style={{ color: "#a855f7" }} />
+                          NotebookLM Materials
+                        </h3>
+                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                          Generate study materials using Google NotebookLM. Upload reference documents or generate a lesson plan first.
+                        </p>
+
+                        {!nlmAuthenticated ? (
+                          <div style={{ padding: "16px", borderRadius: "10px", background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.2)", textAlign: "center" }}>
+                            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                              Connect your Google account to use NotebookLM
+                            </p>
+                            <button
+                              onClick={function() {
+                                api.notebookLMLogin("start").then(function(res) {
+                                  if (res.already_authenticated) {
+                                    setNlmAuthenticated(true);
+                                    addToast("Already connected to NotebookLM!", "success");
+                                  } else if (res.browser_opened) {
+                                    addToast("Complete Google login in the browser window, then come back here.", "info");
+                                    var checkLogin = function() {
+                                      if (confirm("Click OK after you have logged in to Google in the browser window.")) {
+                                        api.notebookLMLogin("complete").then(function(res2) {
+                                          if (res2.success) {
+                                            setNlmAuthenticated(true);
+                                            addToast("Connected to NotebookLM!", "success");
+                                          } else {
+                                            addToast("Login not detected. Try again.", "error");
+                                          }
+                                        }).catch(function(e) { addToast("Login failed: " + e.message, "error"); });
+                                      } else {
+                                        api.notebookLMLogin("cancel").catch(function() {});
+                                      }
+                                    };
+                                    setTimeout(checkLogin, 1500);
+                                  } else if (res.error) {
+                                    addToast("Login error: " + res.error, "error");
+                                  }
+                                }).catch(function(e) { addToast("Login failed: " + e.message, "error"); });
+                              }}
+                              className="btn btn-primary"
+                              style={{ padding: "10px 24px", background: "linear-gradient(135deg, #ec4899, #8b5cf6)" }}
+                            >
+                              <Icon name="LogIn" size={16} /> Connect to NotebookLM
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "15px" }}>
+                              {NLM_MATERIAL_TYPES.map(function(mt) {
+                                return (
+                                  <label key={mt.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", padding: "8px 10px", borderRadius: "8px", background: nlmSelectedMaterials[mt.id] ? "var(--bg-hover)" : "transparent", transition: "background 0.2s" }}>
+                                    <input type="checkbox" checked={nlmSelectedMaterials[mt.id]} onChange={function() { setNlmSelectedMaterials(function(prev) { var next = Object.assign({}, prev); next[mt.id] = !prev[mt.id]; return next; }); }} />
+                                    <Icon name={mt.icon} size={16} />
+                                    <span style={{ fontSize: "0.9rem" }}>{mt.label}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {nlmSelectedMaterials.audio_overview && (
+                              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Audio Format</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.audio_overview || {}).format || "deep-dive"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { audio_overview: Object.assign({}, prev.audio_overview, { format: e.target.value }) }); }); }}>
+                                    <option value="deep-dive">Deep Dive</option>
+                                    <option value="brief">Brief Summary</option>
+                                    <option value="critique">Critique</option>
+                                    <option value="debate">Debate</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Length</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.audio_overview || {}).length || "medium"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { audio_overview: Object.assign({}, prev.audio_overview, { length: e.target.value }) }); }); }}>
+                                    <option value="short">Short</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="long">Long</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            {nlmSelectedMaterials.video_overview && (
+                              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Format</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.video_overview || {}).video_format || "explainer"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { video_overview: Object.assign({}, prev.video_overview, { video_format: e.target.value }) }); }); }}>
+                                    <option value="explainer">Explainer</option>
+                                    <option value="brief">Brief</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Visual Style</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.video_overview || {}).style || "auto"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { video_overview: Object.assign({}, prev.video_overview, { style: e.target.value }) }); }); }}>
+                                    <option value="auto">Auto</option>
+                                    <option value="classic">Classic</option>
+                                    <option value="whiteboard">Whiteboard</option>
+                                    <option value="kawaii">Kawaii</option>
+                                    <option value="anime">Anime</option>
+                                    <option value="watercolor">Watercolor</option>
+                                    <option value="retro_print">Retro Print</option>
+                                    <option value="heritage">Heritage</option>
+                                    <option value="paper_craft">Paper Craft</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            {nlmSelectedMaterials.quiz && (
+                              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Quantity</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.quiz || {}).quantity || "standard"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { quiz: Object.assign({}, prev.quiz, { quantity: e.target.value }) }); }); }}>
+                                    <option value="fewer">Fewer</option>
+                                    <option value="standard">Standard</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Difficulty</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.quiz || {}).difficulty || "medium"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { quiz: Object.assign({}, prev.quiz, { difficulty: e.target.value }) }); }); }}>
+                                    <option value="easy">Easy</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="hard">Hard</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            {nlmSelectedMaterials.flashcards && (
+                              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Quantity</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.flashcards || {}).quantity || "standard"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { flashcards: Object.assign({}, prev.flashcards, { quantity: e.target.value }) }); }); }}>
+                                    <option value="fewer">Fewer</option>
+                                    <option value="standard">Standard</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Difficulty</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.flashcards || {}).difficulty || "medium"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { flashcards: Object.assign({}, prev.flashcards, { difficulty: e.target.value }) }); }); }}>
+                                    <option value="easy">Easy</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="hard">Hard</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            {nlmSelectedMaterials.study_guide && (
+                              <div style={{ marginBottom: "10px" }}>
+                                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                                  <div>
+                                    <label className="label" style={{ fontSize: "0.8rem" }}>Report Format</label>
+                                    <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.study_guide || {}).format || "study_guide"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { study_guide: Object.assign({}, prev.study_guide, { format: e.target.value }) }); }); }}>
+                                      <option value="study_guide">Study Guide</option>
+                                      <option value="briefing_doc">Briefing Doc</option>
+                                      <option value="blog_post">Blog Post</option>
+                                      <option value="custom">Custom Report</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                {(nlmOptions.study_guide || {}).format === "custom" && (
+                                  <textarea className="input" rows={2} placeholder="Describe the report you want generated..." value={(nlmOptions.study_guide || {}).custom_prompt || ""} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { study_guide: Object.assign({}, prev.study_guide, { custom_prompt: e.target.value }) }); }); }} style={{ width: "100%", fontSize: "0.85rem", resize: "vertical", minHeight: "48px", marginTop: "8px" }} />
+                                )}
+                              </div>
+                            )}
+                            {nlmSelectedMaterials.slide_deck && (
+                              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Slide Format</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.slide_deck || {}).format || "detailed"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { slide_deck: Object.assign({}, prev.slide_deck, { format: e.target.value }) }); }); }}>
+                                    <option value="detailed">Detailed Deck</option>
+                                    <option value="presenter">Presenter Slides</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Length</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.slide_deck || {}).length || "default"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { slide_deck: Object.assign({}, prev.slide_deck, { length: e.target.value }) }); }); }}>
+                                    <option value="default">Default</option>
+                                    <option value="short">Short</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            {nlmSelectedMaterials.infographic && (
+                              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Orientation</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.infographic || {}).orientation || "portrait"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { infographic: Object.assign({}, prev.infographic, { orientation: e.target.value }) }); }); }}>
+                                    <option value="portrait">Portrait (9:16)</option>
+                                    <option value="landscape">Landscape (16:9)</option>
+                                    <option value="square">Square</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label" style={{ fontSize: "0.8rem" }}>Detail Level</label>
+                                  <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions.infographic || {}).detail_level || "standard"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { infographic: Object.assign({}, prev.infographic, { detail_level: e.target.value }) }); }); }}>
+                                    <option value="concise">Concise</option>
+                                    <option value="standard">Standard</option>
+                                    <option value="detailed">Detailed</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                              <div style={{ flex: 1, minWidth: "200px" }}>
+                                <label className="label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Custom Instructions (optional)</label>
+                                <textarea className="input" rows={2} placeholder="e.g., Content is for 6th graders even though standards are 8th grade. Focus on vocabulary." value={(nlmOptions._global || {}).instructions || ""} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { _global: Object.assign({}, prev._global, { instructions: e.target.value }) }); }); }} style={{ width: "100%", fontSize: "0.85rem", resize: "vertical", minHeight: "48px" }} />
+                              </div>
+                              <div>
+                                <label className="label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Language</label>
+                                <select className="input" style={{ padding: "6px 10px" }} value={(nlmOptions._global || {}).language || "en"} onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { _global: Object.assign({}, prev._global, { language: e.target.value }) }); }); }}>
+                                  <option value="en">English</option>
+                                  <option value="es">Spanish</option>
+                                  <option value="fr">French</option>
+                                  <option value="de">German</option>
+                                  <option value="it">Italian</option>
+                                  <option value="pt">Portuguese</option>
+                                  <option value="zh">Chinese</option>
+                                  <option value="ja">Japanese</option>
+                                  <option value="ko">Korean</option>
+                                  <option value="ar">Arabic</option>
+                                  <option value="hi">Hindi</option>
+                                  <option value="ru">Russian</option>
+                                  <option value="vi">Vietnamese</option>
+                                  <option value="tl">Tagalog</option>
+                                  <option value="uk">Ukrainian</option>
+                                  <option value="pl">Polish</option>
+                                  <option value="nl">Dutch</option>
+                                  <option value="sv">Swedish</option>
+                                  <option value="tr">Turkish</option>
+                                  <option value="th">Thai</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{ marginBottom: "10px" }}>
+                              <label className="label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Reference Documents (optional)</label>
+                              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0 0 6px 0" }}>Add textbook pages, reference docs, or images for richer materials</p>
+                              <input type="file" id="nlm-context-upload" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt" style={{ display: "none" }} onChange={async function(e) {
+                                var files = Array.from(e.target.files);
+                                if (files.length === 0) return;
+                                setNlmUploading(true);
+                                try {
+                                  for (var i = 0; i < files.length; i++) {
+                                    var result = await api.notebookLMUploadContext(files[i]);
+                                    if (result.error) { addToast("Upload failed: " + result.error, "error"); }
+                                    else { setNlmContextFiles(function(prev) { return prev.concat([result]); }); setNlmNotebookId(null); }
+                                  }
+                                } catch (err) { addToast("Upload error: " + err.message, "error"); }
+                                finally { setNlmUploading(false); e.target.value = ""; }
+                              }} />
+                              <button onClick={function() { document.getElementById("nlm-context-upload").click(); }} className="btn btn-secondary" disabled={nlmUploading || nlmGenerating} style={{ padding: "6px 14px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                                {nlmUploading ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Loader", size: 14, className: "spinning" }), " Uploading...") : React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Upload", size: 14 }), " Add Reference Documents")}
+                              </button>
+                              {nlmContextFiles.length > 0 && (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                                  {nlmContextFiles.map(function(f, idx) {
+                                    var ext = (f.filename || "").split(".").pop().toLowerCase();
+                                    var iconName = ["png","jpg","jpeg","gif","webp"].includes(ext) ? "Image" : "FileText";
+                                    return (
+                                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 10px", borderRadius: "8px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)", fontSize: "0.8rem" }}>
+                                        <Icon name={iconName} size={14} style={{ color: "var(--accent-primary)", flexShrink: 0 }} />
+                                        <span style={{ maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.filename}</span>
+                                        <span style={{ color: "var(--text-secondary)", fontSize: "0.7rem" }}>{f.size < 1024 ? f.size + "B" : f.size < 1048576 ? Math.round(f.size / 1024) + "KB" : (f.size / 1048576).toFixed(1) + "MB"}</span>
+                                        <button onClick={function() { setNlmContextFiles(function(prev) { return prev.filter(function(_, i) { return i !== idx; }); }); setNlmNotebookId(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-secondary)", lineHeight: 1 }} title="Remove"><Icon name="X" size={12} /></button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            {nlmIncludePlan && lessonPlan && (
+                              <div style={{ padding: "8px 12px", borderRadius: "8px", background: "rgba(34,197,94,0.08)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--success)" }}>
+                                <Icon name="CheckCircle" size={14} />
+                                {lessonPlan.title || "Lesson plan"} will be included as source material
+                                <button onClick={function() { setNlmIncludePlan(false); setNlmNotebookId(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-secondary)", lineHeight: 1, marginLeft: "auto" }} title="Remove plan from sources"><Icon name="X" size={12} /></button>
+                              </div>
+                            )}
+                            <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "10px", flexWrap: "wrap" }}>
+                              <button onClick={handleNlmGenerate} className="btn btn-primary" disabled={nlmGenerating || !Object.values(nlmSelectedMaterials).some(function(v) { return v; })} style={{ background: "linear-gradient(135deg, #ec4899, #8b5cf6)", padding: "10px 20px" }}>
+                                {nlmGenerating ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Loader", size: 16, className: "spinning" }), " Generating...") : React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Sparkles", size: 16 }), " Generate Materials")}
+                              </button>
+                              {nlmGenerating && (
+                                <button onClick={function() { api.notebookLMCancel().then(function() { setNlmGenerating(false); addToast("Generation cancelled", "info"); }); }} className="btn btn-secondary" style={{ padding: "6px 12px" }}><Icon name="X" size={14} /> Cancel</button>
+                              )}
+                              {!nlmGenerating && nlmErrors.length > 0 && (
+                                <button onClick={function() { setNlmGenerating(true); api.notebookLMRetry(nlmOptions).then(function(data) { if (data.error) { addToast(data.error, "error"); setNlmGenerating(false); } }); }} className="btn btn-secondary" style={{ padding: "6px 12px", color: "var(--warning)" }}><Icon name="RefreshCw" size={14} /> Retry Failed</button>
+                              )}
+                              {nlmGenerating && (<span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{nlmCompleted.length} / {nlmTotalSelected} complete</span>)}
+                            </div>
+                            {nlmProgress.length > 0 && (
+                              <div style={{ marginTop: "15px" }}>
+                                {nlmGenerating && (
+                                  <div style={{ marginBottom: "12px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                                      <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>{nlmCompleted.length} of {nlmTotalSelected} materials complete</span>
+                                      <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{nlmTotalSelected > 0 ? Math.round((nlmCompleted.length / nlmTotalSelected) * 100) : 0}%</span>
+                                    </div>
+                                    <div style={{ height: "8px", borderRadius: "4px", background: "rgba(139, 92, 246, 0.15)", overflow: "hidden" }}>
+                                      <div style={{ height: "100%", borderRadius: "4px", background: "linear-gradient(90deg, #8b5cf6, #ec4899)", width: (nlmTotalSelected > 0 ? Math.round((nlmCompleted.length / nlmTotalSelected) * 100) : 0) + "%", transition: "width 0.5s ease" }} />
+                                    </div>
+                                  </div>
+                                )}
+                                {nlmProgress.map(function(msg, i) {
+                                  var isDone = nlmCompleted.indexOf(msg.type) !== -1;
+                                  var hasError = nlmErrors.some(function(e) { return e.indexOf(msg.type) === 0; });
+                                  var isActive = nlmGenerating && !isDone && !hasError && i === nlmProgress.length - 1 + (nlmErrors.length > 0 ? -nlmErrors.length : 0);
+                                  var mt = NLM_MATERIAL_TYPES.find(function(m) { return m.id === msg.type; });
+                                  return (
+                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.85rem", padding: "6px 10px", marginBottom: "4px", borderRadius: "8px", background: isDone ? "rgba(34, 197, 94, 0.08)" : hasError ? "rgba(239, 68, 68, 0.08)" : isActive ? "rgba(139, 92, 246, 0.08)" : "transparent", color: isDone ? "var(--success)" : hasError ? "var(--error)" : "var(--text-secondary)" }}>
+                                      {isDone ? React.createElement(Icon, { name: "CheckCircle", size: 16 }) : hasError ? React.createElement(Icon, { name: "XCircle", size: 16 }) : isActive ? React.createElement(Icon, { name: "Loader", size: 16, className: "spinning" }) : React.createElement(Icon, { name: "Clock", size: 16 })}
+                                      <span style={{ fontWeight: isDone || isActive ? 600 : 400 }}>{mt ? mt.label : msg.type.replace("_", " ")}</span>
+                                      {isDone && (<span style={{ marginLeft: "auto", fontSize: "0.75rem", opacity: 0.7 }}>Done</span>)}
+                                      {isActive && (<span style={{ marginLeft: "auto", fontSize: "0.75rem", opacity: 0.7 }}>Generating...</span>)}
+                                    </div>
+                                  );
+                                })}
+                                {nlmErrors.length > 0 && nlmErrors.map(function(err, i) {
+                                  return (<div key={"err-" + i} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.85rem", padding: "6px 10px", marginBottom: "4px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.08)", color: "var(--error)" }}><Icon name="AlertTriangle" size={16} /><span>{err}</span></div>);
+                                })}
+                              </div>
+                            )}
+                            {nlmCompleted.length > 0 && !nlmGenerating && (
+                              <div style={{ marginTop: "15px", borderTop: "1px solid var(--border)", paddingTop: "15px" }}>
+                                <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "10px" }}>Generated Materials</h4>
+                                {nlmShareResult && (<div style={{ background: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "8px", padding: "12px 16px", marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Shared! Join code: </span><strong style={{ fontSize: "1.1rem", letterSpacing: "2px" }}>{nlmShareResult.join_code}</strong></div><button onClick={function() { navigator.clipboard.writeText(nlmShareResult.join_link || (window.location.origin + "/join/" + nlmShareResult.join_code)); addToast("Link copied!", "success"); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}><Icon name="Copy" size={14} /> Copy Link</button></div>)}
+                                {nlmCompleted.map(function(type) {
+                                  var mt = NLM_MATERIAL_TYPES.find(function(m) { return m.id === type; });
+                                  var label = mt ? mt.label : type;
+                                  var icon = mt ? mt.icon : "File";
+                                  var jsonPreviewable = ["quiz", "flashcards", "mind_map", "study_guide"].indexOf(type) !== -1;
+                                  var mediaPreviewable = ["audio_overview", "video_overview", "infographic", "data_table"].indexOf(type) !== -1;
+                                  return (
+                                    <div key={type} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                                      <Icon name={icon} size={16} />
+                                      <span style={{ flex: 1, fontSize: "0.9rem" }}>{label}</span>
+                                      <button onClick={function() { setNlmDownloading(type); api.notebookLMDownload(type).then(function() { setNlmDownloading(null); }).catch(function() { setNlmDownloading(null); addToast("Download failed", "error"); }); }} className="btn btn-secondary" disabled={nlmDownloading === type} style={{ padding: "4px 10px", fontSize: "0.8rem" }}>{nlmDownloading === type ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Loader", size: 14, className: "spinning" }), " Downloading...") : React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Download", size: 14 }), " Download")}</button>
+                                      {jsonPreviewable && (<button onClick={function() { handleNlmPreview(type); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}><Icon name="Eye" size={14} /> Preview</button>)}
+                                      {mediaPreviewable && (<button onClick={function() { setNlmPreviewData({ type: type, mediaUrl: "/api/notebooklm/download/" + type + "?inline=1" }); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}><Icon name="Eye" size={14} /> Preview</button>)}
+                                      <button onClick={function() { var shareType = type; api.shareMaterial(shareType, label).then(function(res) { if (res.success) { setNlmShareResult(res); addToast("Shared! Code: " + res.join_code, "success"); } else { addToast(res.error || "Share failed", "error"); } }).catch(function() { addToast("Share failed", "error"); }); }} className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "0.8rem" }}><Icon name="Share2" size={14} /> Share</button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {nlmPreviewData && (
+                              <div style={{ marginTop: "15px", borderTop: "1px solid var(--border)", paddingTop: "15px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                                  <h4 style={{ fontSize: "1rem", fontWeight: 600 }}>Preview: {(nlmPreviewData.type || "").replace(/_/g, " ")}</h4>
+                                  <button onClick={function() { setNlmPreviewData(null); setNlmShareResult(null); }} className="btn btn-secondary" style={{ padding: "4px 8px" }}><Icon name="X" size={14} /></button>
+                                </div>
+                                {nlmPreviewData.type === "mind_map" && nlmPreviewData.data && (
+                                  <div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", fontSize: "0.9rem", maxHeight: "500px", overflow: "auto", lineHeight: 1.6 }}>
+                                    <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{JSON.stringify(nlmPreviewData.data, null, 2)}</pre>
+                                  </div>
+                                )}
+                                {nlmPreviewData.type === "study_guide" && nlmPreviewData.content && (<div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", fontSize: "0.9rem", maxHeight: "500px", overflow: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{nlmPreviewData.content}</div>)}
+                                {nlmPreviewData.type === "flashcards" && nlmPreviewData.data && (
+                                  <div style={{ background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border)", padding: "16px" }}>
+                                    <FlashcardView data={nlmPreviewData.data} />
+                                  </div>
+                                )}
+                                {nlmPreviewData.type === "quiz" && nlmPreviewData.data && (
+                                  <div style={{ maxHeight: "500px", overflow: "auto" }}>
+                                    {(Array.isArray(nlmPreviewData.data) ? nlmPreviewData.data : nlmPreviewData.data.questions || nlmPreviewData.data.cards || [nlmPreviewData.data]).map(function(item, idx) {
+                                      return (
+                                        <div key={idx} style={{ background: "var(--bg-secondary)", padding: "14px 16px", borderRadius: "10px", marginBottom: "8px", border: "1px solid var(--border)" }}>
+                                          <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "6px" }}>{"Q" + (idx + 1)}</div>
+                                          <div style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>{item.question || item.front || item.term || item.text || JSON.stringify(item)}</div>
+                                          {(item.answer || item.back || item.definition || item.correct_answer) && (<div style={{ marginTop: "8px", padding: "8px 12px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.08)", fontSize: "0.85rem", color: "var(--success)" }}><strong>Answer:</strong> {item.answer || item.back || item.definition || item.correct_answer}</div>)}
+                                          {item.options && (<div style={{ marginTop: "6px", fontSize: "0.83rem" }}>{item.options.map(function(opt, oi) { var isCorrect = opt === item.answer || opt === item.correct_answer || oi === item.correct_index; return (<div key={oi} style={{ padding: "3px 0", color: isCorrect ? "var(--success)" : "var(--text-secondary)" }}>{String.fromCharCode(65 + oi)}) {typeof opt === "string" ? opt : opt.text || JSON.stringify(opt)}{isCorrect ? " " + String.fromCharCode(10003) : ""}</div>); })}</div>)}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {nlmPreviewData.type === "audio_overview" && nlmPreviewData.mediaUrl && (<div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "12px", textAlign: "center" }}><audio controls style={{ width: "100%" }} src={nlmPreviewData.mediaUrl}>Your browser does not support the audio element.</audio></div>)}
+                                {nlmPreviewData.type === "video_overview" && nlmPreviewData.mediaUrl && (<div style={{ background: "var(--bg-secondary)", padding: "12px", borderRadius: "12px", textAlign: "center" }}><video controls style={{ width: "100%", maxHeight: "400px", borderRadius: "8px" }} src={nlmPreviewData.mediaUrl}>Your browser does not support the video element.</video></div>)}
+                                {nlmPreviewData.type === "infographic" && nlmPreviewData.mediaUrl && (<div style={{ background: "var(--bg-secondary)", padding: "12px", borderRadius: "12px", textAlign: "center", maxHeight: "500px", overflow: "auto" }}><img src={nlmPreviewData.mediaUrl} alt="Infographic" style={{ maxWidth: "100%", borderRadius: "8px" }} /></div>)}
+                                {nlmPreviewData.type === "data_table" && nlmPreviewData.mediaUrl && (<DataTablePreview url={nlmPreviewData.mediaUrl} />)}
+                                {!["mind_map", "study_guide", "quiz", "flashcards", "audio_overview", "video_overview", "infographic", "data_table"].includes(nlmPreviewData.type) && (<pre style={{ background: "var(--bg-secondary)", padding: "15px", borderRadius: "8px", fontSize: "0.85rem", maxHeight: "400px", overflow: "auto", whiteSpace: "pre-wrap" }}>{nlmPreviewData.content || JSON.stringify(nlmPreviewData.data, null, 2)}</pre>)}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
 
