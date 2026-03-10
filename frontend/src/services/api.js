@@ -1014,6 +1014,17 @@ export async function createPortalSession() {
 
 // ============ Reading Level Adjustment ============
 
+export async function extractTextFromFile(file) {
+  var formData = new FormData()
+  formData.append('file', file)
+  var response = await fetch('/api/extract-text', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: formData,
+  })
+  return response.json()
+}
+
 export async function adjustReadingLevel(text, targetLevel, subject, preserveTerms) {
   return fetchApi('/api/adjust-reading-level', {
     method: 'POST',
@@ -1343,6 +1354,7 @@ export default {
   createCheckoutSession,
   createPortalSession,
   // Reading Level / LMS Export
+  extractTextFromFile,
   adjustReadingLevel,
   exportLmsCsv,
   // Cost Tracking

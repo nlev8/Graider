@@ -6530,3 +6530,90 @@ TEXT TO REWRITE:
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@planner_bp.route('/api/extract-text', methods=['POST'])
+def extract_text_from_file():
+    """Extract plain text from uploaded documents (docx, pdf, txt) or images (png, jpg, etc.)."""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    filename = file.filename.lower()
+    file_data = file.read()
+
+    try:
+        # Documents — extract text directly
+        if filename.endswith('.docx'):
+            import io
+            from docx import Document
+            doc = Document(io.BytesIO(file_data))
+            text_parts = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    text_parts.append(para.text)
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = ' | '.join([c.text.strip() for c in row.cells if c.text.strip()])
+                    if row_text:
+                        text_parts.append(row_text)
+            return jsonify({"text": '\n'.join(text_parts)})
+
+        elif filename.endswith('.pdf'):
+            import io
+            try:
+                import pdfplumber
+                with pdfplumber.open(io.BytesIO(file_data)) as pdf:
+                    text_parts = [page.extract_text() or '' for page in pdf.pages]
+                return jsonify({"text": '\n'.join(text_parts).strip()})
+            except ImportError:
+                from PyPDF2 import PdfReader
+                reader = PdfReader(io.BytesIO(file_data))
+                text_parts = [page.extract_text() or '' for page in reader.pages]
+                return jsonify({"text": '\n'.join(text_parts).strip()})
+
+        elif filename.endswith('.txt'):
+            return jsonify({"text": file_data.decode('utf-8', errors='replace')})
+
+        # Images — use GPT-4o vision to extract text
+        elif filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')):
+            import base64
+            from backend.api_keys import get_api_key as _gak
+            teacher_id = getattr(g, 'user_id', 'local-dev')
+            api_key = _gak('openai', teacher_id)
+            if not api_key:
+                return jsonify({"error": "OpenAI API key required for image text extraction"}), 400
+
+            ext = filename.rsplit('.', 1)[-1]
+            mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                    "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}.get(ext, "image/png")
+            b64 = base64.b64encode(file_data).decode('utf-8')
+
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary."},
+                    {"role": "user", "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                        {"type": "text", "text": "Extract all text from this image."},
+                    ]},
+                ],
+                max_tokens=4000,
+                temperature=0,
+            )
+
+            usage = _extract_usage(completion, "gpt-4o")
+            _record_planner_cost(usage)
+
+            return jsonify({"text": completion.choices[0].message.content.strip()})
+
+        else:
+            return jsonify({"error": "Unsupported file type. Use .docx, .pdf, .txt, .png, .jpg, or .jpeg"}), 400
+
+    except Exception as e:
+        print(f"Text extraction error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500

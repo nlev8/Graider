@@ -1484,6 +1484,8 @@ function App() {
   const [rlTermInput, setRlTermInput] = useState('');
   const [rlLoading, setRlLoading] = useState(false);
   const [rlResult, setRlResult] = useState(null);
+  const [rlExtracting, setRlExtracting] = useState(false);
+  const [rlFiles, setRlFiles] = useState([]);
 
   var NLM_MATERIAL_TYPES = [
     { id: "audio_overview", label: "Audio Overview", icon: "Headphones" },
@@ -14807,12 +14809,83 @@ ${signature}`;
                           Reading Level Adjuster
                         </h3>
                         <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
-                          Paste text and adjust it to a target reading level. Key terms you specify will be preserved exactly.
+                          Upload documents or screenshots, or paste text directly. Adjust to a target reading level while preserving key terms.
                         </p>
+                        <div style={{ marginBottom: "12px" }}>
+                          <div
+                            onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = '#06b6d4'; }}
+                            onDragLeave={function(e) { e.currentTarget.style.borderColor = 'var(--input-border)'; }}
+                            onDrop={async function(e) {
+                              e.preventDefault();
+                              e.currentTarget.style.borderColor = 'var(--input-border)';
+                              var files = Array.from(e.dataTransfer.files);
+                              if (files.length === 0) return;
+                              setRlExtracting(true);
+                              for (var i = 0; i < files.length; i++) {
+                                try {
+                                  var res = await api.extractTextFromFile(files[i]);
+                                  if (res.error) { addToast(files[i].name + ': ' + res.error, 'error'); }
+                                  else { setRlInput(function(prev) { return prev ? prev + '\n\n' + res.text : res.text; }); setRlFiles(function(prev) { return prev.concat([files[i].name]); }); }
+                                } catch (err) { addToast('Failed to extract text from ' + files[i].name, 'error'); }
+                              }
+                              setRlExtracting(false);
+                            }}
+                            style={{ border: "2px dashed var(--input-border)", borderRadius: "8px", padding: "16px", textAlign: "center", cursor: "pointer", transition: "border-color 0.2s" }}
+                            onClick={function() { document.getElementById('rl-file-input').click(); }}
+                          >
+                            <input
+                              id="rl-file-input"
+                              type="file"
+                              accept=".docx,.pdf,.txt,.png,.jpg,.jpeg,.gif,.webp"
+                              multiple
+                              style={{ display: "none" }}
+                              onChange={async function(e) {
+                                var files = Array.from(e.target.files);
+                                if (files.length === 0) return;
+                                setRlExtracting(true);
+                                for (var i = 0; i < files.length; i++) {
+                                  try {
+                                    var res = await api.extractTextFromFile(files[i]);
+                                    if (res.error) { addToast(files[i].name + ': ' + res.error, 'error'); }
+                                    else { setRlInput(function(prev) { return prev ? prev + '\n\n' + res.text : res.text; }); setRlFiles(function(prev) { return prev.concat([files[i].name]); }); }
+                                  } catch (err) { addToast('Failed to extract text from ' + files[i].name, 'error'); }
+                                }
+                                setRlExtracting(false);
+                                e.target.value = '';
+                              }}
+                            />
+                            {rlExtracting ? (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", color: "#06b6d4" }}>
+                                <Icon name="Loader2" size={18} className="spinning" /> Extracting text...
+                              </div>
+                            ) : (
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+                                  <Icon name="Upload" size={16} />
+                                  <span>Drop files here or click to upload</span>
+                                </div>
+                                <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", opacity: 0.7 }}>
+                                  Documents (.docx, .pdf, .txt) or screenshots (.png, .jpg)
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {rlFiles.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                              {rlFiles.map(function(name, i) {
+                                return (
+                                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "2px 8px", background: "rgba(6,182,212,0.1)", color: "#06b6d4", borderRadius: "6px", fontSize: "0.75rem" }}>
+                                    <Icon name="FileText" size={12} /> {name}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                         <textarea
                           value={rlInput}
-                          onChange={e => setRlInput(e.target.value)}
-                          placeholder="Paste text here to adjust its reading level..."
+                          onChange={function(e) { setRlInput(e.target.value); }}
+                          placeholder="Paste text here or upload documents/screenshots above..."
                           rows={8}
                           style={{ width: "100%", padding: "12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem", resize: "vertical", marginBottom: "16px", fontFamily: "inherit" }}
                         />

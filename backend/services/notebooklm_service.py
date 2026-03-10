@@ -487,13 +487,22 @@ async def _create_notebook_with_sources(title, sources_list, storage_path=None):
 
     async with client_ctx as client:
         nb = await client.notebooks.create(title)
+        added_count = 0
         for src in sources_list:
-            if src["type"] == "text":
-                await client.sources.add_text(nb.id, src.get("title", "Lesson Plan"), src["content"], wait=True)
-            elif src["type"] == "url":
-                await client.sources.add_url(nb.id, src["url"], wait=True)
-            elif src["type"] == "file":
-                await client.sources.add_file(nb.id, src["path"], wait=True)
+            try:
+                if src["type"] == "text":
+                    await client.sources.add_text(nb.id, src.get("title", "Lesson Plan"), src["content"], wait=True)
+                elif src["type"] == "url":
+                    await client.sources.add_url(nb.id, src["url"], wait=True)
+                elif src["type"] == "file":
+                    await client.sources.add_file(nb.id, src["path"], wait=True)
+                added_count += 1
+            except Exception as e:
+                src_name = src.get("path") or src.get("url") or src.get("title", "unknown")
+                print(f"Warning: Source '{src_name}' failed to process: {e}")
+                # Continue with remaining sources instead of aborting
+        if added_count == 0:
+            raise ValueError("All sources failed to process. Check that your files are valid.")
         return nb.id
 
 
