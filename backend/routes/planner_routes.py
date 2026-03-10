@@ -4136,7 +4136,7 @@ def export_generated_assignment():
             filepath = _export_assignment_docx_graider(assignment, output_folder, safe_title)
             _save_grading_config_for_export(assignment)
             if sys.platform == 'darwin':
-            subprocess.run(['open', filepath], check=False)
+                subprocess.run(['open', filepath], check=False)
             return jsonify({"status": "success", "path": filepath})
         except Exception as e:
             import traceback

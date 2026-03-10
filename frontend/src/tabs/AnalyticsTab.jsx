@@ -2509,7 +2509,7 @@ export default React.memo(function AnalyticsTab({
                   ) : (
                     <div style={{ position: "relative" }}>
                       {chartsOverlay && (
-                        <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 50, background: "#6366f1", borderRadius: "12px", padding: "14px 24px", boxShadow: "0 4px 20px rgba(99,102,241,0.4)", willChange: "transform", display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 50, background: "#6366f1", borderRadius: "12px", padding: "14px 24px", boxShadow: "0 4px 20px rgba(99,102,241,0.4)", willChange: "transform", display: "flex", alignItems: "center", gap: "12px" }}>
                           <div style={{ width: "22px", height: "22px", border: "3px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
                           <span style={{ fontSize: "0.9rem", fontWeight: 600, color: "#fff", whiteSpace: "nowrap" }}>Generating Analytics...</span>
                         </div>
