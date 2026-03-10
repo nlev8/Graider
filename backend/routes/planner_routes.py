@@ -3710,7 +3710,8 @@ def export_lesson_plan():
         doc.save(filepath)
 
         # Open the file
-        subprocess.run(['open', filepath])
+        if sys.platform == 'darwin':
+            subprocess.run(['open', filepath], check=False)
 
         return jsonify({"status": "success", "path": filepath})
 
@@ -4134,7 +4135,8 @@ def export_generated_assignment():
             os.makedirs(output_folder, exist_ok=True)
             filepath = _export_assignment_docx_graider(assignment, output_folder, safe_title)
             _save_grading_config_for_export(assignment)
-            subprocess.run(['open', filepath])
+            if sys.platform == 'darwin':
+            subprocess.run(['open', filepath], check=False)
             return jsonify({"status": "success", "path": filepath})
         except Exception as e:
             import traceback
@@ -4464,7 +4466,8 @@ def export_generated_assignment():
         doc.build(story)
 
         # Open the file
-        subprocess.run(['open', filepath])
+        if sys.platform == 'darwin':
+            subprocess.run(['open', filepath], check=False)
 
         return jsonify({"status": "success", "path": filepath})
 
