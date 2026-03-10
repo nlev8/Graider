@@ -3,6 +3,7 @@ Assignment Builder API routes for Graider.
 Handles saving, loading, listing, deleting, and exporting assignments.
 """
 import os
+import sys
 import json
 from flask import Blueprint, request, jsonify, send_from_directory, g
 
@@ -363,7 +364,8 @@ def _export_docx(title, instructions, questions, output_folder, safe_title,
         doc.save(filepath)
 
         # Open the folder
-        os.system(f'open "{output_folder}"')
+        if sys.platform == 'darwin':
+            os.system(f'open "{output_folder}"')
 
         return jsonify({"status": "exported", "path": filepath})
 
@@ -443,7 +445,8 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
             y -= 30
 
         c.save()
-        os.system(f'open "{output_folder}"')
+        if sys.platform == 'darwin':
+            os.system(f'open "{output_folder}"')
 
         return jsonify({"status": "exported", "path": filepath})
 

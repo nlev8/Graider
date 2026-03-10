@@ -895,11 +895,12 @@ def export_focus_batch():
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
 
-    # Open the exports folder in Finder (local dev only, no-op on Railway)
-    try:
-        subprocess.Popen(['open', FOCUS_EXPORTS_DIR])
-    except Exception:
-        pass
+    # Open the exports folder in Finder (local dev only)
+    if sys.platform == 'darwin':
+        try:
+            subprocess.Popen(['open', FOCUS_EXPORTS_DIR])
+        except Exception:
+            pass
 
     return jsonify(manifest)
 
@@ -1010,10 +1011,11 @@ def export_lms_csv():
         json.dump(manifest, f, indent=2)
 
     # Open exports folder (local dev only)
-    try:
-        subprocess.Popen(['open', export_dir])
-    except Exception:
-        pass
+    if sys.platform == 'darwin':
+        try:
+            subprocess.Popen(['open', export_dir])
+        except Exception:
+            pass
 
     return jsonify(manifest)
 

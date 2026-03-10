@@ -5,6 +5,7 @@ Follows the same threading + state pattern as the grading engine.
 """
 import os
 import re
+import sys
 import json
 import asyncio
 import threading
@@ -150,7 +151,8 @@ def complete_login(teacher_id="local-dev"):
 
     try:
         context.storage_state(path=storage_path)
-        Path(storage_path).chmod(0o600)
+        if sys.platform != 'win32':
+            Path(storage_path).chmod(0o600)
     finally:
         context.close()
         pw.stop()

@@ -3,6 +3,7 @@ Document handling API routes for Graider.
 Handles file browsing, document parsing, and folder operations.
 """
 import os
+import sys
 import subprocess
 import base64
 from pathlib import Path
@@ -55,7 +56,8 @@ def open_folder():
     folder = data.get('folder', '')
 
     if os.path.exists(folder):
-        os.system(f'open "{folder}"')
+        if sys.platform == 'darwin':
+            os.system(f'open "{folder}"')
         return jsonify({"status": "opened"})
     return jsonify({"error": "Folder not found"})
 

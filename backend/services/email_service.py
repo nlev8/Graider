@@ -80,7 +80,8 @@ class GraiderEmailer:
         with open(self.config_path, 'w') as f:
             json.dump(self.config, f, indent=2)
 
-        os.chmod(self.config_path, 0o600)
+        if os.name != 'nt':
+            os.chmod(self.config_path, 0o600)
         print("Email configuration saved!")
 
     def send_email(self, to_email: str, student_name: str, subject: str, body: str,

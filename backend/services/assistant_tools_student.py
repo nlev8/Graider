@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime
 
 from backend.services.assistant_tools import (
@@ -652,11 +653,12 @@ def export_student_data(student_name):
     except Exception as e:
         pdf_path = None
 
-    # Open folder
-    try:
-        subprocess.run(['open', export_dir], check=False)
-    except Exception:
-        pass
+    # Open folder (macOS local dev only)
+    if sys.platform == 'darwin':
+        try:
+            subprocess.run(['open', export_dir], check=False)
+        except Exception:
+            pass
 
     return {
         "status": "success",

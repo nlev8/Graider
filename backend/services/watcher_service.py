@@ -78,7 +78,8 @@ class SharePointWatcher:
             json.dump(self.config, f, indent=2)
 
         # Secure the file (owner read/write only)
-        os.chmod(self.config_path, 0o600)
+        if os.name != 'nt':
+            os.chmod(self.config_path, 0o600)
         
     def _load_download_history(self):
         """Load list of already downloaded files."""

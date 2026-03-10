@@ -2795,11 +2795,12 @@ def export_individual_student_data():
         pdf_path = None
         print(f"PDF generation error: {e}")
 
-    # Open folder
-    try:
-        subprocess.run(['open', export_dir], check=False)
-    except Exception:
-        pass
+    # Open folder (macOS local dev only)
+    if sys.platform == 'darwin':
+        try:
+            subprocess.run(['open', export_dir], check=False)
+        except Exception:
+            pass
 
     audit_log("EXPORT_STUDENT_DATA", f"Exported full data for student (name redacted), {record_count} records")
 
