@@ -1183,7 +1183,7 @@ export async function notebookLMDownload(materialType) {
   a.href = url
   var extMap = {
     audio_overview: 'mp3', video_overview: 'mp4', quiz: 'json',
-    flashcards: 'json', study_guide: 'md', slide_deck: 'pptx',
+    flashcards: 'json', study_guide: 'docx', slide_deck: 'pptx',
     mind_map: 'json', infographic: 'png', data_table: 'csv',
   }
   a.download = materialType + '.' + (extMap[materialType] || 'bin')
