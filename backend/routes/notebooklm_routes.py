@@ -133,11 +133,14 @@ def nlm_upload_context():
 def nlm_create_notebook():
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"})
-    from backend.services.notebooklm_service import create_notebook, is_authenticated
+    from backend.services.notebooklm_service import create_notebook, is_authenticated, _fresh_state, _save_state
 
     teacher_id = _get_teacher_id()
     if not is_authenticated(teacher_id):
         return jsonify({"error": "session_expired", "needs_login": True})
+
+    # Clear stale results from any previous generation run
+    _save_state(teacher_id, _fresh_state())
 
     data = request.json or {}
     plan = data.get("plan", {})
