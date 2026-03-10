@@ -764,9 +764,10 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
                 if "language" not in mat_options and global_opts.get("language"):
                     mat_options["language"] = global_opts["language"]
 
-                # Retry once on transient null-result / RPC errors
+                # Retry up to 3 times on transient null-result / RPC errors
                 last_err = None
-                for attempt in range(2):
+                max_retries = 3
+                for attempt in range(max_retries):
                     try:
                         out_path = asyncio.run(
                             _generate_single_material(
@@ -779,9 +780,16 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
                         break
                     except Exception as retry_err:
                         last_err = retry_err
-                        if attempt == 0 and "returned null" in str(retry_err):
+                        err_str = str(retry_err)
+                        if attempt < max_retries - 1 and ("returned null" in err_str or "rLM1Ne" in err_str):
                             import time as _time
-                            _time.sleep(3)  # Brief pause before retry
+                            delay = 3 * (attempt + 1)  # 3s, 6s
+                            state["progress"].append({
+                                "type": mat_type,
+                                "message": "Retrying " + mat_type.replace("_", " ") + " (attempt " + str(attempt + 2) + ")...",
+                            })
+                            _save_state(teacher_id, state)
+                            _time.sleep(delay)
                             continue
                         raise
                 if last_err:
