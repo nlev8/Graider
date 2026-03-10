@@ -4179,6 +4179,23 @@ def export_generated_assignment():
             fontName='Helvetica-Bold', textColor=green
         )
 
+        # Helper: convert Unicode subscript/superscript to ReportLab XML tags
+        _sub_map = str.maketrans('₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎', '0123456789+-=()')
+        _sup_map = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾', '0123456789+-=()')
+        def _fix_sub_sup(text):
+            """Replace Unicode sub/superscript chars with ReportLab <sub>/<sup> tags."""
+            if not text:
+                return text
+            import re as _re
+            # Subscripts: ₀-₉ and related
+            def _replace_sub(m):
+                return '<sub>' + m.group(0).translate(_sub_map) + '</sub>'
+            def _replace_sup(m):
+                return '<sup>' + m.group(0).translate(_sup_map) + '</sup>'
+            text = _re.sub('[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+', _replace_sub, text)
+            text = _re.sub('[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]+', _replace_sup, text)
+            return text
+
         # Build the PDF
         safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
         suffix = "_ANSWER_KEY" if include_answers else "_Student"
@@ -4242,9 +4259,9 @@ def export_generated_assignment():
 
             for q in questions:
                 q_number = q.get('number', question_num)
-                q_text = q.get('question', '')
+                q_text = _fix_sub_sup(q.get('question', ''))
                 q_points = q.get('points', 0)
-                q_options = q.get('options', [])
+                q_options = [_fix_sub_sup(o) for o in q.get('options', [])]
                 q_answer = q.get('answer', '')
                 q_type = q.get('question_type', section_type)
                 q_visual = q.get('visual_type', None)  # number_line, coordinate_plane, etc.
@@ -4288,9 +4305,55 @@ def export_generated_assignment():
                     story.append(Spacer(1, 0.05*inch))
 
                 # Multiple choice options
-                if q_options:
+                if q_options and q_type != 'matching':
                     for opt in q_options:
                         story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;{opt}", normal_style))
+
+                # Matching question: render terms and definitions columns
+                q_terms = q.get('terms', [])
+                q_definitions = q.get('definitions', [])
+                if (q_type == 'matching' or (q_terms and q_definitions)):
+                    q_terms = [_fix_sub_sup(str(t)) for t in q_terms]
+                    q_definitions = [_fix_sub_sup(str(d)) for d in q_definitions]
+                    from reportlab.lib import colors as rl_colors
+                    import random as _random
+                    # Shuffle definitions for student version
+                    shuffled_defs = list(q_definitions)
+                    if not include_answers:
+                        _random.seed(q_number)  # Deterministic shuffle per question
+                        _random.shuffle(shuffled_defs)
+                    # Build two-column table: numbered terms | lettered definitions
+                    max_rows = max(len(q_terms), len(shuffled_defs))
+                    match_data = [['', 'Terms', '', 'Definitions']]
+                    for ri in range(max_rows):
+                        term_num = str(ri + 1) + '.' if ri < len(q_terms) else ''
+                        term_text = q_terms[ri] if ri < len(q_terms) else ''
+                        def_letter = chr(65 + ri) + '.' if ri < len(shuffled_defs) else ''
+                        def_text = shuffled_defs[ri] if ri < len(shuffled_defs) else ''
+                        match_data.append([term_num, term_text, def_letter, def_text])
+                    # Add answer blank column for student version
+                    if not include_answers:
+                        match_data[0].append('Match')
+                        for ri in range(1, len(match_data)):
+                            match_data[ri].append('_____')
+                    col_widths = [0.3*inch, 2.2*inch, 0.3*inch, 2.8*inch]
+                    if not include_answers:
+                        col_widths.append(0.7*inch)
+                    match_tbl = Table(match_data, colWidths=col_widths)
+                    match_tbl.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.Color(0.6, 0.6, 0.6)),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('TOPPADDING', (0, 0), (-1, -1), 6),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ]))
+                    story.append(Spacer(1, 0.05*inch))
+                    story.append(match_tbl)
+                    story.append(Spacer(1, 0.05*inch))
 
                 # Add visual elements based on question type
                 if q_visual or q_type in ['number_line', 'coordinate_plane', 'graph',
@@ -4313,11 +4376,17 @@ def export_generated_assignment():
                 # Answer section
                 if include_answers:
                     # Show answer
-                    if q_type == 'coordinates' and isinstance(q_answer, dict):
+                    if q_type == 'matching' or (q_terms and q_definitions):
+                        if isinstance(q_answer, dict):
+                            ans_parts = [f"{k} → {v}" for k, v in q_answer.items()]
+                            ans_text = "ANSWERS: " + " | ".join(ans_parts)
+                        else:
+                            ans_text = f"ANSWER: {q_answer}"
+                    elif q_type == 'coordinates' and isinstance(q_answer, dict):
                         ans_text = f"ANSWER: Lat: {q_answer.get('lat', 0)}, Lng: {q_answer.get('lng', 0)}"
                     else:
                         ans_text = f"ANSWER: {q_answer}"
-                    story.append(Paragraph(f"<b>{ans_text}</b>", answer_style))
+                    story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
 
                     if q_type == 'math_equation':
                         story.append(Paragraph("<i>(Equivalent forms accepted)</i>", normal_style))
@@ -4326,7 +4395,9 @@ def export_generated_assignment():
                         story.append(Paragraph(f"<i>(Acceptable within {tolerance_km} km)</i>", normal_style))
                 else:
                     # Answer space for students
-                    if q_type == 'math_equation':
+                    if q_type == 'matching' or (q_terms and q_definitions):
+                        pass  # Match table already has answer blanks
+                    elif q_type == 'math_equation':
                         story.append(Paragraph("Show your work:", normal_style))
                         for _ in range(3):
                             story.append(Paragraph("_" * 85, normal_style))
