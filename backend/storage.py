@@ -107,13 +107,17 @@ def _use_supabase(teacher_id):
 # ══════════════════════════════════════════════════════════════
 
 def _file_load(data_key):
-    """Load data from a local file. Returns parsed JSON or None."""
+    """Load data from a local file. Returns parsed JSON, or raw text for CSVs."""
     filepath = _key_to_filepath(data_key)
     if not filepath:
         return None
     if not os.path.exists(filepath):
         return None
     try:
+        # CSV period files are not JSON — return raw text
+        if data_key.startswith('period:') and filepath.endswith('.csv'):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return f.read()
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
@@ -128,8 +132,13 @@ def _file_save(data_key, data):
         return False
     try:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
+        # CSV period files are raw text, not JSON
+        if data_key.startswith('period:') and filepath.endswith('.csv'):
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(data if isinstance(data, str) else str(data))
+        else:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
         return True
     except Exception as e:
         logger.error("Failed to save file %s: %s", filepath, e)
@@ -193,22 +202,27 @@ def _file_list_keys(prefix):
 # ══════════════════════════════════════════════════════════════
 
 def _sb_load(data_key, teacher_id):
-    """Load data from Supabase teacher_data table."""
-    try:
-        sb = _get_supabase()
-        if not sb:
+    """Load data from Supabase teacher_data table. Retries once on transient errors."""
+    import time as _time
+    for attempt in range(2):
+        try:
+            sb = _get_supabase()
+            if not sb:
+                return None
+            result = sb.table('teacher_data') \
+                .select('data') \
+                .eq('teacher_id', teacher_id) \
+                .eq('data_key', data_key) \
+                .execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0]['data']
             return None
-        result = sb.table('teacher_data') \
-            .select('data') \
-            .eq('teacher_id', teacher_id) \
-            .eq('data_key', data_key) \
-            .execute()
-        if result.data and len(result.data) > 0:
-            return result.data[0]['data']
-        return None
-    except Exception as e:
-        logger.error("Supabase load failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
-        return None
+        except Exception as e:
+            if attempt == 0 and 'Resource temporarily unavailable' in str(e):
+                _time.sleep(0.5)
+                continue
+            logger.error("Supabase load failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
+            return None
 
 
 def _sb_save(data_key, data, teacher_id):
