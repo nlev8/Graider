@@ -1201,7 +1201,8 @@ def mark_confirmations_sent_file():
 # ══════════════════════════════════════════════════════════════
 
 FOCUS_COMMS_SCRIPT = os.path.join(
-    os.path.expanduser("~/Downloads/Graider-Focus-Comms"),
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "automation",
     "focus-comms.js",
 )
 
