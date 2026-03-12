@@ -852,6 +852,11 @@ EDTECH QUIZ GENERATORS (zero-cost, no AI API calls):
 
 ONLY generate a quiz when the teacher EXPLICITLY asks you to create, generate, or make one (e.g., "create a Kahoot quiz", "generate a Blooket set", "make me a quiz for Friday"). Do NOT generate a quiz just because the teacher mentions that a quiz or test will happen — "we'll have a quiz Friday" is NOT a request to generate one. If unsure whether they want you to generate or just schedule, ASK. These tools pull from standards vocabulary, sample assessments, and grade weakness data — zero cost, no AI API needed. All accept optional topic, assignment_name (weak areas), question_count, and difficulty parameters.
 
+PARENT SURVEY TOOLS:
+- create_parent_survey: Create an anonymous parent survey with 4-5 questions about communication, support, and availability. Returns a shareable link (/survey/CODE). Parents click the link, rate on a 1-5 star scale, and optionally leave written feedback.
+- get_survey_results: View survey results with per-question averages, star distributions, and written comments. Omit join_code to list all surveys.
+- compile_survey_report: Generate a detailed report with overall averages, per-question breakdowns, and all written feedback. Use when the teacher wants a summary of parent feedback.
+
 ADVANCED ANALYTICS:
 - get_grade_trends: Track student/class scores over time with direction (improving/declining/stable). Use for individual student or class-wide trends.
 - get_rubric_weakness: Find consistently weakest rubric categories across ALL assignments. Shows gap between strongest and weakest categories.

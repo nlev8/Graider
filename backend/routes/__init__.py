@@ -26,6 +26,7 @@ from .student_account_routes import student_account_bp
 from .behavior_routes import behavior_bp
 from .seo_routes import seo_bp
 from .notebooklm_routes import notebooklm_bp
+from .survey_routes import survey_bp
 
 
 def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, get_lock_fn=None):
@@ -54,6 +55,7 @@ def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, 
     app.register_blueprint(behavior_bp)
     app.register_blueprint(seo_bp)
     app.register_blueprint(notebooklm_bp)
+    app.register_blueprint(survey_bp)
 
 
 __all__ = [
@@ -75,4 +77,5 @@ __all__ = [
     'behavior_bp',
     'seo_bp',
     'notebooklm_bp',
+    'survey_bp',
 ]
