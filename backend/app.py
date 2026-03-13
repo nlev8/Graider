@@ -194,7 +194,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         from docx import Document
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
-                    except:
+                    except Exception:
                         continue
                 elif filepath.endswith('.pdf'):
                     try:
@@ -202,7 +202,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         pdf = fitz.open(filepath)
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
-                    except:
+                    except Exception:
                         continue
 
                 if content and total_chars + len(content) < max_chars:
@@ -250,7 +250,7 @@ def load_saved_results(teacher_id='local-dev'):
                     if 'graded_at' not in r:
                         r['graded_at'] = None
                 return results
-        except:
+        except Exception:
             pass
     return []
 
@@ -505,7 +505,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                 try:
                     with open(os.path.join(assignments_dir, f), 'r') as cf:
                         all_configs[config_name.lower()] = json.load(cf)
-                except:
+                except Exception:
                     pass
 
     def extract_content_fingerprints(config_data):
@@ -825,7 +825,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                                 meta = json.load(mf)
                                 period_name = meta.get('period_name', period_name)
                                 class_level = meta.get('class_level', 'standard')
-                        except:
+                        except Exception:
                             pass
 
                     period_class_level_map[period_name] = class_level
@@ -894,7 +894,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                         if filename:
                             already_graded.add(filename)
                             already_graded.add(_canon_csv(filename))  # also add canonical form
-            except:
+            except Exception:
                 pass
 
         # Also check in-memory results (loaded from saved JSON)
@@ -1042,7 +1042,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                             file_text = temp_file_data.get("content", "")
                             if file_text:
                                 matched_config = find_matching_config(filepath.name, file_text)
-                    except:
+                    except Exception:
                         pass
 
                 # Track if config matches the submitted file
@@ -1513,7 +1513,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
                     try:
                         baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
-                    except:
+                    except Exception:
                         pass
 
                 # Save to student history
@@ -1522,7 +1522,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
                                        "assignment": matched_title, "period": student_period}
                         add_assignment_to_history(student_info['student_id'], grade_record_hist)
-                    except:
+                    except Exception:
                         pass
 
                 # Get class level for logging
@@ -1993,7 +1993,7 @@ def grade_individual():
     if student_info_str:
         try:
             student_info = json.loads(student_info_str)
-        except:
+        except Exception:
             pass
 
     # Parse assignment config if provided
@@ -2001,7 +2001,7 @@ def grade_individual():
     if assignment_config_str:
         try:
             assignment_config = json.loads(assignment_config_str)
-        except:
+        except Exception:
             pass
 
     # Build AI notes from config
@@ -3265,7 +3265,7 @@ def list_periods():
                     try:
                         with open(os.path.join(periods_dir, f), 'r', encoding='utf-8') as pf:
                             count = sum(1 for _ in pf) - 1  # Subtract header
-                    except:
+                    except Exception:
                         pass
                     periods.append({"name": period_name, "file": f, "student_count": count})
 

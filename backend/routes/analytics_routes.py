@@ -357,7 +357,7 @@ def export_district_report():
                 teacher_name = settings.get('teacher_name', teacher_name)
                 school_name = settings.get('school_name', school_name)
                 subject = settings.get('subject', subject)
-        except:
+        except Exception:
             pass
 
     master_file = os.path.join(output_folder, "master_grades.csv")

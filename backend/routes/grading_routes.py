@@ -210,7 +210,7 @@ def clear_results():
                 saved_results = [r for r in saved_results if r.get("filename") not in filenames_set]
                 with open(results_file, 'w') as f:
                     json.dump(saved_results, f)
-            except:
+            except Exception:
                 pass
 
         # Also remove from master_grades.csv
@@ -251,7 +251,7 @@ def clear_results():
         if os.path.exists(results_file):
             try:
                 os.remove(results_file)
-            except:
+            except Exception:
                 pass
 
         # Also clear master_grades.csv so files can be regraded
@@ -627,7 +627,7 @@ def export_focus_csv():
                                 name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
-            except:
+            except Exception:
                 pass
 
     # Load from periods
@@ -668,7 +668,7 @@ def export_focus_csv():
                                 name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
-            except:
+            except Exception:
                 pass
 
     # Build list of students to match

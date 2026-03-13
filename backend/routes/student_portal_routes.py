@@ -167,7 +167,7 @@ def list_saved_assessments():
                             "total_points": assessment.get('total_points'),
                             "question_count": question_count,
                         })
-                except:
+                except Exception:
                     pass
 
         assessments.sort(key=lambda x: x.get('saved_at', ''), reverse=True)

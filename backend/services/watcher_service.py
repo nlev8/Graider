@@ -197,7 +197,7 @@ class SharePointWatcher:
                 password_input.clear()
                 password_input.send_keys(password)
                 password_input.send_keys(Keys.RETURN)
-            except:
+            except Exception:
                 # Might already be past login screen
                 pass
             
@@ -215,7 +215,7 @@ class SharePointWatcher:
                     yes_button.click()
                     print("   Clicked 'Stay signed in' - session will persist")
                     time.sleep(2)
-                except:
+                except Exception:
                     pass
                 
                 if "sharepoint.com" in current_url and "login" not in current_url.lower():
@@ -315,7 +315,7 @@ class SharePointWatcher:
                     )
                     download_btn.click()
                     time.sleep(3)
-                except:
+                except Exception:
                     # Try right-click context menu
                     actions = ActionChains(driver)
                     actions.context_click(element).perform()

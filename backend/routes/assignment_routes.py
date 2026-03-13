@@ -196,7 +196,7 @@ def list_assignments():
                         "dueDate": data.get("dueDate", ""),
                         "latePenalty": data.get("latePenalty", {}),
                     }
-            except:
+            except Exception:
                 assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": "", "dueDate": "", "latePenalty": {}}
 
     files_with_mtime.sort(key=lambda x: x[1], reverse=True)

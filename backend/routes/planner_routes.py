@@ -2108,7 +2108,7 @@ def load_support_documents_for_planning() -> str:
                         from docx import Document
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
-                    except:
+                    except Exception:
                         continue
                 elif filepath.endswith('.pdf'):
                     try:
@@ -2116,7 +2116,7 @@ def load_support_documents_for_planning() -> str:
                         pdf = fitz.open(filepath)
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
-                    except:
+                    except Exception:
                         continue
 
                 if content and total_chars + len(content) < max_chars:
@@ -5850,7 +5850,7 @@ def get_assessment_templates():
                 with open(os.path.join(TEMPLATES_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     templates.append(metadata)
-            except:
+            except Exception:
                 pass
 
     # Sort by creation date (newest first)

@@ -75,7 +75,7 @@ def serve_file_endpoint():
 def parse_document():
     """Parse an uploaded Word/PDF document and convert to HTML."""
     if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"})
+        return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files['file']
     filename = file.filename.lower()
@@ -89,11 +89,12 @@ def parse_document():
         elif filename.endswith('.txt'):
             return _parse_txt(file_data, file.filename)
         else:
-            return jsonify({"error": "Unsupported file type. Use .docx, .pdf, or .txt"})
+            return jsonify({"error": "Unsupported file type. Use .docx, .pdf, or .txt"}), 400
 
     except Exception as e:
-        import traceback
-        return jsonify({"error": f"{str(e)}\n{traceback.format_exc()}"})
+        import logging
+        logging.getLogger(__name__).exception("Error parsing document")
+        return jsonify({"error": str(e)}), 500
 
 
 def _parse_docx(file_data, filename):
@@ -139,7 +140,7 @@ def _parse_docx(file_data, filename):
             # Check document properties for title
             if doc.core_properties.title:
                 doc_title = doc.core_properties.title
-        except:
+        except Exception:
             pass
 
         # If no metadata title, use first heading or first paragraph

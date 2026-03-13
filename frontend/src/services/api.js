@@ -239,6 +239,11 @@ export async function parseDocument(file) {
     body: formData,
   })
 
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || 'Failed to parse document')
+  }
+
   return response.json()
 }
 

@@ -958,7 +958,7 @@ def grade_box_plot(question, answer):
             student_val = float(answer.get(key, 0))
             if abs(student_val - exp_val) < tolerance:
                 correct_count += 1
-        except:
+        except Exception:
             pass
 
     if correct_count == total:
@@ -991,7 +991,7 @@ def grade_math_equation(question, answer):
             return {'correct': True, 'feedback': 'Correct!'}
         else:
             return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
-    except:
+    except Exception:
         # Fallback to string comparison
         if str(answer_val).strip() == str(correct_answer).strip():
             return {'correct': True, 'feedback': 'Correct!'}

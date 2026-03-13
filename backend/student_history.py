@@ -76,7 +76,7 @@ def load_student_history(student_id: str, teacher_id: str = 'local-dev') -> dict
         try:
             with open(path, 'r') as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
 
     return {

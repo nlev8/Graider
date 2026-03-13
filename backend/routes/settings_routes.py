@@ -323,7 +323,7 @@ def list_rosters():
                 with open(os.path.join(ROSTERS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     rosters.append(metadata)
-            except:
+            except Exception:
                 pass
     return jsonify({"rosters": rosters})
 
@@ -611,7 +611,7 @@ def list_documents():
                 with open(os.path.join(DOCUMENTS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     documents.append(metadata)
-            except:
+            except Exception:
                 pass
     return jsonify({"documents": documents})
 
