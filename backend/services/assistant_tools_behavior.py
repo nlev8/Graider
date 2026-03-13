@@ -229,7 +229,7 @@ BEHAVIOR_TOOL_DEFINITIONS = [
     },
     {
         "name": "generate_behavior_email",
-        "description": "Generate a professional behavior email to a student's parents. Includes correction counts, specific dates, teacher notes, and a constructive tone. Returns the draft for review before sending.",
+        "description": "Generate a professional behavior email to a student's parents. Can use companion app behavior data from Supabase (corrections, praise, dates, notes) OR draft from chat context only. IMPORTANT: Before calling this, always ask the teacher: 'Would you like me to include behavior data from the Companion app, or draft using just the information you provided?' Set use_behavior_data accordingly.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -244,7 +244,11 @@ BEHAVIOR_TOOL_DEFINITIONS = [
                 },
                 "custom_note": {
                     "type": "string",
-                    "description": "Optional additional note to include in the email"
+                    "description": "When use_behavior_data is false, this should contain ALL the context for the email (what the teacher described in chat). When true, this is an optional additional note."
+                },
+                "use_behavior_data": {
+                    "type": "boolean",
+                    "description": "If true, fetch behavior data from the Companion app (Supabase) and include it in the email. If false, draft the email using ONLY the custom_note (information from the chat conversation). Default: true."
                 }
             },
             "required": ["student_name"]
@@ -684,25 +688,80 @@ def _generate_email_template(ctx, tone, custom_note):
     return email_subject, "\n".join(lines)
 
 
-def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_id='local-dev'):
-    """Generate a professional behavior email draft using AI (with template fallback)."""
+def generate_behavior_email(student_name, tone=None, custom_note=None, use_behavior_data=True, teacher_id='local-dev'):
+    """Generate a professional behavior email draft using AI (with template fallback).
+
+    If use_behavior_data=True, fetches companion app data from Supabase.
+    If use_behavior_data=False, drafts using only the custom_note (chat context).
+    """
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
     if not teacher_id or teacher_id == 'local-dev':
         return {"error": "Not authenticated — teacher_id is 'local-dev'. The auth middleware did not resolve your user ID."}
 
-    ctx = _gather_email_context(teacher_id, student_name)
-    if not ctx:
-        return {"error": f"No behavior data found for '{student_name}' in the last 14 days. Call get_behavior_summary with days=30 or days=90 first to check if older data exists. The student name must match exactly what was recorded in the Companion app."}
+    if use_behavior_data:
+        # Fetch companion app behavior data from Supabase
+        ctx = _gather_email_context(teacher_id, student_name)
+        if not ctx:
+            return {"error": f"No behavior data found for '{student_name}' in the last 14 days. Call get_behavior_summary with days=30 or days=90 first to check if older data exists. The student name must match exactly what was recorded in the Companion app."}
+    else:
+        # Chat-context-only mode: build minimal context without Supabase
+        if not custom_note:
+            return {"error": "When not using companion app data, you must provide context about the student in the custom_note parameter (the information the teacher shared in chat)."}
+        settings = _load_settings()
+        config = settings.get('config', {})
+        first_name = _extract_first_name(student_name)
+        # Look up parent contact info (still useful even without behavior data)
+        parent_email, parent_name = "", ""
+        contacts_raw = _load_parent_contacts()
+        contacts_list = contacts_raw.values() if isinstance(contacts_raw, dict) else contacts_raw
+        for contact in contacts_list:
+            if not isinstance(contact, dict):
+                continue
+            if _fuzzy_name_match(student_name, contact.get("student_name", "")):
+                emails = contact.get("parent_emails", [])
+                parent_email = emails[0] if isinstance(emails, list) and emails else contact.get("parent_email", "") or contact.get("email", "")
+                clist = contact.get("contacts", [])
+                if clist and isinstance(clist[0], dict):
+                    parent_name = f"{clist[0].get('first_name', '')} {clist[0].get('last_name', '')}".strip()
+                if not parent_name:
+                    parent_name = contact.get("parent_name", "") or contact.get("contact_name", "")
+                break
+        if not parent_email:
+            roster = _load_roster()
+            for s in roster:
+                if _fuzzy_name_match(student_name, s.get("name", "")):
+                    parent_email = s.get("parent_email", "") or s.get("guardian_email", "")
+                    parent_name = s.get("parent_name", "") or s.get("guardian_name", "")
+                    break
+        ctx = {
+            "name": student_name,
+            "first_name": first_name,
+            "corrections": 0,
+            "praise": 0,
+            "correction_notes": [],
+            "praise_notes": [],
+            "correction_dates": [],
+            "stt_context": [],
+            "parent_email": parent_email,
+            "parent_name": parent_name,
+            "teacher_name": config.get('teacher_name', 'Your Teacher'),
+            "subject_area": config.get('subject', ''),
+            "school_name": config.get('school_name', ''),
+            "email_signature": config.get('email_signature', ''),
+        }
 
     # Auto-detect tone
     if not tone:
-        if ctx['corrections'] > ctx['praise'] and ctx['corrections'] >= 3:
-            tone = "concern"
-        elif ctx['praise'] > ctx['corrections']:
-            tone = "positive"
+        if use_behavior_data:
+            if ctx['corrections'] > ctx['praise'] and ctx['corrections'] >= 3:
+                tone = "concern"
+            elif ctx['praise'] > ctx['corrections']:
+                tone = "positive"
+            else:
+                tone = "concern"
         else:
-            tone = "concern"
+            tone = "concern"  # Default for chat-only; AI will adapt based on custom_note
 
     # Try AI generation first, fall back to template
     ai_generated = False
@@ -713,21 +772,22 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, teacher_i
     else:
         email_subject, body = _generate_email_template(ctx, tone, custom_note)
 
-    return {
-        "status": "success",
-        "data": {
-            "subject": email_subject,
-            "body": body,
-            "to_email": ctx['parent_email'],
-            "parent_name": ctx['parent_name'],
-            "student_name": ctx['name'],
-            "tone": tone,
-            "corrections": ctx['corrections'],
-            "praise": ctx['praise'],
-            "ai_generated": ai_generated,
-            "note": "Review the draft above. Ask me to send it when ready, or request changes.",
-        }
+    result_data = {
+        "subject": email_subject,
+        "body": body,
+        "to_email": ctx['parent_email'],
+        "parent_name": ctx['parent_name'],
+        "student_name": ctx['name'],
+        "tone": tone,
+        "ai_generated": ai_generated,
+        "used_behavior_data": use_behavior_data,
+        "note": "Review the draft above. Ask me to send it when ready, or request changes.",
     }
+    if use_behavior_data:
+        result_data["corrections"] = ctx['corrections']
+        result_data["praise"] = ctx['praise']
+
+    return {"status": "success", "data": result_data}
 
 
 def send_behavior_email(student_name, subject, body, method="focus"):
