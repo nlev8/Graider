@@ -2278,7 +2278,7 @@ def align_document_to_standards():
 
         system_prompt = (
             "You are an expert curriculum alignment specialist. "
-            "Analyze the educational document against the provided standards and return a detailed alignment analysis. "
+            "Analyze the educational document against the provided standards and return a detailed alignment analysis in JSON format. "
             "Be specific about what content in the document maps to each standard. "
             "Only include standards with at least some relevance (confidence > 0.2). "
             "Sort matched_standards by confidence descending."
@@ -2628,6 +2628,7 @@ def generate_lesson_plan():
     config = data.get('config', {})
     selected_idea = data.get('selectedIdea')  # Optional: from brainstorming
     generate_variations = data.get('generateVariations', False)  # Generate multiple variations
+    reference_docs = data.get('referenceDocs', [])  # Uploaded reference documents
 
     if not selected_standards:
         return jsonify({"error": "No standards selected"})
@@ -2742,6 +2743,16 @@ Develop this specific concept into a complete, detailed lesson plan.
         subject_boundary = _build_subject_boundary_prompt(
             config.get('subject', ''), config.get('grade', ''))
 
+        # Build reference documents block
+        ref_docs_block = ''
+        if reference_docs:
+            ref_docs_block = "\n=== REFERENCE DOCUMENTS (use this content to inform your plan) ===\n"
+            for doc in reference_docs:
+                doc_name = doc.get('filename', 'Document')
+                doc_text = doc.get('text', '')[:6000]
+                ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
+            ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when creating activities, questions, and explanations.\n"
+
         # Build content-type-specific prompt, JSON structure, and instructions
         common_header = f"""You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
 {subject_boundary}
@@ -2754,7 +2765,7 @@ Standards to Cover:
 
 Additional Requirements:
 {config.get('requirements', 'None specified')}
-"""
+{ref_docs_block}"""
         teacher_notes_block = f"""
 TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
 {config.get('globalAINotes', '')}
@@ -5200,6 +5211,13 @@ def generate_assessment():
                     for q in assignment.get('questions', []):
                         source_content += f"  - {q.get('marker', '')}: {q.get('prompt', '')}\n"
                     source_content += "\n"
+
+                elif source.get('type') == 'document':
+                    doc_content = source.get('content', {})
+                    doc_text = doc_content.get('text', '')[:6000]
+                    doc_name = doc_content.get('filename', 'Uploaded Document')
+                    source_content += f"--- REFERENCE DOCUMENT: {doc_name} ---\n"
+                    source_content += doc_text + "\n\n"
 
             source_content += "=== END INSTRUCTIONAL CONTENT ===\n\n"
             source_content += "IMPORTANT: Questions must directly relate to the content above. Reference specific vocabulary, examples, and concepts from the lessons.\n\n"

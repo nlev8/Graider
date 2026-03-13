@@ -1457,6 +1457,12 @@ function App() {
   const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
   const [previewResults, setPreviewResults] = useState(null);
 
+  // Reference document upload state
+  const [uploadedDocs, setUploadedDocs] = useState([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const [matchingInProgress, setMatchingInProgress] = useState(false);
+  const [matchResults, setMatchResults] = useState(null);
+
   // NotebookLM materials state
   const [nlmAuthenticated, setNlmAuthenticated] = useState(false);
   const [nlmNotebookId, setNlmNotebookId] = useState(null);
@@ -4391,6 +4397,9 @@ ${signature}`;
       const autoTitle =
         unitConfig.title || (selectedIdea ? selectedIdea.title : "");
 
+      // Include uploaded reference documents
+      const referenceDocs = uploadedDocs.map(doc => ({ filename: doc.filename, text: doc.text }));
+
       const data = await api.generateLessonPlan({
         standards: fullStandards,
         config: {
@@ -4399,12 +4408,13 @@ ${signature}`;
           subject: config.subject,
           availableTools: config.availableTools || [],
           ...unitConfig,
-          title: autoTitle, // Empty string tells backend to auto-generate title
-          standardCodes: standardCodes, // Pass for title generation if needed
+          title: autoTitle,
+          standardCodes: standardCodes,
           sectionCategories: unitConfig.type === "Assignment" ? assignmentSectionCategories : undefined,
         },
         selectedIdea: selectedIdea,
         generateVariations: generateVariations,
+        referenceDocs: referenceDocs,
       });
       if (data.error) addToast("Error: " + data.error, "error");
       else if (data.variations) {
@@ -4515,6 +4525,83 @@ ${signature}`;
     }
   };
 
+  // Reference document upload handlers
+  const handleDocUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setDocUploading(true);
+    try {
+      for (const file of files) {
+        const [textResult, nlmResult] = await Promise.all([
+          api.extractTextFromFile(file),
+          api.notebookLMUploadContext(file).catch(() => null),
+        ]);
+        if (textResult && textResult.text) {
+          setUploadedDocs(prev => [...prev, {
+            filename: file.name,
+            size: file.size,
+            text: textResult.text,
+            path: nlmResult ? nlmResult.path : null,
+          }]);
+          // Also add to NLM context files if upload succeeded
+          if (nlmResult && nlmResult.path) {
+            setNlmContextFiles(prev => [...prev, { filename: nlmResult.filename || file.name, size: nlmResult.size || file.size, path: nlmResult.path }]);
+          }
+        } else {
+          addToast("Could not extract text from " + file.name, "warning");
+        }
+      }
+    } catch (err) {
+      addToast("Upload error: " + err.message, "error");
+    } finally {
+      setDocUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeUploadedDoc = (index) => {
+    const doc = uploadedDocs[index];
+    setUploadedDocs(prev => prev.filter((_, i) => i !== index));
+    if (doc && doc.path) {
+      setNlmContextFiles(prev => prev.filter(f => f.path !== doc.path));
+    }
+    setMatchResults(null);
+    setNlmNotebookId(null);
+  };
+
+  const handleMatchStandards = async () => {
+    if (uploadedDocs.length === 0 || !config.subject || !config.grade_level) {
+      addToast("Upload documents and set subject/grade first", "warning");
+      return;
+    }
+    setMatchingInProgress(true);
+    try {
+      const combinedText = uploadedDocs.map(d => d.text).join("\n\n");
+      const result = await api.alignDocumentToStandards({ documentText: combinedText, subject: config.subject, grade: config.grade_level });
+      console.log("[Match Standards] API response:", JSON.stringify(result).slice(0, 500));
+      setMatchResults(result);
+      if (result && result.matched_standards) {
+        const matchedCodes = (result.matched_standards || []).filter(a => a.confidence >= 0.4).map(a => a.code);
+        // Alert if currently selected standards conflict with document content
+        if (selectedStandards.length > 0 && matchedCodes.length > 0) {
+          const conflicts = selectedStandards.filter(code => !matchedCodes.includes(code));
+          if (conflicts.length > 0) {
+            addToast("Heads up: " + conflicts.length + " selected standard" + (conflicts.length > 1 ? "s" : "") + " (" + conflicts.join(", ") + ") may not align with your uploaded documents", "warning", 8000);
+          }
+        }
+        if (matchedCodes.length > 0) {
+          addToast(matchedCodes.length + " matching standards found — click to select", "info");
+        } else {
+          addToast("No strong standard matches found in uploaded documents", "warning");
+        }
+      }
+    } catch (err) {
+      addToast("Matching error: " + err.message, "error");
+    } finally {
+      setMatchingInProgress(false);
+    }
+  };
+
   // Assessment generation handlers
   const generateAssessmentHandler = async () => {
     if (!config.subject) {
@@ -4543,6 +4630,12 @@ ${signature}`;
       const title = assessmentConfig.title ||
         `${config.subject || "Subject"} ${assessmentConfig.type.charAt(0).toUpperCase() + assessmentConfig.type.slice(1)} - ${selectedStandards.slice(0, 2).join(", ")}${selectedStandards.length > 2 ? "..." : ""}`;
 
+      // Merge uploaded docs into content sources
+      const allSources = [...selectedSources];
+      for (const doc of uploadedDocs) {
+        allSources.push({ type: "document", content: { text: doc.text, filename: doc.filename } });
+      }
+
       const data = await api.generateAssessment(
         fullStandards,
         {
@@ -4553,7 +4646,7 @@ ${signature}`;
           requirements: unitConfig.requirements || "",
         },
         { ...assessmentConfig, title },
-        selectedSources
+        allSources
       );
 
       if (data.error) {
@@ -10057,6 +10150,67 @@ ${signature}`;
                               </div>
                             </div>
                           )}
+                          {/* Reference Documents */}
+                          <div>
+                            <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <Icon name="FileUp" size={14} />
+                              Reference Documents
+                              {uploadedDocs.length > 0 && <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>({uploadedDocs.length})</span>}
+                            </label>
+                            <input type="file" id="doc-upload-sidebar" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt" style={{ display: "none" }} onChange={handleDocUpload} />
+                            <div style={{ display: "flex", gap: "6px", marginBottom: uploadedDocs.length > 0 ? "8px" : "0" }}>
+                              <button className="btn btn-secondary" onClick={() => document.getElementById("doc-upload-sidebar").click()} disabled={docUploading} style={{ padding: "5px 12px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", flex: 1 }}>
+                                <Icon name="Upload" size={13} />
+                                {docUploading ? "Uploading..." : "Upload"}
+                              </button>
+                              {uploadedDocs.length > 0 && (
+                                <button className="btn btn-primary" onClick={handleMatchStandards} disabled={matchingInProgress} style={{ padding: "5px 12px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", flex: 1 }}>
+                                  <Icon name="Target" size={13} />
+                                  {matchingInProgress ? "Matching..." : "Match Standards"}
+                                </button>
+                              )}
+                            </div>
+                            {uploadedDocs.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                {uploadedDocs.map((doc, idx) => (
+                                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(139, 92, 246, 0.1)", border: "1px solid rgba(139, 92, 246, 0.3)", borderRadius: "6px", padding: "4px 8px", fontSize: "0.8rem" }}>
+                                    <Icon name={["png","jpg","jpeg","gif","webp"].includes((doc.filename || "").split(".").pop().toLowerCase()) ? "Image" : "FileText"} size={12} />
+                                    <span style={{ fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.filename}</span>
+                                    <span style={{ color: "var(--text-muted)", fontSize: "0.7rem", flexShrink: 0 }}>{doc.size < 1024 ? doc.size + "B" : Math.round(doc.size / 1024) + "KB"}</span>
+                                    <button onClick={() => removeUploadedDoc(idx)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "0 2px", fontSize: "0.9rem", lineHeight: 1, flexShrink: 0 }}>×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {matchResults && matchResults.matched_standards && matchResults.matched_standards.length > 0 && (
+                              <div style={{ background: "var(--glass-bg)", borderRadius: "8px", padding: "8px", border: "1px solid var(--glass-border)", marginTop: "8px" }}>
+                                <div style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "6px" }}>
+                                  {matchResults.matched_standards.filter((a) => a.confidence >= 0.4).length} matching standards — click to select
+                                </div>
+                                {matchResults.matched_standards.filter((a) => a.confidence >= 0.2).slice(0, 8).map((a, idx) => {
+                                  const isSelected = selectedStandards.includes(a.code);
+                                  const color = a.confidence >= 0.7 ? "#22c55e" : a.confidence >= 0.4 ? "#f59e0b" : "#ef4444";
+                                  return (
+                                    <div key={idx} onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedStandards(prev => prev.filter(c => c !== a.code));
+                                      } else {
+                                        setSelectedStandards(prev => [...prev, a.code]);
+                                      }
+                                    }} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px", padding: "4px 6px", borderRadius: "6px", cursor: "pointer", background: isSelected ? "rgba(99, 102, 241, 0.15)" : "transparent", border: isSelected ? "1px solid rgba(99, 102, 241, 0.4)" : "1px solid transparent", transition: "all 0.15s ease" }}>
+                                      <Icon name={isSelected ? "CheckCircle" : "Circle"} size={12} style={{ color: isSelected ? "#6366f1" : "var(--text-muted)", flexShrink: 0 }} />
+                                      <span style={{ fontWeight: 600, fontSize: "0.7rem", minWidth: "70px", flexShrink: 0 }}>{a.code}</span>
+                                      <div style={{ flex: 1, height: "4px", background: "var(--glass-border)", borderRadius: "2px", overflow: "hidden" }}>
+                                        <div style={{ width: Math.round(a.confidence * 100) + "%", height: "100%", borderRadius: "2px", background: color }} />
+                                      </div>
+                                      <span style={{ fontSize: "0.7rem", fontWeight: 600, color: color, flexShrink: 0 }}>{Math.round(a.confidence * 100)}%</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
                           <div>
                             <label className="label">
                               Additional Requirements

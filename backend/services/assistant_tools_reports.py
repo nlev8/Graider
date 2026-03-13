@@ -2459,9 +2459,6 @@ def confirm_and_send(teacher_id='local-dev'):
     except Exception as e:
         return {"error": "Failed to read pending send: " + str(e)}
 
-    # Remove pending file so it can't be sent twice
-    os.remove(pending_path)
-
     action = pending.get("action")
 
     try:
@@ -2471,6 +2468,14 @@ def confirm_and_send(teacher_id='local-dev'):
             if not messages:
                 return {"error": "No messages in pending payload."}
             result = launch_focus_comms(messages, teacher_id=teacher_id)
+            if "error" in result:
+                # Keep pending file so teacher can retry
+                return result
+            # Success — remove pending file to prevent double-send
+            try:
+                os.remove(pending_path)
+            except OSError:
+                pass
             result["total_messages"] = len(messages)
             return result
         elif action == "send_parent_emails":
@@ -2479,6 +2484,12 @@ def confirm_and_send(teacher_id='local-dev'):
             if not emails:
                 return {"error": "No emails in pending payload."}
             result = launch_outlook_sender(emails, teacher_id=teacher_id)
+            if "error" in result:
+                return result
+            try:
+                os.remove(pending_path)
+            except OSError:
+                pass
             result["total_emails"] = len(emails)
             return result
         else:

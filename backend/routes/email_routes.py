@@ -1393,13 +1393,6 @@ def confirm_send():
     if not pending:
         return jsonify({"error": "No pending send. Generate a preview first."})
 
-    # Clean up file if it exists (prevent double-send)
-    try:
-        if os.path.exists(pending_path):
-            os.remove(pending_path)
-    except Exception:
-        pass
-
     action = pending.get("action")
     from flask import g
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1409,6 +1402,13 @@ def confirm_send():
         if not messages:
             return jsonify({"error": "No messages in pending payload"})
         result = launch_focus_comms(messages, teacher_id=teacher_id)
+        if "error" not in result:
+            # Success — clean up file to prevent double-send
+            try:
+                if os.path.exists(pending_path):
+                    os.remove(pending_path)
+            except Exception:
+                pass
         return jsonify(result)
 
     elif action == "send_parent_emails":
@@ -1416,6 +1416,12 @@ def confirm_send():
         if not emails:
             return jsonify({"error": "No emails in pending payload"})
         result = launch_outlook_sender(emails, teacher_id=teacher_id)
+        if "error" not in result:
+            try:
+                if os.path.exists(pending_path):
+                    os.remove(pending_path)
+            except Exception:
+                pass
         return jsonify(result)
 
     else:

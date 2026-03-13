@@ -1019,7 +1019,7 @@ export async function extractTextFromFile(file) {
   formData.append('file', file)
   var response = await fetch('/api/extract-text', {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(),
     body: formData,
   })
   return response.json()
