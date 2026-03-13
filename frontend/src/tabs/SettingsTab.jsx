@@ -498,6 +498,9 @@ export default React.memo(function SettingsTab({
                   <option value="English/ELA">English/ELA</option>
                   <option value="Math">Math</option>
                   <option value="Science">Science</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="World Languages">World Languages</option>
                   <option value="Other">Other</option>
                 </select>
               </div>

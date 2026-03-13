@@ -58,6 +58,10 @@ IXL_PAGES = {
         ("https://www.ixl.com/standards/florida/social-studies/grade-7", "7"),
         ("https://www.ixl.com/standards/florida/social-studies/grade-8", "8"),
     ],
+    "spanish": [
+        ("https://www.ixl.com/standards/florida/spanish?documentId=2020001279&subsetId=2020001910", "NM"),
+        ("https://www.ixl.com/standards/florida/spanish?documentId=2020001279&subsetId=2020001909", "NH"),
+    ],
     "english-ela": [
         (f"https://www.ixl.com/standards/florida/ela/grade-{n}", str(n))
         for n in range(6, 13)
@@ -87,6 +91,7 @@ SUBJECT_CODE_PREFIXES = {
     "english-ela": ["ELA.", "LAFS."],
     "math": ["MA."],
     "science": ["SC."],
+    "spanish": ["WL."],
 }
 
 # For geography, only keep geography-related strand codes
@@ -138,11 +143,13 @@ HS_COURSE_MAP = {
 # Matches: SS.8.A.4.1, MA.6.NSO.1.1, ELA.6.R.1.1, SC.6.N.1.1, etc.
 CODE_PATTERN = re.compile(
     r'^(SS|MA|ELA|SC|LAFS)\.\d{1,3}\.[A-Z]{1,4}\.\d+\.\d+'
+    r'|^WL\.K12\.[A-Z]{2,3}\.\d+\.\d+'
 )
 
 # Also match parent codes like SS.68.AA.1 (strand headers), but we prefer full codes
 PARENT_CODE_PATTERN = re.compile(
     r'^(SS|MA|ELA|SC|LAFS)\.\d{1,3}\.[A-Z]{1,4}\.\d+'
+    r'|^WL\.K12\.[A-Z]{2,3}\.\d+'
 )
 
 
@@ -556,7 +563,7 @@ def build_social_studies_composite(all_standards, dry_run=False):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 ALL_SUBJECTS = ["us_history", "world_history", "civics", "geography",
-                "english-ela", "math", "science"]
+                "english-ela", "math", "science", "spanish"]
 
 
 def process_subject(subject, dry_run=False, skip_enrich=False):

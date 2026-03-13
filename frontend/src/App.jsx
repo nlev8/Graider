@@ -171,6 +171,36 @@ const markerLibrary = {
     "Historical significance:",
     "Compare civilizations:",
   ],
+  Spanish: [
+    "Traduce:",
+    "Conjugación:",
+    "Respuesta:",
+    "Escribe en español:",
+    "Completa la oración:",
+    "Vocabulario:",
+    "Lectura:",
+    "Conversación:",
+  ],
+  French: [
+    "Traduisez:",
+    "Conjugaison:",
+    "Répondez:",
+    "Écrivez en français:",
+    "Complétez la phrase:",
+    "Vocabulaire:",
+    "Lecture:",
+    "Conversation:",
+  ],
+  "World Languages": [
+    "Translate:",
+    "Conjugation:",
+    "Response:",
+    "Write in target language:",
+    "Complete the sentence:",
+    "Vocabulary:",
+    "Reading comprehension:",
+    "Conversation:",
+  ],
   Other: [
     "Answer:",
     "Explain:",
@@ -1643,6 +1673,7 @@ function App() {
     const isMath = s.includes('math') || s.includes('algebra') || s.includes('geometry') || s.includes('calculus') || s.includes('statistics');
     const isScience = s.includes('science') || s.includes('biology') || s.includes('chemistry') || s.includes('physics') || s.includes('earth');
     const isELA = s.includes('ela') || s.includes('english') || s.includes('reading') || s.includes('writing') || s.includes('language arts') || s.includes('literature');
+    const isWorldLang = s.includes('spanish') || s.includes('french') || s.includes('world lang') || s.includes('german') || s.includes('italian') || s.includes('portuguese') || s.includes('chinese') || s.includes('japanese');
     const isSocialStudies = s.includes('history') || s.includes('social') || s.includes('civics') || s.includes('economics') || s.includes('geography') || s.includes('government');
 
     if (isMath) {
@@ -1682,6 +1713,19 @@ function App() {
         extended_writing: true,
         vocabulary: true,
         true_false: false,
+      };
+    }
+    if (isWorldLang) {
+      return {
+        multiple_choice: true,
+        short_answer: true,
+        math_computation: false,
+        geometry_visual: false,
+        graphing: false,
+        data_analysis: false,
+        extended_writing: true,
+        vocabulary: true,
+        true_false: true,
       };
     }
     if (isSocialStudies) {
@@ -4278,6 +4322,9 @@ ${signature}`;
     Geography: { G: "Geography" },
     "US History": { A: "American History" },
     "World History": { W: "World History" },
+    Spanish: { C: "Communication", CU: "Culture", CO: "Connections", CM: "Comparisons", CT: "Communities" },
+    French: { C: "Communication", CU: "Culture", CO: "Connections", CM: "Comparisons", CT: "Communities" },
+    "World Languages": { C: "Communication", CU: "Culture", CO: "Connections", CM: "Comparisons", CT: "Communities" },
   };
   const domainNameMap = domainNamesBySubject[config.subject] || domainNamesBySubject.Math;
 

@@ -2191,8 +2191,11 @@ def load_standards(state, subject, grade=None):
                     code_parts = code.split('.')
                     if len(code_parts) >= 2:
                         code_grade = code_parts[1]
+                        # K12 codes (e.g., WL.K12.NH.1.1) apply to all grades
+                        if code_grade == 'K12':
+                            filtered.append(s)
                         # Match grade (handle K, 1-12)
-                        if code_grade == grade or code_grade == f"0{grade}":
+                        elif code_grade == grade or code_grade == f"0{grade}":
                             filtered.append(s)
                         # For kindergarten
                         elif grade == 'K' and code_grade in ['K', '0', '00']:
