@@ -2265,20 +2265,8 @@ export default React.memo(function ResultsTab({
                                                     r.filename,
                                                 ),
                                               );
-                                              // Clean up email approvals
-                                              const newApprovals = {};
-                                              Object.keys(
-                                                emailApprovals,
-                                              ).forEach((key) => {
-                                                const idx = parseInt(key);
-                                                if (idx < originalIndex)
-                                                  newApprovals[idx] =
-                                                    emailApprovals[key];
-                                                else if (idx > originalIndex)
-                                                  newApprovals[idx - 1] =
-                                                    emailApprovals[key];
-                                              });
-                                              setEmailApprovals(newApprovals);
+                                              // Email approvals are re-indexed automatically by the
+                                              // useEffect in App.jsx that watches status.results changes.
                                             } catch (err) {
                                               addToast(
                                                 "Error deleting result: " +

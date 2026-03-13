@@ -4578,7 +4578,6 @@ ${signature}`;
     try {
       const combinedText = uploadedDocs.map(d => d.text).join("\n\n");
       const result = await api.alignDocumentToStandards({ documentText: combinedText, subject: config.subject, grade: config.grade_level });
-      console.log("[Match Standards] API response:", JSON.stringify(result).slice(0, 500));
       setMatchResults(result);
       if (result && result.matched_standards) {
         const matchedCodes = (result.matched_standards || []).filter(a => a.confidence >= 0.4).map(a => a.code);
@@ -5518,6 +5517,15 @@ ${signature}`;
   // Update approval status with persistence
   const updateApprovalStatus = async (index, approval) => {
     setEmailApprovals((prev) => ({ ...prev, [index]: approval }));
+    // Also update the result object so the useEffect that rebuilds approvals
+    // from status.results will preserve this approval
+    setStatus((prev) => {
+      const updatedResults = [...prev.results];
+      if (updatedResults[index]) {
+        updatedResults[index] = { ...updatedResults[index], email_approval: approval };
+      }
+      return { ...prev, results: updatedResults };
+    });
     // Persist to backend
     const result = status.results[index];
     if (result?.filename) {
