@@ -17,8 +17,10 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# ── Environment detection ─────────────────────────────────────
-USE_SUPABASE = bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY'))
+# ── Environment detection (lazy — checked at call time, not import time) ──
+def _is_supabase_configured():
+    """Check at call time so .env has been loaded by then."""
+    return bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY'))
 
 # ── Supabase client (canonical import) ────────────────────────
 from backend.supabase_client import get_supabase as _get_supabase
@@ -99,7 +101,7 @@ def _use_supabase(teacher_id):
     """Determine whether to use Supabase for this request."""
     if teacher_id == 'local-dev':
         return False
-    return USE_SUPABASE
+    return _is_supabase_configured()
 
 
 # ══════════════════════════════════════════════════════════════

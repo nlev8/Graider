@@ -20,6 +20,13 @@ from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+# Load environment variables and set up path FIRST
+# (storage.py reads SUPABASE_* at import time; backend modules need root on sys.path)
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+_root_dir = os.path.dirname(_app_dir)
+sys.path.insert(0, _root_dir)
+load_dotenv(os.path.join(_root_dir, '.env'), override=True)
+
 # Import student history for progress tracking
 try:
     from backend.student_history import add_assignment_to_history, load_student_history, save_student_history, detect_baseline_deviation, get_baseline_summary, build_history_context
@@ -65,14 +72,6 @@ except ImportError:
     except ImportError:
         storage_load = None
         storage_save = None
-
-# Load environment variables
-_app_dir = os.path.dirname(os.path.abspath(__file__))
-_root_dir = os.path.dirname(_app_dir)
-load_dotenv(os.path.join(_root_dir, '.env'), override=True)
-
-# Add parent directory to path for importing assignment_grader
-sys.path.insert(0, _root_dir)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
