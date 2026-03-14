@@ -6731,7 +6731,7 @@ Provide your response in the following JSON format ONLY (no other text):
             debug_file.write(response_text)
             debug_file.close()
             print(f"  ⚠️  Full response saved to: {debug_file.name}")
-        except:
+        except Exception:
             print(f"  ⚠️  Could not display response")
 
         # Try to extract key fields with regex as fallback
@@ -6754,7 +6754,7 @@ Provide your response in the following JSON format ONLY (no other text):
                     "skills_demonstrated": {"strengths": [], "developing": []},
                     "json_recovery": True
                 }
-        except:
+        except Exception:
             pass
 
         return {

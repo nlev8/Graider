@@ -39,6 +39,7 @@ import BehaviorPanel from "./components/BehaviorPanel";
 import MatchingCards from "./components/MatchingCards";
 import MindMapView from "./components/MindMapView";
 import FlashcardView from "./components/FlashcardView";
+import DOMPurify from "dompurify";
 
 // Inline CSV table preview — fetches CSV from URL and renders as HTML table
 function DataTablePreview({ url }) {
@@ -9684,7 +9685,7 @@ ${signature}`;
                                 // Paragraphs
                                 html = html.replace(/\n\n/g, '<br/><br/>');
                                 html = html.replace(/\n/g, '<br/>');
-                                return html;
+                                return DOMPurify.sanitize(html);
                               })() }} />
                             </div>
                           )}

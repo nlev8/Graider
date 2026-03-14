@@ -76,7 +76,14 @@ sys.path.insert(0, _root_dir)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": [
+    "https://app.graider.live",
+    "https://graider.live",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]}})
 
 # Fix request.host behind reverse proxy (Railway/gunicorn)
 from werkzeug.middleware.proxy_fix import ProxyFix

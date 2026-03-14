@@ -190,7 +190,8 @@ def sync_roster_to_class(class_id):
             return jsonify({"error": "No CSV file uploaded. Send as multipart/form-data with 'file' field."}), 400
 
         file = request.files['file']
-        if not file.filename.endswith('.csv'):
+        ext = os.path.splitext(file.filename)[1].lower() if file.filename else ''
+        if ext != '.csv':
             return jsonify({"error": "File must be a CSV"}), 400
 
         content = file.read().decode('utf-8')

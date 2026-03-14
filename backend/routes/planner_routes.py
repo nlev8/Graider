@@ -10,7 +10,10 @@ import math
 import re
 import subprocess
 from flask import Blueprint, request, jsonify, g
+from werkzeug.utils import secure_filename
 from pathlib import Path
+
+ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
 # Import MODEL_PRICING for token cost tracking
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -5755,6 +5758,10 @@ def upload_assessment_template():
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
 
+    ext = os.path.splitext(file.filename)[1].lower() if file.filename else ''
+    if ext not in ALLOWED_DOC_EXTENSIONS:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
     # Create templates directory if it doesn't exist
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
@@ -5762,9 +5769,8 @@ def upload_assessment_template():
     template_id = str(uuid.uuid4())[:8]
 
     # Save the file
-    ext = os.path.splitext(file.filename)[1].lower()
     filename = f"{template_id}_{platform}{ext}"
-    filepath = os.path.join(TEMPLATES_DIR, filename)
+    filepath = os.path.join(TEMPLATES_DIR, secure_filename(filename))
     file.save(filepath)
 
     # Parse the template to understand its structure
@@ -6634,7 +6640,11 @@ def extract_text_from_file():
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files['file']
-    filename = file.filename.lower()
+    filename = file.filename.lower() if file.filename else ''
+    ext = os.path.splitext(filename)[1].lower() if filename else ''
+    if ext not in ALLOWED_DOC_EXTENSIONS:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
     file_data = file.read()
 
     try:

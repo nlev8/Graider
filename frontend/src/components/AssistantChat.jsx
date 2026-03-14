@@ -4,6 +4,7 @@ import { getAuthHeaders } from '../services/api'
 import { useVoice } from '../hooks/useVoice'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+import DOMPurify from 'dompurify'
 
 const API_BASE = ''
 
@@ -174,7 +175,7 @@ function renderMarkdown(text) {
   for (var i = 0; i < placeholders.length; i++) {
     html = html.split('\x00PH' + i + '\x00').join(placeholders[i])
   }
-  return html
+  return DOMPurify.sanitize(html)
 }
 
 const STORAGE_KEY_MESSAGES = 'graider_assistant_messages'

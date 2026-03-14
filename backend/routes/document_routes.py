@@ -57,7 +57,7 @@ def open_folder():
 
     if os.path.exists(folder):
         if sys.platform == 'darwin':
-            os.system(f'open "{folder}"')
+            subprocess.run(['open', folder])
         return jsonify({"status": "opened"})
     return jsonify({"error": "Folder not found"})
 
@@ -68,7 +68,20 @@ def serve_file_endpoint():
     filepath = request.args.get('path', '')
     if not filepath or not os.path.isfile(filepath):
         return jsonify({"error": "File not found"}), 404
-    return send_file(filepath)
+
+    # Resolve real path to prevent symlink/.. traversal attacks
+    import tempfile
+    real_path = os.path.realpath(filepath)
+    allowed_prefixes = [
+        os.path.realpath(os.path.expanduser('~/.graider_')),
+        os.path.realpath('/tmp'),
+        os.path.realpath(tempfile.gettempdir()),
+        os.path.realpath(os.path.expanduser('~/Documents')),
+    ]
+    if not any(real_path.startswith(prefix) for prefix in allowed_prefixes):
+        return jsonify({"error": "Access denied"}), 403
+
+    return send_file(real_path)
 
 
 @document_bp.route('/api/parse-document', methods=['POST'])
@@ -79,6 +92,14 @@ def parse_document():
 
     file = request.files['file']
     filename = file.filename.lower()
+
+    ALLOWED_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf'}
+    ext = os.path.splitext(filename)[1].lower()
+    if not ext and filename.startswith('.'):
+        ext = filename  # Handle bare ".txt" filenames
+    if ext not in ALLOWED_EXTENSIONS:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
     file_data = file.read()
 
     try:

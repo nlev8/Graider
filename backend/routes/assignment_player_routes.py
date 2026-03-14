@@ -11,6 +11,8 @@ Grading approach:
   GPT-4o Vision for ELA/Social Studies (handwritten text → text).
 """
 import os
+import re
+import secrets
 import sys
 import json
 import time
@@ -47,6 +49,17 @@ ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_data/active_assignments")
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
 
 
+def _sanitize_student_name(name):
+    """Sanitize student_name to prevent path traversal."""
+    name = re.sub(r'[^\w\s-]', '', str(name)).strip()[:100]
+    return name if name else 'Unknown'
+
+
+def _validate_assignment_id(assignment_id):
+    """Validate assignment_id format to prevent path traversal."""
+    return bool(re.match(r'^[a-zA-Z0-9_-]+$', assignment_id))
+
+
 def _load_teacher_context():
     """Load teacher settings for AI grading context (rubric, global notes, style)."""
     context = {
@@ -81,6 +94,8 @@ def _load_teacher_context():
 def get_assignment(assignment_id):
     """Get an assignment for a student to complete."""
     try:
+        if not _validate_assignment_id(assignment_id):
+            return jsonify({"error": "Invalid assignment ID"}), 400
         filepath = os.path.join(ASSIGNMENTS_DIR, f"{assignment_id}.json")
         if not os.path.exists(filepath):
             return jsonify({"error": "Assignment not found"}), 404
@@ -107,7 +122,7 @@ def create_assignment():
             return jsonify({"error": "No assignment provided"}), 400
 
         # Generate unique ID
-        assignment_id = f"assign_{int(time.time() * 1000)}"
+        assignment_id = f"assign_{secrets.token_urlsafe(16)}"
         assignment['id'] = assignment_id
         assignment['created_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -134,6 +149,8 @@ def create_assignment():
 def submit_assignment(assignment_id):
     """Submit and grade an assignment."""
     try:
+        if not _validate_assignment_id(assignment_id):
+            return jsonify({"error": "Invalid assignment ID"}), 400
         # Load the assignment with answers
         filepath = os.path.join(ASSIGNMENTS_DIR, f"{assignment_id}.json")
         if not os.path.exists(filepath):
@@ -145,7 +162,7 @@ def submit_assignment(assignment_id):
         # Get student answers
         data = request.json
         student_answers = data.get('answers', {})
-        student_name = data.get('student_name', 'Unknown')
+        student_name = _sanitize_student_name(data.get('student_name', 'Unknown'))
 
         # Grade the assignment
         results = grade_assignment(assignment, student_answers)
@@ -176,6 +193,8 @@ def submit_assignment(assignment_id):
 def get_submissions(assignment_id):
     """Get all submissions for an assignment (teacher view)."""
     try:
+        if not _validate_assignment_id(assignment_id):
+            return jsonify({"error": "Invalid assignment ID"}), 400
         submissions_dir = os.path.join(ASSIGNMENTS_DIR, 'submissions', assignment_id)
         if not os.path.exists(submissions_dir):
             return jsonify({"submissions": []})

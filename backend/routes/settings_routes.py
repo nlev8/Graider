@@ -1264,6 +1264,9 @@ def import_accommodations():
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
 
+    if not allowed_file(file.filename, ALLOWED_CSV_EXTENSIONS):
+        return jsonify({"error": "Invalid file type. Use CSV, XLS, or XLSX"}), 400
+
     id_col = request.form.get('id_column', 'student_id')
     accommodation_col = request.form.get('accommodation_column', 'accommodation_type')
     notes_col = request.form.get('notes_column', 'accommodation_notes')

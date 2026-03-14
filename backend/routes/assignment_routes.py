@@ -5,6 +5,7 @@ Handles saving, loading, listing, deleting, and exporting assignments.
 import os
 import sys
 import json
+import subprocess
 from flask import Blueprint, request, jsonify, send_from_directory, g
 
 # Import storage abstraction
@@ -365,7 +366,7 @@ def _export_docx(title, instructions, questions, output_folder, safe_title,
 
         # Open the folder
         if sys.platform == 'darwin':
-            os.system(f'open "{output_folder}"')
+            subprocess.run(['open', output_folder])
 
         return jsonify({"status": "exported", "path": filepath})
 
@@ -446,7 +447,7 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
 
         c.save()
         if sys.platform == 'darwin':
-            os.system(f'open "{output_folder}"')
+            subprocess.run(['open', output_folder])
 
         return jsonify({"status": "exported", "path": filepath})
 
