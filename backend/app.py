@@ -79,6 +79,7 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 CORS(app, resources={r"/api/*": {"origins": [
     "https://app.graider.live",
     "https://graider.live",
+    "https://*.up.railway.app",
     "http://localhost:3000",
     "http://localhost:5173",
     "http://127.0.0.1:3000",

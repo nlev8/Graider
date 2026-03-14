@@ -226,55 +226,70 @@ def _sb_load(data_key, teacher_id):
 
 
 def _sb_save(data_key, data, teacher_id):
-    """Upsert data to Supabase teacher_data table."""
-    try:
-        sb = _get_supabase()
-        if not sb:
+    """Upsert data to Supabase teacher_data table. Retries once on transient errors."""
+    import time as _time
+    for attempt in range(2):
+        try:
+            sb = _get_supabase()
+            if not sb:
+                return False
+            sb.table('teacher_data').upsert({
+                'teacher_id': teacher_id,
+                'data_key': data_key,
+                'data': data,
+                'updated_at': datetime.utcnow().isoformat(),
+            }).execute()
+            return True
+        except Exception as e:
+            if attempt == 0 and 'Resource temporarily unavailable' in str(e):
+                _time.sleep(0.5)
+                continue
+            logger.error("Supabase save failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
             return False
-        sb.table('teacher_data').upsert({
-            'teacher_id': teacher_id,
-            'data_key': data_key,
-            'data': data,
-            'updated_at': datetime.utcnow().isoformat(),
-        }).execute()
-        return True
-    except Exception as e:
-        logger.error("Supabase save failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
-        return False
 
 
 def _sb_delete(data_key, teacher_id):
-    """Delete a row from Supabase teacher_data table."""
-    try:
-        sb = _get_supabase()
-        if not sb:
+    """Delete a row from Supabase teacher_data table. Retries once on transient errors."""
+    import time as _time
+    for attempt in range(2):
+        try:
+            sb = _get_supabase()
+            if not sb:
+                return False
+            sb.table('teacher_data') \
+                .delete() \
+                .eq('teacher_id', teacher_id) \
+                .eq('data_key', data_key) \
+                .execute()
+            return True
+        except Exception as e:
+            if attempt == 0 and 'Resource temporarily unavailable' in str(e):
+                _time.sleep(0.5)
+                continue
+            logger.error("Supabase delete failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
             return False
-        sb.table('teacher_data') \
-            .delete() \
-            .eq('teacher_id', teacher_id) \
-            .eq('data_key', data_key) \
-            .execute()
-        return True
-    except Exception as e:
-        logger.error("Supabase delete failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
-        return False
 
 
 def _sb_list_keys(prefix, teacher_id):
-    """List data keys matching a prefix from Supabase."""
-    try:
-        sb = _get_supabase()
-        if not sb:
+    """List data keys matching a prefix from Supabase. Retries once on transient errors."""
+    import time as _time
+    for attempt in range(2):
+        try:
+            sb = _get_supabase()
+            if not sb:
+                return []
+            result = sb.table('teacher_data') \
+                .select('data_key') \
+                .eq('teacher_id', teacher_id) \
+                .like('data_key', f"{prefix}%") \
+                .execute()
+            return sorted([row['data_key'] for row in result.data]) if result.data else []
+        except Exception as e:
+            if attempt == 0 and 'Resource temporarily unavailable' in str(e):
+                _time.sleep(0.5)
+                continue
+            logger.error("Supabase list_keys failed for prefix=%s teacher=%s: %s", prefix, teacher_id, e)
             return []
-        result = sb.table('teacher_data') \
-            .select('data_key') \
-            .eq('teacher_id', teacher_id) \
-            .like('data_key', f"{prefix}%") \
-            .execute()
-        return sorted([row['data_key'] for row in result.data]) if result.data else []
-    except Exception as e:
-        logger.error("Supabase list_keys failed for prefix=%s teacher=%s: %s", prefix, teacher_id, e)
-        return []
 
 
 # ══════════════════════════════════════════════════════════════
@@ -309,40 +324,50 @@ def _file_save_student_history(student_id, history):
 
 
 def _sb_load_student_history(teacher_id, student_id):
-    """Load student history from Supabase."""
-    try:
-        sb = _get_supabase()
-        if not sb:
+    """Load student history from Supabase. Retries once on transient errors."""
+    import time as _time
+    for attempt in range(2):
+        try:
+            sb = _get_supabase()
+            if not sb:
+                return None
+            result = sb.table('student_history') \
+                .select('history') \
+                .eq('teacher_id', teacher_id) \
+                .eq('student_id', student_id) \
+                .execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0]['history']
             return None
-        result = sb.table('student_history') \
-            .select('history') \
-            .eq('teacher_id', teacher_id) \
-            .eq('student_id', student_id) \
-            .execute()
-        if result.data and len(result.data) > 0:
-            return result.data[0]['history']
-        return None
-    except Exception as e:
-        logger.error("Supabase load student_history failed: %s", e)
-        return None
+        except Exception as e:
+            if attempt == 0 and 'Resource temporarily unavailable' in str(e):
+                _time.sleep(0.5)
+                continue
+            logger.error("Supabase load student_history failed: %s", e)
+            return None
 
 
 def _sb_save_student_history(teacher_id, student_id, history):
-    """Upsert student history to Supabase."""
-    try:
-        sb = _get_supabase()
-        if not sb:
+    """Upsert student history to Supabase. Retries once on transient errors."""
+    import time as _time
+    for attempt in range(2):
+        try:
+            sb = _get_supabase()
+            if not sb:
+                return False
+            sb.table('student_history').upsert({
+                'teacher_id': teacher_id,
+                'student_id': student_id,
+                'history': history,
+                'updated_at': datetime.utcnow().isoformat(),
+            }).execute()
+            return True
+        except Exception as e:
+            if attempt == 0 and 'Resource temporarily unavailable' in str(e):
+                _time.sleep(0.5)
+                continue
+            logger.error("Supabase save student_history failed: %s", e)
             return False
-        sb.table('student_history').upsert({
-            'teacher_id': teacher_id,
-            'student_id': student_id,
-            'history': history,
-            'updated_at': datetime.utcnow().isoformat(),
-        }).execute()
-        return True
-    except Exception as e:
-        logger.error("Supabase save student_history failed: %s", e)
-        return False
 
 
 # ══════════════════════════════════════════════════════════════
