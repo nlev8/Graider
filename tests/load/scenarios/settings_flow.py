@@ -80,7 +80,7 @@ async def run_settings_flow(
 
     if resp is not None and step.status == "pass":
         data = resp.json()
-        missing = assert_json_has(data, "categories")
+        missing = assert_json_has(data, "rubric")
         if missing:
             step.status = "fail"
             step.error_message = f"Rubric response missing keys: {missing}"
@@ -108,7 +108,7 @@ async def run_settings_flow(
 
     if resp is not None and step.status == "pass":
         data = resp.json()
-        missing = assert_json_has(data, "globalAINotes")
+        missing = assert_json_has(data, "settings")
         if missing:
             step.status = "fail"
             step.error_message = f"Global settings response missing keys: {missing}"
@@ -158,6 +158,7 @@ async def run_settings_flow(
             "reduced_questions": False,
             "simplified_language": True,
         },
+        "ai_instructions": "Allow extended time, use simplified language",
     }
 
     resp, step = await timed_request(

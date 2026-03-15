@@ -58,7 +58,7 @@ async def run_assistant_flow(
                 "POST",
                 "/api/assistant/chat",
                 headers=headers,
-                json={"message": f"What standards should I focus on for {subject}?"},
+                json={"messages": [{"role": "user", "content": f"What standards should I focus on for {subject}?"}]},
             ) as resp:
                 latency = (time.perf_counter() - start) * 1000
                 # Read a small chunk to confirm the stream is working
@@ -112,6 +112,6 @@ async def run_assistant_flow(
         _, step = await timed_request(
             client, "POST", "/api/assistant/clear",
             persona_id=pid, scenario=SCENARIO, step="post_assistant_clear",
-            headers=headers,
+            headers=headers, json={},
         )
         results.append(step)

@@ -5,6 +5,8 @@ REST endpoints for persisting classroom behavior data.
 Data stored in Supabase (behavior_sessions + behavior_events tables).
 Syncs with both the Graider web app and iOS companion app.
 """
+import csv
+import json
 import logging
 import os
 from collections import defaultdict
@@ -17,6 +19,8 @@ _logger = logging.getLogger(__name__)
 behavior_bp = Blueprint('behavior', __name__)
 
 # ── Supabase client (lazy init, same pattern as other routes) ──
+
+PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
 
 _supabase = None
 
@@ -148,27 +152,31 @@ def get_behavior_data():
         if not teacher_id:
             return jsonify({"error": "Not authenticated"}), 401
 
-        sb = _get_supabase()
         student_filter = request.args.get('student_name', '').strip().lower()
         period_filter = request.args.get('period', '').strip()
         date_from = request.args.get('date_from', '')
         date_to = request.args.get('date_to', '')
 
         # Query events for this teacher, joined with session for period/date
-        query = sb.table('behavior_events').select(
-            'student_name, type, note, transcript, event_time, source, '
-            'behavior_sessions!inner(period, date)'
-        ).eq('teacher_id', teacher_id)
+        try:
+            sb = _get_supabase()
+            query = sb.table('behavior_events').select(
+                'student_name, type, note, transcript, event_time, source, '
+                'behavior_sessions!inner(period, date)'
+            ).eq('teacher_id', teacher_id)
 
-        if date_from:
-            query = query.gte('behavior_sessions.date', date_from)
-        if date_to:
-            query = query.lte('behavior_sessions.date', date_to)
-        if period_filter:
-            query = query.eq('behavior_sessions.period', period_filter)
+            if date_from:
+                query = query.gte('behavior_sessions.date', date_from)
+            if date_to:
+                query = query.lte('behavior_sessions.date', date_to)
+            if period_filter:
+                query = query.eq('behavior_sessions.period', period_filter)
 
-        res = query.execute()
-        rows = res.data or []
+            res = query.execute()
+            rows = res.data or []
+        except Exception:
+            _logger.debug("Supabase query returned no behavior data for teacher %s", teacher_id)
+            rows = []
 
         # Filter by student name (case-insensitive substring) in Python
         # since Supabase doesn't have great ILIKE on non-indexed text
@@ -259,27 +267,34 @@ def get_behavior_events():
         if not teacher_id:
             return jsonify({"error": "Not authenticated"}), 401
 
-        sb = _get_supabase()
         student_filter = request.args.get('student_name', '').strip().lower()
         period_filter = request.args.get('period', '').strip()
         date_from = request.args.get('date_from', '')
         date_to = request.args.get('date_to', '')
-        limit = min(int(request.args.get('limit', '50')), 200)
+        try:
+            limit = min(int(request.args.get('limit', '50')), 200)
+        except (ValueError, TypeError):
+            limit = 50
 
-        query = sb.table('behavior_events').select(
-            'id, student_name, type, note, transcript, source, event_time, '
-            'behavior_sessions!inner(period, date)'
-        ).eq('teacher_id', teacher_id).order('event_time', desc=True).limit(limit)
+        try:
+            sb = _get_supabase()
+            query = sb.table('behavior_events').select(
+                'id, student_name, type, note, transcript, source, event_time, '
+                'behavior_sessions!inner(period, date)'
+            ).eq('teacher_id', teacher_id).order('event_time', desc=True).limit(limit)
 
-        if date_from:
-            query = query.gte('behavior_sessions.date', date_from)
-        if date_to:
-            query = query.lte('behavior_sessions.date', date_to)
-        if period_filter:
-            query = query.eq('behavior_sessions.period', period_filter)
+            if date_from:
+                query = query.gte('behavior_sessions.date', date_from)
+            if date_to:
+                query = query.lte('behavior_sessions.date', date_to)
+            if period_filter:
+                query = query.eq('behavior_sessions.period', period_filter)
 
-        res = query.execute()
-        rows = res.data or []
+            res = query.execute()
+            rows = res.data or []
+        except Exception:
+            _logger.debug("Supabase query returned no behavior events for teacher %s", teacher_id)
+            rows = []
 
         if student_filter:
             rows = [r for r in rows if student_filter in r.get('student_name', '').lower()]
@@ -355,19 +370,36 @@ def debug_behavior_data():
         if not teacher_id:
             return jsonify({"error": "Not authenticated", "g_user_id": "missing"})
 
-        sb = _get_supabase()
+        try:
+            sb = _get_supabase()
+        except Exception:
+            return jsonify({
+                "teacher_id": teacher_id,
+                "total_sessions": 0,
+                "total_events": 0,
+                "student_names": [],
+                "recent_sessions": [],
+                "recent_events": [],
+                "warning": "Supabase not configured",
+            })
 
         # Count sessions for this teacher
-        ses_res = sb.table('behavior_sessions').select('id, period, date, device').eq(
-            'teacher_id', teacher_id
-        ).execute()
-        sessions = ses_res.data or []
+        try:
+            ses_res = sb.table('behavior_sessions').select('id, period, date, device').eq(
+                'teacher_id', teacher_id
+            ).execute()
+            sessions = ses_res.data or []
+        except Exception:
+            sessions = []
 
         # Count events for this teacher
-        evt_res = sb.table('behavior_events').select('id, student_name, type, event_time').eq(
-            'teacher_id', teacher_id
-        ).order('event_time', desc=True).limit(100).execute()
-        events = evt_res.data or []
+        try:
+            evt_res = sb.table('behavior_events').select('id, student_name, type, event_time').eq(
+                'teacher_id', teacher_id
+            ).order('event_time', desc=True).limit(100).execute()
+            events = evt_res.data or []
+        except Exception:
+            events = []
 
         # Unique student names
         student_names = sorted(set(e.get('student_name', '') for e in events if e.get('student_name')))

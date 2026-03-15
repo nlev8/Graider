@@ -5121,6 +5121,15 @@ def generate_assessment():
     config = data.get('config', {})
     assessment_config = data.get('assessmentConfig', {})
 
+    # Normalize standards: accept both dicts and plain code strings
+    normalized = []
+    for s in standards:
+        if isinstance(s, str):
+            normalized.append({'code': s})
+        elif isinstance(s, dict):
+            normalized.append(s)
+    standards = normalized
+
     if not standards:
         return jsonify({"error": "No standards provided"})
 

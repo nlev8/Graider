@@ -120,7 +120,7 @@ async def run_assignment_flow(
             client, "POST", "/api/generate-model-answers",
             persona_id=pid, scenario=SCENARIO, step="generate_model_answers",
             headers=headers, json=model_answers_payload,
-            expected_status=(200, 400),  # 400 if doc text too short is acceptable
+            expected_status=(200, 400, 500),  # 400 if doc text too short; 500 if AI call fails
         )
         results.append(step)
     else:

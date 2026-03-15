@@ -330,8 +330,13 @@ const GradeChartsSection = React.memo(function GradeChartsSection({ filteredAnal
   const [distWidth, setDistWidth] = useState(0);
   const [avgWidth, setAvgWidth] = useState(0);
   useLayoutEffect(() => {
-    if (distRef.current) setDistWidth(distRef.current.clientWidth);
-    if (avgRef.current) setAvgWidth(avgRef.current.clientWidth);
+    const measure = () => {
+      if (distRef.current) setDistWidth(distRef.current.clientWidth - 50);
+      if (avgRef.current) setAvgWidth(avgRef.current.clientWidth - 50);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, []);
 
   const uniqueAssignmentNames = useMemo(() => {
@@ -478,7 +483,7 @@ const GradeChartsSection = React.memo(function GradeChartsSection({ filteredAnal
         marginBottom: "20px",
       }}
     >
-      <div ref={distRef} className="glass-card" style={{ padding: "25px" }}>
+      <div ref={distRef} className="glass-card" style={{ padding: "25px", minWidth: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
             <Icon name="PieChart" size={20} />
@@ -574,7 +579,7 @@ const GradeChartsSection = React.memo(function GradeChartsSection({ filteredAnal
         )}
       </div>
 
-      <div ref={avgRef} className="glass-card" style={{ padding: "25px" }}>
+      <div ref={avgRef} className="glass-card" style={{ padding: "25px", minWidth: 0, overflow: "hidden" }}>
         <h3
           style={{
             fontSize: "1.1rem",
