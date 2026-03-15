@@ -5,6 +5,7 @@ Handles grading status, starting/stopping grading, and file checking.
 NOTE: The actual grading thread logic remains in app.py for Phase 1
 due to tight coupling with global state. Full extraction planned for Phase 3.
 """
+import logging
 import os
 import csv
 import json
@@ -16,6 +17,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
 grading_bp = Blueprint('grading', __name__)
+_logger = logging.getLogger(__name__)
 
 EXPORTS_DIR = os.path.expanduser("~/.graider_exports")
 FOCUS_EXPORTS_DIR = os.path.join(EXPORTS_DIR, "focus")
@@ -1217,7 +1219,8 @@ def upload_focus_comments():
         return jsonify({"status": "started", "total": total})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @grading_bp.route('/api/focus-comments/status')
@@ -1249,7 +1252,8 @@ def get_ell_students():
                 data = json.load(f)
             return jsonify(data)
         except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            _logger.exception("Request failed: %s", request.path)
+            return jsonify({"error": "An internal error occurred"}), 500
     return jsonify({})
 
 
@@ -1266,7 +1270,8 @@ def save_ell_students():
             json.dump(data, f, indent=2)
         return jsonify({"status": "saved", "count": len(data)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @grading_bp.route('/api/student-history', methods=['GET'])
@@ -1405,7 +1410,8 @@ def get_student_history(student_id):
             data = json.load(f)
         return jsonify(data)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @grading_bp.route('/api/student-history/<student_id>', methods=['DELETE'])
@@ -1421,7 +1427,8 @@ def delete_student_history(student_id):
         os.remove(filepath)
         return jsonify({"status": "deleted", "student_id": student_id})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @grading_bp.route('/api/student-history', methods=['DELETE'])

@@ -13,6 +13,8 @@ from flask import Blueprint, request, jsonify, g
 auth_bp = Blueprint('auth', __name__)
 logger = logging.getLogger(__name__)
 
+from backend.extensions import limiter
+
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
 
 
@@ -44,7 +46,8 @@ def _build_approve_url(user_id, email):
 
 
 @auth_bp.route('/api/auth/approve-user', methods=['GET', 'POST'])
-def approve_user():
+@limiter.limit("10/minute")
+def approve_user_route():
     """One-click user approval from admin notification email.
 
     PUBLIC endpoint — secured by HMAC token, not JWT.
@@ -74,7 +77,7 @@ def approve_user():
         return _approval_page(email + " has been approved!", success=True)
     except Exception as e:
         logger.error("Failed to approve user %s: %s", user_id, str(e))
-        return _approval_page("Failed to approve user: " + str(e), success=False)
+        return _approval_page("Failed to approve user. Please try again or contact support.", success=False)
 
 
 def _approval_page(message, success=True):
@@ -119,7 +122,8 @@ def approval_status():
 
 
 @auth_bp.route('/api/auth/notify-signup', methods=['POST'])
-def notify_signup():
+@limiter.limit("5/minute")
+def notify_signup_route():
     """
     PUBLIC endpoint — no JWT required.
     Sends admin notification email via Resend when a new user signs up.

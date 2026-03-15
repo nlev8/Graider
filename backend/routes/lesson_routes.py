@@ -71,7 +71,8 @@ def save_lesson():
             with open(filepath, 'w') as f:
                 json.dump(lesson, f, indent=2)
         except Exception as e:
-            return jsonify({"error": str(e)})
+            logger.exception("Failed to save lesson to file")
+            return jsonify({"error": "An internal error occurred"}), 500
 
     return jsonify({"status": "saved", "unit": unit_name})
 
@@ -159,7 +160,8 @@ def load_lesson():
             lesson = json.load(f)
         return jsonify({"lesson": lesson})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        logger.exception("Failed to load lesson")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @lesson_bp.route('/api/delete-lesson', methods=['DELETE'])
@@ -179,7 +181,8 @@ def delete_lesson():
         try:
             os.remove(filepath)
         except Exception as e:
-            return jsonify({"error": str(e)})
+            logger.exception("Failed to delete lesson file")
+            return jsonify({"error": "An internal error occurred"}), 500
 
     return jsonify({"status": "deleted"})
 
@@ -401,7 +404,7 @@ def parse_document_for_calendar():
             return jsonify({"error": "Could not extract text from document"}), 400
     except Exception as e:
         logger.error("Failed to extract text from %s: %s", filename, e)
-        return jsonify({"error": "Failed to read document: " + str(e)}), 500
+        return jsonify({"error": "Failed to read document"}), 500
 
     if anthropic is None:
         return jsonify({"error": "anthropic package is not installed"}), 500
@@ -454,7 +457,7 @@ def parse_document_for_calendar():
         return jsonify({"error": "AI could not parse events from this document"}), 500
     except Exception as e:
         logger.error("AI parsing failed for %s: %s", filename, e)
-        return jsonify({"error": "AI parsing failed: " + str(e)}), 500
+        return jsonify({"error": "AI parsing failed"}), 500
 
 
 @lesson_bp.route('/api/calendar/import-events', methods=['POST'])

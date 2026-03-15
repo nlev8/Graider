@@ -10,6 +10,7 @@ Grading approach:
 - Image uploads: Mathpix OCR for STEM subjects (handwritten math → LaTeX),
   GPT-4o Vision for ELA/Social Studies (handwritten text → text).
 """
+import logging
 import os
 import re
 import secrets
@@ -17,6 +18,8 @@ import sys
 import json
 import time
 from flask import Blueprint, request, jsonify, g
+
+_logger = logging.getLogger(__name__)
 from pathlib import Path
 
 # Import multipass grading for text-based question types
@@ -107,8 +110,9 @@ def get_assignment(assignment_id):
         student_assignment = strip_answers(assignment)
         return jsonify({"assignment": student_assignment})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_player_bp.route('/api/assignment', methods=['POST'])
@@ -141,8 +145,9 @@ def create_assignment():
             "share_url": share_url
         })
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_player_bp.route('/api/assignment/<assignment_id>/submit', methods=['POST'])
@@ -183,10 +188,9 @@ def submit_assignment(assignment_id):
 
         return jsonify({"results": results})
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_player_bp.route('/api/assignment/<assignment_id>/submissions', methods=['GET'])
@@ -210,8 +214,9 @@ def get_submissions(assignment_id):
 
         return jsonify({"submissions": submissions})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def strip_answers(assignment):

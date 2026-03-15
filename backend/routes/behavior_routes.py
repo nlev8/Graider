@@ -5,11 +5,14 @@ REST endpoints for persisting classroom behavior data.
 Data stored in Supabase (behavior_sessions + behavior_events tables).
 Syncs with both the Graider web app and iOS companion app.
 """
+import logging
 import os
 from collections import defaultdict
 from datetime import datetime
 
 from flask import Blueprint, request, jsonify, g
+
+_logger = logging.getLogger(__name__)
 
 behavior_bp = Blueprint('behavior', __name__)
 
@@ -111,8 +114,9 @@ def save_behavior_session():
 
         return jsonify({"status": "success", "message": f"Saved {len(event_rows)} events"})
 
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @behavior_bp.route('/api/behavior/data', methods=['GET'])
@@ -232,8 +236,9 @@ def get_behavior_data():
 
         return jsonify({"status": "success", "data": result})
 
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @behavior_bp.route('/api/behavior/events', methods=['GET'])
@@ -296,8 +301,9 @@ def get_behavior_events():
 
         return jsonify({"status": "success", "data": {"events": events, "total": len(events)}})
 
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @behavior_bp.route('/api/behavior/data', methods=['DELETE'])
@@ -336,8 +342,9 @@ def delete_behavior_data():
 
         return jsonify({"error": "Specify student_id or all=true"})
 
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @behavior_bp.route('/api/behavior/debug', methods=['GET'])
@@ -373,8 +380,9 @@ def debug_behavior_data():
             "recent_sessions": sessions[:5],
             "recent_events": [{"name": e.get("student_name"), "type": e.get("type"), "time": e.get("event_time")} for e in events[:10]],
         })
-    except Exception as e:
-        return jsonify({"error": str(e), "teacher_id": _get_teacher_id()})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @behavior_bp.route('/api/behavior/roster', methods=['GET'])
@@ -427,5 +435,6 @@ def get_roster_for_behavior():
                 pass
 
         return jsonify(roster)
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500

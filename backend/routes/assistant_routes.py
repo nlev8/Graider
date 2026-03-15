@@ -1756,7 +1756,8 @@ def clear_memory():
         try:
             os.remove(MEMORY_FILE)
         except Exception as e:
-            return jsonify({"error": f"Failed to clear memory: {str(e)}"}), 500
+            logger.exception("Failed to clear memory")
+            return jsonify({"error": "An internal error occurred"}), 500
     _audit_log("memory_cleared", "All assistant memories cleared")
     return jsonify({"status": "cleared"})
 

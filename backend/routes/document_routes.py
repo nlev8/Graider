@@ -2,12 +2,15 @@
 Document handling API routes for Graider.
 Handles file browsing, document parsing, and folder operations.
 """
+import logging
 import os
 import sys
 import subprocess
 import base64
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file
+
+_logger = logging.getLogger(__name__)
 
 document_bp = Blueprint('document', __name__)
 
@@ -45,8 +48,9 @@ def browse_for_path():
 
     except subprocess.TimeoutExpired:
         return jsonify({"path": None, "error": "Timeout"})
-    except Exception as e:
-        return jsonify({"path": None, "error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"path": None, "error": "An internal error occurred"}), 500
 
 
 @document_bp.route('/api/open-folder', methods=['POST'])
@@ -112,10 +116,9 @@ def parse_document():
         else:
             return jsonify({"error": "Unsupported file type. Use .docx, .pdf, or .txt"}), 400
 
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).exception("Error parsing document")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def _parse_docx(file_data, filename):

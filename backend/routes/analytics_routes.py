@@ -2,6 +2,7 @@
 Analytics API routes for Graider.
 Provides student performance data, charts, and statistics.
 """
+import logging
 import os
 import re
 import csv
@@ -11,6 +12,7 @@ from flask import Blueprint, request, jsonify
 from backend.services.assistant_tools import _normalize_assignment_name
 
 analytics_bp = Blueprint('analytics', __name__)
+_logger = logging.getLogger(__name__)
 
 
 def _find_master_grades():
@@ -384,7 +386,8 @@ def get_analytics():
                 categories[grade_data["student_name"]]["writing"].append(grade_data["writing"])
                 categories[grade_data["student_name"]]["effort"].append(grade_data["effort"])
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Error loading analytics data")
+        return jsonify({"error": "An internal error occurred"}), 500
 
     # Calculate student progress (for line charts)
     student_progress = []
@@ -601,7 +604,8 @@ def export_district_report():
                 categories["writing"].append(int(float(row.get("Writing Quality", 0) or 0)))
                 categories["effort"].append(int(float(row.get("Effort Engagement", 0) or 0)))
     except Exception as e:
-        return jsonify({"error": f"Error reading grades: {str(e)}"})
+        _logger.exception("Error reading grades")
+        return jsonify({"error": "An internal error occurred"}), 500
 
     if not all_grades:
         return jsonify({"error": "No grades found in data"})
@@ -727,7 +731,8 @@ def cleanup_master_csv():
             header = list(reader.fieldnames or [])
             rows = list(reader)
     except Exception as e:
-        return jsonify({"error": f"Could not read CSV: {str(e)}"}), 500
+        _logger.exception("Could not read CSV")
+        return jsonify({"error": "An internal error occurred"}), 500
 
     # Add Approved column if missing
     added_column = False
@@ -820,7 +825,8 @@ def cleanup_master_csv():
             writer.writeheader()
             writer.writerows(cleaned_rows)
     except Exception as e:
-        return jsonify({"error": f"Could not write CSV: {str(e)}"}), 500
+        _logger.exception("Could not write CSV")
+        return jsonify({"error": "An internal error occurred"}), 500
 
     return jsonify({
         "status": "success",

@@ -2,6 +2,7 @@
 Settings-related API routes for Graider.
 Handles rubric configuration, global settings, file uploads, and accommodations.
 """
+import logging
 import os
 import json
 import csv
@@ -45,6 +46,7 @@ except ImportError:
         sync_all_to_cloud = None
 
 settings_bp = Blueprint('settings', __name__)
+_logger = logging.getLogger(__name__)
 
 # Data directories
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
@@ -167,7 +169,8 @@ def save_rubric():
                 json.dump(data, f, indent=2)
         return jsonify({"status": "saved"})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/load-rubric')
@@ -187,7 +190,8 @@ def load_rubric():
                 data = json.load(f)
             return jsonify({"rubric": data})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/save-global-settings', methods=['POST'])
@@ -205,7 +209,8 @@ def save_global_settings():
                 json.dump(data, f, indent=2)
         return jsonify({"status": "saved"})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/load-global-settings')
@@ -225,7 +230,8 @@ def load_global_settings():
                 data = json.load(f)
             return jsonify({"settings": data})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def allowed_file(filename, allowed_extensions):
@@ -347,7 +353,8 @@ def delete_roster():
             os.remove(metadata_path)
         return jsonify({"status": "deleted"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/upload-period', methods=['POST'])
@@ -501,7 +508,8 @@ def delete_period():
             os.remove(metadata_path)
         return jsonify({"status": "deleted"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/update-period-level', methods=['POST'])
@@ -538,7 +546,8 @@ def update_period_level():
 
         return jsonify({"status": "updated", "class_level": class_level})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/get-period-students', methods=['POST'])
@@ -559,7 +568,8 @@ def get_period_students():
         students = get_students_from_period_file(filepath)
         return jsonify({"students": students, "count": len(students)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/upload-document', methods=['POST'])
@@ -635,7 +645,8 @@ def delete_document():
             os.remove(metadata_path)
         return jsonify({"status": "deleted"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -846,7 +857,8 @@ def preview_parent_contacts():
     except ImportError:
         return jsonify({"error": "openpyxl not installed. Run: pip install openpyxl"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/save-parent-contact-mapping', methods=['POST'])
@@ -1056,7 +1068,8 @@ def save_parent_contact_mapping():
     except ImportError:
         return jsonify({"error": "openpyxl not installed. Run: pip install openpyxl"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/parent-contacts')
@@ -1075,7 +1088,8 @@ def get_parent_contacts():
             with open(PARENT_CONTACTS_FILE, 'r') as f:
                 contacts = json.load(f)
         except Exception as e:
-            return jsonify({"error": str(e)})
+            _logger.exception("Request failed: %s", request.path)
+            return jsonify({"error": "An internal error occurred"}), 500
 
     try:
 
@@ -1099,7 +1113,8 @@ def get_parent_contacts():
             "period_stats": period_stats,
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1287,7 +1302,8 @@ def import_accommodations():
             "total": result["total"]
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/export-accommodations')
@@ -1805,7 +1821,8 @@ def add_student():
         return jsonify({"status": "added", "students": students, "count": len(students)})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/remove-student', methods=['POST'])
@@ -1853,7 +1870,8 @@ def remove_student():
         return jsonify({"status": "removed", "students": students, "count": len(students)})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @settings_bp.route('/api/update-student', methods=['POST'])
@@ -1949,7 +1967,8 @@ def update_student():
         return jsonify({"status": "updated"})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1973,4 +1992,5 @@ def sync_to_cloud():
             return jsonify(summary), 400
         return jsonify({"status": "synced", "summary": summary})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500

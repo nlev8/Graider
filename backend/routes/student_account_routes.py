@@ -22,6 +22,10 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
+from backend.extensions import limiter
+
+import logging
+_logger = logging.getLogger(__name__)
 
 student_account_bp = Blueprint('student_account', __name__)
 
@@ -146,7 +150,8 @@ def create_class():
             "join_code": join_code,
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/classes', methods=['GET'])
@@ -163,7 +168,8 @@ def list_classes():
 
         return jsonify({"classes": classes.data})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/classes/<class_id>/sync-roster', methods=['POST'])
@@ -283,7 +289,8 @@ def sync_roster_to_class(class_id):
             "errors": errors,
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/classes/<class_id>/students', methods=['GET'])
@@ -308,7 +315,8 @@ def list_class_students(class_id):
         students = [row['students'] for row in result.data if row.get('students')]
         return jsonify({"students": students})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/publish-to-class', methods=['POST'])
@@ -357,7 +365,8 @@ def publish_to_class():
             "join_link": f"{host}/student?code={join_code}",
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/portal-submissions', methods=['GET'])
@@ -421,7 +430,8 @@ def get_portal_submissions():
 
         return jsonify({"submissions": results, "pending_confirmations": pending_count})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/grade-portal-submission', methods=['POST'])
@@ -534,12 +544,14 @@ def grade_portal_submission():
             "needs_review": len(needs_review),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ============ Student Endpoints (public, session-based auth) ============
 
 @student_account_bp.route('/api/student/login', methods=['POST'])
+@limiter.limit("10/minute")
 def student_login():
     """Student login with email + class join code.
     Returns a session token valid for 8 hours.
@@ -616,7 +628,8 @@ def student_login():
             },
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/student/dashboard', methods=['GET'])
@@ -660,7 +673,8 @@ def student_dashboard():
 
         return jsonify({"items": items})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/student/content/<content_id>', methods=['GET'])
@@ -708,7 +722,8 @@ def get_student_content(content_id):
             "due_date": item.get('due_date'),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/student/submit/<content_id>', methods=['POST'])
@@ -806,7 +821,8 @@ def submit_student_work(content_id):
             "message": "Submitted successfully!",
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/student/session', methods=['GET'])
@@ -939,7 +955,8 @@ def send_submission_confirmations():
             "confirmation_ids": conf_ids,
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_account_bp.route('/api/mark-confirmations-sent', methods=['POST'])
@@ -974,4 +991,5 @@ def mark_confirmations_sent():
 
         return jsonify({"success": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500

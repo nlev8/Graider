@@ -2,6 +2,7 @@
 Email API routes for Graider.
 Handles sending grade feedback emails to students via Resend.
 """
+import logging
 import os
 import sys
 import json
@@ -12,6 +13,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 email_bp = Blueprint('email', __name__)
+_logger = logging.getLogger(__name__)
 
 
 @email_bp.route('/api/send-emails', methods=['POST'])
@@ -130,7 +132,8 @@ def send_emails():
     except ImportError:
         return jsonify({"error": "email_service not found."})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Failed to send emails")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @email_bp.route('/api/test-email', methods=['POST'])
@@ -153,7 +156,8 @@ def test_email():
             })
 
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
+        _logger.exception("Failed to send test email")
+        return jsonify({"success": False, "message": "An internal error occurred"}), 500
 
 
 @email_bp.route('/api/email-status', methods=['GET'])
@@ -179,7 +183,8 @@ def email_status():
         })
 
     except Exception as e:
-        return jsonify({"configured": False, "message": str(e)})
+        _logger.exception("Failed to check email status")
+        return jsonify({"configured": False, "message": "An internal error occurred"}), 500
 
 
 @email_bp.route('/api/save-email-config', methods=['POST'])
@@ -198,7 +203,8 @@ def save_email_config():
         return jsonify({"success": True, "message": "Email configuration saved"})
 
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
+        _logger.exception("Failed to save email config")
+        return jsonify({"success": False, "message": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -339,7 +345,8 @@ def export_outlook_emails():
         return jsonify(output)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to export Outlook emails")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -554,7 +561,8 @@ def send_outlook_emails():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to send Outlook emails")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @email_bp.route('/api/outlook-send/status')
@@ -588,7 +596,8 @@ def outlook_login():
         )
         return jsonify({"status": "started", "message": "Browser opening..."})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to open Outlook login")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1030,7 +1039,8 @@ def send_confirmation_emails():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to send confirmation emails")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 CONFIRMATIONS_FILE = os.path.expanduser("~/.graider_data/confirmations_sent.json")
@@ -1119,7 +1129,8 @@ def pending_confirmations():
         return jsonify({"count": count, "students": sorted(pending_students)})
 
     except Exception as e:
-        return jsonify({"count": 0, "students": [], "error": str(e)})
+        _logger.exception("Failed to load pending confirmations")
+        return jsonify({"count": 0, "students": [], "error": "An internal error occurred"}), 500
 
 
 def _load_confirmed_filenames():
@@ -1192,7 +1203,8 @@ def mark_confirmations_sent_file():
         return jsonify({"status": "ok", "updated": updated, "total_confirmed": len(confirmed)})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to mark confirmations sent")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 
@@ -1339,7 +1351,8 @@ def send_focus_comms():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to send Focus communications")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @email_bp.route('/api/focus-comms/status')
@@ -1388,7 +1401,8 @@ def confirm_send():
             with open(pending_path, 'r') as f:
                 pending = json.load(f)
         except Exception as e:
-            return jsonify({"error": "Failed to read pending send: " + str(e)})
+            _logger.exception("Failed to read pending send file")
+            return jsonify({"error": "An internal error occurred"}), 500
 
     if not pending:
         return jsonify({"error": "No pending send. Generate a preview first."})

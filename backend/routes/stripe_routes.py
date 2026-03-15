@@ -4,10 +4,12 @@ Handles checkout sessions, customer portal, subscription status, and webhooks.
 Uses Supabase user_metadata to store stripe_customer_id.
 """
 import os
+import logging
 import stripe
 from flask import Blueprint, request, jsonify, g
 
 stripe_bp = Blueprint('stripe', __name__)
+_logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
 
@@ -99,7 +101,8 @@ def subscription_status():
             "cancel_at_period_end": sub["cancel_at_period_end"],
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to get subscription status")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @stripe_bp.route('/api/stripe/create-checkout-session', methods=['POST'])
@@ -134,7 +137,8 @@ def create_checkout_session():
         )
         return jsonify({"checkout_url": session.url})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to create checkout session")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @stripe_bp.route('/api/stripe/create-portal-session', methods=['POST'])
@@ -156,7 +160,8 @@ def create_portal_session():
         )
         return jsonify({"portal_url": session.url})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to create portal session")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @stripe_bp.route('/api/stripe/webhook', methods=['POST'])

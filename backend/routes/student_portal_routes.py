@@ -4,6 +4,7 @@ Handles publishing assessments, student access via join codes, and submission gr
 Uses Supabase for cloud storage - students can submit anytime.
 """
 import json
+import logging
 import os
 import random
 import string
@@ -12,6 +13,7 @@ from flask import Blueprint, request, jsonify
 from backend.supabase_client import get_supabase_or_raise as get_supabase
 
 student_portal_bp = Blueprint('student_portal', __name__)
+_logger = logging.getLogger(__name__)
 
 
 def generate_join_code():
@@ -97,10 +99,8 @@ def publish_assessment():
         })
 
     except Exception as e:
-        print(f"Publish assessment error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Publish assessment error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ============ Saved Assessments (Local Storage) ============
@@ -138,7 +138,8 @@ def save_assessment():
         return jsonify({"success": True, "filename": filename, "message": f"Assessment '{name}' saved"})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/list-saved-assessments', methods=['GET'])
@@ -174,7 +175,8 @@ def list_saved_assessments():
         return jsonify({"assessments": assessments})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/load-saved-assessment', methods=['POST'])
@@ -201,7 +203,8 @@ def load_saved_assessment():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/delete-saved-assessment', methods=['POST'])
@@ -221,7 +224,8 @@ def delete_saved_assessment():
         return jsonify({"success": True})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/teacher/assessments', methods=['GET'])
@@ -249,8 +253,8 @@ def list_published_assessments():
         return jsonify({"assessments": assessments})
 
     except Exception as e:
-        print(f"List assessments error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("List assessments error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/teacher/assessment/<code>/results', methods=['GET'])
@@ -294,8 +298,8 @@ def get_assessment_results(code):
         })
 
     except Exception as e:
-        print(f"Get results error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Get results error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/teacher/assessment/<code>/toggle', methods=['POST'])
@@ -325,8 +329,8 @@ def toggle_assessment(code):
         })
 
     except Exception as e:
-        print(f"Toggle assessment error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Toggle assessment error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/teacher/assessment/<code>', methods=['DELETE'])
@@ -345,8 +349,8 @@ def delete_published_assessment(code):
         return jsonify({"success": True, "message": "Assessment deleted"})
 
     except Exception as e:
-        print(f"Delete assessment error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Delete assessment error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ============ Student Endpoints ============
@@ -442,8 +446,8 @@ def get_assessment_for_student(code):
         })
 
     except Exception as e:
-        print(f"Get assessment for student error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Get assessment for student error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @student_portal_bp.route('/api/student/submit/<code>', methods=['POST'])
@@ -524,10 +528,8 @@ def submit_assessment(code):
         return jsonify(response)
 
     except Exception as e:
-        print(f"Submit assessment error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Submit assessment error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def grade_student_submission(assessment, answers):

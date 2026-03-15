@@ -2,11 +2,14 @@
 Assignment Builder API routes for Graider.
 Handles saving, loading, listing, deleting, and exporting assignments.
 """
+import logging
 import os
 import sys
 import json
 import subprocess
 from flask import Blueprint, request, jsonify, send_from_directory, g
+
+_logger = logging.getLogger(__name__)
 
 # Import storage abstraction
 try:
@@ -64,8 +67,9 @@ def save_assignment_config():
             with open(filepath, 'w') as f:
                 json.dump(merged, f, indent=2)
         return jsonify({"status": "saved", "path": filepath})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_bp.route('/api/generate-model-answers', methods=['POST'])
@@ -141,8 +145,9 @@ Return ONLY valid JSON:
         return jsonify(result)
     except json.JSONDecodeError:
         return jsonify({"error": "Failed to parse AI response. Try again."}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_bp.route('/api/list-assignments')
@@ -225,8 +230,9 @@ def load_assignment():
         with open(filepath, 'r') as f:
             data = json.load(f)
         return jsonify({"assignment": data})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_bp.route('/api/delete-assignment', methods=['DELETE'])
@@ -243,8 +249,9 @@ def delete_assignment():
     if os.path.exists(filepath):
         try:
             os.remove(filepath)
-        except Exception as e:
-            return jsonify({"error": str(e)})
+        except Exception:
+            _logger.exception("Request failed: %s", request.path)
+            return jsonify({"error": "An internal error occurred"}), 500
 
     return jsonify({"status": "deleted"})
 
@@ -372,8 +379,9 @@ def _export_docx(title, instructions, questions, output_folder, safe_title,
 
     except ImportError:
         return jsonify({"error": "python-docx not installed. Run: pip3 install python-docx"})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def _export_pdf(title, instructions, questions, output_folder, safe_title):
@@ -453,8 +461,9 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
 
     except ImportError:
         return jsonify({"error": "reportlab not installed. Run: pip3 install reportlab"})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @assignment_bp.route('/api/download-document/<filename>')

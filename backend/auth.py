@@ -69,8 +69,8 @@ def validate_token(token):
             return payload
         except jwt.ExpiredSignatureError:
             return None
-        except jwt.InvalidTokenError:
-            pass  # Fall through to HS256
+        except jwt.InvalidTokenError as e:
+            logger.warning("ES256 validation failed, trying HS256: %s", type(e).__name__)
 
     # Fallback: HS256 with legacy secret
     try:
@@ -109,7 +109,8 @@ def init_auth(app):
         # to localhost even on production, so always prefer JWT when available.
         host = request.host.split(':')[0]
         has_bearer = request.headers.get('Authorization', '').startswith('Bearer ')
-        if host in ('localhost', '127.0.0.1') and not has_bearer:
+        is_dev = os.getenv('FLASK_ENV', '').lower() in ('development', 'dev')
+        if is_dev and host in ('localhost', '127.0.0.1') and not has_bearer:
             g.user_id = os.getenv('DEV_USER_ID', 'local-dev')
             g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
             return None

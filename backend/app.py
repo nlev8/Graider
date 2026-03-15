@@ -16,6 +16,7 @@ import concurrent.futures
 from pathlib import Path
 from datetime import datetime
 
+import logging
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -78,12 +79,39 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 CORS(app, resources={r"/api/*": {"origins": [
     "https://app.graider.live",
     "https://graider.live",
-    "https://*.up.railway.app",
     "http://localhost:3000",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
 ]}})
+
+# Rate limiter (shared via backend.extensions to avoid circular imports)
+from backend.extensions import limiter
+limiter.init_app(app)
+
+_logger = logging.getLogger(__name__)
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(self), geolocation=()'
+    # Add CSP only on non-API responses (HTML pages)
+    if not request.path.startswith('/api/'):
+        supabase_url = os.getenv('SUPABASE_URL', '')
+        connect_src = f"'self' {supabase_url}" if supabase_url else "'self'"
+        response.headers['Content-Security-Policy'] = (
+            f"default-src 'self'; "
+            f"script-src 'self'; "
+            f"style-src 'self' 'unsafe-inline'; "
+            f"img-src 'self' data:; "
+            f"connect-src {connect_src}; "
+            f"frame-ancestors 'none'"
+        )
+    return response
 
 # Fix request.host behind reverse proxy (Railway/gunicorn)
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -1886,6 +1914,7 @@ register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/grade', methods=['POST'])
+@limiter.limit("10/minute")
 def start_grading():
     """Start the grading process."""
     print("🚀 BACKEND/APP.PY - /api/grade called")  # DEBUG: Confirm this file is being used
@@ -2132,8 +2161,8 @@ def grade_individual():
         return jsonify(result)
 
     except Exception as e:
-        print(f"Individual grading error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Individual grading error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2155,7 +2184,8 @@ def list_files():
         stage_result = stage_files(folder)
         staging_folder = stage_result["staging_folder"]
     except Exception as e:
-        return jsonify({"files": [], "error": f"Staging failed: {e}"})
+        _logger.exception("Staging failed for list-files")
+        return jsonify({"files": [], "error": "Staging failed"})
 
     # Get already graded files (canonicalize so they match staged names)
     from backend.staging import canonicalize_filename as _canon
@@ -2189,7 +2219,8 @@ def list_files():
         files.sort(key=lambda x: x["name"].lower())
         return jsonify({"files": files})
     except Exception as e:
-        return jsonify({"files": [], "error": str(e)})
+        _logger.exception("Failed to list files in folder")
+        return jsonify({"files": [], "error": "An internal error occurred"})
 
 
 def _remove_from_master_csv(result):
@@ -2465,8 +2496,9 @@ def delete_all_student_data():
         })
 
     except Exception as e:
-        audit_log("DELETE_ALL_DATA_ERROR", str(e))
-        return jsonify({"error": f"Failed to delete data: {str(e)}"}), 500
+        _logger.exception("Failed to delete all student data")
+        audit_log("DELETE_ALL_DATA_ERROR", "internal error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @app.route('/api/ferpa/audit-log', methods=['GET'])
@@ -2844,7 +2876,8 @@ def import_individual_student_data():
     try:
         data = json.loads(file.read().decode('utf-8'))
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        return jsonify({"error": f"Invalid JSON file: {e}"}), 400
+        _logger.exception("Invalid JSON file uploaded")
+        return jsonify({"error": "Invalid JSON file"}), 400
 
     # Validate required fields
     student_name = data.get('student_name')
@@ -3092,7 +3125,8 @@ def retranslate_feedback():
         return jsonify({"translation": translation})
 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Failed to translate feedback")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3177,9 +3211,11 @@ Important:
         return jsonify({"success": True, "student": student_info})
 
     except json.JSONDecodeError as e:
-        return jsonify({"error": f"Failed to parse AI response: {e}", "raw_response": response_text})
+        _logger.exception("Failed to parse AI response for student extraction")
+        return jsonify({"error": "Failed to parse AI response"})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Failed to extract student from image")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @app.route('/api/add-student-to-roster', methods=['POST'])
@@ -3251,9 +3287,8 @@ def add_student_to_roster():
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)})
+        _logger.exception("Failed to add student")
+        return jsonify({"error": "An error occurred while adding the student"}), 500
 
 
 @app.route('/api/list-periods', methods=['GET'])
@@ -3280,7 +3315,8 @@ def list_periods():
         return jsonify({"periods": periods})
 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Failed to list periods")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3301,7 +3337,8 @@ def get_user_manual():
                 _user_manual_cache['content'] = f.read()
         return jsonify({"content": _user_manual_cache['content']})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to load user manual")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # ══════════════════════════════════════════════════════════════

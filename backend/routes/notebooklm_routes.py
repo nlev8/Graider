@@ -3,10 +3,13 @@ NotebookLM API routes.
 Provides endpoints for authenticating with NotebookLM, creating notebooks
 from lesson plans, generating materials, and downloading results.
 """
+import logging
 import os
 import json
 import threading
 from flask import Blueprint, request, jsonify, send_file, g
+
+_logger = logging.getLogger(__name__)
 
 notebooklm_bp = Blueprint("notebooklm", __name__)
 
@@ -88,8 +91,9 @@ def nlm_login():
                 "browser_opened": True,
                 "message": "Complete Google login in the browser window, then click 'I'm logged in'"
             })
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 ALLOWED_CONTEXT_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt"}
@@ -161,7 +165,8 @@ def nlm_create_notebook():
         error_msg = str(e)
         if any(kw in error_msg.lower() for kw in ("auth", "login", "cookie", "session")):
             return jsonify({"error": "session_expired", "needs_login": True})
-        return jsonify({"error": error_msg})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @notebooklm_bp.route("/api/notebooklm/generate", methods=["POST"])
@@ -441,8 +446,9 @@ def share_material():
             "join_code": code,
             "join_link": host + "/join/" + code,
         })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @notebooklm_bp.route("/api/student/shared-media/<code>")
@@ -491,5 +497,6 @@ def serve_shared_media(code):
             as_attachment=False,
             download_name=material_type + "." + ext,
         )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500

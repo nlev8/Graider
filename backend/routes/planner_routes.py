@@ -8,6 +8,7 @@ import json
 import time
 import math
 import re
+import logging
 import subprocess
 from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
@@ -2067,6 +2068,7 @@ def _compute_geometry_answer(qt, q):
 
 
 planner_bp = Blueprint('planner', __name__)
+_logger = logging.getLogger(__name__)
 
 # Path to standards data
 DATA_DIR = Path(__file__).parent.parent / 'data'
@@ -2326,7 +2328,8 @@ def align_document_to_standards():
         return jsonify({**result, "usage": usage})
 
     except Exception as e:
-        return jsonify({"error": f"Standards alignment failed: {str(e)}"})
+        _logger.exception("Standards alignment failed")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/rewrite-for-alignment', methods=['POST'])
@@ -2411,7 +2414,8 @@ def rewrite_for_alignment():
         return jsonify({**result, "usage": usage})
 
     except Exception as e:
-        return jsonify({"error": f"Rewrite failed: {str(e)}"})
+        _logger.exception("Rewrite for alignment failed")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/get-lesson-templates', methods=['POST'])
@@ -2452,7 +2456,8 @@ def get_lesson_templates():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        _logger.exception("Failed to get lesson templates")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/brainstorm-lesson-ideas', methods=['POST'])
@@ -3733,10 +3738,8 @@ def export_lesson_plan():
         return jsonify({"status": "success", "path": filepath})
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"Error exporting plan: {e}")
-        return jsonify({"error": str(e)})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def _save_grading_config_for_export(assignment):
@@ -4156,10 +4159,8 @@ def export_generated_assignment():
                 subprocess.run(['open', filepath], check=False)
             return jsonify({"status": "success", "path": filepath})
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"Error exporting DOCX assignment: {e}")
-            return jsonify({"error": str(e)})
+            _logger.exception("Request failed: %s", request.path)
+            return jsonify({"error": "An internal error occurred"}), 500
 
     # PDF path (answer keys and fallback)
     try:
@@ -4489,10 +4490,8 @@ def export_generated_assignment():
         return jsonify({"status": "success", "path": filepath})
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"Error exporting assignment: {e}")
-        return jsonify({"error": str(e)})
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def _create_visual_for_question(question: dict, show_answer: bool = False):
@@ -5730,10 +5729,8 @@ def export_assessment():
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"Export error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 # =============================================================================
@@ -5891,7 +5888,8 @@ def delete_assessment_template(template_id):
         return jsonify({"success": True, "message": "Template deleted"})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Failed to delete template")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/export-assessment-platform', methods=['POST'])
@@ -6121,8 +6119,8 @@ def export_assessment_for_platform():
             return jsonify({"error": f"Unknown platform: {platform}"}), 400
 
     except Exception as e:
-        print(f"Platform export error: {e}")
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Platform export error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 def generate_qti_xml(assessment, questions):
@@ -6412,10 +6410,8 @@ Respond in JSON format:
         return jsonify({"results": results, "usage": grading_usage if grading_usage["total_tokens"] > 0 else None})
 
     except Exception as e:
-        print(f"Grade assessment error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/regenerate-questions', methods=['POST'])
@@ -6538,10 +6534,8 @@ Make questions grade-appropriate, clear, and assessable by AI grading systems.""
         return jsonify({"replacements": replacements, "usage": usage})
 
     except Exception as e:
-        print(f"Regenerate questions error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/planner/costs', methods=['GET'])
@@ -6627,10 +6621,8 @@ TEXT TO REWRITE:
         })
 
     except Exception as e:
-        print(f"Reading level adjustment error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @planner_bp.route('/api/extract-text', methods=['POST'])
@@ -6718,7 +6710,5 @@ def extract_text_from_file():
             return jsonify({"error": "Unsupported file type. Use .docx, .pdf, .txt, .png, .jpg, or .jpeg"}), 400
 
     except Exception as e:
-        print(f"Text extraction error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        _logger.exception("Request failed: %s", request.path)
+        return jsonify({"error": "An internal error occurred"}), 500
