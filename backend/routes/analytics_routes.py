@@ -13,6 +13,214 @@ from backend.services.assistant_tools import _normalize_assignment_name
 analytics_bp = Blueprint('analytics', __name__)
 
 
+def _find_master_grades():
+    """Find master_grades.csv by checking multiple known locations."""
+    # Check legacy global settings file
+    settings_file = os.path.expanduser("~/.graider_global_settings.json")
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, 'r') as f:
+                settings = json.load(f)
+                folder = settings.get('output_folder', '')
+                if folder:
+                    path = os.path.join(folder, "master_grades.csv")
+                    if os.path.exists(path):
+                        return path
+        except Exception:
+            pass
+
+    # Check common locations
+    candidates = [
+        os.path.expanduser("~/.graider_data/output/master_grades.csv"),
+        os.path.expanduser("~/Downloads/Graider/Results/master_grades.csv"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _analytics_from_results(period_filter='all', approval_filter='all', include_unmatched=False):
+    """Build analytics response from in-memory grading results (Supabase/storage).
+    Returns the same structure as the CSV-based path so the frontend works identically."""
+    from flask import g
+    try:
+        from backend.storage import load as storage_load
+    except ImportError:
+        from storage import load as storage_load
+
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    results = storage_load('results', teacher_id) if storage_load else None
+    if not results or not isinstance(results, list) or len(results) == 0:
+        return jsonify({"error": "No data yet", "students": [], "assignments": [], "trends": []})
+
+    valid_names = _load_valid_assignment_names()
+
+    students = defaultdict(list)
+    assignments_map = defaultdict(list)
+    categories = defaultdict(lambda: {"content": [], "completeness": [], "writing": [], "effort": []})
+    all_grades = []
+    available_periods = set()
+    skipped_unmatched = 0
+    skipped_approval = 0
+
+    for r in results:
+        student_name = r.get("student_name", "").strip()
+        if not student_name:
+            continue
+
+        row_assignment = r.get("assignment", "")
+        if not include_unmatched and valid_names and not _assignment_matches_config(row_assignment, valid_names):
+            skipped_unmatched += 1
+            continue
+
+        row_approval = r.get("email_approval", "").strip().lower()
+        if approval_filter != 'all':
+            if not row_approval:
+                row_approval = 'pending'
+            if row_approval != approval_filter.lower():
+                skipped_approval += 1
+                continue
+
+        row_quarter = r.get("period", "")
+        if row_quarter:
+            available_periods.add(row_quarter)
+
+        if period_filter != 'all' and row_quarter != period_filter:
+            continue
+
+        breakdown = r.get("breakdown", {})
+        grade_data = {
+            "date": r.get("graded_at", ""),
+            "student_id": r.get("student_id", ""),
+            "student_name": student_name,
+            "first_name": student_name.split(",")[1].strip() if "," in student_name else student_name.split()[0] if student_name else "",
+            "assignment": row_assignment,
+            "quarter": row_quarter,
+            "score": int(r.get("score", 0) or 0),
+            "letter_grade": r.get("letter_grade", ""),
+            "content": int(breakdown.get("content_accuracy", 0) or 0),
+            "completeness": int(breakdown.get("completeness", 0) or 0),
+            "writing": int(breakdown.get("writing_quality", 0) or 0),
+            "effort": int(breakdown.get("effort_engagement", 0) or 0),
+            "approved": r.get("email_approval", ""),
+        }
+        all_grades.append(grade_data)
+        students[student_name].append(grade_data)
+        assignments_map[row_assignment].append(grade_data)
+        categories[student_name]["content"].append(grade_data["content"])
+        categories[student_name]["completeness"].append(grade_data["completeness"])
+        categories[student_name]["writing"].append(grade_data["writing"])
+        categories[student_name]["effort"].append(grade_data["effort"])
+
+    # Student progress (line charts)
+    student_progress = []
+    for name, grades in students.items():
+        sorted_grades = sorted(grades, key=lambda x: x.get("date", ""))
+        avg = round(sum(g["score"] for g in grades) / len(grades), 1) if grades else 0
+        if len(sorted_grades) >= 2:
+            mid = max(1, len(sorted_grades) // 2)
+            first_half_avg = sum(g["score"] for g in sorted_grades[:mid]) / mid
+            second_half_avg = sum(g["score"] for g in sorted_grades[mid:]) / max(1, len(sorted_grades) - mid)
+            diff = second_half_avg - first_half_avg
+            trend = "improving" if diff >= 3 else "declining" if diff <= -3 else "stable"
+        else:
+            trend = "stable"
+        student_progress.append({
+            "name": name,
+            "grades": [{"date": g["date"], "assignment": g["assignment"], "score": g["score"]} for g in sorted_grades],
+            "average": avg,
+            "trend": trend,
+        })
+
+    # Assignment stats (bar charts)
+    assignment_stats = []
+    for name, grades in assignments_map.items():
+        assignment_stats.append({
+            "name": name,
+            "average": round(sum(g["score"] for g in grades) / len(grades), 1) if grades else 0,
+            "count": len(grades),
+            "highest": max(g["score"] for g in grades) if grades else 0,
+            "lowest": min(g["score"] for g in grades) if grades else 0,
+        })
+
+    # Category stats (radar charts)
+    category_stats = []
+    for name, cats in categories.items():
+        category_stats.append({
+            "name": name,
+            "content": round(sum(cats["content"]) / len(cats["content"]) * 2.5, 1) if cats["content"] else 0,
+            "completeness": round(sum(cats["completeness"]) / len(cats["completeness"]) * 4, 1) if cats["completeness"] else 0,
+            "writing": round(sum(cats["writing"]) / len(cats["writing"]) * 5, 1) if cats["writing"] else 0,
+            "effort": round(sum(cats["effort"]) / len(cats["effort"]) * 6.67, 1) if cats["effort"] else 0,
+        })
+
+    # Class-wide stats
+    all_scores = [g["score"] for g in all_grades]
+    student_avg_scores = []
+    for name, grades in students.items():
+        s_scores = [g["score"] for g in grades]
+        student_avg_scores.append(round(sum(s_scores) / len(s_scores), 1))
+
+    class_stats = {
+        "total_assignments": len(all_grades),
+        "total_students": len(students),
+        "class_average": round(sum(all_scores) / len(all_scores), 1) if all_scores else 0,
+        "highest": max(all_scores) if all_scores else 0,
+        "lowest": min(all_scores) if all_scores else 0,
+        "grade_distribution": {
+            "A": len([s for s in student_avg_scores if s >= 90]),
+            "B": len([s for s in student_avg_scores if 80 <= s < 90]),
+            "C": len([s for s in student_avg_scores if 70 <= s < 80]),
+            "D": len([s for s in student_avg_scores if 60 <= s < 70]),
+            "F": len([s for s in student_avg_scores if s < 60]),
+        }
+    }
+
+    # Attention needed / top performers
+    MIN_ASSIGNMENTS = 3
+    attention_needed = [
+        s for s in student_progress
+        if len(s["grades"]) >= 1 and (
+            s["average"] < 70
+            or (s["average"] < 80 and s["trend"] == "declining" and len(s["grades"]) >= 2)
+        )
+    ]
+    attention_names = {s["name"] for s in attention_needed}
+    top_performers = sorted(
+        [s for s in student_progress if s["name"] not in attention_names and len(s["grades"]) >= MIN_ASSIGNMENTS],
+        key=lambda x: x["average"], reverse=True
+    )[:5]
+
+    # Cost summary (results don't have cost data, so return zeroes)
+    cost_summary = {
+        "total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0,
+        "total_tokens": 0, "total_api_calls": 0, "total_graded": len(all_grades),
+        "avg_cost_per_student": 0, "filtered_cost": 0,
+        "by_model": [], "by_assignment": [],
+    }
+
+    return jsonify({
+        "class_stats": class_stats,
+        "student_progress": sorted(student_progress, key=lambda x: x["name"]),
+        "assignment_stats": assignment_stats,
+        "category_stats": category_stats,
+        "attention_needed": attention_needed,
+        "top_performers": top_performers,
+        "all_grades": all_grades,
+        "available_periods": sorted(list(available_periods)),
+        "cost_summary": cost_summary,
+        "filters": {
+            "period": period_filter,
+            "approval": approval_filter,
+            "include_unmatched": include_unmatched,
+            "skipped_unmatched": skipped_unmatched,
+            "skipped_approval": skipped_approval,
+            "valid_configs_count": len(valid_names),
+        }
+    })
+
+
 def _load_valid_assignment_names():
     """Load all saved assignment config titles and aliases as a normalized set."""
     valid_names = set()
@@ -62,21 +270,23 @@ def get_analytics():
     approval_filter = request.args.get('approval', 'all')  # 'all', 'approved', 'pending', 'rejected'
     include_unmatched = request.args.get('include_unmatched', 'false').lower() == 'true'
 
-    # Try to get output folder from global settings, fallback to default
-    settings_file = os.path.expanduser("~/.graider_global_settings.json")
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
-
-    if os.path.exists(settings_file):
+    # Prefer in-memory results (Supabase) over CSV — they're always up to date
+    from flask import g as _g
+    teacher_id = getattr(_g, 'user_id', 'local-dev')
+    try:
+        from backend.storage import load as _storage_load
+    except ImportError:
         try:
-            with open(settings_file, 'r') as f:
-                settings = json.load(f)
-                output_folder = settings.get('output_folder', output_folder)
-        except Exception:
-            pass
+            from storage import load as _storage_load
+        except ImportError:
+            _storage_load = None
+    _results = _storage_load('results', teacher_id) if _storage_load else None
+    if _results and isinstance(_results, list) and len(_results) > 0:
+        return _analytics_from_results(period_filter, approval_filter, include_unmatched)
 
-    master_file = os.path.join(output_folder, "master_grades.csv")
-
-    if not os.path.exists(master_file):
+    # Fall back to master_grades.csv
+    master_file = _find_master_grades()
+    if not master_file:
         return jsonify({"error": "No data yet", "students": [], "assignments": [], "trends": []})
 
     # Load valid assignment names from saved configs
@@ -342,27 +552,25 @@ def export_district_report():
     import json
     from datetime import datetime
 
-    # Get output folder from settings
-    settings_file = os.path.expanduser("~/.graider_global_settings.json")
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    # Get output folder and teacher info from settings
     teacher_name = "Unknown Teacher"
     school_name = "Unknown School"
     subject = "Social Studies"
 
+    settings_file = os.path.expanduser("~/.graider_global_settings.json")
     if os.path.exists(settings_file):
         try:
             with open(settings_file, 'r') as f:
                 settings = json.load(f)
-                output_folder = settings.get('output_folder', output_folder)
                 teacher_name = settings.get('teacher_name', teacher_name)
                 school_name = settings.get('school_name', school_name)
                 subject = settings.get('subject', subject)
         except Exception:
             pass
 
-    master_file = os.path.join(output_folder, "master_grades.csv")
+    master_file = _find_master_grades()
 
-    if not os.path.exists(master_file):
+    if not master_file:
         return jsonify({"error": "No grading data available to export"})
 
     # Collect anonymized aggregate data
@@ -478,18 +686,9 @@ def cleanup_master_csv():
     3. Add Approved column to header if missing
     """
     # Get output folder
-    settings_file = os.path.expanduser("~/.graider_global_settings.json")
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
-
-    if os.path.exists(settings_file):
-        try:
-            with open(settings_file, 'r') as f:
-                settings = json.load(f)
-                output_folder = settings.get('output_folder', output_folder)
-        except Exception:
-            pass
-
-    master_file = os.path.join(output_folder, "master_grades.csv")
+    master_file = _find_master_grades()
+    if not master_file:
+        return jsonify({"error": "No master_grades.csv found"}), 404
     results_file = os.path.expanduser("~/.graider_results.json")
 
     if not os.path.exists(master_file):

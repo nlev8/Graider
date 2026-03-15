@@ -491,9 +491,6 @@ export default React.memo(function PlannerTab({
     { id: "data_table", label: "Data Table", icon: "Table2" },
   ];
 
-  // Context document uploads for NotebookLM
-  const [nlmContextFiles, setNlmContextFiles] = useState([]);
-  const [nlmUploading, setNlmUploading] = useState(false);
 
   // Question editing state
   const [editMode, setEditMode] = useState(false);
@@ -519,6 +516,10 @@ export default React.memo(function PlannerTab({
   const [savedLessons, setSavedLessons] = useState({ units: {}, lessons: [] });
   const [savedUnits, setSavedUnits] = useState([]);
   const [selectedSources, setSelectedSources] = useState([]); // [{type, unit, filename, content}]
+  const [uploadedDocs, setUploadedDocs] = useState([]); // [{filename, size, text}]
+  const [docUploading, setDocUploading] = useState(false);
+  const [matchingInProgress, setMatchingInProgress] = useState(false);
+  const [matchResults, setMatchResults] = useState(null);
   const [showSaveLesson, setShowSaveLesson] = useState(false);
   const [saveLessonUnit, setSaveLessonUnit] = useState('');
   const [newUnitName, setNewUnitName] = useState('');
@@ -1195,7 +1196,7 @@ export default React.memo(function PlannerTab({
     }
 
     // Must have a lesson plan OR context files to generate from
-    if (!lessonPlan && nlmContextFiles.length === 0) {
+    if (!lessonPlan && uploadedDocs.length === 0) {
       addToast("Upload reference documents or generate a lesson plan first", "warning");
       return;
     }
@@ -1220,7 +1221,7 @@ export default React.memo(function PlannerTab({
         var nbData = await api.notebookLMCreateNotebook(
           lessonPlan || {}, enrichedStandards,
           { subject: config.subject, grade: config.grade_level },
-          nlmContextFiles.map(function(f) { return f.path; })
+          uploadedDocs.filter(function(f) { return f.path; }).map(function(f) { return f.path; })
         );
         if (nbData.error) {
           if (nbData.needs_login) {
@@ -1257,6 +1258,91 @@ export default React.memo(function PlannerTab({
     }
   };
 
+  // Document upload and standards matching handlers
+  const handleDocUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setDocUploading(true);
+    try {
+      for (const file of files) {
+        // Call both APIs in parallel: extract text + upload for NLM server path
+        const [textResult, nlmResult] = await Promise.all([
+          api.extractTextFromFile(file),
+          api.notebookLMUploadContext(file).catch(() => null),
+        ]);
+        if (textResult.error) {
+          addToast("Failed to extract text from " + file.name + ": " + textResult.error, "error");
+          continue;
+        }
+        setUploadedDocs((prev) => [
+          ...prev,
+          {
+            filename: file.name,
+            size: file.size,
+            text: textResult.text || "",
+            path: nlmResult && !nlmResult.error ? nlmResult.path : null,
+          },
+        ]);
+        // Reset NLM notebook so it picks up new sources
+        setNlmNotebookId(null);
+      }
+      addToast(files.length + " document(s) uploaded", "success");
+    } catch (err) {
+      addToast("Upload error: " + err.message, "error");
+    } finally {
+      setDocUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleMatchStandards = async () => {
+    if (uploadedDocs.length === 0) {
+      addToast("Upload documents first", "warning");
+      return;
+    }
+    if (!config.subject || !config.grade_level) {
+      addToast("Set subject and grade level in Settings first", "warning");
+      return;
+    }
+    setMatchingInProgress(true);
+    try {
+      const combinedText = uploadedDocs.map((d) => d.text).join("\n\n");
+      const result = await api.alignDocumentToStandards({
+        text: combinedText,
+        grade: config.grade_level,
+        subject: config.subject,
+      });
+      if (result.error) {
+        addToast("Matching error: " + result.error, "error");
+        return;
+      }
+      setMatchResults(result);
+      // Auto-select standards with confidence >= 0.4
+      const matched = (result.alignments || [])
+        .filter((a) => a.confidence >= 0.4)
+        .map((a) => a.standard_code);
+      if (matched.length > 0) {
+        setSelectedStandards((prev) => {
+          const combined = new Set([...prev, ...matched]);
+          return Array.from(combined);
+        });
+        addToast(matched.length + " standards matched from documents", "success");
+      } else {
+        addToast("No strong matches found (threshold: 40%)", "info");
+      }
+    } catch (err) {
+      addToast("Matching error: " + err.message, "error");
+    } finally {
+      setMatchingInProgress(false);
+    }
+  };
+
+  const removeUploadedDoc = (index) => {
+    setUploadedDocs((prev) => prev.filter((_, i) => i !== index));
+    setMatchResults(null);
+    setNlmNotebookId(null);
+  };
+
   // Assessment generation handlers
   const generateAssessmentHandler = async () => {
     if (!config.subject) {
@@ -1285,6 +1371,12 @@ export default React.memo(function PlannerTab({
       const title = assessmentConfig.title ||
         `${config.subject || "Subject"} ${assessmentConfig.type.charAt(0).toUpperCase() + assessmentConfig.type.slice(1)} - ${selectedStandards.slice(0, 2).join(", ")}${selectedStandards.length > 2 ? "..." : ""}`;
 
+      // Merge uploaded docs into content sources
+      const allSources = [...selectedSources];
+      for (const doc of uploadedDocs) {
+        allSources.push({ type: "document", content: { text: doc.text, filename: doc.filename } });
+      }
+
       const data = await api.generateAssessment(
         fullStandards,
         {
@@ -1295,7 +1387,7 @@ export default React.memo(function PlannerTab({
           requirements: unitConfig.requirements || "",
         },
         { ...assessmentConfig, title },
-        selectedSources
+        allSources
       );
 
       if (data.error) {
@@ -2100,12 +2192,11 @@ export default React.memo(function PlannerTab({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: (lessonPlan && ((lessonPlan.sections && !lessonPlan.days) || generatedAssignment)) ? "1fr" : "300px 1fr",
+                      gridTemplateColumns: "300px 1fr",
                       gap: "25px",
                     }}
                   >
-                    {/* Sidebar — hidden when viewing a generated assignment; visible for lesson plans so user can configure & create assignments */}
-                    {!(lessonPlan && ((lessonPlan.sections && !lessonPlan.days) || generatedAssignment)) && (
+                    {/* Sidebar — always visible for reference docs upload */}
                     <div
                       style={{
                         display: "flex",
@@ -2255,6 +2346,55 @@ export default React.memo(function PlannerTab({
                               </div>
                             </div>
                           )}
+                          {/* Reference Documents */}
+                          <div>
+                            <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <Icon name="FileUp" size={14} />
+                              Reference Documents
+                              {uploadedDocs.length > 0 && <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>({uploadedDocs.length})</span>}
+                            </label>
+                            <input type="file" id="doc-upload-sidebar" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt" style={{ display: "none" }} onChange={handleDocUpload} />
+                            <div style={{ display: "flex", gap: "6px", marginBottom: uploadedDocs.length > 0 ? "8px" : "0" }}>
+                              <button className="btn btn-secondary" onClick={() => document.getElementById("doc-upload-sidebar").click()} disabled={docUploading} style={{ padding: "5px 12px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", flex: 1 }}>
+                                <Icon name="Upload" size={13} />
+                                {docUploading ? "Uploading..." : "Upload"}
+                              </button>
+                              {uploadedDocs.length > 0 && (
+                                <button className="btn btn-primary" onClick={handleMatchStandards} disabled={matchingInProgress} style={{ padding: "5px 12px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", flex: 1 }}>
+                                  <Icon name="Target" size={13} />
+                                  {matchingInProgress ? "Matching..." : "Match Standards"}
+                                </button>
+                              )}
+                            </div>
+                            {uploadedDocs.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                {uploadedDocs.map((doc, idx) => (
+                                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(139, 92, 246, 0.1)", border: "1px solid rgba(139, 92, 246, 0.3)", borderRadius: "6px", padding: "4px 8px", fontSize: "0.8rem" }}>
+                                    <Icon name={["png","jpg","jpeg","gif","webp"].includes((doc.filename || "").split(".").pop().toLowerCase()) ? "Image" : "FileText"} size={12} />
+                                    <span style={{ fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.filename}</span>
+                                    <span style={{ color: "var(--text-muted)", fontSize: "0.7rem", flexShrink: 0 }}>{doc.size < 1024 ? doc.size + "B" : Math.round(doc.size / 1024) + "KB"}</span>
+                                    <button onClick={() => removeUploadedDoc(idx)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "0 2px", fontSize: "0.9rem", lineHeight: 1, flexShrink: 0 }}>×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {matchResults && matchResults.alignments && matchResults.alignments.length > 0 && (
+                              <div style={{ background: "var(--glass-bg)", borderRadius: "8px", padding: "8px", border: "1px solid var(--glass-border)", marginTop: "8px" }}>
+                                <div style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "6px" }}>{matchResults.alignments.filter((a) => a.confidence >= 0.4).length} standards matched</div>
+                                {matchResults.alignments.slice(0, 5).map((a, idx) => (
+                                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
+                                    <span style={{ fontWeight: 600, fontSize: "0.7rem", minWidth: "70px" }}>{a.standard_code}</span>
+                                    <div style={{ flex: 1, height: "4px", background: "var(--glass-border)", borderRadius: "2px", overflow: "hidden" }}>
+                                      <div style={{ width: Math.round(a.confidence * 100) + "%", height: "100%", borderRadius: "2px", background: a.confidence >= 0.7 ? "#22c55e" : a.confidence >= 0.4 ? "#f59e0b" : "#ef4444" }} />
+                                    </div>
+                                    <span style={{ fontSize: "0.7rem", fontWeight: 600, color: a.confidence >= 0.7 ? "#22c55e" : a.confidence >= 0.4 ? "#f59e0b" : "#ef4444" }}>{Math.round(a.confidence * 100)}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ background: "red", color: "white", padding: "20px", fontSize: "20px", fontWeight: "bold" }}>TEST - REFERENCE DOCS GO HERE</div>
                           <div>
                             <label className="label">
                               Additional Requirements
@@ -2457,7 +2597,6 @@ export default React.memo(function PlannerTab({
                         </div>
                       </div>
                     </div>
-                    )}
 
                     {/* Main Content */}
                     <div>
@@ -5182,6 +5321,16 @@ export default React.memo(function PlannerTab({
                                         >
                                           DOK {std.dok}
                                         </span>
+                                        {matchResults && matchResults.alignments && (() => {
+                                          const match = matchResults.alignments.find((a) => a.standard_code === std.code);
+                                          if (!match) return null;
+                                          const pct = Math.round(match.confidence * 100);
+                                          const color = match.confidence >= 0.7 ? "#22c55e" : match.confidence >= 0.4 ? "#f59e0b" : "#ef4444";
+                                          const bg = match.confidence >= 0.7 ? "rgba(34, 197, 94, 0.15)" : match.confidence >= 0.4 ? "rgba(245, 158, 11, 0.15)" : "rgba(239, 68, 68, 0.15)";
+                                          return React.createElement("span", {
+                                            style: { padding: "2px 8px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 600, background: bg, color: color }
+                                          }, pct + "% match");
+                                        })()}
                                       </div>
                                       <p
                                         style={{
@@ -7272,87 +7421,6 @@ export default React.memo(function PlannerTab({
                                 onChange={function(e) { setNlmOptions(function(prev) { return Object.assign({}, prev, { _global: Object.assign({}, prev._global, { instructions: e.target.value }) }); }); }}
                                 style={{ width: "100%", fontSize: "0.85rem", resize: "vertical", minHeight: "48px" }}
                               />
-                            </div>
-
-                            {/* Reference Document Uploads */}
-                            <div style={{ marginBottom: "10px" }}>
-                              <label className="label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Reference Documents (optional)</label>
-                              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0 0 6px 0" }}>
-                                Add textbook pages, reference docs, or images for richer materials
-                              </p>
-                              <input
-                                type="file"
-                                id="nlm-context-upload"
-                                multiple
-                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt"
-                                style={{ display: "none" }}
-                                onChange={async function(e) {
-                                  var files = Array.from(e.target.files);
-                                  if (files.length === 0) return;
-                                  setNlmUploading(true);
-                                  try {
-                                    for (var i = 0; i < files.length; i++) {
-                                      var result = await api.notebookLMUploadContext(files[i]);
-                                      if (result.error) {
-                                        addToast("Upload failed: " + result.error, "error");
-                                      } else {
-                                        setNlmContextFiles(function(prev) { return prev.concat([result]); });
-                                        setNlmNotebookId(null);
-                                      }
-                                    }
-                                  } catch (err) {
-                                    addToast("Upload error: " + err.message, "error");
-                                  } finally {
-                                    setNlmUploading(false);
-                                    e.target.value = "";
-                                  }
-                                }}
-                              />
-                              <button
-                                onClick={function() { document.getElementById("nlm-context-upload").click(); }}
-                                className="btn btn-secondary"
-                                disabled={nlmUploading || nlmGenerating}
-                                style={{ padding: "6px 14px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px" }}
-                              >
-                                {nlmUploading
-                                  ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Loader", size: 14, className: "spinning" }), " Uploading...")
-                                  : React.createElement(React.Fragment, null, React.createElement(Icon, { name: "Upload", size: 14 }), " Add Reference Documents")
-                                }
-                              </button>
-                              {nlmContextFiles.length > 0 && (
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
-                                  {nlmContextFiles.map(function(f, idx) {
-                                    var ext = (f.filename || "").split(".").pop().toLowerCase();
-                                    var iconName = ["png","jpg","jpeg","gif","webp"].includes(ext) ? "Image" : "FileText";
-                                    return (
-                                      <div key={idx} style={{
-                                        display: "flex", alignItems: "center", gap: "6px",
-                                        padding: "4px 10px", borderRadius: "8px",
-                                        background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
-                                        fontSize: "0.8rem",
-                                      }}>
-                                        <Icon name={iconName} size={14} style={{ color: "var(--accent-primary)", flexShrink: 0 }} />
-                                        <span style={{ maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                          {f.filename}
-                                        </span>
-                                        <span style={{ color: "var(--text-secondary)", fontSize: "0.7rem" }}>
-                                          {f.size < 1024 ? f.size + "B" : f.size < 1048576 ? Math.round(f.size / 1024) + "KB" : (f.size / 1048576).toFixed(1) + "MB"}
-                                        </span>
-                                        <button
-                                          onClick={function() {
-                                            setNlmContextFiles(function(prev) { return prev.filter(function(_, i) { return i !== idx; }); });
-                                            setNlmNotebookId(null);
-                                          }}
-                                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-secondary)", lineHeight: 1 }}
-                                          title="Remove"
-                                        >
-                                          <Icon name="X" size={12} />
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
                             </div>
 
                             {/* Source info — show if lesson plan exists */}

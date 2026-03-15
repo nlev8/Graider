@@ -883,7 +883,7 @@ COMMUNICATION & REPORTING:
 STUDENT INFO:
 - get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
 - get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators.
-- remove_student_from_roster: Remove a student from the class roster by name. Use when a teacher says a student has transferred, withdrawn, or needs to be removed.
+- remove_student_from_roster: Remove a student from ALL records (roster, grades, history, accommodations, contacts, ELL, master CSV, Supabase). Use when a teacher says to remove a student or their data completely.
 - export_student_data: Export all data for a student (grades, history, accommodations) as JSON + PDF. Use for parent requests, transfers, FERPA compliance.
 - import_student_data: Import a student's exported data file (JSON) into Graider. Use when a student transfers in from another Graider teacher.
 

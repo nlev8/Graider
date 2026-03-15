@@ -643,6 +643,7 @@ const StaticSections = React.memo(function StaticSections({
   const [missingPeriodFilter, setMissingPeriodFilter] = useState("");
   const [expandedPeriods, setExpandedPeriods] = useState(new Set());
   const [missingStudentFilter, setMissingStudentFilter] = useState("");
+  const [assignmentViewMode, setAssignmentViewMode] = useState("missing"); // "missing" | "submitted"
   const [missingUploadedFiles, setMissingUploadedFiles] = useState([]);
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
 
@@ -977,19 +978,52 @@ const StaticSections = React.memo(function StaticSections({
             marginBottom: "20px",
           }}
         >
-          <h3
-            style={{
-              fontSize: "1.1rem",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              margin: 0,
-            }}
-          >
-            <Icon name="UserX" size={20} />
-            Missing Assignments
-          </h3>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <h3
+              style={{
+                fontSize: "1.1rem",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                margin: 0,
+              }}
+            >
+              <Icon name={assignmentViewMode === "missing" ? "UserX" : "CheckSquare"} size={20} />
+              Assignment Tracker
+            </h3>
+            <div style={{ display: "flex", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--glass-border)" }}>
+              <button
+                onClick={() => setAssignmentViewMode("missing")}
+                style={{
+                  padding: "4px 12px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  border: "none",
+                  cursor: "pointer",
+                  background: assignmentViewMode === "missing" ? "rgba(251,191,36,0.3)" : "transparent",
+                  color: assignmentViewMode === "missing" ? "#b45309" : "var(--text-secondary)",
+                }}
+              >
+                Missing
+              </button>
+              <button
+                onClick={() => setAssignmentViewMode("submitted")}
+                style={{
+                  padding: "4px 12px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  border: "none",
+                  borderLeft: "1px solid var(--glass-border)",
+                  cursor: "pointer",
+                  background: assignmentViewMode === "submitted" ? "rgba(16,185,129,0.3)" : "transparent",
+                  color: assignmentViewMode === "submitted" ? "#059669" : "var(--text-secondary)",
+                }}
+              >
+                Submitted
+              </button>
+            </div>
+          </div>
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -1126,10 +1160,10 @@ const StaticSections = React.memo(function StaticSections({
             </div>
             <datalist id="missing-student-suggestions">
               {(missingPeriodFilter
-                ? sortedPeriods.find(
+                ? (periodStudentMap[sortedPeriods.find(
                     (p) => p.filename === missingPeriodFilter,
-                  )?.students || []
-                : sortedPeriods.flatMap((p) => p.students || [])
+                  )?.period_name] || [])
+                : Object.values(periodStudentMap).flat()
               ).map((s, i) => {
                 const name =
                   s.full ||
@@ -1218,65 +1252,62 @@ const StaticSections = React.memo(function StaticSections({
                 )
               : sortedPeriods;
 
-            // Build set of uploaded file names (normalized, with duplicate suffixes stripped)
-            const uploadedNames = new Set(
-              missingUploadedFiles.map((f) => {
-                let name = (f.name || f)
-                  .toLowerCase()
-                  .replace(/\.(docx|pdf|doc|txt)$/i, "");
-                // Strip OneDrive/SharePoint duplicate suffixes
-                name = name.replace(/\s*\(\d+\)\s*$/, "");   // "file (1)" -> "file"
-                name = name.replace(/\s*-\s*copy\s*\d*$/i, ""); // "file - Copy 2" -> "file"
-                return name
-                  .replace(/[^\w\s&']/g, " ")
-                  .replace(/_/g, " ")
-                  .replace(/\s+/g, " ")
-                  .trim();
-              }),
-            );
+            // Pre-normalize uploaded file names once (not per call)
+            const uploadedNormed = missingUploadedFiles.map((f) => {
+              let name = (f.name || f)
+                .toLowerCase()
+                .replace(/\.(docx|pdf|doc|txt)$/i, "");
+              name = name.replace(/\s*\(\d+\)\s*$/, "");
+              name = name.replace(/\s*-\s*copy\s*\d*$/i, "");
+              return name
+                .replace(/[^\w\s&']/g, " ")
+                .replace(/_/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+            });
 
-            // Check if student has uploaded for an assignment (including aliases)
-            const hasUploaded = (
-              studentName,
-              assignmentName,
-            ) => {
-              const sName = studentName.toLowerCase();
-              const assignmentData =
-                savedAssignmentData[assignmentName] || {};
-              const namesToCheck = [
+            // Pre-normalize assignment names once
+            const assignmentNormed = {};
+            assignmentsToCheck.forEach((assignmentName) => {
+              const assignmentData = savedAssignmentData[assignmentName] || {};
+              assignmentNormed[assignmentName] = [
                 assignmentName.toLowerCase(),
-                ...(assignmentData.aliases || []).map((a) =>
-                  a.toLowerCase(),
-                ),
+                ...(assignmentData.aliases || []).map((a) => a.toLowerCase()),
                 ...(assignmentData.importedFilename ? [assignmentData.importedFilename.replace(/\.\w+$/, "").toLowerCase()] : []),
-              ];
+              ].map((aName) => {
+                const normName = aName.replace(/[^\w\s&']/g, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim();
+                const words = normName.split(" ").filter((w) => w.length > 3);
+                return { normName, words };
+              });
+            });
 
+            // Cache results: "studentName|assignmentName" -> boolean
+            const uploadCache = {};
+            const hasUploaded = (studentName, assignmentName) => {
+              const key = studentName + "|" + assignmentName;
+              if (key in uploadCache) return uploadCache[key];
+
+              const sName = studentName.toLowerCase();
               const sNorm = sName.replace(/[_\-\.,;]/g, " ").replace(/\s+/g, " ").trim();
               const nameParts = sNorm.split(" ");
               const nameThreshold = Math.max(2, nameParts.length - 1);
+              const sJoined = sNorm.replace(/ /g, "");
+              const normChecks = assignmentNormed[assignmentName] || [];
 
-              return [...uploadedNames].some((fileName) => {
-                const fLower = fileName.toLowerCase();
-                const fNorm = fLower.replace(/[^\w\s&']/g, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim();
-                const nameMatchCount = nameParts.filter((part) =>
-                  fLower.includes(part),
-                ).length;
-                const hasStudentName =
-                  nameMatchCount >= nameThreshold ||
-                  fLower.includes(sNorm.replace(/ /g, ""));
-                const hasAssignment = namesToCheck.some(
-                  (aName) => {
-                    const normName = aName.replace(/[^\w\s&']/g, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim();
-                    if (fNorm.includes(normName)) return true;
-                    if (normName.length > 15 && fNorm.includes(normName.slice(0, Math.min(normName.length, 35)))) return true;
-                    const words = normName.split(" ").filter((w) => w.length > 3);
-                    if (words.length < 2) return false;
-                    const matched = words.filter((w) => fNorm.includes(w)).length;
-                    return matched >= Math.max(3, Math.ceil(words.length * 0.75));
-                  },
-                );
-                return hasStudentName && hasAssignment;
+              const result = uploadedNormed.some((fNorm) => {
+                const nameMatchCount = nameParts.filter((part) => fNorm.includes(part)).length;
+                const hasStudentName = nameMatchCount >= nameThreshold || fNorm.includes(sJoined);
+                if (!hasStudentName) return false;
+                return normChecks.some(({ normName, words }) => {
+                  if (fNorm.includes(normName)) return true;
+                  if (normName.length > 15 && fNorm.includes(normName.slice(0, Math.min(normName.length, 35)))) return true;
+                  if (words.length < 2) return false;
+                  const matched = words.filter((w) => fNorm.includes(w)).length;
+                  return matched >= Math.max(3, Math.ceil(words.length * 0.75));
+                });
               });
+              uploadCache[key] = result;
+              return result;
             };
 
             // If filtering by student
@@ -1287,7 +1318,7 @@ const StaticSections = React.memo(function StaticSections({
               let studentPeriod = null;
 
               for (const period of periodsToCheck) {
-                const found = (period.students || []).find(
+                const found = (periodStudentMap[period.period_name] || period.students || []).find(
                   (s) => {
                     const fullName = (
                       s.full ||
@@ -1457,10 +1488,11 @@ const StaticSections = React.memo(function StaticSections({
             const periodReports = [];
 
             periodsToCheck.forEach((period) => {
-              const students = period.students || [];
+              const students = periodStudentMap[period.period_name] || period.students || [];
               totalStudents += students.length;
               const studentsWithMissing = [];
 
+              const showSubmitted = assignmentViewMode === "submitted";
               students.forEach((student) => {
                 const name =
                   student.full ||
@@ -1470,20 +1502,32 @@ const StaticSections = React.memo(function StaticSections({
                     " " +
                     (student.last || "")
                   ).trim();
-                const missing = assignmentsToCheck.filter(
-                  (a) => !hasUploaded(name, a),
-                );
+                const missing = [];
+                const submitted = [];
+                assignmentsToCheck.forEach((a) => {
+                  if (hasUploaded(name, a)) {
+                    submitted.push(a);
+                  } else {
+                    missing.push(a);
+                  }
+                });
                 if (missing.length > 0) {
-                  studentsWithMissing.push({ name, missing });
+                  studentsWithMissing.push({ name, missing, submitted });
                   totalMissing += missing.length;
+                } else if (showSubmitted) {
+                  studentsWithMissing.push({ name, missing: [], submitted });
                 }
               });
+
+              const studentsWithSubmitted = studentsWithMissing.filter(s => s.submitted.length > 0);
+              const studentsActuallyMissing = studentsWithMissing.filter(s => s.missing.length > 0);
 
               periodReports.push({
                 period: period.period_name,
                 total: students.length,
-                studentsWithMissing,
-                allComplete: studentsWithMissing.length === 0,
+                studentsWithMissing: studentsActuallyMissing,
+                studentsWithSubmitted,
+                allComplete: studentsActuallyMissing.length === 0,
               });
             });
 
@@ -1587,6 +1631,10 @@ const StaticSections = React.memo(function StaticSections({
                   {periodReports.map((report) => {
                     const canCollapse = !missingPeriodFilter && periodReports.length > 1;
                     const isCollapsed = canCollapse && !expandedPeriods.has(report.period);
+                    const displayStudents = assignmentViewMode === "submitted"
+                      ? report.studentsWithSubmitted
+                      : report.studentsWithMissing;
+                    const isMissing = assignmentViewMode === "missing";
                     return (
                     <div
                       key={report.period}
@@ -1594,9 +1642,9 @@ const StaticSections = React.memo(function StaticSections({
                         padding: "12px 15px",
                         background: "rgba(0,0,0,0.15)",
                         borderRadius: "8px",
-                        border: report.allComplete
-                          ? "1px solid rgba(16,185,129,0.3)"
-                          : "1px solid rgba(251,191,36,0.3)",
+                        border: isMissing
+                          ? (report.allComplete ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(251,191,36,0.3)")
+                          : "1px solid rgba(16,185,129,0.3)",
                       }}
                     >
                       <div
@@ -1614,7 +1662,7 @@ const StaticSections = React.memo(function StaticSections({
                           alignItems: "center",
                           cursor: canCollapse ? "pointer" : "default",
                           marginBottom:
-                            !isCollapsed && report.studentsWithMissing.length > 0
+                            !isCollapsed && displayStudents.length > 0
                               ? "10px"
                               : 0,
                         }}
@@ -1626,23 +1674,25 @@ const StaticSections = React.memo(function StaticSections({
                           {report.period}
                         </span>
                         <span style={{ fontSize: "0.85rem" }}>
-                          {report.allComplete ? (
-                            <span style={{ color: "#10b981" }}>
-                              ✓ All complete
-                            </span>
+                          {isMissing ? (
+                            report.allComplete ? (
+                              <span style={{ color: "#10b981" }}>
+                                ✓ All complete
+                              </span>
+                            ) : (
+                              <span style={{ color: "#b45309" }}>
+                                {report.studentsWithMissing.length}{" "}
+                                students missing work
+                              </span>
+                            )
                           ) : (
-                            <span style={{ color: "#b45309" }}>
-                              {
-                                report.studentsWithMissing
-                                  .length
-                              }{" "}
-                              students missing work
+                            <span style={{ color: "#059669" }}>
+                              {report.studentsWithSubmitted.length} students with submissions
                             </span>
                           )}
                         </span>
                       </div>
-                      {!isCollapsed && report.studentsWithMissing.length >
-                        0 && (
+                      {!isCollapsed && displayStudents.length > 0 && (
                         <div
                           style={{
                             display: "flex",
@@ -1650,8 +1700,10 @@ const StaticSections = React.memo(function StaticSections({
                             gap: "6px",
                           }}
                         >
-                          {report.studentsWithMissing.map(
-                            (s, idx) => (
+                          {displayStudents.map(
+                            (s, idx) => {
+                              const items = isMissing ? s.missing : s.submitted;
+                              return (
                               <div
                                 key={idx}
                                 style={{
@@ -1669,6 +1721,11 @@ const StaticSections = React.memo(function StaticSections({
                                   }}
                                 >
                                   {s.name}
+                                  {!isMissing && s.missing.length > 0 && (
+                                    <span style={{ color: "#b45309", fontWeight: 400, fontSize: "0.75rem", marginLeft: "6px" }}>
+                                      ({s.missing.length} missing)
+                                    </span>
+                                  )}
                                 </span>
                                 <div
                                   style={{
@@ -1677,17 +1734,20 @@ const StaticSections = React.memo(function StaticSections({
                                     flexWrap: "wrap",
                                   }}
                                 >
-                                  {s.missing.map((a) => (
+                                  {items.map((a) => (
                                     <span
                                       key={a}
                                       style={{
                                         padding: "2px 8px",
-                                        background:
-                                          "rgba(251,191,36,0.15)",
+                                        background: isMissing
+                                          ? "rgba(251,191,36,0.15)"
+                                          : "rgba(16,185,129,0.15)",
                                         borderRadius: "4px",
                                         fontSize: "0.75rem",
-                                        color: "#b45309",
-                                        border: "1px solid rgba(180,83,9,0.3)",
+                                        color: isMissing ? "#b45309" : "#059669",
+                                        border: isMissing
+                                          ? "1px solid rgba(180,83,9,0.3)"
+                                          : "1px solid rgba(16,185,129,0.3)",
                                       }}
                                     >
                                       {a}
@@ -1695,7 +1755,8 @@ const StaticSections = React.memo(function StaticSections({
                                   ))}
                                 </div>
                               </div>
-                            ),
+                              );
+                            },
                           )}
                         </div>
                       )}

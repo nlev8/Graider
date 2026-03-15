@@ -56,7 +56,7 @@ STUDENT_TOOL_DEFINITIONS = [
     },
     {
         "name": "remove_student_from_roster",
-        "description": "Remove a student from the class roster. Finds the student by name (fuzzy match) across all period CSV files and removes their row. Use when a teacher says a student has transferred, withdrawn, or needs to be removed from the roster.",
+        "description": "Remove a student from ALL records: roster CSVs, grading results, student history, accommodations, parent contacts, ELL data, master grades CSV, and Supabase. Use when a teacher says a student has transferred, withdrawn, or needs to be completely removed.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -395,10 +395,17 @@ def _delete_student_supabase(student_name):
         return ""
 
 
-def remove_student_from_roster(student_name):
-    """Remove a student from ALL roster CSV files where they appear."""
+def remove_student_from_roster(student_name, teacher_id=None):
+    """Remove a student from ALL records: rosters, results, history, accommodations, contacts, ELL, master CSV, Supabase."""
     if not student_name:
         return {"error": "student_name is required."}
+
+    if not teacher_id:
+        try:
+            from flask import g
+            teacher_id = getattr(g, 'user_id', 'local-dev')
+        except Exception:
+            teacher_id = 'local-dev'
 
     search_dirs = [
         (PERIODS_DIR, "periods"),
@@ -430,7 +437,7 @@ def remove_student_from_roster(student_name):
             "hint": "Check the name format in the roster files above."
         }
 
-    # Remove from ALL matched files
+    # Remove from ALL matched roster files
     matched_name = matches[0][0]
     results = []
     errors = []
@@ -441,15 +448,130 @@ def remove_student_from_roster(student_name):
         except Exception as e:
             errors.append({"source": label, "error": str(e)})
 
-    # Deactivate in Supabase so the iPhone app stops showing them
+    # --- Derive student ID for file-based lookups ---
+    roster = _load_roster()
+    matched_id = None
+    for entry in roster:
+        rname = entry.get("student_name", "") or entry.get("name", "")
+        if _fuzzy_name_match(student_name, rname):
+            matched_id = entry.get("student_id", "")
+            break
+    safe_id = matched_id or re.sub(r'[^\w]', '_', matched_name.lower())
+
+    # --- Remove grading results from in-memory state + storage ---
+    results_removed = 0
+    try:
+        from backend.app import _get_state, save_results
+        grading_state = _get_state(teacher_id)
+        original_count = len(grading_state.get("results", []))
+        grading_state["results"] = [
+            r for r in grading_state.get("results", [])
+            if not _fuzzy_name_match(student_name, r.get("student_name", ""))
+        ]
+        results_removed = original_count - len(grading_state["results"])
+        if results_removed > 0:
+            save_results(grading_state["results"], teacher_id)
+            results.append({"source": "grading_results", "removed": results_removed})
+    except Exception as e:
+        errors.append({"source": "grading_results", "error": str(e)})
+
+    # --- Remove from master_grades.csv ---
+    try:
+        master_paths = [
+            os.path.expanduser("~/Downloads/Graider/Results/master_grades.csv"),
+            os.path.expanduser("~/.graider_data/output/master_grades.csv"),
+        ]
+        for master_file in master_paths:
+            if not os.path.exists(master_file):
+                continue
+            with open(master_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                header = reader.fieldnames
+                rows = list(reader)
+            filtered = [row for row in rows
+                        if not (_fuzzy_name_match(student_name, row.get('Student Name', ''))
+                                or row.get('Student ID', '') == safe_id)]
+            csv_removed = len(rows) - len(filtered)
+            if csv_removed > 0:
+                with open(master_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=header)
+                    writer.writeheader()
+                    writer.writerows(filtered)
+                results.append({"source": f"master_csv ({os.path.basename(os.path.dirname(master_file))})", "removed": csv_removed})
+    except Exception as e:
+        errors.append({"source": "master_csv", "error": str(e)})
+
+    # --- Delete student history file ---
+    try:
+        history_path = os.path.expanduser(f"~/.graider_data/student_history/{safe_id}.json")
+        if os.path.exists(history_path):
+            os.remove(history_path)
+            results.append({"source": "student_history", "removed": 1})
+    except Exception as e:
+        errors.append({"source": "student_history", "error": str(e)})
+
+    # --- Remove from accommodations ---
+    try:
+        accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
+        if os.path.exists(accomm_file):
+            with open(accomm_file, 'r') as f:
+                all_acc = json.load(f)
+            removed_keys = [k for k in list(all_acc.keys())
+                           if k == safe_id or k == (matched_id or '')]
+            if removed_keys:
+                for k in removed_keys:
+                    del all_acc[k]
+                with open(accomm_file, 'w') as f:
+                    json.dump(all_acc, f, indent=2)
+                results.append({"source": "accommodations", "removed": len(removed_keys)})
+    except Exception as e:
+        errors.append({"source": "accommodations", "error": str(e)})
+
+    # --- Remove from parent contacts ---
+    try:
+        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+        if os.path.exists(contacts_file):
+            with open(contacts_file, 'r') as f:
+                all_contacts = json.load(f)
+            removed_keys = [k for k in list(all_contacts.keys())
+                           if k == safe_id or k == (matched_id or '')]
+            if removed_keys:
+                for k in removed_keys:
+                    del all_contacts[k]
+                with open(contacts_file, 'w') as f:
+                    json.dump(all_contacts, f, indent=2)
+                results.append({"source": "parent_contacts", "removed": len(removed_keys)})
+    except Exception as e:
+        errors.append({"source": "parent_contacts", "error": str(e)})
+
+    # --- Remove from ELL data ---
+    try:
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        if os.path.exists(ell_file):
+            with open(ell_file, 'r') as f:
+                all_ell = json.load(f)
+            removed_keys = [k for k in list(all_ell.keys())
+                           if k == safe_id or k == (matched_id or '')]
+            if removed_keys:
+                for k in removed_keys:
+                    del all_ell[k]
+                with open(ell_file, 'w') as f:
+                    json.dump(all_ell, f, indent=2)
+                results.append({"source": "ell_data", "removed": len(removed_keys)})
+    except Exception as e:
+        errors.append({"source": "ell_data", "error": str(e)})
+
+    # --- Cascade delete from Supabase ---
     supabase_msg = _delete_student_supabase(matched_name)
 
+    # --- Build summary ---
     sources = [r["source"] for r in results]
-    msg = f"Removed {matched_name} from {len(results)} file(s): {', '.join(sources)}."
+    total_removed = sum(r.get("removed", 0) for r in results)
+    msg = f"Removed {matched_name} from {len(results)} source(s): {', '.join(sources)}. Total records removed: {total_removed}."
     if supabase_msg:
         msg += f" {supabase_msg}"
     if errors:
-        msg += f" Failed on {len(errors)} file(s)."
+        msg += f" Failed on {len(errors)} source(s): {', '.join(e['source'] for e in errors)}."
 
     return {
         "removed": matched_name,
