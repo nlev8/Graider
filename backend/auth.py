@@ -111,7 +111,9 @@ def init_auth(app):
         has_bearer = request.headers.get('Authorization', '').startswith('Bearer ')
         is_dev = os.getenv('FLASK_ENV', '').lower() in ('development', 'dev')
         if is_dev and host in ('localhost', '127.0.0.1') and not has_bearer:
-            g.user_id = os.getenv('DEV_USER_ID', 'local-dev')
+            # Allow test harness to simulate multiple teachers via header
+            g.user_id = request.headers.get('X-Test-Teacher-Id',
+                                            os.getenv('DEV_USER_ID', 'local-dev'))
             g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
             return None
 

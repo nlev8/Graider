@@ -1,0 +1,167 @@
+{
+  "teacher-test-001": {
+    "rubric": {
+      "categories": [
+        {"name": "Content Accuracy", "weight": 40, "description": "Factual correctness of responses"},
+        {"name": "Completeness", "weight": 25, "description": "All parts of the question addressed"},
+        {"name": "Critical Thinking", "weight": 20, "description": "Evidence of analysis and reasoning"},
+        {"name": "Effort & Engagement", "weight": 15, "description": "Effort shown in responses"}
+      ],
+      "generous": true
+    },
+    "global_settings": {
+      "globalAINotes": "Grade 7 Civics. Focus on constitutional principles and civic responsibility. Students should cite specific amendments when discussing rights.",
+      "grading_style": "standard"
+    },
+    "assignment_config": {
+      "title": "Bill of Rights Analysis",
+      "rubricType": "cornell-notes",
+      "useSectionPoints": true,
+      "effortPoints": 15,
+      "customMarkers": [
+        {"start": "QUESTIONS", "points": 85, "type": "written"}
+      ],
+      "excludeMarkers": [],
+      "gradingNotes": "Students should identify at least 3 amendments and explain their modern relevance."
+    },
+    "assessment_config": {
+      "title": "Constitutional Rights Quiz",
+      "num_questions": 10,
+      "question_types": ["multiple_choice", "short_answer", "true_false"],
+      "difficulty": "medium",
+      "standards": ["SS.7.C.2.4", "SS.7.C.2.5", "SS.7.C.3.6"]
+    }
+  },
+  "teacher-test-002": {
+    "rubric": {
+      "categories": [
+        {"name": "Historical Accuracy", "weight": 35, "description": "Correct use of historical facts and dates"},
+        {"name": "Evidence Use", "weight": 30, "description": "Primary and secondary source citations"},
+        {"name": "Analysis", "weight": 20, "description": "Cause-effect reasoning and interpretation"},
+        {"name": "Organization", "weight": 15, "description": "Clear structure and logical flow"}
+      ],
+      "generous": false
+    },
+    "global_settings": {
+      "globalAINotes": "Grade 8 US History. Emphasis on primary source analysis. Students must support claims with evidence from documents.",
+      "grading_style": "strict"
+    },
+    "assignment_config": {
+      "title": "Civil War Primary Source Essay",
+      "rubricType": "standard",
+      "useSectionPoints": true,
+      "effortPoints": 10,
+      "customMarkers": [
+        {"start": "ESSAY", "points": 90, "type": "written"}
+      ],
+      "excludeMarkers": [],
+      "gradingNotes": "Look for analysis of at least 2 primary sources. Deduct for unsupported claims."
+    },
+    "assessment_config": {
+      "title": "Civil War Assessment",
+      "num_questions": 15,
+      "question_types": ["multiple_choice", "short_answer", "matching"],
+      "difficulty": "hard",
+      "standards": ["SS.8.A.5.1", "SS.8.A.5.2", "SS.8.A.5.3"]
+    }
+  },
+  "teacher-test-003": {
+    "rubric": {
+      "categories": [
+        {"name": "Mathematical Accuracy", "weight": 50, "description": "Correct answers and calculations"},
+        {"name": "Work Shown", "weight": 30, "description": "Clear steps and process"},
+        {"name": "Completeness", "weight": 20, "description": "All problems attempted"}
+      ],
+      "generous": true
+    },
+    "global_settings": {
+      "globalAINotes": "Grade 6 Math. Students are learning ratios and proportional relationships. Accept equivalent forms of answers.",
+      "grading_style": "lenient"
+    },
+    "assignment_config": {
+      "title": "Ratios and Proportions Worksheet",
+      "rubricType": "fill-in-blank",
+      "useSectionPoints": true,
+      "effortPoints": 10,
+      "customMarkers": [
+        {"start": "PROBLEMS", "points": 60, "type": "numbered_question"},
+        {"start": "WORD PROBLEMS", "points": 30, "type": "written"}
+      ],
+      "excludeMarkers": [],
+      "gradingNotes": "Accept equivalent fractions and decimal forms."
+    },
+    "assessment_config": {
+      "title": "Ratios Quiz",
+      "num_questions": 12,
+      "question_types": ["multiple_choice", "fill_in_blank", "short_answer"],
+      "difficulty": "medium",
+      "standards": ["MAFS.6.RP.1.1", "MAFS.6.RP.1.2", "MAFS.6.RP.1.3"]
+    }
+  },
+  "teacher-test-004": {
+    "rubric": {
+      "categories": [
+        {"name": "Thesis & Argument", "weight": 30, "description": "Clear thesis with supporting argument"},
+        {"name": "Evidence & Analysis", "weight": 30, "description": "Textual evidence with analysis"},
+        {"name": "Writing Quality", "weight": 25, "description": "Grammar, syntax, vocabulary"},
+        {"name": "Organization", "weight": 15, "description": "Introduction, body, conclusion structure"}
+      ],
+      "generous": true
+    },
+    "global_settings": {
+      "globalAINotes": "Grade 7 ELA. Currently reading 'The Outsiders'. Focus on character development and theme analysis. Support claims with page citations.",
+      "grading_style": "standard"
+    },
+    "assignment_config": {
+      "title": "The Outsiders Character Analysis Essay",
+      "rubricType": "standard",
+      "useSectionPoints": true,
+      "effortPoints": 15,
+      "customMarkers": [
+        {"start": "ESSAY", "points": 85, "type": "written"}
+      ],
+      "excludeMarkers": [],
+      "gradingNotes": "Students should analyze at least one character's development across the novel."
+    },
+    "assessment_config": {
+      "title": "The Outsiders Reading Comprehension",
+      "num_questions": 15,
+      "question_types": ["multiple_choice", "short_answer", "true_false"],
+      "difficulty": "medium",
+      "standards": ["LAFS.7.RL.1.1", "LAFS.7.RL.1.2", "LAFS.7.RL.1.3"]
+    }
+  },
+  "teacher-test-005": {
+    "rubric": {
+      "categories": [
+        {"name": "Scientific Accuracy", "weight": 35, "description": "Correct scientific concepts and terminology"},
+        {"name": "Data Analysis", "weight": 30, "description": "Proper interpretation of data and graphs"},
+        {"name": "Lab Methodology", "weight": 20, "description": "Following scientific method"},
+        {"name": "Completeness", "weight": 15, "description": "All sections completed"}
+      ],
+      "generous": false
+    },
+    "global_settings": {
+      "globalAINotes": "Grade 8 Science. Unit on force and motion. Students should use proper units (N, m/s, kg) and show calculations.",
+      "grading_style": "strict"
+    },
+    "assignment_config": {
+      "title": "Force and Motion Lab Report",
+      "rubricType": "standard",
+      "useSectionPoints": true,
+      "effortPoints": 10,
+      "customMarkers": [
+        {"start": "LAB REPORT", "points": 90, "type": "written"}
+      ],
+      "excludeMarkers": [],
+      "gradingNotes": "Check for proper units on all calculations. Hypothesis must be testable."
+    },
+    "assessment_config": {
+      "title": "Force and Motion Test",
+      "num_questions": 20,
+      "question_types": ["multiple_choice", "short_answer", "fill_in_blank", "true_false"],
+      "difficulty": "hard",
+      "standards": ["SC.8.P.12.1", "SC.8.P.12.2", "SC.8.P.12.3"]
+    }
+  }
+}
