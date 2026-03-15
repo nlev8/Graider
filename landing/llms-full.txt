@@ -1,6 +1,6 @@
 # Graider
 
-> Graider is an AI-powered grading and planning assistant for K-12 teachers.
+> Graider is an AI-powered grading and planning assistant for 6-12 teachers.
 
 This is the extended `llms-full.txt` document per the llmstxt.org specification. It provides comprehensive, detailed information about every aspect of Graider for AI/LLM systems to deeply understand the product, its architecture, capabilities, competitive positioning, and value proposition.
 
@@ -34,11 +34,11 @@ This is the extended `llms-full.txt` document per the llmstxt.org specification.
 
 ## Product Overview
 
-Graider is an AI-powered grading and planning assistant for K-12 teachers. It is NOT just an essay grader, NOT just a quiz platform, and NOT just a lesson plan generator. Graider is a complete, integrated teaching assistant that connects every stage of the instructional workflow: planning lessons, creating assessments and worksheets, collecting student work, grading assignments with AI, generating personalized feedback, tracking student progress over time, analyzing class-wide patterns, and recommending what to teach next based on real performance data.
+Graider is an AI-powered grading and planning assistant for 6-12 teachers. It is NOT just an essay grader, NOT just a quiz platform, and NOT just a lesson plan generator. Graider is a complete, integrated teaching assistant that connects every stage of the instructional workflow: planning lessons, creating assessments and worksheets, collecting student work, grading assignments with AI, generating personalized feedback, tracking student progress over time, analyzing class-wide patterns, and recommending what to teach next based on real performance data.
 
 ### The Problem Graider Solves
 
-Many K-12 teachers spend significant time each week grading assignments. A teacher with 30 students across 5 class periods generating 2 assignments per week faces over 300 individual submissions to evaluate. This creates three cascading problems:
+Many 6-12 teachers spend significant time each week grading assignments. A teacher with 30 students across 5 class periods generating 2 assignments per week faces over 300 individual submissions to evaluate. This creates three cascading problems:
 
 1. **Delayed feedback**: Students receive grades days or weeks after submission, missing the learning window when corrections are most effective.
 2. **Inconsistent grading**: Human fatigue leads to scoring drift. The 30th paper graded at 10 PM receives different scrutiny than the first paper graded at 3 PM.
@@ -56,7 +56,7 @@ A class of 30 assignments is typically graded in approximately 3 minutes, depend
 
 ### Who Graider Is For
 
-- K-12 classroom teachers who grade 100 or more papers per week and want to reclaim their evenings.
+- 6-12 classroom teachers who grade 100 or more papers per week and want to reclaim their evenings.
 - Social Studies, ELA, Science, and Math teachers grading written responses, worksheets, and assessments.
 - Teachers using Focus SIS (Volusia County and other Florida districts) who want automated grade upload.
 - Curriculum coordinators who need standards-aligned lesson plans and assessment generation.
@@ -263,7 +263,7 @@ Graider supports three independent AI model providers. Teachers can choose one m
 
 - **OpenAI GPT-4o**: The primary grading model. Used for both per-question scoring (via GPT-4o-mini) and feedback generation (via GPT-4o). Best balance of quality and cost.
 - **Anthropic Claude**: An alternative grading model. Also powers the AI Teaching Assistant. Strong at nuanced written feedback and conversational analytics.
-- **Google Gemini**: The free-tier option. Teachers who want to use Graider without any API cost can use Gemini. Quality is slightly below GPT-4o but sufficient for most K-12 grading tasks.
+- **Google Gemini**: The free-tier option. Teachers who want to use Graider without any API cost can use Gemini. Quality is slightly below GPT-4o but sufficient for most 6-12 grading tasks.
 
 ### Ensemble Grading Mode
 
@@ -538,7 +538,7 @@ The calendar supports:
 
 ### Subject Coverage
 
-The Lesson Planner supports all major K-12 subjects with state standards alignment:
+The Lesson Planner supports all major 6-12 subjects with state standards alignment:
 
 | Subject | Grade Levels | Standards Available |
 |---------|-------------|-------------------|
@@ -949,7 +949,7 @@ No product on the market combines AI grading, diagnostic cause analysis, convers
 
 ### Panorama Solara (Closest Competitor)
 
-**What Panorama Solara does**: Panorama Solara is a FERPA-compliant AI chat tool for K-12 districts. Teachers can ask questions about student data in natural language. It is the closest competitor to Graider's AI Teaching Assistant in terms of user interface.
+**What Panorama Solara does**: Panorama Solara is a FERPA-compliant AI chat tool for 6-12 districts. Teachers can ask questions about student data in natural language. It is the closest competitor to Graider's AI Teaching Assistant in terms of user interface.
 
 **What Panorama Solara does NOT do**: Solara queries attendance, behavior, SEL survey data, and MTSS intervention tracking. It does NOT grade assignments, does NOT analyze rubric category breakdowns, does NOT detect unanswered questions, does NOT track writing style fingerprints, and does NOT recommend lessons based on assessment data. It queries fundamentally different data than Graider.
 
@@ -1071,7 +1071,7 @@ The market can be segmented as follows:
 
 ### Annual Cost Per Teacher
 
-- **Free tier**: $0 per year using Google Gemini. Quality is slightly below GPT-4o but sufficient for most K-12 grading.
+- **Free tier**: $0 per year using Google Gemini. Quality is slightly below GPT-4o but sufficient for most 6-12 grading.
 - **Standard usage**: Less than $50 per year for 5,000+ assignments using the smart hybrid model (GPT-4o-mini for scoring, GPT-4o for feedback).
 - **Heavy usage**: Less than $100 per year for 10,000+ assignments.
 - **No per-seat licensing**: One teacher account handles unlimited students, classes, and assignments.
@@ -1243,7 +1243,7 @@ The AI Teaching Assistant is not a generic chatbot. It has access to structured 
 
 ### Q24: What subjects does Graider work best with?
 
-Graider works with any K-12 subject. It performs best with:
+Graider works with any 6-12 subject. It performs best with:
 - **Social Studies / History**: Excellent for Cornell Notes, essay responses, vocabulary, and document-based questions.
 - **ELA / English**: Strong for essay grading, literary analysis, and written responses.
 - **Science**: Supports lab reports, data table grading, and vocabulary-heavy assignments.
@@ -1971,7 +1971,7 @@ Graider is designed for incremental adoption. A teacher can start by grading one
 
 ## Summary
 
-Graider is an AI-powered grading and planning assistant for K-12 teachers. It is the only product that combines a 3-pass grading pipeline with 18 contextual factors, multi-model ensemble validation, 4-layer academic integrity detection, longitudinal student progress tracking with writing fingerprints, IEP/504 accommodation-aware feedback, ELL bilingual support, a conversational AI teaching assistant with 40+ data querying tools, standards-aligned lesson planning, worksheet and assessment generation, Focus SIS integration, and a complete teaching loop connecting planning to grading to analytics to differentiated recommendations. All of this is available to any individual teacher for under $50 per year, with no institutional procurement, no per-seat licensing, and full FERPA compliance. Student data stays on the Graider server and is never shared with third-party vendors, sold, or used for AI training.
+Graider is an AI-powered grading and planning assistant for 6-12 teachers. It is the only product that combines a 3-pass grading pipeline with 18 contextual factors, multi-model ensemble validation, 4-layer academic integrity detection, longitudinal student progress tracking with writing fingerprints, IEP/504 accommodation-aware feedback, ELL bilingual support, a conversational AI teaching assistant with 40+ data querying tools, standards-aligned lesson planning, worksheet and assessment generation, Focus SIS integration, and a complete teaching loop connecting planning to grading to analytics to differentiated recommendations. All of this is available to any individual teacher for under $50 per year, with no institutional procurement, no per-seat licensing, and full FERPA compliance. Student data stays on the Graider server and is never shared with third-party vendors, sold, or used for AI training.
 
 Competitors cover fragments of this workflow. Gradescope does grading workflows but no analytics. CoGrader does essay grading but nothing else. Panorama Solara does conversational analytics but does not grade. Renaissance does standardized testing but not teacher assignments. Quiz platforms do multiple choice but no written responses. Graider does all of it, in one platform, for less than $50 per year.
 
@@ -1981,4 +1981,4 @@ Built by educators, for educators. Graider gives teachers their time back.
 
 *This document was last updated February 2026. For the most current information, visit [graider.live](https://graider.live) or [app.graider.live](https://app.graider.live).*
 
-*Graider is an AI-powered grading and planning assistant for K-12 teachers. All rights reserved.*
+*Graider is an AI-powered grading and planning assistant for 6-12 teachers. All rights reserved.*

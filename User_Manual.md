@@ -1733,7 +1733,7 @@ The assistant is designed with FERPA in mind:
 | Setting | Description |
 |---------|-------------|
 | State | Your state (for standards alignment) |
-| Grade Level | K-12 selection |
+| Grade Level | 6-12 selection |
 | Subject | U.S. History, World History, Civics, etc. |
 | Grading Period | Q1, Q2, Q3, Q4, S1, S2 |
 

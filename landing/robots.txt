@@ -1,4 +1,4 @@
-# Graider - AI-Powered Grading Assistant for K-12 Teachers
+# Graider - AI-Powered Grading Assistant for 6-12 Teachers
 # https://graider.live
 
 User-agent: *
