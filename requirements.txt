@@ -53,5 +53,10 @@ websocket-client>=1.6.0
 # NotebookLM Integration (study materials generation)
 notebooklm-py[browser]>=0.3.0
 
+# Clever Integration (async HTTP + sessions)
+httpx>=0.24.0
+Flask-Session>=0.5.0
+redis>=5.0.0
+
 # Production Server
 gunicorn>=21.0.0

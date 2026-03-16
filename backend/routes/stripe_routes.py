@@ -28,9 +28,14 @@ def _is_local_dev():
     return g.user_id == 'local-dev'
 
 
+def _is_clever_user():
+    """Check if the current user is authenticated via Clever (not Supabase)."""
+    return getattr(g, 'user_id', '').startswith('clever:')
+
+
 def _get_user_metadata(user_id):
     """Fetch user_metadata from Supabase auth.users for the given user."""
-    if _is_local_dev():
+    if _is_local_dev() or _is_clever_user():
         return {}
     sb = _get_supabase()
     res = sb.auth.admin.get_user_by_id(user_id)
@@ -39,7 +44,7 @@ def _get_user_metadata(user_id):
 
 def _update_user_metadata(user_id, metadata_update):
     """Merge metadata_update into the user's user_metadata."""
-    if _is_local_dev():
+    if _is_local_dev() or _is_clever_user():
         return
     sb = _get_supabase()
     sb.auth.admin.update_user_by_id(user_id, {"user_metadata": metadata_update})
@@ -72,6 +77,12 @@ def _get_or_create_customer(user_id, user_email):
 @stripe_bp.route('/api/stripe/subscription-status', methods=['GET'])
 def subscription_status():
     """Get the current user's subscription status from Stripe."""
+    if _is_clever_user():
+        return jsonify({
+            "status": "district",
+            "message": "District-managed account (billing handled by district)",
+        })
+
     if not _init_stripe():
         return jsonify({"error": "Stripe not configured"}), 500
 

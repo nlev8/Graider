@@ -12,6 +12,12 @@ const API_BASE = ''  // Empty for same-origin, Vite proxies /api to Flask
  * Get authorization headers with current session token
  */
 export async function getAuthHeaders() {
+  // Clever users don't have Supabase sessions — skip entirely
+  // (the browser sends the session cookie automatically)
+  const currentUser = window.__graiderUser;
+  if (currentUser && currentUser.id && currentUser.id.startsWith('clever:')) {
+    return {}
+  }
   const { data: { session } } = await supabase.auth.getSession()
   if (session?.access_token) {
     return { 'Authorization': 'Bearer ' + session.access_token }
@@ -57,7 +63,11 @@ async function fetchApi(endpoint, options = {}) {
         }
       }
       // Still no valid session after waiting — truly expired
-      window.dispatchEvent(new Event('auth-expired'))
+      // Don't fire for Clever users (they don't use Supabase sessions)
+      var currentUser = window.__graiderUser;
+      if (!(currentUser && currentUser.id && currentUser.id.startsWith('clever:'))) {
+        window.dispatchEvent(new Event('auth-expired'))
+      }
       throw new Error('Session expired. Please log in again.')
     }
 
@@ -1265,6 +1275,31 @@ export async function shareMaterial(materialType, title, teacherName) {
   })
 }
 
+// ============ Clever SSO & Sync ============
+
+export async function getCleverLoginUrl() {
+  return fetchApi('/api/clever/login-url')
+}
+
+export async function getCleverSession() {
+  return fetchApi('/api/clever/session')
+}
+
+export async function syncCleverRoster() {
+  return fetchApi('/api/clever/sync-roster', { method: 'POST' })
+}
+
+export async function applyCleverAccommodations(accommodations) {
+  return fetchApi('/api/clever/apply-accommodations', {
+    method: 'POST',
+    body: JSON.stringify({ accommodations }),
+  })
+}
+
+export async function cleverLogout() {
+  return fetchApi('/api/clever/logout', { method: 'POST' })
+}
+
 export default {
   getStatus,
   startGrading,
@@ -1431,4 +1466,10 @@ export default {
   notebookLMCancel,
   notebookLMRetry,
   shareMaterial,
+  // Clever SSO & Sync
+  getCleverLoginUrl,
+  getCleverSession,
+  syncCleverRoster,
+  applyCleverAccommodations,
+  cleverLogout,
 }

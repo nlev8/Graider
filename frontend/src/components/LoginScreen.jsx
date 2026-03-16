@@ -315,6 +315,46 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
               Microsoft
             </button>
           </div>
+
+          {/* Clever SSO */}
+          <button onClick={async () => {
+            setError('');
+            try {
+              const resp = await fetch('/api/clever/login-url');
+              const data = await resp.json();
+              if (data.url) {
+                window.location.href = data.url;
+              } else {
+                setError('Clever login not configured for this server');
+              }
+            } catch (err) {
+              setError('Could not connect to Clever');
+            }
+          }}
+            style={{
+              width: '100%',
+              marginTop: '12px',
+              padding: '12px',
+              borderRadius: '12px',
+              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+              background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              color: isDark ? 'white' : '#1e293b',
+              fontSize: '0.9rem',
+              fontWeight: 500,
+              fontFamily: 'inherit',
+            }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#4274F6"/>
+              <path d="M15.5 8.5L12 12l-3.5-3.5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M12 12v5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Log in with Clever
+          </button>
           </>
         )}
       </div>

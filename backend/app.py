@@ -117,6 +117,18 @@ def set_security_headers(response):
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
+# Session configuration — Redis in production, filesystem locally
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-change-in-production')
+if os.getenv('REDIS_URL'):
+    # Production: server-side sessions via Redis (survives multi-worker)
+    from flask_session import Session
+    import redis
+    app.config['SESSION_TYPE'] = 'redis'
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_KEY_PREFIX'] = 'graider:'
+    app.config['SESSION_REDIS'] = redis.from_url(os.getenv('REDIS_URL'))
+    Session(app)
+
 # ══════════════════════════════════════════════════════════════
 # AUTHENTICATION
 # ══════════════════════════════════════════════════════════════

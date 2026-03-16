@@ -7,7 +7,7 @@ import os
 import logging
 import jwt
 from jwt import PyJWKClient
-from flask import request, jsonify, g
+from flask import request, jsonify, g, session
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ from backend.supabase_client import get_supabase as _get_supabase
 # Routes that don't require authentication
 PUBLIC_PREFIXES = [
     '/api/student/',       # Student portal (public, students don't have accounts)
+    '/api/clever/',        # Clever OAuth flow (callback must be unauthenticated)
 ]
 
 PUBLIC_EXACT = [
@@ -117,6 +118,14 @@ def init_auth(app):
             g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
             return None
 
+        # Clever SSO session (cookie-based, set during OAuth callback)
+        clever_user = session.get('clever_user') if hasattr(session, 'get') else None
+        if clever_user and not has_bearer:
+            g.user_id = f"clever:{clever_user['clever_id']}"
+            g.user_email = clever_user.get('email', '')
+            g.auth_source = 'clever'
+            return None
+
         # Skip non-API routes (static files, index.html, etc.)
         if not request.path.startswith('/api/'):
             return None
@@ -141,6 +150,10 @@ def init_auth(app):
 
         # Approval gate — skip for the approval-status endpoint itself
         if request.path != '/api/auth/approval-status':
+            # Clever users are district-approved by definition — skip gate
+            if getattr(g, 'auth_source', None) == 'clever':
+                return None
+
             user_meta = payload.get('user_metadata', {})
             if not user_meta.get('approved'):
                 # JWT metadata may be stale — check Supabase admin API as fallback

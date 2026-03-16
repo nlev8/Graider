@@ -771,6 +771,7 @@ function App() {
     }
     logoutIntentRef.current = false;
     _setUser(u);
+    window.__graiderUser = u;  // lets api.js detect Clever users
   }
 
   // Check URL hash for recovery token BEFORE Supabase consumes it
@@ -788,6 +789,37 @@ function App() {
 
   // Check for existing session on mount
   useEffect(() => {
+    // Check for Clever login redirect (before localhost check — works everywhere)
+    const urlParams = new URLSearchParams(window.location.search);
+    const cleverLogin = urlParams.get('clever_login');
+    const cleverError = urlParams.get('clever_error');
+
+    if (cleverLogin === 'success') {
+      fetch('/api/clever/session')
+        .then(function(r) { return r.json() })
+        .then(function(data) {
+          if (data.authenticated) {
+            _setUser({
+              id: 'clever:' + data.clever_id,
+              email: data.email,
+              user_metadata: {
+                name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || ''),
+                approved: true,
+              },
+            });
+            window.__graiderUser = { id: 'clever:' + data.clever_id, email: data.email };
+            setAuthLoading(false);
+          }
+        })
+        .catch(function(err) { console.error('Clever session check failed:', err) });
+      window.history.replaceState({}, '', '/');
+      return;
+    }
+    if (cleverError) {
+      console.error('Clever login error:', cleverError);
+      window.history.replaceState({}, '', '/');
+    }
+
     if (isLocalhost) {
       _setUser({ id: 'local-dev', email: 'dev@localhost' });
       setAuthLoading(false);
@@ -893,11 +925,16 @@ function App() {
   }, [user]);
 
   async function handleLogout() {
+    // Clear Clever session if present
+    if (user && user.id && user.id.startsWith('clever:')) {
+      fetch('/api/clever/logout', { method: 'POST' }).catch(function() {});
+    }
     logoutIntentRef.current = true;
     approvalConfirmedRef.current = false;
     resetUser();
     await supabase.auth.signOut();
     _setUser(null);
+    window.__graiderUser = null;
   }
 
   // Theme state with localStorage persistence
