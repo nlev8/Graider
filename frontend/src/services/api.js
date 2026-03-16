@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabase'
+import { track } from './posthog'
 
 const API_BASE = ''  // Empty for same-origin, Vite proxies /api to Flask
 
@@ -113,6 +114,13 @@ export async function getStatus() {
 }
 
 export async function startGrading(config) {
+  track('grading_started', {
+    file_count: config.selectedFiles ? config.selectedFiles.length : null,
+    grading_style: config.gradingStyle || 'standard',
+    has_rubric: !!(config.rubric && config.rubric.categories && config.rubric.categories.length),
+    has_assignment_config: !!config.assignmentConfig,
+    ensemble: !!config.ensemble_models,
+  })
   return fetchApi('/api/grade', {
     method: 'POST',
     body: JSON.stringify(config),
@@ -148,6 +156,10 @@ export async function deleteResult(filename) {
 }
 
 export async function updateResult(filename, updates) {
+  track('result_updated', {
+    has_score_change: updates.score !== undefined,
+    has_feedback_change: updates.feedback !== undefined,
+  })
   return fetchApi('/api/update-result', {
     method: 'POST',
     body: JSON.stringify({ filename, ...updates }),
@@ -164,6 +176,10 @@ export async function checkNewFiles(folder, outputFolder) {
 // ============ Settings ============
 
 export async function saveRubric(data) {
+  track('rubric_saved', {
+    category_count: data.categories ? data.categories.length : 0,
+    grading_style: data.gradingStyle || 'standard',
+  })
   return fetchApi('/api/save-rubric', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -188,6 +204,10 @@ export async function loadGlobalSettings() {
 // ============ Assignments ============
 
 export async function saveAssignmentConfig(data) {
+  track('assignment_config_saved', {
+    has_markers: !!(data.customMarkers && data.customMarkers.length),
+    has_grading_notes: !!data.gradingNotes,
+  })
   return fetchApi('/api/save-assignment-config', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -209,6 +229,7 @@ export async function deleteAssignment(name) {
 }
 
 export async function exportAssignment(data) {
+  track('content_exported', { type: 'assignment', format: data.format || 'docx' })
   return fetchApi('/api/export-assignment', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -229,6 +250,8 @@ export async function browse(type = 'folder') {
 }
 
 export async function parseDocument(file) {
+  var ext = file.name ? file.name.split('.').pop().toLowerCase() : 'unknown'
+  track('document_parsed', { file_type: ext })
   const formData = new FormData()
   formData.append('file', file)
 
@@ -303,6 +326,7 @@ export async function brainstormLessonIdeas(data) {
 }
 
 export async function generateLessonPlan(data) {
+  track('lesson_plan_generated', { subject: data.subject, grade_level: data.grade_level })
   return fetchApi('/api/generate-lesson-plan', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -310,6 +334,7 @@ export async function generateLessonPlan(data) {
 }
 
 export async function exportLessonPlan(plan) {
+  track('content_exported', { type: 'lesson_plan' })
   return fetchApi('/api/export-lesson-plan', {
     method: 'POST',
     body: JSON.stringify({ plan }),
@@ -342,6 +367,7 @@ export async function listUnits() {
 }
 
 export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'worksheet') {
+  track('assignment_from_lesson_generated', { assignment_type: assignmentType })
   return fetchApi('/api/generate-assignment-from-lesson', {
     method: 'POST',
     body: JSON.stringify({ lessonPlan, config, assignmentType }),
@@ -349,6 +375,7 @@ export async function generateAssignmentFromLesson(lessonPlan, config, assignmen
 }
 
 export async function exportGeneratedAssignment(assignment, format = 'docx', includeAnswers = false) {
+  track('content_exported', { type: 'generated_assignment', format, include_answers: includeAnswers })
   return fetchApi('/api/export-generated-assignment', {
     method: 'POST',
     body: JSON.stringify({ assignment, format, include_answers: includeAnswers }),
@@ -358,6 +385,11 @@ export async function exportGeneratedAssignment(assignment, format = 'docx', inc
 // ============ Assessment Generation ============
 
 export async function generateAssessment(standards, config, assessmentConfig, contentSources = []) {
+  track('assessment_generated', {
+    standard_count: standards ? standards.length : 0,
+    question_count: assessmentConfig ? assessmentConfig.questionCount : null,
+    has_content_sources: contentSources.length > 0,
+  })
   return fetchApi('/api/generate-assessment', {
     method: 'POST',
     body: JSON.stringify({ standards, config, assessmentConfig, contentSources }),
@@ -365,6 +397,7 @@ export async function generateAssessment(standards, config, assessmentConfig, co
 }
 
 export async function exportAssessment(assessment, includeAnswerKey = false) {
+  track('content_exported', { type: 'assessment', include_answer_key: includeAnswerKey })
   return fetchApi('/api/export-assessment', {
     method: 'POST',
     body: JSON.stringify({ assessment, includeAnswerKey }),
@@ -372,6 +405,7 @@ export async function exportAssessment(assessment, includeAnswerKey = false) {
 }
 
 export async function exportAssessmentForPlatform(assessment, platform, templateId = null) {
+  track('content_exported', { type: 'assessment_platform', platform })
   return fetchApi('/api/export-assessment-platform', {
     method: 'POST',
     body: JSON.stringify({ assessment, platform, templateId }),
@@ -450,6 +484,7 @@ export async function getAssignmentSubmissions(assignmentId) {
 // ============ Email ============
 
 export async function sendEmails(results, teacherEmail = '', teacherName = '', emailSignature = '') {
+  track('emails_sent', { count: results ? results.length : 0 })
   return fetchApi('/api/send-emails', {
     method: 'POST',
     body: JSON.stringify({
@@ -662,6 +697,7 @@ export async function getAccommodationStats() {
 // ============ Student Portal ============
 
 export async function publishAssessmentToPortal(assessment, settings = {}) {
+  track('assessment_published_to_portal')
   return fetchApi('/api/publish-assessment', {
     method: 'POST',
     body: JSON.stringify({ assessment, settings }),
@@ -870,6 +906,7 @@ export async function updateStudent(data) {
 // ============ Focus Batch Export ============
 
 export async function exportFocusBatch(results = null, assignment = null) {
+  track('content_exported', { type: 'focus_batch' })
   return fetchApi('/api/export-focus-batch', {
     method: 'POST',
     body: JSON.stringify({ results, assignment }),
@@ -974,6 +1011,7 @@ export async function getPendingConfirmations(data = {}) {
 // ============ Assistant ============
 
 export async function sendAssistantMessage(messages, sessionId, files = []) {
+  track('assistant_message_sent', { has_files: files.length > 0 })
   const authHeaders = await getAuthHeaders()
   return fetch(API_BASE + '/api/assistant/chat', {
     method: 'POST',
@@ -1045,6 +1083,7 @@ export async function adjustReadingLevel(text, targetLevel, subject, preserveTer
 // ============ LMS Grade Export ============
 
 export async function exportLmsCsv(results, assignment, totalPoints, format) {
+  track('content_exported', { type: 'lms_csv', format, result_count: results ? results.length : 0 })
   return fetchApi('/api/export-lms-csv', {
     method: 'POST',
     body: JSON.stringify({

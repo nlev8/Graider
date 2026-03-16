@@ -10,6 +10,14 @@
       gtag('js', new Date());
       gtag('config', 'G-80NP6VL2BK', { anonymize_ip: true });
     </script>
+    <!-- PostHog Analytics -->
+    <script>
+      !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+      posthog.init('phc_lWjzRXIG81gguCXd4yqRv5M4K16rnUr7rYx2plbQLdl', {
+        api_host: 'https://us.i.posthog.com',
+        person_profiles: 'identified_only'
+      });
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Graider — AI Grading and Planning Assistant for Teachers | Grade 100 Papers in Minutes</title>
     <meta name="description" content="Graider is the best AI grading and planning assistant for 6-12 teachers. Grade 100 assignments in minutes with per-question feedback, generate standards-aligned lesson plans, create worksheets, and track student progress. Uses GPT-4o, Claude, or Gemini. Free tier available. FERPA-compliant EdTech.">
@@ -1247,5 +1255,183 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
+
+    <!-- PostHog Custom Event Tracking -->
+    <script>
+    (function() {
+        if (!window.posthog) return;
+        var ph = window.posthog;
+        var pageLoadTime = Date.now();
+        var maxScroll = 0;
+
+        // --- 1. CTA Click Tracking (event delegation) ---
+        var ctaMap = [
+            { text: 'Start Grading with AI Free', name: 'hero_start_grading', section: 'hero' },
+            { text: 'See How It Works', name: 'hero_see_how', section: 'hero' },
+            { text: 'Join the Beta', name: 'beta_join', section: 'pricing' },
+            { text: 'Get Started Free', name: 'bottom_get_started', section: 'cta' },
+            { text: 'Schedule a Demo', name: 'bottom_schedule_demo', section: 'cta' }
+        ];
+
+        document.addEventListener('click', function(e) {
+            var el = e.target.closest('a, button');
+            if (!el) return;
+            var text = (el.textContent || '').trim().replace(/\s+/g, ' ');
+            var inMobile = !!el.closest('.mobile-menu');
+
+            // Nav-specific CTAs
+            if (el.closest('.nav-actions')) {
+                if (text === 'Log In') {
+                    ph.capture('cta_clicked', { cta_name: 'nav_login', section: 'nav' });
+                } else if (text === 'Get Started') {
+                    ph.capture('cta_clicked', { cta_name: 'nav_get_started', section: 'nav' });
+                }
+                return;
+            }
+
+            // Mobile menu CTAs
+            if (inMobile) {
+                if (text === 'Log In') {
+                    ph.capture('cta_clicked', { cta_name: 'nav_login_mobile', section: 'nav' });
+                } else if (text === 'Get Started') {
+                    ph.capture('cta_clicked', { cta_name: 'nav_get_started_mobile', section: 'nav' });
+                }
+                return;
+            }
+
+            // Mapped CTAs
+            for (var i = 0; i < ctaMap.length; i++) {
+                if (text.indexOf(ctaMap[i].text) !== -1) {
+                    ph.capture('cta_clicked', { cta_name: ctaMap[i].name, section: ctaMap[i].section });
+                    return;
+                }
+            }
+
+            // Nav anchor links
+            if (el.tagName === 'A' && el.getAttribute('href') && el.getAttribute('href').charAt(0) === '#') {
+                var nav = el.closest('.nav-links, .mobile-menu');
+                if (nav) {
+                    ph.capture('nav_link_clicked', { target: el.getAttribute('href'), link_text: text });
+                }
+                return;
+            }
+
+            // Outbound links
+            if (el.tagName === 'A') {
+                var href = el.getAttribute('href') || '';
+                if (href.indexOf('http') === 0 || href.indexOf('/blog') === 0 || href.indexOf('/llms') === 0) {
+                    var section = el.closest('section, footer, nav');
+                    var sectionId = section ? (section.id || section.className.split(' ')[0]) : 'unknown';
+                    ph.capture('outbound_link_clicked', { url: href, link_text: text, section: sectionId });
+                }
+            }
+        });
+
+        // --- 2. Section Visibility Tracking ---
+        var viewedSections = {};
+        var sectionIds = ['features', 'how-it-works', 'testimonials', 'competitive-advantage', 'pricing'];
+        var sectionEls = [];
+
+        // Hero and CTA/footer don't have simple IDs, handle by class
+        var hero = document.querySelector('.hero');
+        var ctaSection = document.querySelector('.cta');
+        var footer = document.querySelector('.footer');
+        if (hero) { hero.setAttribute('data-track-section', 'hero'); sectionEls.push(hero); }
+        if (ctaSection) { ctaSection.setAttribute('data-track-section', 'cta'); sectionEls.push(ctaSection); }
+        if (footer) { footer.setAttribute('data-track-section', 'footer'); sectionEls.push(footer); }
+
+        for (var s = 0; s < sectionIds.length; s++) {
+            var secEl = document.getElementById(sectionIds[s]);
+            if (secEl) {
+                secEl.setAttribute('data-track-section', sectionIds[s]);
+                sectionEls.push(secEl);
+            }
+        }
+
+        if (window.IntersectionObserver) {
+            var observer = new IntersectionObserver(function(entries) {
+                for (var j = 0; j < entries.length; j++) {
+                    if (entries[j].isIntersecting) {
+                        var name = entries[j].target.getAttribute('data-track-section');
+                        if (name && !viewedSections[name]) {
+                            viewedSections[name] = true;
+                            ph.capture('section_viewed', { section: name });
+                        }
+                    }
+                }
+            }, { threshold: 0.3 });
+
+            for (var k = 0; k < sectionEls.length; k++) {
+                observer.observe(sectionEls[k]);
+            }
+        }
+
+        // --- 3. Scroll Depth Milestones ---
+        var scrollMilestones = {};
+        var milestones = [25, 50, 75, 90];
+
+        window.addEventListener('scroll', function() {
+            var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            if (docHeight <= 0) return;
+            var pct = Math.round((scrollTop / docHeight) * 100);
+            if (pct > maxScroll) maxScroll = pct;
+
+            for (var m = 0; m < milestones.length; m++) {
+                if (pct >= milestones[m] && !scrollMilestones[milestones[m]]) {
+                    scrollMilestones[milestones[m]] = true;
+                    ph.capture('scroll_depth', { percent: milestones[m] });
+                }
+            }
+        }, { passive: true });
+
+        // --- 4. Modal Tracking ---
+        if (typeof window.openLoginModal === 'function') {
+            var origOpen = window.openLoginModal;
+            window.openLoginModal = function(mode) {
+                ph.capture('modal_opened', { modal_type: mode || 'login' });
+                return origOpen.apply(this, arguments);
+            };
+        }
+
+        if (typeof window.handleLogin === 'function') {
+            var origLogin = window.handleLogin;
+            window.handleLogin = function(e) {
+                ph.capture('auth_attempted', { method: 'email_login' });
+                return origLogin.apply(this, arguments);
+            };
+        }
+
+        if (typeof window.handleSignup === 'function') {
+            var origSignup = window.handleSignup;
+            window.handleSignup = function(e) {
+                ph.capture('auth_attempted', { method: 'email_signup' });
+                return origSignup.apply(this, arguments);
+            };
+        }
+
+        if (typeof window.handleGoogleAuth === 'function') {
+            var origGoogle = window.handleGoogleAuth;
+            window.handleGoogleAuth = function() {
+                ph.capture('auth_attempted', { method: 'google' });
+                return origGoogle.apply(this, arguments);
+            };
+        }
+
+        if (typeof window.handleMicrosoftAuth === 'function') {
+            var origMs = window.handleMicrosoftAuth;
+            window.handleMicrosoftAuth = function() {
+                ph.capture('auth_attempted', { method: 'microsoft' });
+                return origMs.apply(this, arguments);
+            };
+        }
+
+        // --- 5. Time on Page ---
+        window.addEventListener('beforeunload', function() {
+            var seconds = Math.round((Date.now() - pageLoadTime) / 1000);
+            ph.capture('page_exit', { time_on_page_seconds: seconds, max_scroll_percent: maxScroll });
+        });
+    })();
+    </script>
 </body>
 </html>

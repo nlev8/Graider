@@ -40,6 +40,7 @@ import MatchingCards from "./components/MatchingCards";
 import MindMapView from "./components/MindMapView";
 import FlashcardView from "./components/FlashcardView";
 import DOMPurify from "dompurify";
+import { initPostHog, identifyUser, resetUser, track as phTrack } from "./services/posthog";
 
 // Inline CSV table preview — fetches CSV from URL and renders as HTML table
 function DataTablePreview({ url }) {
@@ -780,6 +781,11 @@ function App() {
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+  // Initialize PostHog (skip on localhost)
+  useEffect(() => {
+    if (!isLocalhost) initPostHog();
+  }, []);
+
   // Check for existing session on mount
   useEffect(() => {
     if (isLocalhost) {
@@ -881,9 +887,15 @@ function App() {
     return () => window.removeEventListener('account-not-approved', handleNotApproved);
   }, [user, isLocalhost]);
 
+  // Identify user in PostHog when they log in
+  useEffect(() => {
+    if (user && !isLocalhost) identifyUser(user);
+  }, [user]);
+
   async function handleLogout() {
     logoutIntentRef.current = true;
     approvalConfirmedRef.current = false;
+    resetUser();
     await supabase.auth.signOut();
     _setUser(null);
   }
@@ -1251,7 +1263,11 @@ function App() {
     showSuggestions: false,
   });
 
-  const [activeTab, setActiveTab] = useState("grade");
+  const [activeTab, _setActiveTab] = useState("grade");
+  const setActiveTab = useCallback((tab) => {
+    _setActiveTab(tab);
+    if (!isLocalhost) phTrack('tab_switched', { tab });
+  }, []);
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
@@ -2331,6 +2347,14 @@ function App() {
           : t
       ));
     } else if (!status.is_running && wasGrading.current) {
+      // Track grading completion
+      if (!isLocalhost && status.results) {
+        phTrack('grading_completed', {
+          result_count: status.results.length,
+          cost: status.session_cost?.total_cost || 0,
+          cost_limit_hit: !!status.cost_limit_hit,
+        });
+      }
       // Grading just finished - remove persistent toast
       wasGrading.current = false;
       if (gradingToastId.current) {

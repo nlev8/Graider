@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../services/supabase'
+import { track } from '../services/posthog'
 
 export default function LoginScreen({ onLogin, theme, toggleTheme }) {
   const isDark = theme !== 'light';
@@ -13,6 +14,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
 
   async function handleOAuth(provider) {
     setError('')
+    track('auth_attempted', { method: provider })
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -36,6 +38,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
     setLoading(false)
 
     if (authError) {
+      track('auth_attempted', { method: 'email', success: false })
       if (authError.message.includes('Email not confirmed')) {
         setError('Please confirm your email before signing in. Check your inbox.')
       } else {
@@ -44,6 +47,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
       return
     }
 
+    track('auth_attempted', { method: 'email', success: true })
     onLogin(data.user)
   }
 
