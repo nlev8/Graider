@@ -124,6 +124,7 @@ def init_auth(app):
             g.user_id = f"clever:{clever_user['clever_id']}"
             g.user_email = clever_user.get('email', '')
             g.auth_source = 'clever'
+            g.district_id = clever_user.get('district', '')
             return None
 
         # Skip non-API routes (static files, index.html, etc.)

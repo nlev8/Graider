@@ -307,6 +307,61 @@ def clever_delete_data():
         return jsonify({"error": "An internal error occurred"}), 500
 
 
+@clever_bp.route("/api/clever/district-keys", methods=["GET"])
+def clever_district_keys_status():
+    """Check which API keys are configured at the district level."""
+    clever_user = session.get("clever_user")
+    if not clever_user:
+        return jsonify({"error": "Not authenticated via Clever"}), 403
+
+    district_id = clever_user.get("district", "")
+    if not district_id:
+        return jsonify({"error": "No district associated"}), 400
+
+    from backend.api_keys import check_district_keys
+    status = check_district_keys(district_id)
+    return jsonify({"district_id": district_id, "keys": status})
+
+
+@clever_bp.route("/api/clever/district-keys", methods=["POST"])
+def clever_save_district_keys():
+    """Save district-level API keys. Only district_admin users can do this.
+
+    Body: { "openai": "sk-...", "anthropic": "sk-ant-...", "gemini": "AI..." }
+    Empty strings are ignored (won't overwrite existing keys).
+    """
+    clever_user = session.get("clever_user")
+    if not clever_user:
+        return jsonify({"error": "Not authenticated via Clever"}), 403
+
+    # Only district admins can set district-wide keys
+    if clever_user.get("type") != "district_admin":
+        return jsonify({"error": "Only district administrators can manage district API keys"}), 403
+
+    district_id = clever_user.get("district", "")
+    if not district_id:
+        return jsonify({"error": "No district associated"}), 400
+
+    data = request.get_json(silent=True) or {}
+    keys = {}
+    for provider in ("openai", "anthropic", "gemini"):
+        val = data.get(provider, "").strip()
+        if val:
+            keys[provider] = val
+
+    if not keys:
+        return jsonify({"error": "No API keys provided"}), 400
+
+    from backend.api_keys import save_district_keys
+    ok = save_district_keys(district_id, keys)
+    if ok:
+        logger.info("District API keys updated by %s for district %s",
+                     clever_user.get("email"), district_id)
+        return jsonify({"status": "saved", "district_id": district_id})
+    else:
+        return jsonify({"error": "Failed to save district keys"}), 500
+
+
 @clever_bp.route("/api/clever/logout", methods=["POST"])
 def clever_logout():
     """Clear the Clever session."""
