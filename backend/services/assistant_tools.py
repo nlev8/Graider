@@ -49,6 +49,7 @@ LESSONS_DIR = os.path.expanduser("~/.graider_lessons")
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 STANDARDS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
+ROSTERS_DIR = os.path.expanduser("~/.graider_data/rosters")
 ACCOMMODATIONS_DIR = os.path.expanduser("~/.graider_data/accommodations")
 PARENT_CONTACTS_FILE = os.path.expanduser("~/.graider_data/parent_contacts.json")
 PERIOD_CSVS_DIR = os.path.join(PROJECT_ROOT, "Period CSVs")
@@ -507,61 +508,121 @@ def _load_saved_lessons(teacher_id='local-dev'):
 
 
 def _load_roster(teacher_id='local-dev'):
-    """Load student roster from periods. Returns list of dicts with name, id, local_id, grade, period, course_codes."""
+    """Load student roster from periods and Clever rosters.
+
+    Returns list of dicts with name, id, local_id, grade, period, course_codes.
+    Handles both Focus SIS CSVs (periods/) and Clever CSVs + section JSONs (rosters/ + periods/).
+    """
     roster = []
-    if not os.path.exists(PERIODS_DIR):
-        return roster
-    # Load period metadata for course codes
-    period_meta = {}
-    for f in os.listdir(PERIODS_DIR):
-        if f.endswith('.meta.json'):
+    seen_ids = set()
+
+    # --- Phase 1: Focus SIS CSVs from PERIODS_DIR (existing format) ---
+    if os.path.exists(PERIODS_DIR):
+        period_meta = {}
+        for f in os.listdir(PERIODS_DIR):
+            if f.endswith('.meta.json'):
+                try:
+                    with open(os.path.join(PERIODS_DIR, f), 'r') as fh:
+                        meta = json.load(fh)
+                    csv_name = f.replace('.meta.json', '')
+                    period_meta[csv_name] = meta
+                except Exception:
+                    pass
+
+        for f in sorted(os.listdir(PERIODS_DIR)):
+            if not f.endswith('.csv'):
+                continue
+            meta = period_meta.get(f, {})
+            period_name = meta.get('period_name', f.replace('.csv', '').replace('_', ' '))
+            course_codes = meta.get('course_codes', [])
+            filepath = os.path.join(PERIODS_DIR, f)
             try:
-                with open(os.path.join(PERIODS_DIR, f), 'r') as fh:
-                    meta = json.load(fh)
-                csv_name = f.replace('.meta.json', '')
-                period_meta[csv_name] = meta
+                with open(filepath, 'r', encoding='utf-8') as fh:
+                    reader = csv.DictReader(fh)
+                    for row in reader:
+                        raw_name = row.get('Student', '').strip().strip('"')
+                        student_id = row.get('Student ID', '').strip().strip('"')
+                        local_id = row.get('Local ID', '').strip().strip('"')
+                        grade = row.get('Grade', '').strip().strip('"')
+                        # Convert "Last, First Middle" or "Last; First Middle" to "First Middle Last"
+                        if ';' in raw_name:
+                            parts = raw_name.split(';', 1)
+                            last = parts[0].strip()
+                            first = parts[1].strip() if len(parts) > 1 else ''
+                            display_name = f"{first} {last}".strip()
+                        elif ',' in raw_name:
+                            parts = raw_name.split(',', 1)
+                            last = parts[0].strip()
+                            first = parts[1].strip() if len(parts) > 1 else ''
+                            display_name = f"{first} {last}".strip()
+                        else:
+                            display_name = raw_name
+                        if display_name:
+                            roster.append({
+                                "name": display_name,
+                                "student_id": student_id,
+                                "local_id": local_id,
+                                "grade": grade,
+                                "period": period_name,
+                                "course_codes": course_codes,
+                            })
+                            if student_id:
+                                seen_ids.add(student_id)
             except Exception:
                 pass
 
-    for f in sorted(os.listdir(PERIODS_DIR)):
-        if not f.endswith('.csv'):
-            continue
-        meta = period_meta.get(f, {})
-        period_name = meta.get('period_name', f.replace('.csv', '').replace('_', ' '))
-        course_codes = meta.get('course_codes', [])
-        filepath = os.path.join(PERIODS_DIR, f)
-        try:
-            with open(filepath, 'r', encoding='utf-8') as fh:
-                reader = csv.DictReader(fh)
-                for row in reader:
-                    raw_name = row.get('Student', '').strip().strip('"')
-                    student_id = row.get('Student ID', '').strip().strip('"')
-                    local_id = row.get('Local ID', '').strip().strip('"')
-                    grade = row.get('Grade', '').strip().strip('"')
-                    # Convert "Last, First Middle" or "Last; First Middle" to "First Middle Last"
-                    if ';' in raw_name:
-                        parts = raw_name.split(';', 1)
-                        last = parts[0].strip()
-                        first = parts[1].strip() if len(parts) > 1 else ''
+    # --- Phase 2: Clever roster CSVs from ROSTERS_DIR ---
+    if os.path.exists(ROSTERS_DIR):
+        # Build student-ID → period mapping from Clever section JSONs in PERIODS_DIR
+        clever_student_periods = {}  # student_id → list of period names
+        if os.path.exists(PERIODS_DIR):
+            for f in sorted(os.listdir(PERIODS_DIR)):
+                if not f.endswith('.json') or f.endswith('.meta.json'):
+                    continue
+                filepath = os.path.join(PERIODS_DIR, f)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as fh:
+                        section = json.load(fh)
+                    if section.get('source') != 'clever':
+                        continue
+                    period_name = section.get('name', f.replace('.json', ''))
+                    for sid in section.get('students', []):
+                        clever_student_periods.setdefault(sid, []).append(period_name)
+                except Exception:
+                    pass
+
+        for f in sorted(os.listdir(ROSTERS_DIR)):
+            if not f.endswith('.csv'):
+                continue
+            filepath = os.path.join(ROSTERS_DIR, f)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as fh:
+                    reader = csv.DictReader(fh)
+                    for row in reader:
+                        student_id = row.get('student_id', '').strip()
+                        if student_id in seen_ids:
+                            continue  # Already loaded from Focus SIS
+                        first = row.get('first_name', '').strip()
+                        last = row.get('last_name', '').strip()
                         display_name = f"{first} {last}".strip()
-                    elif ',' in raw_name:
-                        parts = raw_name.split(',', 1)
-                        last = parts[0].strip()
-                        first = parts[1].strip() if len(parts) > 1 else ''
-                        display_name = f"{first} {last}".strip()
-                    else:
-                        display_name = raw_name
-                    if display_name:
-                        roster.append({
-                            "name": display_name,
-                            "student_id": student_id,
-                            "local_id": local_id,
-                            "grade": grade,
-                            "period": period_name,
-                            "course_codes": course_codes,
-                        })
-        except Exception:
-            pass
+                        grade = row.get('grade', '').strip()
+                        if not display_name:
+                            continue
+                        # A Clever student may appear in multiple sections
+                        periods = clever_student_periods.get(student_id, [''])
+                        for period_name in periods:
+                            roster.append({
+                                "name": display_name,
+                                "student_id": student_id,
+                                "local_id": "",
+                                "grade": grade,
+                                "period": period_name,
+                                "course_codes": [],
+                            })
+                        seen_ids.add(student_id)
+            except Exception:
+                pass
+
     return roster
 
 

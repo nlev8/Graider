@@ -16,9 +16,8 @@ from datetime import datetime
 from backend.services.assistant_tools import (
     _load_master_csv, _load_accommodations, _load_roster,
     _fuzzy_name_match, _safe_int_score, ACCOMMODATIONS_DIR, PERIODS_DIR,
+    ROSTERS_DIR,
 )
-
-ROSTERS_DIR = os.path.expanduser("~/.graider_data/rosters")
 
 
 # ═══════════════════════════════════════════════════════
@@ -278,6 +277,9 @@ def _parse_csv_name(raw_name):
 def _find_all_student_files(student_name, dirs):
     """Search for a student across CSV files in multiple directories.
 
+    Handles both Focus SIS format (column 'Student' with "Last, First")
+    and Clever format (columns 'first_name', 'last_name').
+
     Returns list of (matched_name, filepath, label) for ALL files containing the student.
     """
     matches = []
@@ -295,8 +297,16 @@ def _find_all_student_files(student_name, dirs):
                 with open(filepath, 'r', encoding='utf-8') as fh:
                     reader = csv.DictReader(fh)
                     for row in reader:
+                        # Try Focus SIS format first (column 'Student')
                         raw_name = row.get('Student', '').strip().strip('"')
-                        display_name = _parse_csv_name(raw_name)
+                        if raw_name:
+                            display_name = _parse_csv_name(raw_name)
+                        else:
+                            # Clever format: separate first_name/last_name columns
+                            first = row.get('first_name', '').strip()
+                            last = row.get('last_name', '').strip()
+                            raw_name = f"{first} {last}".strip()
+                            display_name = raw_name
                         if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
                             if label_prefix == "periods":
                                 meta_path = filepath.replace('.csv', '.meta.json')
@@ -318,7 +328,10 @@ def _find_all_student_files(student_name, dirs):
 
 
 def _remove_student_from_csv(student_name, filepath):
-    """Remove a student from a single CSV file. Returns (removed_count, remaining_count)."""
+    """Remove a student from a single CSV file. Returns (removed_count, remaining_count).
+
+    Handles both Focus SIS format (column 'Student') and Clever format ('first_name'/'last_name').
+    """
     with open(filepath, 'r', encoding='utf-8') as fh:
         content = fh.read()
     reader = csv.DictReader(io.StringIO(content))
@@ -327,7 +340,13 @@ def _remove_student_from_csv(student_name, filepath):
     removed_count = 0
     for row in reader:
         raw_name = row.get('Student', '').strip().strip('"')
-        display_name = _parse_csv_name(raw_name)
+        if raw_name:
+            display_name = _parse_csv_name(raw_name)
+        else:
+            first = row.get('first_name', '').strip()
+            last = row.get('last_name', '').strip()
+            raw_name = f"{first} {last}".strip()
+            display_name = raw_name
         if _fuzzy_name_match(student_name, display_name) or _fuzzy_name_match(student_name, raw_name):
             removed_count += 1
             continue
