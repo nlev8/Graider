@@ -1608,7 +1608,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 }
 
             except Exception as e:
-                return {"success": False, "error": str(e), "filepath": filepath}
+                logger.error("Grading failed for %s: %s", filepath, str(e))
+                return {"success": False, "error": "Grading failed for this file", "filepath": filepath}
 
         # ═══════════════════════════════════════════════════════════
         # PARALLEL GRADING EXECUTION

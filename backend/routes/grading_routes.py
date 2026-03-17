@@ -1314,7 +1314,7 @@ def list_student_history():
                     students.append({
                         'student_id': student_id,
                         'name': id_to_name.get(student_id, student_id),
-                        'error': str(e)
+                        'error': 'Failed to load student results'
                     })
 
     # Sort by name

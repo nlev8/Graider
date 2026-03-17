@@ -318,6 +318,11 @@ def map_sections_to_periods(sections):
     return periods
 
 
+def _safe_teacher_id(teacher_id):
+    """Sanitize teacher_id for use in filenames (colon is illegal on Windows)."""
+    return teacher_id.replace(":", "_")
+
+
 def persist_roster_as_csv(students, teacher_id="local-dev"):
     """Write Clever students to ROSTERS_DIR as CSV, matching manual upload format.
 
@@ -326,9 +331,10 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
     and restores students who reappear.
     """
     os.makedirs(ROSTERS_DIR, exist_ok=True)
-    filename = f"clever_roster_{teacher_id}.csv"
+    safe_id = _safe_teacher_id(teacher_id)
+    filename = f"clever_roster_{safe_id}.csv"
     filepath = os.path.join(ROSTERS_DIR, filename)
-    archive_path = os.path.join(ROSTERS_DIR, f"clever_roster_{teacher_id}_archived.json")
+    archive_path = os.path.join(ROSTERS_DIR, f"clever_roster_{safe_id}_archived.json")
 
     # Load previous archive (if any) to track removals/restores
     archived = {}
@@ -373,7 +379,7 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
         os.remove(archive_path)
 
     # Load manual overrides (teacher edits that should survive sync)
-    overrides_path = os.path.join(ROSTERS_DIR, f"clever_roster_{teacher_id}_overrides.json")
+    overrides_path = os.path.join(ROSTERS_DIR, f"clever_roster_{safe_id}_overrides.json")
     overrides = {}
     if os.path.exists(overrides_path):
         with open(overrides_path, "r") as f:
@@ -531,3 +537,122 @@ def persist_parent_contacts(contact_map, teacher_id="local-dev"):
         json.dump(existing, f, indent=2)
 
     logger.info("Persisted parent contacts: %d students total", len(existing))
+
+
+def delete_clever_data(teacher_id="local-dev"):
+    """Delete all Clever-sourced data for a teacher (district disconnect / data deletion).
+
+    Clever requires apps to delete student data when a district disconnects.
+    This removes:
+    - Clever roster CSVs + archive + overrides + metadata
+    - Clever section/period JSONs + metadata
+    - Clever-sourced parent contacts (only for students in this teacher's roster)
+    - Clever-sourced student accommodations (only for students in this teacher's roster)
+    - ELL entries for those students
+
+    Returns dict with counts of deleted items.
+    """
+    import glob as globmod
+
+    deleted = {"roster_files": 0, "period_files": 0, "contacts_removed": 0,
+               "accommodations_removed": 0, "ell_removed": 0}
+    safe_id = _safe_teacher_id(teacher_id)
+
+    # ── Step 0: Collect Clever student IDs from roster BEFORE deleting it ──
+    clever_student_ids = set()
+    roster_path = os.path.join(ROSTERS_DIR, f"clever_roster_{safe_id}.csv")
+    if os.path.exists(roster_path):
+        try:
+            with open(roster_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    sid = row.get("student_id", "").strip()
+                    if sid:
+                        clever_student_ids.add(sid)
+        except (csv.Error, OSError) as e:
+            logger.warning("Failed to read roster for ID collection: %s", e)
+
+    # Also collect student IDs from Clever period files
+    period_pattern = os.path.join(PERIODS_DIR, "clever_*.json")
+    for filepath in globmod.glob(period_pattern):
+        if filepath.endswith(".meta.json"):
+            continue
+        try:
+            with open(filepath, "r") as f:
+                period_data = json.load(f)
+            for sid in period_data.get("students", []):
+                if sid:
+                    clever_student_ids.add(sid)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    logger.info("Collected %d Clever student IDs for deletion", len(clever_student_ids))
+
+    # ── Step 1: Delete Clever roster files (CSV, archive, overrides, metadata) ──
+    roster_glob = os.path.join(ROSTERS_DIR, f"clever_roster_{safe_id}*")
+    for filepath in globmod.glob(roster_glob):
+        try:
+            os.remove(filepath)
+            deleted["roster_files"] += 1
+            logger.info("Deleted Clever roster file: %s", os.path.basename(filepath))
+        except OSError as e:
+            logger.warning("Failed to delete %s: %s", filepath, e)
+
+    # ── Step 2: Delete Clever section/period files ──
+    period_all = os.path.join(PERIODS_DIR, "clever_*.json*")
+    for filepath in globmod.glob(period_all):
+        try:
+            os.remove(filepath)
+            deleted["period_files"] += 1
+            logger.info("Deleted Clever period file: %s", os.path.basename(filepath))
+        except OSError as e:
+            logger.warning("Failed to delete %s: %s", filepath, e)
+
+    # ── Step 3: Remove only Clever students from parent_contacts.json ──
+    if clever_student_ids:
+        contacts_file = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
+        if os.path.exists(contacts_file):
+            try:
+                with open(contacts_file, "r") as f:
+                    contacts = json.load(f)
+                for sid in clever_student_ids:
+                    if sid in contacts:
+                        del contacts[sid]
+                        deleted["contacts_removed"] += 1
+                with open(contacts_file, "w") as f:
+                    json.dump(contacts, f, indent=2)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to clean parent contacts: %s", e)
+
+        # ── Step 4: Remove only Clever students from accommodations ──
+        accomm_file = os.path.join(GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
+        if os.path.exists(accomm_file):
+            try:
+                with open(accomm_file, "r") as f:
+                    accommodations = json.load(f)
+                for sid in clever_student_ids:
+                    if sid in accommodations:
+                        del accommodations[sid]
+                        deleted["accommodations_removed"] += 1
+                with open(accomm_file, "w") as f:
+                    json.dump(accommodations, f, indent=2)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to clean accommodations: %s", e)
+
+        # ── Step 5: Remove only Clever students from ELL data ──
+        ell_file = os.path.join(GRAIDER_DATA_DIR, "ell_students.json")
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, "r") as f:
+                    ell_data = json.load(f)
+                for sid in clever_student_ids:
+                    if sid in ell_data:
+                        del ell_data[sid]
+                        deleted["ell_removed"] += 1
+                with open(ell_file, "w") as f:
+                    json.dump(ell_data, f, indent=2)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to clean ELL data: %s", e)
+
+    logger.info("Clever data deletion complete for %s: %s", teacher_id, deleted)
+    return deleted

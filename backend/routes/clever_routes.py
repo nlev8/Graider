@@ -20,6 +20,7 @@ from backend.clever import (
     persist_sections_as_periods,
     persist_parent_contacts,
     map_sections_to_periods,
+    delete_clever_data,
 )
 from backend.accommodations import set_student_accommodation
 
@@ -272,13 +273,38 @@ def clever_apply_accommodations():
                 errors.append(f"Failed to save for {student_id}")
         except Exception as e:
             logger.error("Error applying accommodation for %s: %s", student_id, str(e))
-            errors.append(f"Error for {student_id}: {str(e)}")
+            errors.append(f"Error for {student_id}")
 
     return jsonify({
         "applied": applied,
         "total": len(accommodations),
         "errors": errors if errors else None,
     })
+
+
+@clever_bp.route("/api/clever/delete-data", methods=["POST"])
+def clever_delete_data():
+    """Delete all Clever-sourced student data for the current teacher.
+
+    Clever requires apps to support data deletion when a district disconnects.
+    This endpoint removes roster CSVs, period files, parent contacts,
+    and accommodation data sourced from Clever.
+    """
+    # Require active Clever session for data deletion
+    if not session.get("clever_user"):
+        return jsonify({"error": "Not authenticated via Clever"}), 403
+
+    teacher_id = getattr(g, "user_id", "")
+    if not teacher_id.startswith("clever:"):
+        return jsonify({"error": "Not a Clever user"}), 403
+
+    try:
+        result = delete_clever_data(teacher_id)
+        logger.info("Clever data deletion for %s: %s", teacher_id, result)
+        return jsonify({"status": "deleted", "deleted": result})
+    except Exception as e:
+        logger.error("Clever data deletion failed for %s: %s", teacher_id, str(e))
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @clever_bp.route("/api/clever/logout", methods=["POST"])

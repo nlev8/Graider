@@ -465,7 +465,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
             removed, remaining = _remove_student_from_csv(student_name, filepath)
             results.append({"source": label, "removed": removed, "remaining": remaining})
         except Exception as e:
-            errors.append({"source": label, "error": str(e)})
+            errors.append({"source": label, "error": "Failed to remove from roster"})
 
     # --- Derive student ID for file-based lookups ---
     roster = _load_roster()
@@ -492,7 +492,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
             save_results(grading_state["results"], teacher_id)
             results.append({"source": "grading_results", "removed": results_removed})
     except Exception as e:
-        errors.append({"source": "grading_results", "error": str(e)})
+        errors.append({"source": "grading_results", "error": "Failed to remove grading results"})
 
     # --- Remove from master_grades.csv ---
     try:
@@ -518,7 +518,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
                     writer.writerows(filtered)
                 results.append({"source": f"master_csv ({os.path.basename(os.path.dirname(master_file))})", "removed": csv_removed})
     except Exception as e:
-        errors.append({"source": "master_csv", "error": str(e)})
+        errors.append({"source": "master_csv", "error": "Failed to remove from master grades"})
 
     # --- Delete student history file ---
     try:
@@ -527,7 +527,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
             os.remove(history_path)
             results.append({"source": "student_history", "removed": 1})
     except Exception as e:
-        errors.append({"source": "student_history", "error": str(e)})
+        errors.append({"source": "student_history", "error": "Failed to remove student history"})
 
     # --- Remove from accommodations ---
     try:
@@ -544,7 +544,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
                     json.dump(all_acc, f, indent=2)
                 results.append({"source": "accommodations", "removed": len(removed_keys)})
     except Exception as e:
-        errors.append({"source": "accommodations", "error": str(e)})
+        errors.append({"source": "accommodations", "error": "Failed to remove accommodations"})
 
     # --- Remove from parent contacts ---
     try:
@@ -561,7 +561,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
                     json.dump(all_contacts, f, indent=2)
                 results.append({"source": "parent_contacts", "removed": len(removed_keys)})
     except Exception as e:
-        errors.append({"source": "parent_contacts", "error": str(e)})
+        errors.append({"source": "parent_contacts", "error": "Failed to remove parent contacts"})
 
     # --- Remove from ELL data ---
     try:
@@ -578,7 +578,7 @@ def remove_student_from_roster(student_name, teacher_id=None):
                     json.dump(all_ell, f, indent=2)
                 results.append({"source": "ell_data", "removed": len(removed_keys)})
     except Exception as e:
-        errors.append({"source": "ell_data", "error": str(e)})
+        errors.append({"source": "ell_data", "error": "Failed to remove ELL data"})
 
     # --- Cascade delete from Supabase ---
     supabase_msg = _delete_student_supabase(matched_name)

@@ -334,3 +334,314 @@ class TestPersistSectionsAsPeriods:
         # Metadata file
         meta_path = filepath + ".meta.json"
         assert os.path.exists(meta_path)
+
+
+# ---------------------------------------------------------------------------
+# _safe_teacher_id — colon sanitization for filenames
+# ---------------------------------------------------------------------------
+
+
+class TestSafeTeacherId:
+    def test_sanitizes_colon(self):
+        assert clever._safe_teacher_id("clever:abc123") == "clever_abc123"
+
+    def test_no_change_without_colon(self):
+        assert clever._safe_teacher_id("local-dev") == "local-dev"
+
+    def test_multiple_colons(self):
+        assert clever._safe_teacher_id("a:b:c") == "a_b_c"
+
+
+# ---------------------------------------------------------------------------
+# persist_roster_as_csv — clever: prefix produces valid filenames
+# ---------------------------------------------------------------------------
+
+
+class TestPersistRosterCleverPrefix:
+    def _make_students(self, ids):
+        return [
+            {
+                "data": {
+                    "id": sid,
+                    "name": {"first": f"First{sid}", "last": f"Last{sid}"},
+                    "email": f"{sid}@school.edu",
+                    "roles": {"student": {"grade": "8", "iep_status": "", "ell_status": ""}},
+                }
+            }
+            for sid in ids
+        ]
+
+    @pytest.fixture(autouse=True)
+    def _clean_dirs(self):
+        import shutil
+        if os.path.exists(clever.ROSTERS_DIR):
+            shutil.rmtree(clever.ROSTERS_DIR)
+        os.makedirs(clever.ROSTERS_DIR, exist_ok=True)
+        yield
+
+    def test_clever_prefix_creates_valid_filename(self):
+        """clever:abc123 should produce clever_abc123 in filename, not clever:abc123."""
+        students = self._make_students(["s1"])
+        path = clever.persist_roster_as_csv(students, teacher_id="clever:abc123")
+        assert os.path.exists(path)
+        assert "clever_abc123" in os.path.basename(path)
+        assert ":" not in os.path.basename(path)
+
+
+# ---------------------------------------------------------------------------
+# extract_parent_contacts
+# ---------------------------------------------------------------------------
+
+
+class TestExtractParentContacts:
+    def test_basic_mapping(self):
+        students = [{"data": {"id": "s1"}}, {"data": {"id": "s2"}}]
+        contacts = [
+            {
+                "data": {
+                    "email": "parent@test.com",
+                    "phone": "555-1234",
+                    "student_relationships": [{"student": "s1"}],
+                }
+            }
+        ]
+        result = clever.extract_parent_contacts(contacts, students)
+        assert "s1" in result
+        assert "parent@test.com" in result["s1"]["parent_emails"]
+        assert "555-1234" in result["s1"]["parent_phones"]
+        assert "s2" not in result
+
+    def test_deduplicates_contacts(self):
+        students = [{"data": {"id": "s1"}}]
+        contacts = [
+            {
+                "data": {
+                    "email": "same@test.com",
+                    "phone": "",
+                    "student_relationships": [{"student": "s1"}],
+                }
+            },
+            {
+                "data": {
+                    "email": "same@test.com",
+                    "phone": "",
+                    "student_relationships": [{"student": "s1"}],
+                }
+            },
+        ]
+        result = clever.extract_parent_contacts(contacts, students)
+        assert len(result["s1"]["parent_emails"]) == 1
+
+    def test_filters_unknown_students(self):
+        students = [{"data": {"id": "s1"}}]
+        contacts = [
+            {
+                "data": {
+                    "email": "parent@test.com",
+                    "phone": "",
+                    "student_relationships": [{"student": "unknown_id"}],
+                }
+            }
+        ]
+        result = clever.extract_parent_contacts(contacts, students)
+        assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# persist_parent_contacts
+# ---------------------------------------------------------------------------
+
+
+class TestPersistParentContacts:
+    @pytest.fixture(autouse=True)
+    def _clean_dirs(self):
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        if os.path.exists(contacts_file):
+            os.remove(contacts_file)
+        yield
+
+    def test_creates_contacts_file(self):
+        contact_map = {"s1": {"parent_emails": ["p@test.com"], "parent_phones": ["555"]}}
+        clever.persist_parent_contacts(contact_map, "test")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        assert os.path.exists(contacts_file)
+        with open(contacts_file) as f:
+            data = json.load(f)
+        assert "s1" in data
+
+    def test_merges_with_existing(self):
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
+        with open(contacts_file, "w") as f:
+            json.dump({"s1": {"parent_emails": ["existing@test.com"], "parent_phones": []}}, f)
+
+        contact_map = {"s1": {"parent_emails": ["new@test.com"], "parent_phones": ["555"]}}
+        clever.persist_parent_contacts(contact_map, "test")
+
+        with open(contacts_file) as f:
+            data = json.load(f)
+        assert "existing@test.com" in data["s1"]["parent_emails"]
+        assert "new@test.com" in data["s1"]["parent_emails"]
+        assert "555" in data["s1"]["parent_phones"]
+
+
+# ---------------------------------------------------------------------------
+# delete_clever_data — full data deletion
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteCleverData:
+    def _make_students(self, ids):
+        return [
+            {
+                "data": {
+                    "id": sid,
+                    "name": {"first": f"F{sid}", "last": f"L{sid}"},
+                    "email": f"{sid}@school.edu",
+                    "roles": {"student": {"grade": "8", "iep_status": "", "ell_status": ""}},
+                }
+            }
+            for sid in ids
+        ]
+
+    @pytest.fixture(autouse=True)
+    def _clean_dirs(self):
+        import shutil
+        for d in [clever.ROSTERS_DIR, clever.PERIODS_DIR]:
+            if os.path.exists(d):
+                shutil.rmtree(d)
+            os.makedirs(d, exist_ok=True)
+        # Clean contacts, accommodations, ELL
+        for f in [
+            os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json"),
+            os.path.join(clever.GRAIDER_DATA_DIR, "ell_students.json"),
+        ]:
+            if os.path.exists(f):
+                os.remove(f)
+        accomm_dir = os.path.join(clever.GRAIDER_DATA_DIR, "accommodations")
+        if os.path.exists(accomm_dir):
+            shutil.rmtree(accomm_dir)
+        os.makedirs(accomm_dir, exist_ok=True)
+        yield
+
+    def test_deletes_roster_files(self):
+        clever.persist_roster_as_csv(self._make_students(["a", "b"]), "clever:t1")
+        import glob as globmod
+        safe_id = clever._safe_teacher_id("clever:t1")
+        files_before = globmod.glob(os.path.join(clever.ROSTERS_DIR, f"clever_roster_{safe_id}*"))
+        assert len(files_before) >= 2  # CSV + metadata
+
+        result = clever.delete_clever_data("clever:t1")
+        files_after = globmod.glob(os.path.join(clever.ROSTERS_DIR, f"clever_roster_{safe_id}*"))
+        assert len(files_after) == 0
+        assert result["roster_files"] >= 2
+
+    def test_deletes_period_files(self):
+        sections = [
+            {
+                "data": {
+                    "id": "sec1", "name": "Math", "subject": "Math",
+                    "grade": "7", "teachers": ["t1"], "students": ["s1"],
+                    "period": "1", "term_id": "t",
+                }
+            }
+        ]
+        clever.persist_sections_as_periods(sections, "clever:t1")
+        result = clever.delete_clever_data("clever:t1")
+        assert result["period_files"] >= 2  # JSON + metadata
+
+    def test_removes_only_clever_students_from_contacts(self):
+        """Deletion should only remove students found in the Clever roster, not all contacts."""
+        # Create roster with students a, b
+        clever.persist_roster_as_csv(self._make_students(["a", "b"]), "clever:t1")
+        # Create contacts for a (Clever), b (Clever), and manual_student (manual)
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        with open(contacts_file, "w") as f:
+            json.dump({
+                "a": {"parent_emails": ["pa@t.com"], "parent_phones": []},
+                "b": {"parent_emails": ["pb@t.com"], "parent_phones": []},
+                "manual_student": {"parent_emails": ["pm@t.com"], "parent_phones": []},
+            }, f)
+
+        result = clever.delete_clever_data("clever:t1")
+        assert result["contacts_removed"] == 2  # a and b removed
+        with open(contacts_file) as f:
+            remaining = json.load(f)
+        assert "manual_student" in remaining  # manual entry preserved
+        assert "a" not in remaining
+        assert "b" not in remaining
+
+    def test_removes_only_clever_students_from_accommodations(self):
+        """Deletion should only remove Clever-sourced students from accommodations."""
+        clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
+        accomm_file = os.path.join(clever.GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
+        with open(accomm_file, "w") as f:
+            json.dump({
+                "a": {"presets": ["simplified_language"]},
+                "manual_student": {"presets": ["extra_encouragement"]},
+            }, f)
+
+        result = clever.delete_clever_data("clever:t1")
+        assert result["accommodations_removed"] == 1
+        with open(accomm_file) as f:
+            remaining = json.load(f)
+        assert "manual_student" in remaining
+        assert "a" not in remaining
+
+    def test_removes_ell_entries(self):
+        """Deletion should remove ELL entries for Clever students only."""
+        clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
+        ell_file = os.path.join(clever.GRAIDER_DATA_DIR, "ell_students.json")
+        with open(ell_file, "w") as f:
+            json.dump({
+                "a": {"language": "Spanish"},
+                "manual_student": {"language": "French"},
+            }, f)
+
+        result = clever.delete_clever_data("clever:t1")
+        assert result["ell_removed"] == 1
+        with open(ell_file) as f:
+            remaining = json.load(f)
+        assert "manual_student" in remaining
+        assert "a" not in remaining
+
+    def test_handles_empty_state(self):
+        """Deletion on clean state should not error."""
+        result = clever.delete_clever_data("clever:t1")
+        assert result["roster_files"] == 0
+        assert result["period_files"] == 0
+        assert result["contacts_removed"] == 0
+        assert result["accommodations_removed"] == 0
+        assert result["ell_removed"] == 0
+
+    def test_handles_corrupt_json_files(self):
+        """Corrupt JSON should not crash deletion."""
+        clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
+        # Write corrupt contacts
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        with open(contacts_file, "w") as f:
+            f.write("{invalid json")
+        # Should not raise
+        result = clever.delete_clever_data("clever:t1")
+        assert result["contacts_removed"] == 0  # couldn't parse, but didn't crash
+
+    def test_collects_ids_from_period_files(self):
+        """Student IDs should be collected from period files too."""
+        # Create period with student "p1" (no roster file for this teacher)
+        sections = [
+            {
+                "data": {
+                    "id": "sec1", "name": "Math", "subject": "Math",
+                    "grade": "7", "teachers": ["t1"], "students": ["p1"],
+                    "period": "1", "term_id": "t",
+                }
+            }
+        ]
+        clever.persist_sections_as_periods(sections, "clever:t1")
+        # Add contacts for p1
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        with open(contacts_file, "w") as f:
+            json.dump({"p1": {"parent_emails": ["parent@t.com"], "parent_phones": []}}, f)
+
+        result = clever.delete_clever_data("clever:t1")
+        assert result["contacts_removed"] == 1
