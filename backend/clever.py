@@ -7,6 +7,7 @@ import io
 import json
 import os
 import logging
+from datetime import datetime
 from urllib.parse import urlencode
 from base64 import b64encode
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 CLEVER_AUTH_URL = "https://clever.com/oauth/authorize"
 CLEVER_TOKEN_URL = "https://clever.com/oauth/tokens"
 CLEVER_API_BASE = "https://api.clever.com"
-CLEVER_API_VERSION = "v3.1"
+CLEVER_API_VERSION = os.getenv("CLEVER_API_VERSION", "v3.0")
 
 # Graider data directories (same paths as settings_routes.py / storage.py)
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
@@ -264,11 +265,57 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
     """Write Clever students to ROSTERS_DIR as CSV, matching manual upload format.
 
     Creates 'clever_roster_{teacher_id}.csv' with standard columns.
+    Archives previously synced students who are no longer in the roster
+    and restores students who reappear.
     """
     os.makedirs(ROSTERS_DIR, exist_ok=True)
     filename = f"clever_roster_{teacher_id}.csv"
     filepath = os.path.join(ROSTERS_DIR, filename)
+    archive_path = os.path.join(ROSTERS_DIR, f"clever_roster_{teacher_id}_archived.json")
 
+    # Load previous archive (if any) to track removals/restores
+    archived = {}
+    if os.path.exists(archive_path):
+        with open(archive_path, "r") as f:
+            try:
+                archived = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                archived = {}
+
+    # Current Clever IDs in this sync
+    current_ids = set()
+    for student in students:
+        data = student.get("data", student)
+        current_ids.add(data.get("id", ""))
+
+    # Restore any previously archived students who reappeared
+    restored = [sid for sid in list(archived.keys()) if sid in current_ids]
+    for sid in restored:
+        logger.info("Restored previously archived Clever student: %s", sid)
+        del archived[sid]
+
+    # Load previous roster IDs to detect removals
+    prev_ids = set()
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                prev_ids.add(row.get("student_id", ""))
+
+    # Archive students who were in previous roster but not in current sync
+    newly_archived = prev_ids - current_ids - {""}
+    for sid in newly_archived:
+        archived[sid] = {"archived_at": datetime.now().isoformat(), "reason": "removed_from_clever"}
+        logger.info("Archived Clever student no longer in roster: %s", sid)
+
+    # Save archive file
+    if archived:
+        with open(archive_path, "w") as f:
+            json.dump(archived, f, indent=2)
+    elif os.path.exists(archive_path):
+        os.remove(archive_path)
+
+    # Write current roster
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["student_id", "first_name", "last_name", "email", "grade", "iep_status", "ell_status"])
@@ -304,7 +351,8 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
     with open(meta_path, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    logger.info("Persisted Clever roster: %s (%d students)", filepath, len(students))
+    logger.info("Persisted Clever roster: %s (%d students, %d archived, %d restored)",
+                filepath, len(students), len(newly_archived), len(restored))
     return filepath
 
 
