@@ -11,9 +11,13 @@ from datetime import datetime
 from urllib.parse import urlencode
 from base64 import b64encode
 
+import asyncio
+
 import httpx
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 5
 
 CLEVER_AUTH_URL = "https://clever.com/oauth/authorize"
 CLEVER_TOKEN_URL = "https://clever.com/oauth/tokens"
@@ -135,10 +139,48 @@ async def get_clever_user(access_token):
             return None
 
 
+async def _clever_get_with_retry(client, url, headers, label=""):
+    """GET with exponential backoff on 429 (rate limit) and 5xx errors.
+
+    Per Clever docs: 1,200 req/min per token, retry with backoff on 429/5xx,
+    stop after MAX_RETRIES attempts.
+    """
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp
+            if resp.status_code == 429:
+                wait = 2 ** attempt
+                logger.warning("Clever rate limited (%s), retrying in %ds (attempt %d/%d)",
+                               label, wait, attempt + 1, MAX_RETRIES)
+                await asyncio.sleep(wait)
+                continue
+            if resp.status_code >= 500:
+                wait = 2 ** attempt
+                logger.warning("Clever %d error (%s), retrying in %ds (attempt %d/%d)",
+                               resp.status_code, label, wait, attempt + 1, MAX_RETRIES)
+                await asyncio.sleep(wait)
+                continue
+            # 4xx (not 429) — don't retry
+            logger.error("Clever API error (%s): %s %s", label, resp.status_code, resp.text[:200])
+            return resp
+        except httpx.HTTPError as e:
+            wait = 2 ** attempt
+            logger.warning("Clever HTTP error (%s): %s, retrying in %ds (attempt %d/%d)",
+                           label, str(e), wait, attempt + 1, MAX_RETRIES)
+            if attempt < MAX_RETRIES - 1:
+                await asyncio.sleep(wait)
+                continue
+            raise
+    return resp  # Return last response after exhausting retries
+
+
 async def sync_roster(district_token):
     """Sync full roster from Clever using a district-app token.
 
     Returns dict: { "teachers": [...], "students": [...], "sections": [...] }
+    Handles rate limiting (429) and server errors (5xx) with exponential backoff.
     """
     headers = {"Authorization": f"Bearer {district_token}"}
     result = {"teachers": [], "students": [], "sections": []}
@@ -149,7 +191,7 @@ async def sync_roster(district_token):
             url = f"{CLEVER_API_BASE}/{CLEVER_API_VERSION}/users?role={user_type[:-1]}"
             while url:
                 try:
-                    resp = await client.get(url, headers=headers)
+                    resp = await _clever_get_with_retry(client, url, headers, label=user_type)
                     if resp.status_code != 200:
                         logger.error("Clever roster fetch (%s) failed: %s", user_type, resp.status_code)
                         break
@@ -164,7 +206,7 @@ async def sync_roster(district_token):
         url = f"{CLEVER_API_BASE}/{CLEVER_API_VERSION}/sections"
         while url:
             try:
-                resp = await client.get(url, headers=headers)
+                resp = await _clever_get_with_retry(client, url, headers, label="sections")
                 if resp.status_code != 200:
                     break
                 body = resp.json()
@@ -174,9 +216,24 @@ async def sync_roster(district_token):
                 logger.error("Clever sections fetch error: %s", str(e))
                 break
 
+        # Fetch contacts/guardians (parent data)
+        url = f"{CLEVER_API_BASE}/{CLEVER_API_VERSION}/users?role=contact"
+        while url:
+            try:
+                resp = await _clever_get_with_retry(client, url, headers, label="contacts")
+                if resp.status_code != 200:
+                    break
+                body = resp.json()
+                result.setdefault("contacts", []).extend(body.get("data", []))
+                url = _next_page_url(body)
+            except httpx.HTTPError as e:
+                logger.warning("Clever contacts fetch error (non-blocking): %s", str(e))
+                break
+
     logger.info(
-        "Clever roster sync: %d teachers, %d students, %d sections",
-        len(result["teachers"]), len(result["students"]), len(result["sections"]),
+        "Clever roster sync: %d teachers, %d students, %d sections, %d contacts",
+        len(result["teachers"]), len(result["students"]),
+        len(result["sections"]), len(result.get("contacts", [])),
     )
     return result
 
@@ -406,3 +463,71 @@ def persist_sections_as_periods(sections, teacher_id="local-dev"):
 
     logger.info("Persisted %d Clever sections as periods", len(periods))
     return periods
+
+
+def extract_parent_contacts(contacts, students):
+    """Map Clever contacts (guardians) to students for parent contact data.
+
+    Returns dict keyed by student Clever ID:
+    {
+        "student_id": {
+            "parent_emails": ["parent@email.com"],
+            "parent_phones": ["555-1234"],
+        }
+    }
+    """
+    # Build student ID set for filtering
+    student_ids = set()
+    for s in students:
+        data = s.get("data", s)
+        student_ids.add(data.get("id", ""))
+
+    result = {}
+    for contact in contacts:
+        data = contact.get("data", contact)
+        email = data.get("email", "")
+        phone = data.get("phone", "")
+        relationships = data.get("student_relationships", [])
+
+        for rel in relationships:
+            sid = rel.get("student", "")
+            if sid not in student_ids:
+                continue
+            entry = result.setdefault(sid, {"parent_emails": [], "parent_phones": []})
+            if email and email not in entry["parent_emails"]:
+                entry["parent_emails"].append(email)
+            if phone and phone not in entry["parent_phones"]:
+                entry["parent_phones"].append(phone)
+
+    logger.info("Extracted parent contacts for %d students from %d contacts",
+                len(result), len(contacts))
+    return result
+
+
+def persist_parent_contacts(contact_map, teacher_id="local-dev"):
+    """Merge Clever parent contacts into the existing parent_contacts.json file."""
+    contacts_file = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
+
+    existing = {}
+    if os.path.exists(contacts_file):
+        try:
+            with open(contacts_file, "r") as f:
+                existing = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            existing = {}
+
+    # Merge — Clever data supplements existing; don't overwrite manual entries
+    for sid, data in contact_map.items():
+        entry = existing.setdefault(sid, {"parent_emails": [], "parent_phones": []})
+        for email in data.get("parent_emails", []):
+            if email not in entry.get("parent_emails", []):
+                entry.setdefault("parent_emails", []).append(email)
+        for phone in data.get("parent_phones", []):
+            if phone not in entry.get("parent_phones", []):
+                entry.setdefault("parent_phones", []).append(phone)
+
+    os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
+    with open(contacts_file, "w") as f:
+        json.dump(existing, f, indent=2)
+
+    logger.info("Persisted parent contacts: %d students total", len(existing))

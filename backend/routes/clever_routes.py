@@ -15,8 +15,10 @@ from backend.clever import (
     get_clever_user,
     sync_roster,
     extract_student_accommodations,
+    extract_parent_contacts,
     persist_roster_as_csv,
     persist_sections_as_periods,
+    persist_parent_contacts,
     map_sections_to_periods,
 )
 from backend.accommodations import set_student_accommodation
@@ -116,8 +118,13 @@ def clever_callback():
             sections = roster.get("sections", [])
             if sections:
                 persist_sections_as_periods(sections, teacher_id)
-            logger.info("Login-triggered roster sync: %d students, %d sections",
-                        len(students), len(sections))
+            contacts = roster.get("contacts", [])
+            if contacts and students:
+                contact_map = extract_parent_contacts(contacts, students)
+                if contact_map:
+                    persist_parent_contacts(contact_map, teacher_id)
+            logger.info("Login-triggered roster sync: %d students, %d sections, %d contacts",
+                        len(students), len(sections), len(contacts))
         except Exception as e:
             logger.warning("Login-triggered roster sync failed (non-blocking): %s", str(e))
 
@@ -190,6 +197,15 @@ def clever_sync_roster():
     if sections:
         persist_sections_as_periods(sections, teacher_id)
 
+    # Persist parent contacts from Clever guardians
+    contacts = roster.get("contacts", [])
+    contacts_count = 0
+    if contacts and students:
+        contact_map = extract_parent_contacts(contacts, students)
+        if contact_map:
+            persist_parent_contacts(contact_map, teacher_id)
+            contacts_count = len(contact_map)
+
     # Extract accommodation suggestions (teacher reviews before applying)
     accomm_data = extract_student_accommodations(students)
 
@@ -203,6 +219,7 @@ def clever_sync_roster():
             "students": len(students),
             "sections": len(sections),
             "students_with_accommodations": len(accomm_data),
+            "parent_contacts": contacts_count,
         },
         "accommodation_suggestions": accomm_data,
         "available_sections": all_sections_mapped,
