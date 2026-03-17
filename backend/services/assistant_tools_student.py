@@ -446,7 +446,14 @@ def remove_student_from_roster(student_name, teacher_id=None):
                 try:
                     with open(filepath, 'r', encoding='utf-8') as fh:
                         reader = csv.DictReader(fh)
-                        names = [row.get('Student', '').strip().strip('"') for row in reader]
+                        names = []
+                        for row in reader:
+                            raw = row.get('Student', '').strip().strip('"')
+                            if not raw:
+                                first = row.get('first_name', '').strip()
+                                last = row.get('last_name', '').strip()
+                                raw = f"{first} {last}".strip()
+                            names.append(raw)
                         roster_info.append({"file": f, "directory": prefix, "count": len(names), "sample": names[:5]})
                 except Exception:
                     roster_info.append({"file": f, "directory": prefix, "error": "Could not read"})
