@@ -817,6 +817,16 @@ function App() {
     }
     if (cleverError) {
       console.error('Clever login error:', cleverError);
+      var cleverErrorMessages = {
+        'missing_code': 'Login was cancelled or interrupted. Please try again.',
+        'state_mismatch': 'Login session expired. Please try again.',
+        'token_exchange_failed': 'Could not complete login with Clever. Please try again.',
+        'user_fetch_failed': 'Could not retrieve your account information from Clever.',
+        'students_use_portal': 'Student accounts should use the student portal, not the teacher login.',
+      };
+      var friendlyMsg = cleverErrorMessages[cleverError] || ('Clever login failed: ' + cleverError);
+      // Store error so LoginScreen can display it
+      window.__cleverLoginError = friendlyMsg;
       window.history.replaceState({}, '', '/');
     }
 

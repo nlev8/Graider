@@ -315,8 +315,18 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
     elif os.path.exists(archive_path):
         os.remove(archive_path)
 
-    # Write current roster
-    with open(filepath, "w", newline="") as f:
+    # Load manual overrides (teacher edits that should survive sync)
+    overrides_path = os.path.join(ROSTERS_DIR, f"clever_roster_{teacher_id}_overrides.json")
+    overrides = {}
+    if os.path.exists(overrides_path):
+        with open(overrides_path, "r") as f:
+            try:
+                overrides = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                overrides = {}
+
+    # Write current roster (merging manual overrides where they exist)
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["student_id", "first_name", "last_name", "email", "grade", "iep_status", "ell_status"])
         for student in students:
@@ -324,12 +334,17 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
             name = data.get("name", {})
             roles = data.get("roles", {})
             sr = roles.get("student", {})
+            sid = data.get("id", "")
+
+            # Apply manual overrides if teacher has edited this student
+            student_overrides = overrides.get(sid, {})
+
             writer.writerow([
-                data.get("id", ""),
-                name.get("first", ""),
-                name.get("last", ""),
-                data.get("email", ""),
-                sr.get("grade", ""),
+                sid,
+                student_overrides.get("first_name", name.get("first", "")),
+                student_overrides.get("last_name", name.get("last", "")),
+                student_overrides.get("email", data.get("email", "")),
+                student_overrides.get("grade", sr.get("grade", "")),
                 sr.get("iep_status", ""),
                 sr.get("ell_status", ""),
             ])

@@ -17,6 +17,7 @@ from backend.clever import (
     extract_student_accommodations,
     persist_roster_as_csv,
     persist_sections_as_periods,
+    map_sections_to_periods,
 )
 from backend.accommodations import set_student_accommodation
 
@@ -87,7 +88,11 @@ def clever_callback():
     if clever_user["type"] not in ("teacher", "district_admin", "staff"):
         return redirect("/?clever_error=students_use_portal")
 
+    # Clear any existing session (shared device support — Clever requirement)
+    session.clear()
+
     # Store Clever session info
+    session.permanent = True  # Apply PERMANENT_SESSION_LIFETIME (8h inactivity timeout)
     session["clever_user"] = {
         "clever_id": clever_user["clever_id"],
         "email": clever_user.get("email", ""),
@@ -97,6 +102,24 @@ def clever_callback():
         # Do NOT store access_token in session — it's short-lived
         # and only needed for the initial user fetch
     }
+
+    # Trigger background roster sync on login (Clever requires daily data updates;
+    # login-triggered sync satisfies this requirement)
+    district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
+    if district_token:
+        try:
+            teacher_id = f"clever:{clever_user['clever_id']}"
+            roster = _run_async(sync_roster(district_token))
+            students = roster.get("students", [])
+            if students:
+                persist_roster_as_csv(students, teacher_id)
+            sections = roster.get("sections", [])
+            if sections:
+                persist_sections_as_periods(sections, teacher_id)
+            logger.info("Login-triggered roster sync: %d students, %d sections",
+                        len(students), len(sections))
+        except Exception as e:
+            logger.warning("Login-triggered roster sync failed (non-blocking): %s", str(e))
 
     logger.info("Clever SSO login: %s (%s)", clever_user.get("email"), clever_user["type"])
     return redirect("/?clever_login=success")
@@ -124,27 +147,54 @@ def clever_sync_roster():
 
     Pulls students and sections, persists them to ROSTERS_DIR and PERIODS_DIR
     (same format as manual CSV upload), and returns accommodation suggestions.
+
+    Optional body: { "section_ids": ["id1", "id2"] } to sync only specific sections.
+    If omitted, syncs all sections.
     """
     district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
     if not district_token:
         return jsonify({"error": "District token not configured"}), 503
 
     teacher_id = getattr(g, "user_id", "local-dev")
+    data = request.get_json(silent=True) or {}
+    selected_section_ids = data.get("section_ids")  # None = all sections
 
-    roster = _run_async(sync_roster(district_token))
+    try:
+        roster = _run_async(sync_roster(district_token))
+    except Exception as e:
+        logger.error("Clever roster sync failed: %s", str(e))
+        return jsonify({"error": "Failed to sync roster from Clever"}), 502
+
+    # Filter sections if teacher selected specific ones
+    sections = roster.get("sections", [])
+    if selected_section_ids is not None:
+        selected_set = set(selected_section_ids)
+        sections = [s for s in sections if s.get("data", s).get("id", "") in selected_set]
+
+    # Collect student IDs from selected sections to filter students
+    students = roster.get("students", [])
+    if selected_section_ids is not None and sections:
+        # Only include students enrolled in selected sections
+        section_student_ids = set()
+        for s in sections:
+            sd = s.get("data", s)
+            section_student_ids.update(sd.get("students", []))
+        students = [st for st in students
+                    if st.get("data", st).get("id", "") in section_student_ids]
 
     # Persist roster to CSV (same location as manual upload)
-    students = roster.get("students", [])
     if students:
         persist_roster_as_csv(students, teacher_id)
 
     # Persist sections as periods (same location as manual period creation)
-    sections = roster.get("sections", [])
     if sections:
         persist_sections_as_periods(sections, teacher_id)
 
     # Extract accommodation suggestions (teacher reviews before applying)
     accomm_data = extract_student_accommodations(students)
+
+    # Return all available sections so the frontend can show a selection UI
+    all_sections_mapped = map_sections_to_periods(roster.get("sections", []))
 
     return jsonify({
         "status": "synced",
@@ -155,6 +205,7 @@ def clever_sync_roster():
             "students_with_accommodations": len(accomm_data),
         },
         "accommodation_suggestions": accomm_data,
+        "available_sections": all_sections_mapped,
     })
 
 

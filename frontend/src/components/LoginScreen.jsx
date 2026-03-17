@@ -7,7 +7,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(window.__cleverLoginError || '')
   const [showForgot, setShowForgot] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
