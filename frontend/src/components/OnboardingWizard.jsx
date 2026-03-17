@@ -146,12 +146,15 @@ export default function OnboardingWizard({
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
-  // Pre-populate from existing config on mount
+  // Pre-populate from existing config and Clever session on mount
   useEffect(() => {
+    var cleverUser = window.__graiderUser || {};
+    var cleverName = cleverUser.name || "";
+    var cleverEmail = cleverUser.email || "";
     setWizardData((prev) => ({
       ...prev,
-      teacher_name: config.teacher_name || prev.teacher_name,
-      teacher_email: config.teacher_email || prev.teacher_email,
+      teacher_name: config.teacher_name || cleverName || prev.teacher_name,
+      teacher_email: config.teacher_email || cleverEmail || prev.teacher_email,
       school_name: config.school_name || prev.school_name,
       grade_level: config.grade_level || prev.grade_level,
       subject: config.subject || prev.subject,
@@ -261,7 +264,8 @@ export default function OnboardingWizard({
 
   const hasAnyApiKey = apiKeys.openaiConfigured || apiKeys.anthropicConfigured || apiKeys.geminiConfigured || keysSaved;
 
-  const nextDisabled = !canContinue() || (step === 5 && !hasAnyApiKey);
+  // Clever district users may have API keys pre-configured by their district admin
+  const nextDisabled = !canContinue() || (step === 5 && !hasAnyApiKey && !isCleverUser);
 
   const getNextLabel = () => {
     if (step === 0) return "Let's Get Started";
@@ -296,6 +300,17 @@ export default function OnboardingWizard({
       <p style={{ color: "var(--text-secondary)", marginBottom: 24, fontSize: "0.95rem" }}>
         Tell us a little about yourself so we can personalize your experience.
       </p>
+      {isCleverUser && wizardData.teacher_name && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "8px 12px", borderRadius: 8, marginBottom: 16,
+          background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+          fontSize: "0.82rem", color: "#22c55e",
+        }}>
+          <Icon name="CheckCircle" size={14} />
+          Pre-filled from your Clever account
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
           <label className="label" style={{ marginBottom: 4 }}>Teacher Name *</label>
@@ -573,8 +588,34 @@ export default function OnboardingWizard({
     <div style={{ padding: "10px 0" }}>
       <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>AI Connection</h2>
       <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.95rem" }}>
-        Graider uses AI to grade assignments. You need at least one API key to continue.
+        {isCleverUser
+          ? "Your district may have pre-configured API keys. If not, you can add your own below or skip this step."
+          : "Graider uses AI to grade assignments. You need at least one API key to continue."}
       </p>
+
+      {isCleverUser && hasAnyApiKey && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "10px 14px", borderRadius: 8, marginBottom: 16,
+          background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+          fontSize: "0.88rem", color: "#22c55e",
+        }}>
+          <Icon name="CheckCircle" size={16} />
+          AI provider is configured. You're all set!
+        </div>
+      )}
+
+      {isCleverUser && !hasAnyApiKey && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "10px 14px", borderRadius: 8, marginBottom: 16,
+          background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
+          fontSize: "0.88rem", color: "#f59e0b",
+        }}>
+          <Icon name="AlertTriangle" size={16} />
+          No API key configured yet. Add one below, or your district admin can set this up for you.
+        </div>
+      )}
 
       <div style={{
         background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
@@ -653,7 +694,7 @@ export default function OnboardingWizard({
         </>
       )}
 
-      {!hasAnyApiKey && (
+      {!hasAnyApiKey && !isCleverUser && (
         <div style={{
           marginTop: 16, padding: "12px 16px",
           background: "rgba(239,68,68,0.1)",

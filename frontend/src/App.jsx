@@ -807,7 +807,7 @@ function App() {
                 approved: true,
               },
             });
-            window.__graiderUser = { id: 'clever:' + data.clever_id, email: data.email };
+            window.__graiderUser = { id: 'clever:' + data.clever_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || '') };
             setAuthLoading(false);
           }
         })
