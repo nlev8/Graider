@@ -28,7 +28,7 @@ Graider uses advanced AI to:
 - Apply your rubric consistently
 - Generate personalized, encouraging feedback
 - Track student progress over time
-- Export grades directly to Focus/SIS
+- Export grades directly to Focus, Canvas, or PowerSchool
 
 **You stay in control** - review, edit, and approve everything before it's final.
 
@@ -41,8 +41,8 @@ Graider uses advanced AI to:
 ```
 1. CONFIGURE     2. UPLOAD        3. REVIEW        4. EXPORT
    ↓                ↓                ↓                ↓
-Set rubric &    Drop files or    Check grades    One-click
-AI instructions  sync folder     & feedback      to Focus/SIS
+Set rubric &    Drop files or    Check grades    One-click to
+AI instructions  sync folder     & feedback      Focus/Canvas/PS
 ```
 
 ### Demo: Grade 30 assignments in under 3 minutes
@@ -357,7 +357,9 @@ Graider includes ready-to-use accommodation profiles that adjust AI grading and 
 
 | Export | Format | Use Case |
 |--------|--------|----------|
-| **Focus CSV** | Student ID, Score, Comment | Direct gradebook import |
+| **Focus CSV** | Student ID, Score, Comment | Direct Focus SIS gradebook import |
+| **Canvas CSV** | "Last, First", Section, Score + Points Possible header | Canvas LMS grade import |
+| **PowerSchool CSV** | Student Number, Last Name, First Name, Score | PowerSchool grade import |
 | **Master Grades** | Full tracking CSV | Year-long progress reports |
 | **Detailed Report** | Complete breakdown | Parent conferences |
 | **Email Files** | Per-student feedback | Communication |
@@ -564,6 +566,40 @@ All subjects include full benchmark data (DOK, learning targets, vocabulary, etc
 
 - **Word Document** — Fully formatted, print-ready
 - **Copy to clipboard** — Paste into Google Docs, Canvas, etc.
+
+---
+
+## Reading Level Adjustment Tool
+
+### Differentiate Materials in Seconds
+
+Found a great reading passage but it's too advanced for your students? The **Reading Level Adjuster** (Planner > Tools) rewrites any text at your target grade level while preserving key vocabulary.
+
+| Feature | What It Does |
+|---------|-------------|
+| **Target Level Selection** | Grade 2 through 12, Simplified, or Advanced/AP |
+| **Key Term Preservation** | Tag terms that must stay unchanged (e.g., "photosynthesis", "mitosis") |
+| **Vocabulary Change Log** | See exactly which words were swapped and their replacements |
+| **Reading Level Estimate** | Flesch-Kincaid grade level of the adjusted output |
+| **One-Click Copy** | Copy adjusted text to clipboard for immediate use |
+
+### Example:
+```
+INPUT (Grade 11):
+"The mitochondria facilitate cellular respiration through oxidative
+phosphorylation, converting adenosine diphosphate into adenosine
+triphosphate via the electron transport chain."
+
+OUTPUT (Grade 6, preserving "mitochondria" and "cellular respiration"):
+"The mitochondria are tiny parts inside your cells that help with
+cellular respiration. They take in nutrients and turn them into
+energy your body can use, kind of like a power plant."
+
+Vocabulary Changes:
+  facilitate → help with          oxidative phosphorylation → (simplified)
+  adenosine diphosphate → nutrients    adenosine triphosphate → energy
+  electron transport chain → (removed, simplified)
+```
 
 ---
 
@@ -803,6 +839,8 @@ Teachers spend **hours per week** on repetitive portal tasks — logging in, nav
 | Submission Confirmations (+ CC Parents) | ✅ Complete |
 | Script Builder | ✅ Complete |
 | Supabase Teacher Auth | ✅ Complete |
+| Reading Level Adjuster | ✅ Complete |
+| LMS Grade Export (Canvas, PowerSchool) | ✅ Complete |
 
 **Deployment:** Hosted web app (Railway) — accessible from any browser
 **Best For:** Individual teachers, pilot programs, schools wanting easy onboarding
@@ -857,8 +895,8 @@ District Dashboard
 
 | Feature | Description |
 |---------|-------------|
-| **LMS Integration** | Canvas, Schoology, Google Classroom grade passback |
-| **SIS Sync** | PowerSchool, Infinite Campus roster sync |
+| **LMS Integration** | ~~Canvas~~, Schoology, Google Classroom grade passback (Canvas & PowerSchool CSV export already live) |
+| **SIS Sync** | ~~PowerSchool~~, Infinite Campus roster sync (PowerSchool CSV export already live) |
 | **API Access** | Custom integrations for district systems |
 | **Advanced Analytics** | Standards mastery tracking, intervention alerts |
 | **White-Label Option** | District-branded deployment |
