@@ -14,6 +14,7 @@ ThreadPoolExecutor child threads in Python 3.12+.
 import os
 import time
 import logging
+import threading
 from contextvars import ContextVar
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ _ENV_MAP = {
 
 # ── In-memory cache (teacher_id or district_id → {keys, ts}) ─
 _cache: dict[str, dict] = {}
+_cache_lock = threading.Lock()
 _CACHE_TTL = 300  # 5 minutes
 
 
@@ -137,7 +139,8 @@ def save_user_keys(teacher_id: str, keys: dict) -> bool:
     ok = save('api_keys', existing, teacher_id)
 
     # Invalidate cache
-    _cache.pop(teacher_id, None)
+    with _cache_lock:
+        _cache.pop(teacher_id, None)
 
     return ok
 
@@ -177,14 +180,16 @@ def _load_user_keys(teacher_id: str) -> dict:
     if not teacher_id:
         return {}
 
-    cached = _cache.get(teacher_id)
-    if cached and (time.time() - cached['ts']) < _CACHE_TTL:
-        return cached['keys']
+    with _cache_lock:
+        cached = _cache.get(teacher_id)
+        if cached and (time.time() - cached['ts']) < _CACHE_TTL:
+            return cached['keys']
 
     from backend.storage import load
     keys = load('api_keys', teacher_id) or {}
 
-    _cache[teacher_id] = {'keys': keys, 'ts': time.time()}
+    with _cache_lock:
+        _cache[teacher_id] = {'keys': keys, 'ts': time.time()}
     return keys
 
 
@@ -204,14 +209,16 @@ def _load_district_keys(district_id: str) -> dict:
         return {}
 
     cache_key = f"{_DISTRICT_KEY_PREFIX}{district_id}"
-    cached = _cache.get(cache_key)
-    if cached and (time.time() - cached['ts']) < _CACHE_TTL:
-        return cached['keys']
+    with _cache_lock:
+        cached = _cache.get(cache_key)
+        if cached and (time.time() - cached['ts']) < _CACHE_TTL:
+            return cached['keys']
 
     from backend.storage import load
     keys = load('api_keys', cache_key) or {}
 
-    _cache[cache_key] = {'keys': keys, 'ts': time.time()}
+    with _cache_lock:
+        _cache[cache_key] = {'keys': keys, 'ts': time.time()}
     return keys
 
 
@@ -238,7 +245,8 @@ def save_district_keys(district_id: str, keys: dict) -> bool:
     ok = save('api_keys', existing, cache_key)
 
     # Invalidate cache
-    _cache.pop(cache_key, None)
+    with _cache_lock:
+        _cache.pop(cache_key, None)
 
     if ok:
         logger.info("District API keys saved for %s", district_id)

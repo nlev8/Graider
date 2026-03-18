@@ -145,6 +145,7 @@ async def _clever_get_with_retry(client, url, headers, label=""):
     Per Clever docs: 1,200 req/min per token, retry with backoff on 429/5xx,
     stop after MAX_RETRIES attempts.
     """
+    resp = None
     for attempt in range(MAX_RETRIES):
         try:
             resp = await client.get(url, headers=headers)
@@ -511,7 +512,13 @@ def extract_parent_contacts(contacts, students):
 
 
 def persist_parent_contacts(contact_map, teacher_id="local-dev"):
-    """Merge Clever parent contacts into the existing parent_contacts.json file."""
+    """Merge Clever parent contacts into the existing parent_contacts.json file.
+
+    Note: Local file backend uses a single global file because Graider runs
+    single-tenant per server. Multi-tenant isolation is handled by the Supabase
+    storage layer (teacher_data table keyed by teacher_id). The teacher_id param
+    is accepted for future scoping but currently unused for file paths.
+    """
     contacts_file = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
 
     existing = {}

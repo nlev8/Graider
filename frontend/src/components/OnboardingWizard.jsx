@@ -146,6 +146,9 @@ export default function OnboardingWizard({
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
+  // Detect Clever login (set once, used across all steps)
+  const isCleverUser = !!(window.__graiderUser && window.__graiderUser.id && window.__graiderUser.id.startsWith('clever:'));
+
   // Pre-populate from existing config and Clever session on mount
   useEffect(() => {
     var cleverUser = window.__graiderUser || {};
@@ -831,8 +834,6 @@ export default function OnboardingWizard({
       </div>
     );
   };
-
-  const isCleverUser = !!(window.__graiderUser && window.__graiderUser.id && window.__graiderUser.id.startsWith('clever:'));
 
   const renderStep7 = () => {
     if (isCleverUser) {

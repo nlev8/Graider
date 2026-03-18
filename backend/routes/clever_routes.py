@@ -5,6 +5,7 @@ import os
 import asyncio
 import logging
 import secrets
+import threading
 
 from flask import Blueprint, request, jsonify, redirect, session, g
 
@@ -36,6 +37,27 @@ def _run_async(coro):
         return loop.run_until_complete(coro)
     finally:
         loop.close()
+
+
+def _background_roster_sync(district_token, teacher_id):
+    """Run roster sync in a background thread so OAuth callback returns immediately."""
+    try:
+        roster = _run_async(sync_roster(district_token))
+        students = roster.get("students", [])
+        if students:
+            persist_roster_as_csv(students, teacher_id)
+        sections = roster.get("sections", [])
+        if sections:
+            persist_sections_as_periods(sections, teacher_id)
+        contacts = roster.get("contacts", [])
+        if contacts and students:
+            contact_map = extract_parent_contacts(contacts, students)
+            if contact_map:
+                persist_parent_contacts(contact_map, teacher_id)
+        logger.info("Background roster sync complete: %d students, %d sections, %d contacts",
+                    len(students), len(sections), len(contacts))
+    except Exception as e:
+        logger.warning("Background roster sync failed: %s", str(e))
 
 
 @clever_bp.route("/api/clever/login-url", methods=["GET"])
@@ -70,9 +92,12 @@ def clever_callback():
         return redirect("/?clever_error=missing_code")
 
     # Validate state parameter (CSRF protection)
+    # Clever Portal/Instant Login may not include state, but if we set one
+    # in the session, it MUST match. Missing expected_state = session lost = reject.
     expected_state = session.pop("clever_oauth_state", None)
-    if expected_state and state != expected_state:
-        logger.warning("Clever OAuth state mismatch")
+    if not expected_state or state != expected_state:
+        logger.warning("Clever OAuth state mismatch (expected=%s, got=%s)",
+                       bool(expected_state), bool(state))
         return redirect("/?clever_error=state_mismatch")
 
     # Exchange code for token
@@ -106,28 +131,18 @@ def clever_callback():
         # and only needed for the initial user fetch
     }
 
-    # Trigger background roster sync on login (Clever requires daily data updates;
-    # login-triggered sync satisfies this requirement)
+    # Trigger BACKGROUND roster sync on login (Clever requires daily data updates;
+    # login-triggered sync satisfies this requirement). Runs in a separate thread
+    # so the OAuth redirect returns immediately.
     district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
     if district_token:
-        try:
-            teacher_id = f"clever:{clever_user['clever_id']}"
-            roster = _run_async(sync_roster(district_token))
-            students = roster.get("students", [])
-            if students:
-                persist_roster_as_csv(students, teacher_id)
-            sections = roster.get("sections", [])
-            if sections:
-                persist_sections_as_periods(sections, teacher_id)
-            contacts = roster.get("contacts", [])
-            if contacts and students:
-                contact_map = extract_parent_contacts(contacts, students)
-                if contact_map:
-                    persist_parent_contacts(contact_map, teacher_id)
-            logger.info("Login-triggered roster sync: %d students, %d sections, %d contacts",
-                        len(students), len(sections), len(contacts))
-        except Exception as e:
-            logger.warning("Login-triggered roster sync failed (non-blocking): %s", str(e))
+        teacher_id = f"clever:{clever_user['clever_id']}"
+        thread = threading.Thread(
+            target=_background_roster_sync,
+            args=(district_token, teacher_id),
+            daemon=True,
+        )
+        thread.start()
 
     logger.info("Clever SSO login: %s (%s)", clever_user.get("email"), clever_user["type"])
     return redirect("/?clever_login=success")
