@@ -186,7 +186,59 @@ DEFAULT_PRESETS = {
 - Do NOT penalize for L1-influenced patterns (missing articles, verb tense, word order)
 - Focus grading on CONTENT understanding, not language accuracy
 - Celebrate effort and participation"""
-    }
+    },
+    # ── Delivery Accommodations (affect portal UI, not AI grading) ──
+    "extended_time_1_5x": {
+        "id": "extended_time_1_5x",
+        "name": "Extended Time (1.5x)",
+        "description": "50% additional time on timed assessments",
+        "icon": "Clock",
+        "type": "delivery",
+        "time_multiplier": 1.5,
+        "ai_instructions": "",
+    },
+    "extended_time_2x": {
+        "id": "extended_time_2x",
+        "name": "Extended Time (2x)",
+        "description": "Double time on timed assessments",
+        "icon": "Clock",
+        "type": "delivery",
+        "time_multiplier": 2.0,
+        "ai_instructions": "",
+    },
+    "extended_time_unlimited": {
+        "id": "extended_time_unlimited",
+        "name": "Extended Time (Unlimited)",
+        "description": "No time limit on timed assessments",
+        "icon": "Clock",
+        "type": "delivery",
+        "time_multiplier": 0,
+        "ai_instructions": "",
+    },
+    "large_text": {
+        "id": "large_text",
+        "name": "Large Text",
+        "description": "Increase font size in student portal",
+        "icon": "Type",
+        "type": "delivery",
+        "ai_instructions": "",
+    },
+    "read_aloud": {
+        "id": "read_aloud",
+        "name": "Read Aloud",
+        "description": "Text-to-speech option for questions and answer choices",
+        "icon": "Volume2",
+        "type": "delivery",
+        "ai_instructions": "",
+    },
+    "reduced_distractions": {
+        "id": "reduced_distractions",
+        "name": "Reduced Distractions",
+        "description": "Simplified portal UI — hides progress bar and question count",
+        "icon": "Eye",
+        "type": "delivery",
+        "ai_instructions": "",
+    },
 }
 
 
@@ -468,6 +520,84 @@ def build_accommodation_prompt(student_id: str, teacher_id: str = 'local-dev') -
                            f"Built prompt with {len(preset_ids)} presets for grading")
 
     return "\n".join(prompt_parts)
+
+
+def _find_student_accommodation(student_name, student_accommodations):
+    """Look up a student's accommodation by name (case-insensitive)."""
+    if not student_name or not student_accommodations:
+        return None
+    accommodation = student_accommodations.get(student_name)
+    if accommodation:
+        return accommodation
+    normalized = student_name.strip().lower()
+    for name, accom in student_accommodations.items():
+        if name.strip().lower() == normalized:
+            return accom
+    return None
+
+
+def build_prompt_from_presets(preset_ids, custom_notes="", teacher_id='local-dev'):
+    """Build AI prompt instructions directly from preset IDs.
+
+    Skips delivery presets (they affect UI only, not AI grading).
+    Includes teacher's custom presets via load_presets().
+    """
+    if not preset_ids and not custom_notes:
+        return ""
+
+    presets = load_presets(teacher_id)
+    ai_preset_ids = [p for p in preset_ids if presets.get(p, {}).get("type") != "delivery"]
+
+    if not ai_preset_ids and not custom_notes:
+        return ""
+
+    prompt_parts = [
+        "",
+        "═══════════════════════════════════════════════════════════",
+        "ACCOMMODATION INSTRUCTIONS (Apply to all feedback below)",
+        "═══════════════════════════════════════════════════════════",
+        ""
+    ]
+
+    for preset_id in ai_preset_ids:
+        preset = presets.get(preset_id)
+        if preset and preset.get("ai_instructions"):
+            prompt_parts.append(preset["ai_instructions"])
+            prompt_parts.append("")
+
+    if custom_notes:
+        prompt_parts.append("ADDITIONAL ACCOMMODATION NOTES:")
+        prompt_parts.append(custom_notes)
+        prompt_parts.append("")
+
+    prompt_parts.append("═══════════════════════════════════════════════════════════")
+    prompt_parts.append("")
+
+    return "\n".join(prompt_parts)
+
+
+def build_prompt_from_student_accommodations(student_name, student_accommodations,
+                                              teacher_id='local-dev'):
+    """Look up a student by name in published accommodation dict and build AI prompt."""
+    accommodation = _find_student_accommodation(student_name, student_accommodations)
+    if not accommodation:
+        return ""
+    return build_prompt_from_presets(
+        preset_ids=accommodation.get("presets", []),
+        custom_notes=accommodation.get("custom_notes", ""),
+        teacher_id=teacher_id,
+    )
+
+
+def get_delivery_accommodations(student_name, student_accommodations):
+    """Extract delivery-type preset IDs for a student (for frontend UI modifications)."""
+    accommodation = _find_student_accommodation(student_name, student_accommodations)
+    if not accommodation:
+        return []
+    return [
+        p for p in accommodation.get("presets", [])
+        if DEFAULT_PRESETS.get(p, {}).get("type") == "delivery"
+    ]
 
 
 # ══════════════════════════════════════════════════════════════
