@@ -57,6 +57,11 @@ export default function StudentPortal({
   const [startTime, setStartTime] = useState(null);
   const [results, setResults] = useState(null);
   const [studentAccommodation, setStudentAccommodation] = useState(null);
+  const [deliveryAccommodations, setDeliveryAccommodations] = useState([]);
+
+  // Delivery accommodation preset IDs for conditional checks
+  var DELIVERY_PRESET_IDS = ["extended_time_1_5x", "extended_time_2x", "extended_time_unlimited",
+    "large_text", "read_aloud", "reduced_distractions"];
 
   // Load assessment if URL has code (join-code path)
   useEffect(() => {
@@ -65,10 +70,27 @@ export default function StudentPortal({
     }
   }, [urlCode]);
 
-  // Start timer immediately for preloaded (Clever/class) path
+  // Start timer and detect accommodations for preloaded (Clever/class) path
   useEffect(() => {
     if (isPreloaded && !startTime) {
       setStartTime(Date.now());
+    }
+    // Auto-detect accommodations for Clever students (they skip handleStartAssessment)
+    if (isPreloaded && preloadedStudentName && assessment && assessment.student_accommodations) {
+      var normalizedName = preloadedStudentName.trim().toLowerCase();
+      var matchedAccom = null;
+      Object.entries(assessment.student_accommodations).forEach(function(entry) {
+        if (entry[0].trim().toLowerCase() === normalizedName) {
+          matchedAccom = entry[1];
+        }
+      });
+      if (matchedAccom) {
+        setStudentAccommodation(matchedAccom);
+        var deliveryPresets = (matchedAccom.presets || []).filter(function(p) {
+          return DELIVERY_PRESET_IDS.indexOf(p) !== -1;
+        });
+        setDeliveryAccommodations(deliveryPresets);
+      }
     }
   }, [isPreloaded]);
 
@@ -126,12 +148,21 @@ export default function StudentPortal({
       }
     }
 
-    // Check if student has accommodations
+    // Check if student has accommodations (case-insensitive name match)
     if (assessment?.student_accommodations) {
-      const normalizedName = studentName.trim();
-      const accommodation = assessment.student_accommodations[normalizedName];
-      if (accommodation) {
-        setStudentAccommodation(accommodation);
+      var normalizedAccomName = studentName.trim().toLowerCase();
+      var matchedAccom = null;
+      Object.entries(assessment.student_accommodations).forEach(function(entry) {
+        if (entry[0].trim().toLowerCase() === normalizedAccomName) {
+          matchedAccom = entry[1];
+        }
+      });
+      if (matchedAccom) {
+        setStudentAccommodation(matchedAccom);
+        var deliveryPresets = (matchedAccom.presets || []).filter(function(p) {
+          return DELIVERY_PRESET_IDS.indexOf(p) !== -1;
+        });
+        setDeliveryAccommodations(deliveryPresets);
       }
     }
 
@@ -381,19 +412,39 @@ export default function StudentPortal({
     const totalQuestions = assessment?.sections?.reduce((sum, s) => sum + (s.questions?.length || 0), 0) || 0;
     const answeredCount = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== "").length;
 
+    // Delivery accommodation flags (derived, no state mutation)
+    var isLargeText = deliveryAccommodations.indexOf("large_text") !== -1;
+    var isReadAloud = deliveryAccommodations.indexOf("read_aloud") !== -1;
+    var isReducedDistractions = deliveryAccommodations.indexOf("reduced_distractions") !== -1;
+    var portalFontSize = isLargeText ? "1.2rem" : "1rem";
+
+    // Compute effective time limit with extended time accommodation
+    var effectiveTimeLimit = assessment?.settings?.time_limit_minutes || null;
+    if (effectiveTimeLimit && deliveryAccommodations.length > 0) {
+      if (deliveryAccommodations.indexOf("extended_time_unlimited") !== -1) {
+        effectiveTimeLimit = null;
+      } else if (deliveryAccommodations.indexOf("extended_time_2x") !== -1) {
+        effectiveTimeLimit = Math.round(effectiveTimeLimit * 2);
+      } else if (deliveryAccommodations.indexOf("extended_time_1_5x") !== -1) {
+        effectiveTimeLimit = Math.round(effectiveTimeLimit * 1.5);
+      }
+    }
+
     return (
       <div style={containerStyle}>
         {/* Header */}
         <div style={{ position: "sticky", top: 0, background: "rgba(15, 15, 35, 0.95)", borderBottom: "1px solid rgba(255,255,255,0.1)", padding: "15px 20px", zIndex: 100 }}>
           <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "4px" }}>{assessment?.title}</h1>
+              <h1 style={{ fontSize: isLargeText ? "1.4rem" : "1.2rem", fontWeight: 700, marginBottom: "4px" }}>{assessment?.title}</h1>
               <span style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)" }}>{studentName}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+              {!isReducedDistractions && (
               <span style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)" }}>
                 {answeredCount}/{totalQuestions} answered
               </span>
+              )}
               <button
                 onClick={handleSubmit}
                 disabled={loading}
@@ -423,9 +474,26 @@ export default function StudentPortal({
               </div>
               {studentAccommodation.presets && studentAccommodation.presets.length > 0 && (
                 <ul style={{ margin: "0 0 10px 20px", padding: 0, color: "rgba(255,255,255,0.8)", fontSize: "0.95rem" }}>
-                  {studentAccommodation.presets.map((preset, idx) => (
-                    <li key={idx} style={{ marginBottom: "5px" }}>{preset}</li>
-                  ))}
+                  {studentAccommodation.presets.map(function(preset, idx) {
+                    var names = {
+                      simplified_language: "Simplified Language",
+                      effort_focused: "Effort-Focused Feedback",
+                      extra_encouragement: "Extra Encouragement",
+                      chunked_feedback: "Chunked Feedback",
+                      modified_expectations: "Modified Expectations",
+                      visual_structure: "Visual Structure",
+                      read_aloud_friendly: "Read-Aloud Friendly",
+                      growth_mindset: "Growth Mindset",
+                      ell_support: "ELL Support",
+                      extended_time_1_5x: "Extended Time (1.5x)",
+                      extended_time_2x: "Extended Time (2x)",
+                      extended_time_unlimited: "Extended Time (Unlimited)",
+                      large_text: "Large Text",
+                      read_aloud: "Read Aloud",
+                      reduced_distractions: "Reduced Distractions",
+                    };
+                    return <li key={idx} style={{ marginBottom: "5px" }}>{names[preset] || preset.replace(/_/g, " ")}</li>;
+                  })}
                 </ul>
               )}
               {studentAccommodation.custom_notes && (
@@ -467,8 +535,27 @@ export default function StudentPortal({
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
-                      <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
+                      <span style={{ fontWeight: 700, fontSize: isLargeText ? "1.3rem" : "1.1rem" }}>
                         {q.number}. {q.question}
+                        {isReadAloud && (
+                          <button
+                            onClick={function(e) {
+                              e.stopPropagation();
+                              var utterance = new SpeechSynthesisUtterance(q.question);
+                              utterance.rate = 0.9;
+                              window.speechSynthesis.cancel();
+                              window.speechSynthesis.speak(utterance);
+                            }}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              color: "rgba(99,102,241,0.8)", padding: "4px", marginLeft: "8px",
+                              verticalAlign: "middle",
+                            }}
+                            title="Read aloud"
+                          >
+                            <Icon name="Volume2" size={18} />
+                          </button>
+                        )}
                       </span>
                       <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.9rem" }}>
                         {q.points} pt{q.points > 1 ? "s" : ""}
