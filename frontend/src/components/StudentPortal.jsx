@@ -135,13 +135,24 @@ export default function StudentPortal() {
           setStage("results");
         }
       } else {
-        setResults({
-          score: data.score,
-          total_points: data.total_points,
-          percentage: data.percentage,
-          feedback_summary: data.feedback_summary,
-          questions: data.detailed_results,
-        });
+        if (data.grading_status === "partial") {
+          setResults({
+            grading_status: "partial",
+            mc_correct: data.mc_correct,
+            mc_total: data.mc_total,
+            written_pending: data.written_pending,
+            message: data.message,
+            questions: data.detailed_results,
+          });
+        } else {
+          setResults({
+            score: data.score,
+            total_points: data.total_points,
+            percentage: data.percentage,
+            feedback_summary: data.feedback_summary,
+            questions: data.detailed_results,
+          });
+        }
         setStage("results");
       }
     } catch (e) {
@@ -571,45 +582,54 @@ export default function StudentPortal() {
 
   // ============ RESULTS SCREEN ============
   if (stage === "results") {
-    const percentage = results?.percentage || 0;
-    const gradeColor = percentage >= 90 ? "#22c55e" : percentage >= 70 ? "#f59e0b" : "#ef4444";
+    var isPartial = results && results.grading_status === "partial";
+    var percentage = results?.percentage || 0;
+    var gradeColor = percentage >= 90 ? "#22c55e" : percentage >= 70 ? "#f59e0b" : "#ef4444";
 
     return (
       <div style={containerStyle}>
         <div style={{ padding: "40px 20px", maxWidth: "700px", margin: "0 auto" }}>
           {/* Score Card */}
           <div style={{ ...cardStyle, textAlign: "center", marginBottom: "30px" }}>
-            <Icon name="Award" size={50} />
+            <Icon name={isPartial ? "Clock" : "Award"} size={50} />
             <h2 style={{ fontSize: "1.8rem", fontWeight: 700, marginTop: "15px", marginBottom: "10px" }}>
-              Assessment Complete!
+              {isPartial ? "Submitted!" : "Assessment Complete!"}
             </h2>
             <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "25px" }}>{studentName}</p>
 
-            <div
-              style={{
-                fontSize: "4rem",
-                fontWeight: 800,
-                color: gradeColor,
-                marginBottom: "10px",
-              }}
-            >
-              {percentage}%
-            </div>
-            <div style={{ fontSize: "1.2rem", color: "rgba(255,255,255,0.7)" }}>
-              {results?.score}/{results?.total_points} points
-            </div>
-
-            {results?.feedback_summary && (
-              <div
-                style={{
-                  marginTop: "25px",
-                  padding: "15px",
-                  background: "rgba(255,255,255,0.05)",
-                  borderRadius: "10px",
-                  fontStyle: "italic",
-                }}
-              >
-                {results.feedback_summary}
+            {isPartial ? (
+              <div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#6366f1", marginBottom: "10px" }}>
+                  {results.mc_correct}/{results.mc_total} multiple choice correct
+                </div>
+                <div style={{
+                  padding: "12px 16px", borderRadius: "10px",
+                  background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)",
+                  color: "#f59e0b", fontSize: "0.95rem", marginTop: "15px",
+                }}>
+                  <Icon name="Clock" size={16} style={{ marginRight: "8px", verticalAlign: "middle" }} />
+                  {results.written_pending} written response{results.written_pending !== 1 ? "s" : ""} pending teacher review
+                </div>
+                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginTop: "12px" }}>
+                  Your teacher will review your written responses and you'll see your full score soon.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: "4rem", fontWeight: 800, color: gradeColor, marginBottom: "10px" }}>
+                  {percentage}%
+                </div>
+                <div style={{ fontSize: "1.2rem", color: "rgba(255,255,255,0.7)" }}>
+                  {results?.score}/{results?.total_points} points
+                </div>
+                {results?.feedback_summary && (
+                  <div style={{
+                    marginTop: "25px", padding: "15px",
+                    background: "rgba(255,255,255,0.05)", borderRadius: "10px", fontStyle: "italic",
+                  }}>
+                    {results.feedback_summary}
+                  </div>
+                )}
               </div>
             )}
           </div>
