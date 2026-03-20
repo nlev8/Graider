@@ -331,7 +331,7 @@ export default function StudentPortal() {
             )}
 
             <button onClick={handleStartAssessment} style={buttonStyle}>
-              Start Assessment <Icon name="ArrowRight" />
+              {assessment?.sections ? "Start Assignment" : "Start Assessment"} <Icon name="ArrowRight" />
             </button>
           </div>
         </div>
@@ -593,7 +593,7 @@ export default function StudentPortal() {
           <div style={{ ...cardStyle, textAlign: "center", marginBottom: "30px" }}>
             <Icon name={isPartial ? "Clock" : "Award"} size={50} />
             <h2 style={{ fontSize: "1.8rem", fontWeight: 700, marginTop: "15px", marginBottom: "10px" }}>
-              {isPartial ? "Submitted!" : "Assessment Complete!"}
+              {isPartial ? "Submitted!" : (assessment?.sections ? "Assignment Complete!" : "Assessment Complete!")}
             </h2>
             <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "25px" }}>{studentName}</p>
 
