@@ -767,7 +767,69 @@ data = await api.publishAssessmentToPortal(contentToPublish, {
 
 ---
 
-## Task 5: Update StudentPortal.jsx to handle `pending_review` grading status
+## Task 5: Backend timing enforcement for submissions
+
+**Files:** `backend/routes/student_portal_routes.py`, `backend/routes/student_account_routes.py`
+
+This task enforces `available_from` / `available_until` windows on the join-code path (assessments) and `due_date` late-flagging on the class-based path (assignments). The `available_from` and `available_until` fields are already stored inside the `settings` dict in `published_assessments` (added in Task 4 Step 4.1). The `published_content` table already has a `due_date` column.
+
+### Step 5.1: Enforce availability window in join-code submit handler
+
+- [ ] In `backend/routes/student_portal_routes.py`, in the `submit_assessment` handler, after retrieving `assessment_data` and `settings` from the database, add a time-window check before processing the submission.
+
+**Insert after getting `settings` from the assessment data (before grading logic begins):**
+```python
+# Enforce availability window (assessments)
+available_from = settings.get('available_from')
+available_until = settings.get('available_until')
+now = datetime.now(timezone.utc).isoformat()
+if available_from and now < available_from:
+    return jsonify({"error": "This assessment is not yet available."}), 403
+if available_until and now > available_until:
+    return jsonify({"error": "This assessment is no longer accepting submissions."}), 403
+```
+
+> **Note:** ISO 8601 string comparison works correctly for UTC timestamps because the format is lexicographically sortable. Ensure `available_from` and `available_until` are stored as UTC ISO strings from the frontend (the datetime-local input values should be converted to UTC before saving).
+
+### Step 5.2: Flag late submissions in class-based submit handler
+
+- [ ] In `backend/routes/student_account_routes.py`, in the `submit_student_work` handler, after loading the `published_content` record (`pc`), check the `due_date` and flag the submission as late if past due.
+
+**Insert after loading `published_content` (before building the submission row):**
+```python
+# Check for late submission (assignments)
+due_date = pc.data[0].get('due_date')
+is_late = False
+if due_date:
+    now = datetime.now(tz=timezone.utc).isoformat()
+    if now > due_date:
+        is_late = True
+```
+
+**Add to the submission row being inserted into Supabase:**
+```python
+submission_row['is_late'] = is_late
+```
+
+- [ ] Also include `is_late` in the response so the frontend can display a "Late" badge:
+
+**In the response dict (from Task 4 Step 4.3), add:**
+```python
+response['is_late'] = is_late
+```
+
+### Step 5.3: Ensure `datetime` and `timezone` are imported
+
+- [ ] In both files, verify that `datetime` and `timezone` are imported at the top:
+```python
+from datetime import datetime, timezone
+```
+
+If not present, add the import. `student_portal_routes.py` likely already has `datetime` imported for timestamp handling; just ensure `timezone` is included.
+
+---
+
+## Task 6: Update StudentPortal.jsx to handle `pending_review` grading status
 
 **File:** `frontend/src/components/StudentPortal.jsx`
 
@@ -889,13 +951,13 @@ var isPendingReview = results && results.grading_status === "pending_review";
 
 ---
 
-## Task 6: Build, test, and verify
+## Task 7: Build, test, and verify
 
-### Step 6.1: Build frontend
+### Step 7.1: Build frontend
 
 - [ ] Run `cd /Users/alexc/Downloads/Graider/frontend && npm run build` to compile the React app and verify no build errors.
 
-### Step 6.2: Manual test — publish as Assessment
+### Step 7.2: Manual test — publish as Assessment
 
 - [ ] Open the teacher dashboard, generate or load an assessment, click Publish.
 - [ ] Verify the content type selector shows "Assessment" and "Assignment" buttons.
@@ -906,7 +968,7 @@ var isPendingReview = results && results.grading_status === "pending_review";
 - [ ] Publish with a time limit, then take the assessment as a student.
 - [ ] Verify the student sees "Submitted! Your teacher will review and share your results." with NO scores shown.
 
-### Step 6.3: Manual test — publish as Assignment
+### Step 7.3: Manual test — publish as Assignment
 
 - [ ] Switch to "Assignment" in the publish modal.
 - [ ] Verify time limit changes to "Optional" placeholder (no asterisk).
@@ -915,12 +977,12 @@ var isPendingReview = results && results.grading_status === "pending_review";
 - [ ] Publish, then submit as a student.
 - [ ] Verify MC/TF scores show immediately; written responses show "pending teacher review."
 
-### Step 6.4: Test class-based publish path
+### Step 7.4: Test class-based publish path
 
 - [ ] In App.jsx, publish to a class as Assessment — verify `content_type` is passed as `'assessment'` (not inferred from structure).
 - [ ] Publish to a class as Assignment — verify `content_type` is `'assignment'` and `due_date` is passed.
 
-### Step 6.5: Verify backward compatibility
+### Step 7.5: Verify backward compatibility
 
 - [ ] Existing published assessments (no `content_type` in settings) should continue to work with the current behavior (`show_score_immediately: true`, `show_correct_answers: true` defaults).
 - [ ] The `published_assessments` table does NOT require a migration — `content_type` lives inside the `settings` JSON column.

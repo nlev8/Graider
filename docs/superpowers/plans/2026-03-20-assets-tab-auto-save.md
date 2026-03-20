@@ -124,6 +124,17 @@ In `_key_to_filepath()`, add a new `elif` branch before the final `return None` 
         return os.path.join(RESOURCES_DIR, f"{resource_id}.json")
 ```
 
+In `sync_all_to_cloud()`, add a `resource:` sync block following the existing pattern for other key types (e.g., `lesson:`, `assignment:`). Find the section where each key prefix is synced and add:
+
+```python
+    # Sync resources
+    resource_keys = _file_list_keys('resource:')
+    for key in resource_keys:
+        data = _file_load(key)
+        if data:
+            _cloud_save(key, data, teacher_id)
+```
+
 In `_file_list_keys()`, add a new `elif` branch after the `period_meta:` handler (before line 199 `return sorted(keys)`):
 
 ```python
@@ -144,10 +155,13 @@ Expected: All 4 tests pass.
 
 Add these 4 endpoints at the end of the file (after the last existing route). They follow the exact same pattern as the existing `save_lesson` / `list_lessons` / `load_lesson` / `delete_lesson` endpoints already in this file.
 
+> **Auth guard:** All 4 endpoints below MUST use the `@require_teacher` decorator. This decorator is imported from `backend.auth` and is already used by other endpoints in `lesson_routes.py` (e.g., `save_lesson`, `list_lessons`). It validates the JWT token and sets `g.user_id` for teacher-scoped storage access.
+
 ```python
 # ============ Resources (Assets) ============
 
 @lesson_bp.route('/api/save-resource', methods=['POST'])
+@require_teacher
 def save_resource():
     """Save a generated resource (assessment, assignment, lesson) for the Assets library."""
     data = request.json
@@ -185,6 +199,7 @@ def save_resource():
 
 
 @lesson_bp.route('/api/list-resources', methods=['GET'])
+@require_teacher
 def list_resources():
     """List all saved resources for the teacher."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -214,6 +229,7 @@ def list_resources():
 
 
 @lesson_bp.route('/api/load-resource', methods=['POST'])
+@require_teacher
 def load_resource():
     """Load a saved resource by ID."""
     data = request.json
@@ -233,6 +249,7 @@ def load_resource():
 
 
 @lesson_bp.route('/api/delete-resource', methods=['POST'])
+@require_teacher
 def delete_resource():
     """Delete a saved resource by ID."""
     data = request.json
@@ -531,10 +548,12 @@ Add a fetch function after the `autoSaveResource` helper (from Task 2 Step 2):
 
 ```javascript
   // Fetch all resources for the Assets tab
-  const fetchAssets = async () => {
+  // Accepts filter as parameter to avoid stale closure over assetsFilter state
+  const fetchAssets = async (filter) => {
     setAssetsLoading(true);
     try {
-      const typeParam = assetsFilter === 'all' ? undefined : assetsFilter;
+      const filterValue = filter !== undefined ? filter : assetsFilter;
+      const typeParam = filterValue === 'all' ? undefined : filterValue;
       const data = await api.listResources(typeParam);
       if (data.resources) {
         setAssets(data.resources);
@@ -567,16 +586,23 @@ Add a fetch function after the `autoSaveResource` helper (from Task 2 Step 2):
         return;
       }
       const content = data.resource.content;
+      // Clear conflicting state before loading — only one content type should be active
       if (contentType === 'assessment') {
+        setGeneratedAssignment(null);
+        setLessonPlan(null);
         setGeneratedAssessment(content);
         setAssessmentAnswers({});
         setPlannerMode('assessment');
         addToast('Assessment loaded into editor', 'success');
       } else if (contentType === 'assignment') {
+        setGeneratedAssessment(null);
+        setLessonPlan(null);
         setGeneratedAssignment(content);
         setPlannerMode('lesson');
         addToast('Assignment loaded into editor', 'success');
       } else if (contentType === 'lesson') {
+        setGeneratedAssessment(null);
+        setGeneratedAssignment(null);
         setLessonPlan(content);
         setPlannerMode('lesson');
         addToast('Lesson plan loaded into editor', 'success');
@@ -824,7 +850,7 @@ Add a `useEffect` near the other effects (around line 940-944 where the calendar
 ```javascript
   useEffect(() => {
     if (plannerMode === 'assets') {
-      fetchAssets();
+      fetchAssets(assetsFilter);
     }
   }, [assetsFilter]);
 ```
@@ -859,13 +885,20 @@ Replace the publish button `onClick` in the Assets list with:
                                             return;
                                           }
                                           const content = data.resource.content;
+                                          // Clear conflicting state before setting content
                                           if (asset.content_type === 'assessment') {
+                                            setGeneratedAssignment(null);
+                                            setLessonPlan(null);
                                             setGeneratedAssessment(content);
                                             setPlannerMode('assessment');
                                           } else if (asset.content_type === 'assignment') {
+                                            setGeneratedAssessment(null);
+                                            setLessonPlan(null);
                                             setGeneratedAssignment(content);
                                             setPlannerMode('lesson');
                                           } else if (asset.content_type === 'lesson') {
+                                            setGeneratedAssessment(null);
+                                            setGeneratedAssignment(null);
                                             setLessonPlan(content);
                                             setPlannerMode('lesson');
                                           }

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Simplify the "Create Assignment" flow from lesson plans by removing the type dropdown (worksheet/quiz/homework/project/essay/lab), using a single "Create Assignment" button, passing reference documents and selected standards to the generation prompt, and ensuring the Publish button is visible on generated output.
+**Goal:** Simplify the "Create Assignment" flow from lesson plans by reducing the type dropdown from 6 options (worksheet/quiz/homework/project/essay/lab) to 3 meaningful options (Assignment/Project/Essay), passing reference documents and selected standards to the generation prompt, and ensuring the Publish button is visible on generated output.
 
-**Architecture:** Remove the frontend dropdown and backend type_instructions branching. Use the section toggles to control format. Extend the backend prompt to include reference documents and standards. The Publish button already exists in the generated assignment section.
+**Architecture:** Simplify the frontend dropdown to 3 options and backend `type_instructions` to match. Remove redundant types (worksheet=Assignment, quiz=redundant, homework=redundant, lab=can't grade in portal). Use the section toggles to control format within each type. Extend the backend prompt to include reference documents and standards. The Publish button already exists in the generated assignment section.
 
 **Tech Stack:** Python/Flask, React
 
@@ -12,97 +12,45 @@
 
 ---
 
-## Task 1: Remove the type dropdown from the frontend
+## Task 1: Simplify the type dropdown to 3 options
 
 **File:** `frontend/src/tabs/PlannerTab.jsx`
 
-### Step 1.1: Remove the `assignmentType` state variable
+### Step 1.1: Update the `assignmentType` state default
 
-- [ ] At line 455, delete the state declaration:
+- [ ] At line 455, change the default from `"worksheet"` to `"assignment"`:
 ```javascript
-const [assignmentType, setAssignmentType] = useState("worksheet");
+const [assignmentType, setAssignmentType] = useState("assignment");
 ```
 
-### Step 1.2: Remove the `<select>` dropdown from the UI
+### Step 1.2: Reduce the `<select>` dropdown to 3 options
 
-- [ ] At lines 3202-3242, replace the `<div>` containing the `<select>` and button with just the button. The current code:
+- [ ] At lines 3202-3242, keep the `<div>` containing the `<select>` and button, but reduce the options from 6 to 3. Remove worksheet (redundant with Assignment), quiz (redundant), homework (redundant), and lab (can't grade in portal).
+
+**Find the `<select>` options:**
 ```jsx
-<div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-  <select
-    value={assignmentType}
-    onChange={(e) =>
-      setAssignmentType(e.target.value)
-    }
-    className="input"
-    style={{
-      padding: "8px 12px",
-      minWidth: "120px",
-    }}
-  >
     <option value="worksheet">Worksheet</option>
     <option value="quiz">Quiz</option>
     <option value="homework">Homework</option>
     <option value="project">Project</option>
     <option value="essay">Essay</option>
     <option value="lab">Lab Activity</option>
-  </select>
-  <button
-    onClick={generateAssignmentFromLessonHandler}
-    className="btn btn-primary"
-    disabled={assignmentLoading}
-  >
-    {assignmentLoading ? (
-      <>
-        <Icon
-          name="Loader"
-          size={16}
-          className="spinning"
-        />{" "}
-        Generating...
-      </>
-    ) : (
-      <>
-        <Icon name="FileText" size={16} /> Create
-        Assignment
-      </>
-    )}
-  </button>
-</div>
 ```
-Replace with (remove the wrapping `<div>` and `<select>`, keep only the button):
+
+**Replace with:**
 ```jsx
-<button
-  onClick={generateAssignmentFromLessonHandler}
-  className="btn btn-primary"
-  disabled={assignmentLoading}
->
-  {assignmentLoading ? (
-    <>
-      <Icon
-        name="Loader"
-        size={16}
-        className="spinning"
-      />{" "}
-      Generating...
-    </>
-  ) : (
-    <>
-      <Icon name="FileText" size={16} /> Create Assignment
-    </>
-  )}
-</button>
+    <option value="assignment">Assignment</option>
+    <option value="project">Project</option>
+    <option value="essay">Essay</option>
 ```
 
 ### Step 1.3: Update the success toast message
 
-- [ ] At line 1802, the toast uses `assignmentType` to display the type name:
+- [ ] At line 1802, the toast uses `assignmentType` to display the type name. This still works with the 3 remaining types, but update the fallback:
 ```javascript
 `${assignmentType.charAt(0).toUpperCase() + assignmentType.slice(1)} generated from lesson!`,
 ```
-Replace with a static message:
-```javascript
-"Assignment generated from lesson!",
-```
+No change needed — the existing code works with "assignment", "project", and "essay" values.
 
 ---
 
@@ -128,7 +76,7 @@ const data = await api.generateAssignmentFromLesson(
   assignmentType,
 );
 ```
-Replace with (remove `assignmentType` arg, add `standards` and `referenceDocs` to config):
+Replace with (keep `assignmentType` arg, add `standards` and `referenceDocs` to config):
 ```javascript
 const fullStandards = selectedStandards.map((code) => {
   return standards.find((s) => s.code === code) || { code, benchmark: code };
@@ -147,15 +95,16 @@ const data = await api.generateAssignmentFromLesson(
     referenceDocs: uploadedDocs,
     globalAINotes: globalAINotes,
   },
+  assignmentType,
 );
 ```
 Note: `selectedStandards`, `standards`, `uploadedDocs`, and `globalAINotes` are all already in scope within PlannerTab.
 
-### Step 2.2: Update the API service function signature
+### Step 2.2: Update the API service function default value
 
 **File:** `frontend/src/services/api.js`
 
-- [ ] At lines 340-345, update the function to remove the `assignmentType` parameter:
+- [ ] At lines 340-345, update the function to change the default `assignmentType` from `'worksheet'` to `'assignment'`:
 ```javascript
 export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'worksheet') {
   track('assignment_from_lesson_generated', { assignment_type: assignmentType })
@@ -167,37 +116,37 @@ export async function generateAssignmentFromLesson(lessonPlan, config, assignmen
 ```
 Replace with:
 ```javascript
-export async function generateAssignmentFromLesson(lessonPlan, config) {
-  track('assignment_from_lesson_generated')
+export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'assignment') {
+  track('assignment_from_lesson_generated', { assignment_type: assignmentType })
   return fetchApi('/api/generate-assignment-from-lesson', {
     method: 'POST',
-    body: JSON.stringify({ lessonPlan, config }),
+    body: JSON.stringify({ lessonPlan, config, assignmentType }),
   })
 }
 ```
 
 ---
 
-## Task 3: Update the backend to use standards, reference docs, and a single generic prompt
+## Task 3: Update the backend to use standards, reference docs, and simplified type instructions
 
 **File:** `backend/routes/planner_routes.py`
 
-### Step 3.1: Accept new fields from the request
+### Step 3.1: Update `assignment_type` default and accept new fields
 
-- [ ] At line 3143, remove the `assignment_type` extraction:
+- [ ] At line 3143, update the default from `'worksheet'` to `'assignment'`:
 ```python
-assignment_type = data.get('assignmentType', 'worksheet')  # worksheet, quiz, project, homework
+assignment_type = data.get('assignmentType', 'assignment')  # assignment, project, essay
 ```
-Delete this line entirely. Instead, after the existing `config` extraction at line 3142, add extraction for the new fields:
+After the existing `config` extraction at line 3142, add extraction for the new fields:
 ```python
 config_standards = config.get('standards', [])
 reference_docs = config.get('referenceDocs', [])
 global_ai_notes = config.get('globalAINotes', '')
 ```
 
-### Step 3.2: Remove the `type_instructions` dict and replace with a generic instruction
+### Step 3.2: Reduce the `type_instructions` dict to 3 entries
 
-- [ ] At lines 3197-3206, delete the `type_instructions` dict and the `type_instruction` lookup:
+- [ ] At lines 3197-3206, replace the 6-entry `type_instructions` dict with 3 entries matching the simplified dropdown:
 ```python
 type_instructions = {
     'worksheet': "Create a practice worksheet with a MIX of question types: ...",
@@ -210,9 +159,15 @@ type_instructions = {
 
 type_instruction = type_instructions.get(assignment_type, type_instructions['worksheet'])
 ```
-Replace with a single generic instruction:
+Replace with:
 ```python
-type_instruction = "Create an assignment with an appropriate mix of question types based on the section categories specified below. Use the section toggles to determine format — if multiple choice is enabled, include MC questions; if extended writing is enabled, include essay/written response questions; etc."
+type_instructions = {
+    'assignment': "Create an assignment with a MIX of question types based on the section categories specified below. Use the section toggles to determine format — if multiple choice is enabled, include MC questions; if extended writing is enabled, include essay/written response questions; etc.",
+    'project': "Create a multi-day project assignment with clear requirements, milestones, and a rubric. Include specific deliverables and evaluation criteria.",
+    'essay': "Create an essay prompt with a clear thesis question, required length, and grading criteria. Include pre-writing guidance and evaluation rubric."
+}
+
+type_instruction = type_instructions.get(assignment_type, type_instructions['assignment'])
 ```
 
 ### Step 3.3: Update the STEM branch to not reference `type_instruction` dict
@@ -259,47 +214,27 @@ if reference_docs:
 {ref_docs_block}
 ```
 
-### Step 3.7: Replace `assignment_type` references in the prompt template
+### Step 3.7: Keep `assignment_type` references in the prompt template
 
-- [ ] At line 3301, replace:
-```python
-ASSIGNMENT TYPE: {assignment_type.title()}
-```
-with:
-```python
-ASSIGNMENT TYPE: Assignment
-```
-
-- [ ] At line 3351, the JSON template has `"type": "{assignment_type}"`. Replace with:
-```python
-"type": "assignment",
-```
+No changes needed — the prompt template at line 3301 (`ASSIGNMENT TYPE: {assignment_type.title()}`) and line 3351 (`"type": "{assignment_type}"`) will now correctly use the 3 valid values: "assignment", "project", or "essay".
 
 ### Step 3.8: Add globalAINotes to the prompt
 
 - [ ] At lines 3470-3473, there is already a block for `config.get('globalAINotes')`. This will now be populated because we pass `globalAINotes` in the config from the frontend (Step 2.1). No backend edit needed here — the existing template already handles it.
 
-### Step 3.9: Update the mock fallback to remove `assignment_type` references
+### Step 3.9: Keep the mock fallback references
 
-- [ ] At line 3507, the mock fallback uses `assignment_type` in the title:
-```python
-"title": f"{assignment_type.title()} - {lesson_plan.get('title', 'Lesson')}",
-```
-Replace with:
-```python
-"title": f"Assignment - {lesson_plan.get('title', 'Lesson')}",
-```
-
-- [ ] At line 3508, the mock fallback sets `"type": assignment_type`. Replace with:
-```python
-"type": "assignment",
-```
+No changes needed — the mock fallback at line 3507 (`"title": f"{assignment_type.title()} - ..."`) and line 3508 (`"type": assignment_type`) will correctly use the 3 valid values.
 
 ---
 
-## Task 4: Verify Publish button works on generated assignment
+## Task 4: Verify Publish button works on generated assignment and preserve conditional guard
 
-**No code changes needed** — verification only.
+**Mostly verification** — one important constraint to preserve.
+
+### Step 4.0: Preserve the conditional guard around Create button
+
+- [ ] **IMPORTANT:** The `{(!lessonPlan.sections || lessonPlan.days) && !lessonPlan.phases && (...)}` wrapper around the Create Assignment button (and dropdown) MUST remain in place. This guard ensures the Create button only appears for appropriate lesson plan types. Do NOT remove this wrapper when simplifying the dropdown in Task 1 Step 1.2.
 
 ### Step 4.1: Confirm `getActiveAssignment()` returns `generatedAssignment`
 
@@ -326,27 +261,53 @@ This means when a generated assignment exists, it will be returned to `publishAs
 
 ---
 
-## Task 5: Build, test, verify
+## Task 5: Address `assignmentType` references in App.jsx
 
-### Step 5.1: Build the frontend
+**File:** `frontend/src/App.jsx`
+
+### Step 5.1: Audit `assignmentType` references in App.jsx
+
+- [ ] Search for `assignmentType` in `frontend/src/App.jsx` (known at lines 1540, 4816, 4824, 10850). Determine whether these are:
+  - **Dead code** — PlannerTab.jsx is the active component and App.jsx may have legacy duplicates from before the tab was extracted. If so, remove the dead references.
+  - **Active code** — If App.jsx still has an active assignment generation flow, update the dropdown options and default to match the simplified 3-option set (`assignment`, `project`, `essay`).
+
+### Step 5.2: Update or remove based on audit
+
+- [ ] If the references are in active code paths (e.g., App.jsx has its own `assignmentType` state and dropdown for a non-Planner flow):
+  - Update `useState("worksheet")` to `useState("assignment")`
+  - Update any `<select>` options to match the 3 simplified options
+  - Update any `type_instructions` or label references
+
+- [ ] If the references are dead code (duplicated from before PlannerTab extraction):
+  - Remove the `assignmentType` state declaration
+  - Remove any `<select>` dropdown that uses it
+  - Remove any handler references to it
+  - Verify the build still passes after removal
+
+---
+
+## Task 6: Build, test, verify
+
+### Step 6.1: Build the frontend
 
 - [ ] Run `cd /Users/alexc/Downloads/Graider/frontend && npm run build`
 - [ ] Verify no build errors
 
-### Step 5.2: Start the backend and test
+### Step 6.2: Start the backend and test
 
 - [ ] Run `source /Users/alexc/Downloads/Graider/venv/bin/activate && cd /Users/alexc/Downloads/Graider && python -m backend.app`
 - [ ] Navigate to the Planner tab
-- [ ] Verify the type dropdown is gone and only the "Create Assignment" button appears
+- [ ] Verify the type dropdown shows 3 options: "Assignment", "Project", "Essay"
+- [ ] Verify "Assignment" is selected by default
 - [ ] Verify the section category toggles (MC, Short Answer, etc.) still appear and function
 
-### Step 5.3: Test assignment generation without standards/docs
+### Step 6.3: Test assignment generation without standards/docs
 
 - [ ] Generate a lesson plan, then click "Create Assignment"
 - [ ] Verify it generates successfully with section categories controlling format
 - [ ] Verify the success toast says "Assignment generated from lesson!"
 
-### Step 5.4: Test assignment generation with standards and reference docs
+### Step 6.4: Test assignment generation with standards and reference docs
 
 - [ ] Upload a reference document in the Planner tab
 - [ ] Select at least one standard
@@ -354,7 +315,7 @@ This means when a generated assignment exists, it will be returned to `publishAs
 - [ ] Verify the generated assignment references content from the uploaded doc
 - [ ] Verify questions align to the selected standards
 
-### Step 5.5: Test Publish flow end-to-end
+### Step 6.5: Test Publish flow end-to-end
 
 - [ ] On a generated assignment, click "Publish to Portal"
 - [ ] Verify the publish modal opens with time limit pre-filled
@@ -367,6 +328,7 @@ This means when a generated assignment exists, it will be returned to `publishAs
 
 | File | Changes |
 |------|---------|
-| `frontend/src/tabs/PlannerTab.jsx` | Remove `assignmentType` state, remove `<select>` dropdown, pass `standards`/`referenceDocs`/`globalAINotes` in API call, update toast message |
-| `frontend/src/services/api.js` | Remove `assignmentType` parameter from `generateAssignmentFromLesson()` |
-| `backend/routes/planner_routes.py` | Remove `assignment_type` extraction and `type_instructions` dict, accept `standards`/`referenceDocs`/`globalAINotes`, add standards and reference docs to prompt, update mock fallback |
+| `frontend/src/tabs/PlannerTab.jsx` | Simplify `assignmentType` state default to `"assignment"`, reduce `<select>` dropdown to 3 options, pass `standards`/`referenceDocs`/`globalAINotes` in API call |
+| `frontend/src/services/api.js` | Update `assignmentType` default from `'worksheet'` to `'assignment'` in `generateAssignmentFromLesson()` |
+| `frontend/src/App.jsx` | Audit and update/remove `assignmentType` references (lines 1540, 4816, 4824, 10850) — dead code removal or update to match simplified options |
+| `backend/routes/planner_routes.py` | Update `assignment_type` default, reduce `type_instructions` dict to 3 entries, accept `standards`/`referenceDocs`/`globalAINotes`, add standards and reference docs to prompt |
