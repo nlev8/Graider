@@ -530,6 +530,17 @@ def submit_assessment(code):
 
         settings = assessment_data.get('settings', {})
 
+        # Enforce availability window (assessments)
+        available_from = settings.get('available_from')
+        available_until = settings.get('available_until')
+        if available_from or available_until:
+            from datetime import timezone
+            now = datetime.now(timezone.utc).isoformat()
+            if available_from and now < available_from:
+                return jsonify({"error": "This assessment is not yet available."}), 403
+            if available_until and now > available_until:
+                return jsonify({"error": "This assessment is no longer accepting submissions."}), 403
+
         # Check for duplicate submission
         if not settings.get('allow_multiple_attempts', False):
             existing = db.table('submissions').select('id, results').eq('join_code', code).ilike('student_name', student_name).execute()

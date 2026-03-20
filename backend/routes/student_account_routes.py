@@ -782,6 +782,14 @@ def submit_student_work(content_id):
         content_title = pc.data[0].get('title', 'Assignment')
         teacher_id = pc.data[0].get('teacher_id', s.get('teacher_id', ''))
 
+        # Check for late submission (assignments with due dates)
+        due_date = pc.data[0].get('due_date')
+        is_late = False
+        if due_date:
+            now_ts = datetime.now(tz=timezone.utc).isoformat()
+            if now_ts > due_date:
+                is_late = True
+
         # Grade instant questions (MC/TF/matching) immediately
         from backend.services.portal_grading import has_written_questions, run_portal_grading_thread
         from backend.routes.student_portal_routes import grade_instant_only, grade_student_submission
@@ -803,6 +811,7 @@ def submit_student_work(content_id):
             'results': instant_results,
             'time_taken_seconds': time_taken,
             'attempt_number': attempt,
+            'is_late': is_late,
         }
 
         if needs_multipass:
@@ -915,6 +924,7 @@ def submit_student_work(content_id):
         response = {
             "success": True,
             "submission_id": submission_id,
+            "is_late": is_late,
         }
 
         # Assessment mode: if both score and answers are hidden, return pending_review

@@ -203,7 +203,13 @@ export default function StudentPortal({
           setStage("results");
         }
       } else {
-        if (data.grading_status === "partial") {
+        if (data.grading_status === "pending_review") {
+          setResults({
+            grading_status: "pending_review",
+            message: data.message,
+            is_late: data.is_late,
+          });
+        } else if (data.grading_status === "partial") {
           setResults({
             grading_status: "partial",
             mc_correct: data.mc_correct,
@@ -211,6 +217,7 @@ export default function StudentPortal({
             written_pending: data.written_pending,
             message: data.message,
             questions: data.detailed_results,
+            is_late: data.is_late,
           });
         } else {
           setResults({
@@ -219,6 +226,7 @@ export default function StudentPortal({
             percentage: data.percentage,
             feedback_summary: data.feedback_summary,
             questions: data.detailed_results,
+            is_late: data.is_late,
           });
         }
         setStage("results");
@@ -438,6 +446,11 @@ export default function StudentPortal({
             <div>
               <h1 style={{ fontSize: isLargeText ? "1.4rem" : "1.2rem", fontWeight: 700, marginBottom: "4px" }}>{assessment?.title}</h1>
               <span style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)" }}>{studentName}</span>
+              {assessment?.settings?.due_date && (
+                <span style={{ fontSize: "0.8rem", color: "rgba(245,158,11,0.8)" }}>
+                  Due: {new Date(assessment.settings.due_date).toLocaleDateString()}
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
               {!isReducedDistractions && (
@@ -711,6 +724,7 @@ export default function StudentPortal({
 
   // ============ RESULTS SCREEN ============
   if (stage === "results") {
+    var isPendingReview = results && results.grading_status === "pending_review";
     var isPartial = results && results.grading_status === "partial";
     var percentage = results?.percentage || 0;
     var gradeColor = percentage >= 90 ? "#22c55e" : percentage >= 70 ? "#f59e0b" : "#ef4444";
@@ -718,15 +732,41 @@ export default function StudentPortal({
     return (
       <div style={containerStyle}>
         <div style={{ padding: "40px 20px", maxWidth: "700px", margin: "0 auto" }}>
+          {/* Late submission badge */}
+          {results?.is_late && (
+            <div style={{
+              padding: "10px 16px", borderRadius: "10px", marginBottom: "20px",
+              background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)",
+              color: "#fca5a5", fontSize: "0.9rem", textAlign: "center",
+            }}>
+              <Icon name="AlertCircle" size={16} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+              Submitted after due date
+            </div>
+          )}
+
           {/* Score Card */}
           <div style={{ ...cardStyle, textAlign: "center", marginBottom: "30px" }}>
-            <Icon name={isPartial ? "Clock" : "Award"} size={50} />
+            <Icon name={isPendingReview ? "Clock" : isPartial ? "Clock" : "Award"} size={50} />
             <h2 style={{ fontSize: "1.8rem", fontWeight: 700, marginTop: "15px", marginBottom: "10px" }}>
-              {isPartial ? "Submitted!" : (assessment?.sections ? "Assignment Complete!" : "Assessment Complete!")}
+              {isPendingReview ? "Submitted!" : isPartial ? "Submitted!" : (assessment?.sections ? "Assignment Complete!" : "Assessment Complete!")}
             </h2>
             <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "25px" }}>{studentName}</p>
 
-            {isPartial ? (
+            {isPendingReview ? (
+              <div>
+                <div style={{
+                  padding: "16px 20px", borderRadius: "10px",
+                  background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+                  color: "#a5b4fc", fontSize: "1rem",
+                }}>
+                  <Icon name="Clock" size={20} style={{ marginRight: "8px", verticalAlign: "middle" }} />
+                  {results.message || "Your teacher will review and share your results."}
+                </div>
+                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginTop: "15px" }}>
+                  You will see your score once your teacher has reviewed your submission.
+                </p>
+              </div>
+            ) : isPartial ? (
               <div>
                 <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#6366f1", marginBottom: "10px" }}>
                   {results.mc_correct}/{results.mc_total} multiple choice correct
