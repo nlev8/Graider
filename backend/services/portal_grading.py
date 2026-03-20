@@ -63,14 +63,8 @@ def build_portal_ai_notes(global_ai_notes="", assignment_title="",
     if grading_style:
         notes += f"\nGRADING STYLE: {grading_style}"
 
-    if rubric and rubric.get("categories"):
-        rubric_text = "\n\nRUBRIC CATEGORIES:\n"
-        for cat in rubric["categories"]:
-            name = cat.get("name", "Unknown")
-            weight = cat.get("weight", 0)
-            desc = cat.get("description", "")
-            rubric_text += f"- {name} ({weight}%): {desc}\n"
-        notes += rubric_text
+    # Note: rubric categories are appended via format_rubric_for_prompt() in
+    # run_portal_grading_thread() — don't duplicate them here.
 
     if accommodation_prompt:
         notes += f"\n{accommodation_prompt}"
@@ -215,16 +209,12 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         # Build student history context
         history_context = ""
         try:
-            from backend.services.assistant_tools import load_student_history_context
-            history_context = load_student_history_context(student_id) or ""
+            from backend.storage import load_student_history
+            history = load_student_history(teacher_id, student_id)
+            if history:
+                history_context = str(history)
         except Exception:
-            try:
-                from backend.storage import load_student_history
-                history = load_student_history(teacher_id, student_id)
-                if history:
-                    history_context = str(history)
-            except Exception:
-                pass
+            pass
 
         ai_notes = build_portal_ai_notes(
             global_ai_notes=teacher_config.get("global_ai_notes", ""),
@@ -261,10 +251,10 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
 
         # Set API keys for this thread
         try:
-            from backend.api_keys import set_context_keys, resolve_keys_for_teacher
+            from backend.api_keys import set_thread_keys, resolve_keys_for_teacher
             keys = resolve_keys_for_teacher(teacher_id)
             if keys:
-                set_context_keys(keys)
+                set_thread_keys(keys)
         except Exception:
             pass
 
@@ -424,11 +414,13 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         )
 
         # Save to teacher's results storage (for Results tab + Analytics)
+        # Use per-teacher lock to prevent race conditions with concurrent submissions
         try:
-            from backend.app import load_saved_results, save_results
-            results = load_saved_results(teacher_id)
-            results.append(result_record)
-            save_results(results, teacher_id)
+            from backend.app import load_saved_results, save_results, _get_lock
+            with _get_lock(teacher_id):
+                results = load_saved_results(teacher_id)
+                results.append(result_record)
+                save_results(results, teacher_id)
         except Exception as e:
             logger.error("Failed to save result to teacher storage: %s", str(e))
 
