@@ -33,33 +33,63 @@ graider/
 ├── graider_app.py          # LEGACY - old embedded React UI, DO NOT EDIT for UI changes
 ├── assignment_grader.py    # Core grading logic, file parsing, OpenAI calls
 ├── email_sender.py         # Email functionality for sending feedback
-├── sharepoint_watcher.py   # OneDrive/SharePoint file watching
 ├── .env                    # API keys (never commit)
+├── backend/
+│   ├── app.py              # Main Flask app, grading state, results
+│   ├── clever.py           # Clever API client, roster sync
+│   ├── auth.py             # JWT auth, Clever session resolution
+│   ├── routes/
+│   │   ├── clever_routes.py             # Clever SSO, roster sync, class creation
+│   │   ├── student_account_routes.py    # Student portal, classes, submissions
+│   │   ├── student_portal_routes.py     # Join code portal, auto-grading
+│   │   └── ...
+│   └── ...
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx          # Main app (teacher dashboard)
+│   │   ├── components/
+│   │   │   ├── StudentApp.jsx      # Student portal (authenticated)
+│   │   │   ├── StudentLogin.jsx    # Student login form
+│   │   │   ├── StudentPortal.jsx   # Join code portal
+│   │   │   ├── LoginScreen.jsx     # Teacher login + Clever SSO
+│   │   │   └── OnboardingWizard.jsx
+│   │   └── tabs/
+│   │       ├── PlannerTab.jsx
+│   │       ├── SettingsTab.jsx
+│   │       ├── ResultsTab.jsx
+│   │       └── AnalyticsTab.jsx
+│   └── ...
 └── ~/.graider_*/           # User config files (rubric, assignments, settings)
 ```
 
 ### Key Components
 
-1. **Flask Backend** (`graider_app.py`)
-   - Serves embedded React UI via HTML template string
+1. **Flask Backend** (`backend/app.py`)
+   - Serves the Vite-built React frontend from `backend/static/`
    - REST API endpoints under `/api/*`
    - Grading runs in background thread
 
-2. **Embedded React Frontend** (inside `graider_app.py`)
-   - Uses CDN-loaded React, ReactDOM, Babel
-   - NO separate npm/node process needed
-   - Single `python graider_app.py` serves everything
+2. **React Frontend** (`frontend/src/`)
+   - Teacher dashboard (`App.jsx`) — grading, planner, settings, results
+   - Student portal (`StudentApp.jsx`) — authenticated class-based path at `/student`
+   - Join code portal (`StudentPortal.jsx`) — anonymous path at `/join/CODE`
+   - Built with Vite; output goes to `backend/static/`
 
 3. **Grading Engine** (`assignment_grader.py`)
    - Parses Word docs, PDFs, images
    - Extracts student work using markers
    - Calls OpenAI API for grading
 
-4. **Persistence**
+4. **Student Workflow**
+   - Students complete assignments in the browser portal, not via local file folders
+   - Assignments are published via join codes or class-based publishing
+   - Two portal paths: anonymous join code (`/join/CODE`) and authenticated class-based (`/student`)
+
+5. **Persistence**
+   - Supabase — student records, classes, submissions, published content
    - `~/.graider_rubric.json` - Rubric settings
    - `~/.graider_settings.json` - Global AI notes
    - `~/.graider_assignments/` - Saved assignment configs
-   - `~/.graider_email.json` - Email credentials
 
 ---
 
@@ -349,6 +379,77 @@ python graider_app.py
 - `POST /api/generate-lesson-plan` - Generate AI lesson plan
 - `POST /api/export-lesson-plan` - Export to Word
 
+### Clever SSO & Roster
+- `GET /api/clever/login-url` — Get Clever OAuth URL
+- `GET /api/clever/callback` — OAuth callback (handles teachers + students)
+- `GET /api/clever/session` — Check Clever session status
+- `POST /api/clever/sync-roster` — Manual roster sync
+- `POST /api/clever/apply-accommodations` — Apply IEP/ELL accommodations
+- `GET /api/clever/district-keys` — Check district API key status
+- `POST /api/clever/district-keys` — Save district API keys (admin only)
+- `POST /api/clever/delete-data` — Delete all Clever-sourced data
+- `POST /api/clever/logout` — Clear Clever session
+- `POST /api/clever/student-token` — Exchange auth code for student session token
+- `GET /api/clever/health` — Health check (config + connectivity status)
+
+### Student Portal
+- `POST /api/student/login` — Student login (email + class code)
+- `GET /api/student/session` — Validate student session
+- `GET /api/student/dashboard` — Get student's assigned work
+- `GET /api/student/content/<id>` — Get assessment/assignment content
+- `POST /api/student/submit/<id>` — Submit answers
+
+### Classes
+- `POST /api/classes` — Create a class
+- `GET /api/classes` — List teacher's classes
+- `GET /api/classes/<id>/students` — List enrolled students
+- `POST /api/classes/<id>/sync-roster` — Sync roster via CSV
+- `POST /api/publish-to-class` — Publish content to a class
+
+### Portal (Join Code)
+- `POST /api/publish-assessment` — Publish via join code
+- `GET /api/student/join/<code>` — Get assessment by join code
+- `POST /api/student/submit/<code>` — Submit via join code
+
+---
+
+## Environment Variables
+
+### Required
+- `FLASK_SECRET_KEY` — Session signing key (MUST be set in production)
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_SERVICE_KEY` — Supabase service role key
+- `SUPABASE_JWT_SECRET` — JWT secret for token validation
+
+### Clever Integration
+- `CLEVER_CLIENT_ID` — OAuth client ID
+- `CLEVER_CLIENT_SECRET` — OAuth client secret
+- `CLEVER_REDIRECT_URI` — OAuth callback URL
+- `CLEVER_DISTRICT_TOKEN` — District app token (for Secure Sync)
+- `CLEVER_API_VERSION` — API version (default: v3.0)
+
+### Optional
+- `OPENAI_API_KEY` — Default OpenAI key (fallback)
+- `ANTHROPIC_API_KEY` — Default Anthropic key (fallback)
+- `FLASK_ENV` — Set to "development" for dev mode
+- `REDIS_URL` — Redis for session storage in production
+
+---
+
+## Supabase Tables
+
+### Authentication & Sessions
+- `classes` — Teacher's classes (name, join_code, clever_section_id)
+- `students` — Student records (name, email, student_id_number, accommodations)
+- `class_students` — Enrollment junction (class_id, student_id)
+- `student_sessions` — Hashed session tokens with expiry
+
+### Content & Submissions
+- `published_assessments` — Join-code published content
+- `published_content` — Class-based published content
+- `student_submissions` — Student answers and grading results
+- `submissions` — Anonymous join-code submissions
+
 ---
 
 ## Performance Notes
@@ -409,22 +510,98 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 
 ---
 
-*Last updated: February 2025*
+*Last updated: March 2026*
 
 <!-- gitnexus:start -->
-# GitNexus MCP
+# GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Graider** (2058 symbols, 5192 relationships, 153 execution flows).
+This project is indexed by GitNexus as **Graider** (4880 symbols, 12630 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-## Always Start Here
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
-1. **Read `gitnexus://repo/{name}/context`** — codebase overview + check index freshness
-2. **Match your task to a skill below** and **read that skill file**
-3. **Follow the skill's workflow and checklist**
+## Always Do
 
-> If step 1 warns the index is stale, run `npx gitnexus analyze` in the terminal first.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-## Skills
+## When Debugging
+
+1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
+2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
+3. `READ gitnexus://repo/Graider/process/{processName}` — trace the full execution flow step by step
+4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
+
+## When Refactoring
+
+- **Renaming**: MUST use `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` first. Review the preview — graph edits are safe, text_search edits need manual review. Then run with `dry_run: false`.
+- **Extracting/Splitting**: MUST run `gitnexus_context({name: "target"})` to see all incoming/outgoing refs, then `gitnexus_impact({target: "target", direction: "upstream"})` to find all external callers before moving code.
+- After any refactor: run `gitnexus_detect_changes({scope: "all"})` to verify only expected files changed.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Tools Quick Reference
+
+| Tool | When to use | Command |
+|------|-------------|---------|
+| `query` | Find code by concept | `gitnexus_query({query: "auth validation"})` |
+| `context` | 360-degree view of one symbol | `gitnexus_context({name: "validateUser"})` |
+| `impact` | Blast radius before editing | `gitnexus_impact({target: "X", direction: "upstream"})` |
+| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` |
+| `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` |
+| `cypher` | Custom graph queries | `gitnexus_cypher({query: "MATCH ..."})` |
+
+## Impact Risk Levels
+
+| Depth | Meaning | Action |
+|-------|---------|--------|
+| d=1 | WILL BREAK — direct callers/importers | MUST update these |
+| d=2 | LIKELY AFFECTED — indirect deps | Should test |
+| d=3 | MAY NEED TESTING — transitive | Test if critical path |
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/Graider/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/Graider/clusters` | All functional areas |
+| `gitnexus://repo/Graider/processes` | All execution flows |
+| `gitnexus://repo/Graider/process/{name}` | Step-by-step execution trace |
+
+## Self-Check Before Finishing
+
+Before completing any code modification task, verify:
+1. `gitnexus_impact` was run for all modified symbols
+2. No HIGH/CRITICAL risk warnings were ignored
+3. `gitnexus_detect_changes()` confirms changes match expected scope
+4. All d=1 (WILL BREAK) dependents were updated
+
+## Keeping the Index Fresh
+
+After committing code changes, the GitNexus index becomes stale. Re-run analyze to update it:
+
+```bash
+npx gitnexus analyze
+```
+
+If the index previously included embeddings, preserve them by adding `--embeddings`:
+
+```bash
+npx gitnexus analyze --embeddings
+```
+
+To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.embeddings` field shows the count (0 means no embeddings). **Running analyze without `--embeddings` will delete any previously generated embeddings.**
+
+> Claude Code users: A PostToolUse hook handles this automatically after `git commit` and `git merge`.
+
+## CLI
 
 | Task | Read this skill file |
 |------|---------------------|

@@ -9,30 +9,79 @@ export default function StudentApp() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("student_token");
-    const savedStudent = localStorage.getItem("student_info");
-    const savedClass = localStorage.getItem("student_class");
+    var params = new URLSearchParams(window.location.search);
+    var cleverFlag = params.get("clever");
+    var cleverCode = params.get("code");
 
-    if (token && savedStudent) {
-      fetch("/api/student/session", {
-        headers: { "X-Student-Token": token },
+    if (cleverFlag === "1" && cleverCode) {
+      // Clean the URL to remove the auth code from browser bar
+      window.history.replaceState({}, document.title, "/student");
+
+      // Exchange auth code for session token
+      fetch("/api/clever/student-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: cleverCode }),
       })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.valid) {
-            setStudentInfo(JSON.parse(savedStudent));
-            setClassInfo(JSON.parse(savedClass || "{}"));
-            setLoggedIn(true);
-          } else {
-            localStorage.removeItem("student_token");
-            localStorage.removeItem("student_info");
-            localStorage.removeItem("student_class");
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            setChecking(false);
+            return;
           }
+          var token = data.token;
+          localStorage.setItem("student_token", token);
+
+          return fetch("/api/student/session", {
+            headers: { "X-Student-Token": token },
+          })
+            .then(function(r) { return r.json(); })
+            .then(function(sessionData) {
+              if (sessionData.valid) {
+                var studentData = sessionData.student || {};
+                var classData = sessionData.class_info || {};
+                localStorage.setItem("student_info", JSON.stringify(studentData));
+                localStorage.setItem("student_class", JSON.stringify(classData));
+                setStudentInfo(studentData);
+                setClassInfo(classData);
+                setLoggedIn(true);
+              }
+            });
         })
-        .catch(() => {})
-        .finally(() => setChecking(false));
+        .catch(function(err) {
+          console.error("Clever student auth failed:", err);
+          localStorage.removeItem("student_token");
+        })
+        .finally(function() { setChecking(false); });
+      return;
     } else {
-      setChecking(false);
+      var token = localStorage.getItem("student_token");
+      var savedStudent = localStorage.getItem("student_info");
+      var savedClass = localStorage.getItem("student_class");
+
+      if (token && savedStudent) {
+        fetch("/api/student/session", {
+          headers: { "X-Student-Token": token },
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.valid) {
+              setStudentInfo(JSON.parse(savedStudent));
+              setClassInfo(JSON.parse(savedClass || "{}"));
+              setLoggedIn(true);
+            } else {
+              localStorage.removeItem("student_token");
+              localStorage.removeItem("student_info");
+              localStorage.removeItem("student_class");
+            }
+          })
+          .catch(function(err) {
+            console.error("Session check failed:", err);
+          })
+          .finally(function() { setChecking(false); });
+      } else {
+        setChecking(false);
+      }
     }
   }, []);
 

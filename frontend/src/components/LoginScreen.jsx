@@ -357,6 +357,11 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           </button>
           </>
         )}
+        <div style={{ textAlign: "center", marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "16px" }}>
+          <a href="/student" style={{ color: "#94a3b8", fontSize: "0.85rem", textDecoration: "none" }}>
+            I'm a student — go to Student Portal
+          </a>
+        </div>
       </div>
     </div>
   )

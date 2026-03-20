@@ -652,14 +652,10 @@ const StaticSections = React.memo(function StaticSections({
   const [missingUploadedFiles, setMissingUploadedFiles] = useState([]);
   const [missingFilesLoading, setMissingFilesLoading] = useState(false);
 
+  // listFiles removed (portal-only workflow) — no local folder to scan
   useEffect(() => {
-    if (!config.assignments_folder) return;
-    setMissingFilesLoading(true);
-    api.listFiles(config.assignments_folder)
-      .then((data) => setMissingUploadedFiles(data.files || []))
-      .catch(() => setMissingUploadedFiles([]))
-      .finally(() => setMissingFilesLoading(false));
-  }, [config.assignments_folder, status.results.length]);
+    setMissingUploadedFiles([]);
+  }, []);
 
   return (
     <>
@@ -1032,21 +1028,7 @@ const StaticSections = React.memo(function StaticSections({
           <button
             className="btn btn-secondary"
             onClick={() => {
-              if (!config.assignments_folder) {
-                addToast(
-                  "Set assignments folder in Settings first",
-                  "error",
-                );
-                return;
-              }
-              setMissingFilesLoading(true);
-              api
-                .listFiles(config.assignments_folder)
-                .then((data) =>
-                  setMissingUploadedFiles(data.files || []),
-                )
-                .catch(() => setMissingUploadedFiles([]))
-                .finally(() => setMissingFilesLoading(false));
+              addToast("File scanning not available in portal mode", "info");
             }}
             style={{ padding: "6px 12px", fontSize: "0.85rem" }}
           >

@@ -1075,16 +1075,16 @@ def pending_confirmations():
 
         # Load confirmed filenames
         confirmed_filenames = _load_confirmed_filenames()
-        from backend.routes.grading_routes import grading_state, grading_lock
-        if grading_state and grading_state.get("results"):
-            lock = grading_lock
-            results = grading_state["results"] if not lock else None
-            if lock:
-                with lock:
-                    results = list(grading_state["results"])
-            for r in (results or []):
-                if r.get('confirmation_sent'):
-                    confirmed_filenames.add(r.get('filename', ''))
+        try:
+            from backend.app import _get_state
+            teacher_id = getattr(g, 'user_id', 'local-dev')
+            state = _get_state(teacher_id)
+            if state and state.get("results"):
+                for r in state["results"]:
+                    if r.get('confirmation_sent'):
+                        confirmed_filenames.add(r.get('filename', ''))
+        except Exception:
+            pass  # Grading state not available — skip
 
         # Stage files first — canonicalize and deduplicate
         from backend.staging import stage_files, MANIFEST_NAME

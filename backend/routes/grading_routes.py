@@ -69,67 +69,6 @@ def get_status():
     return jsonify(snapshot)
 
 
-@grading_bp.route('/api/check-new-files', methods=['POST'])
-def check_new_files():
-    """Check for new files that haven't been graded yet."""
-    data = request.json
-    assignments_folder = data.get('folder', '')
-    output_folder = data.get('output_folder', '')
-
-    if not assignments_folder or not os.path.exists(assignments_folder):
-        return jsonify({"error": f"Folder not found: {assignments_folder}", "new_files": 0})
-
-    # Stage files first — canonicalize and deduplicate
-    from backend.staging import stage_files, MANIFEST_NAME
-    try:
-        stage_result = stage_files(assignments_folder)
-        staging_folder = stage_result["staging_folder"]
-    except Exception:
-        staging_folder = assignments_folder  # fallback to raw folder
-
-    # Load already graded files from master CSV (canonicalize so they match staged names)
-    from backend.staging import canonicalize_filename as _canon
-    already_graded = set()
-    master_file = os.path.join(output_folder, "master_grades.csv")
-    if os.path.exists(master_file):
-        try:
-            with open(master_file, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    filename = row.get('Filename', '')
-                    if filename:
-                        already_graded.add(filename)
-                        already_graded.add(_canon(filename))
-        except Exception:
-            pass
-
-    # Also check in-memory results (from per-teacher grading_state)
-    teacher_id = getattr(g, 'user_id', 'local-dev')
-    grading_state = _get_state(teacher_id) if _get_state else None
-    if grading_state and grading_state.get("results"):
-        for r in grading_state["results"]:
-            if r.get("filename"):
-                already_graded.add(r["filename"])
-                already_graded.add(_canon(r["filename"]))
-
-    # Count new files from staged folder (canonical names match graded results)
-    all_files = []
-    for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
-        all_files.extend(Path(staging_folder).glob(ext))
-    # Exclude manifest
-    all_files = [f for f in all_files if f.name != MANIFEST_NAME]
-
-    new_files = [f for f in all_files if f.name not in already_graded]
-
-    return jsonify({
-        "total_files": len(all_files),
-        "already_graded": len(already_graded),
-        "new_files": len(new_files),
-        "new_file_names": [f.name for f in new_files[:5]],
-        "folder_checked": assignments_folder
-    })
-
-
 @grading_bp.route('/api/stop-grading', methods=['POST'])
 def stop_grading():
     """Stop grading and save progress."""

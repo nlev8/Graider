@@ -1,91 +1,16 @@
 """
 Document handling API routes for Graider.
-Handles file browsing, document parsing, and folder operations.
+Handles document parsing and export.
 """
 import logging
 import os
-import sys
-import subprocess
 import base64
 from pathlib import Path
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify
 
 _logger = logging.getLogger(__name__)
 
 document_bp = Blueprint('document', __name__)
-
-
-@document_bp.route('/api/browse')
-def browse_for_path():
-    """Open a file/folder picker dialog (macOS)."""
-    browse_type = request.args.get('type', 'folder')
-
-    try:
-        if browse_type == 'folder':
-            script = '''
-            tell application "System Events"
-                activate
-                set folderPath to POSIX path of (choose folder with prompt "Select Folder")
-                return folderPath
-            end tell
-            '''
-        else:
-            script = '''
-            tell application "System Events"
-                activate
-                set filePath to POSIX path of (choose file with prompt "Select File")
-                return filePath
-            end tell
-            '''
-
-        result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=60)
-
-        if result.returncode == 0 and result.stdout.strip():
-            path = result.stdout.strip()
-            return jsonify({"path": path})
-        else:
-            return jsonify({"path": None, "error": "Cancelled or no selection"})
-
-    except subprocess.TimeoutExpired:
-        return jsonify({"path": None, "error": "Timeout"})
-    except Exception:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"path": None, "error": "An internal error occurred"}), 500
-
-
-@document_bp.route('/api/open-folder', methods=['POST'])
-def open_folder():
-    """Open a folder in Finder."""
-    data = request.json
-    folder = data.get('folder', '')
-
-    if os.path.exists(folder):
-        if sys.platform == 'darwin':
-            subprocess.run(['open', folder])
-        return jsonify({"status": "opened"})
-    return jsonify({"error": "Folder not found"})
-
-
-@document_bp.route('/api/serve-file', methods=['GET'])
-def serve_file_endpoint():
-    """Serve a local file for inline preview (images, etc.)."""
-    filepath = request.args.get('path', '')
-    if not filepath or not os.path.isfile(filepath):
-        return jsonify({"error": "File not found"}), 404
-
-    # Resolve real path to prevent symlink/.. traversal attacks
-    import tempfile
-    real_path = os.path.realpath(filepath)
-    allowed_prefixes = [
-        os.path.realpath(os.path.expanduser('~/.graider_')),
-        os.path.realpath('/tmp'),
-        os.path.realpath(tempfile.gettempdir()),
-        os.path.realpath(os.path.expanduser('~/Documents')),
-    ]
-    if not any(real_path.startswith(prefix) for prefix in allowed_prefixes):
-        return jsonify({"error": "Access denied"}), 403
-
-    return send_file(real_path)
 
 
 @document_bp.route('/api/parse-document', methods=['POST'])

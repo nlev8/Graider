@@ -120,7 +120,6 @@ export default React.memo(function SettingsTab({
   filesLoading,
   sortedPeriods,
   accommodationPresets,
-  handleBrowse,
   EDTECH_TOOLS,
   MODEL_COST_PER_ASSIGNMENT,
   addToast,
@@ -166,7 +165,7 @@ export default React.memo(function SettingsTab({
               { id: "classroom", label: "Classroom", icon: "Users" },
               { id: "integration", label: "Tools", icon: "Laptop" },
               { id: "privacy", label: "Privacy", icon: "Shield" },
-              { id: "billing", label: "Billing", icon: "CreditCard" },
+              ...(!isCleverUser ? [{ id: "billing", label: "Billing", icon: "CreditCard" }] : []),
               { id: "resources", label: "Resources", icon: "FolderOpen" },
             ].map((tab) => (
               <button
@@ -203,65 +202,6 @@ export default React.memo(function SettingsTab({
             {/* General Tab */}
             {settingsTab === "general" && (
               <div data-tutorial="settings-general">
-            <div>
-              <label className="label">Assignments Folder</label>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <input
-                  type="text"
-                  className="input"
-                  value={config.assignments_folder}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      assignments_folder: e.target.value,
-                    }))
-                  }
-                />
-                <button
-                  onClick={() =>
-                    handleBrowse("folder", "assignments_folder")
-                  }
-                  className="btn btn-secondary"
-                >
-                  Browse
-                </button>
-                <button
-                  onClick={loadAvailableFiles}
-                  disabled={!config.assignments_folder || filesLoading}
-                  className="btn btn-secondary"
-                  style={{
-                    opacity: !config.assignments_folder ? 0.5 : 1,
-                  }}
-                >
-                  {filesLoading ? "Loading..." : "Load Files"}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="label">Output Folder</label>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <input
-                  type="text"
-                  className="input"
-                  value={config.output_folder}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      output_folder: e.target.value,
-                    }))
-                  }
-                />
-                <button
-                  onClick={() =>
-                    handleBrowse("folder", "output_folder")
-                  }
-                  className="btn btn-secondary"
-                >
-                  Browse
-                </button>
-              </div>
-            </div>
 
             {/* Teacher & School Info */}
             <div

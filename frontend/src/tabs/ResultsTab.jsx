@@ -80,7 +80,6 @@ import * as api from "../services/api";
  *
  * --- Callbacks / functions ---
  * addToast               - function(message, type, duration?)
- * openResults            - function()
  * openReview             - function(index)
  * sendSingleEmail        - function(result, index)
  * getDefaultEmailBody    - function(index)
@@ -320,7 +319,6 @@ export default React.memo(function ResultsTab({
   setCcParents,
   // Callbacks
   addToast,
-  openResults,
   openReview,
   sendSingleEmail,
   getDefaultEmailBody,
@@ -576,13 +574,6 @@ export default React.memo(function ResultsTab({
                               Apply Curve
                             </button>
                           )}
-                          <button
-                            onClick={openResults}
-                            className="btn btn-secondary"
-                          >
-                            <Icon name="FolderOpen" size={18} />
-                            Open Folder
-                          </button>
                           <button
                             onClick={async () => {
                               const hasAnyFilter = resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter || resultsSearch.trim();
@@ -1981,57 +1972,7 @@ export default React.memo(function ResultsTab({
                                             {/* Trust button for flagged students -- adds to trusted list AND regrades */}
                                             {isFlagged && (
                                               <button
-                                                onClick={async () => {
-                                                  var newTrusted = [...(config.trustedStudents || []), studentId];
-                                                  setConfig(prev => ({
-                                                    ...prev,
-                                                    trustedStudents: newTrusted
-                                                  }));
-                                                  addToast("Trusting " + r.student_name + " and regrading...", "info");
-                                                  try {
-                                                    await api.deleteResult(r.filename);
-                                                    setStatus(function(prev) { return { ...prev, results: prev.results.filter(function(res) { return res.filename !== r.filename; }) }; });
-                                                    var filename = r.original_filename || r.filename;
-                                                    var trustAssignmentCfg = savedAssignmentData[r.assignment] || Object.values(savedAssignmentData).find(function(c) { return c.title === r.assignment; }) || null;
-                                                    await api.startGrading({
-                                                      assignments_folder: config.assignments_folder,
-                                                      output_folder: config.output_folder,
-                                                      roster_file: config.roster_file,
-                                                      grading_period: config.grading_period,
-                                                      grade_level: config.grade_level,
-                                                      subject: config.subject,
-                                                      teacher_name: config.teacher_name,
-                                                      school_name: config.school_name,
-                                                      ai_model: config.ai_model,
-                                                      extraction_mode: config.extraction_mode,
-                                                      selectedFiles: [filename],
-                                                      globalAINotes: globalAINotes,
-                                                      classPeriod: r.period || '',
-                                                      ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
-                                                      trustedStudents: newTrusted,
-                                                      gradingStyle: rubric.gradingStyle || 'standard',
-                                                      assignmentConfig: trustAssignmentCfg,
-                                                      rubric: rubric,
-                                                    });
-                                                    var checkInterval = setInterval(async function() {
-                                                      var st = await api.getStatus();
-                                                      if (!st.is_running) {
-                                                        clearInterval(checkInterval);
-                                                        if (st.results && st.results.length > 0) {
-                                                          var newResult = st.results.find(function(res) {
-                                                            return res.student_name === r.student_name && (res.assignment === r.assignment || res.filename === filename);
-                                                          });
-                                                          if (newResult) {
-                                                            setStatus(function(prev) { return { ...prev, results: [...prev.results, newResult] }; });
-                                                            addToast(r.student_name + " regraded: " + newResult.letter_grade + " (" + newResult.score + "%)", "success");
-                                                          }
-                                                        }
-                                                      }
-                                                    }, 1000);
-                                                  } catch (err) {
-                                                    addToast("Regrade failed: " + err.message, "error");
-                                                  }
-                                                }}
+                                                onClick={() => addToast("Regrading is not available in portal mode. Students can resubmit via the portal.", "info")}
                                                 title="Mark as trusted writer - this student writes well naturally"
                                                 style={{
                                                   background: "rgba(34,197,94,0.1)",
@@ -2153,61 +2094,7 @@ export default React.memo(function ResultsTab({
                                         <Icon name="Edit" size={16} />
                                       </button>
                                       <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          if (!confirm(`Regrade "${r.student_name}"'s assignment? This will delete the previous grade.`)) return;
-                                          try {
-                                            // Delete the previous result first
-                                            await api.deleteResult(r.filename);
-                                            setStatus((prev) => ({
-                                              ...prev,
-                                              results: prev.results.filter((res) => res.filename !== r.filename),
-                                            }));
-                                            addToast(`Regrading ${r.student_name}...`, "info");
-                                            // Use the original filename to regrade
-                                            const filename = r.original_filename || r.filename;
-                                            var regradeAssignmentCfg = savedAssignmentData[r.assignment] || Object.values(savedAssignmentData).find(function(c) { return c.title === r.assignment; }) || null;
-                                            await api.startGrading({
-                                              assignments_folder: config.assignments_folder,
-                                              output_folder: config.output_folder,
-                                              roster_file: config.roster_file,
-                                              grading_period: config.grading_period,
-                                              grade_level: config.grade_level,
-                                              subject: config.subject,
-                                              teacher_name: config.teacher_name,
-                                              school_name: config.school_name,
-                                              ai_model: config.ai_model,
-                                              extraction_mode: config.extraction_mode,
-                                              selectedFiles: [filename],
-                                              globalAINotes: globalAINotes,
-                                              classPeriod: r.period || '',
-                                              ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
-                                              trustedStudents: config.trustedStudents || [],
-                                              gradingStyle: rubric.gradingStyle || 'standard',
-                                              assignmentConfig: regradeAssignmentCfg,
-                                              rubric: rubric,
-                                            });
-                                            // Poll for completion and update results
-                                            const checkStatus = setInterval(async () => {
-                                              const st = await api.getStatus();
-                                              if (!st.is_running) {
-                                                clearInterval(checkStatus);
-                                                if (st.results && st.results.length > 0) {
-                                                  const newResult = st.results.find(res =>
-                                                    res.student_name === r.student_name &&
-                                                    (res.assignment === r.assignment || res.filename === filename)
-                                                  );
-                                                  if (newResult) {
-                                                    setStatus(prev => ({ ...prev, results: [...prev.results, newResult] }));
-                                                    addToast(`Regraded ${r.student_name}: ${newResult.letter_grade} (${newResult.score}%)`, "success");
-                                                  }
-                                                }
-                                              }
-                                            }, 1000);
-                                          } catch (err) {
-                                            addToast(`Regrade failed: ${err.message}`, "error");
-                                          }
-                                        }}
+                                        onClick={() => addToast("Regrading is not available in portal mode. Students can resubmit via the portal.", "info")}
                                         style={{
                                           background: "none",
                                           border: "none",

@@ -123,30 +123,9 @@ export async function getStatus() {
   return fetchApi('/api/status')
 }
 
-export async function startGrading(config) {
-  track('grading_started', {
-    file_count: config.selectedFiles ? config.selectedFiles.length : null,
-    grading_style: config.gradingStyle || 'standard',
-    has_rubric: !!(config.rubric && config.rubric.categories && config.rubric.categories.length),
-    has_assignment_config: !!config.assignmentConfig,
-    ensemble: !!config.ensemble_models,
-  })
-  return fetchApi('/api/grade', {
-    method: 'POST',
-    body: JSON.stringify(config),
-  })
-}
-
 export async function stopGrading() {
   return fetchApi('/api/stop-grading', {
     method: 'POST',
-  })
-}
-
-export async function listFiles(folder) {
-  return fetchApi('/api/list-files', {
-    method: 'POST',
-    body: JSON.stringify({ folder }),
   })
 }
 
@@ -173,13 +152,6 @@ export async function updateResult(filename, updates) {
   return fetchApi('/api/update-result', {
     method: 'POST',
     body: JSON.stringify({ filename, ...updates }),
-  })
-}
-
-export async function checkNewFiles(folder, outputFolder) {
-  return fetchApi('/api/check-new-files', {
-    method: 'POST',
-    body: JSON.stringify({ folder, output_folder: outputFolder }),
   })
 }
 
@@ -255,10 +227,6 @@ export async function generateModelAnswers(data) {
 
 // ============ Documents ============
 
-export async function browse(type = 'folder') {
-  return fetchApi(`/api/browse?type=${type}`)
-}
-
 export async function parseDocument(file) {
   var ext = file.name ? file.name.split('.').pop().toLowerCase() : 'unknown'
   track('document_parsed', { file_type: ext })
@@ -278,13 +246,6 @@ export async function parseDocument(file) {
   }
 
   return response.json()
-}
-
-export async function openFolder(folder) {
-  return fetchApi('/api/open-folder', {
-    method: 'POST',
-    body: JSON.stringify({ folder }),
-  })
 }
 
 // ============ Analytics ============
@@ -1302,12 +1263,10 @@ export async function cleverLogout() {
 
 export default {
   getStatus,
-  startGrading,
   stopGrading,
   clearResults,
   deleteResult,
   updateResult,
-  checkNewFiles,
   saveRubric,
   loadRubric,
   saveGlobalSettings,
@@ -1318,9 +1277,7 @@ export default {
   loadAssignment,
   deleteAssignment,
   exportAssignment,
-  browse,
   parseDocument,
-  openFolder,
   getAnalytics,
   exportDistrictReport,
   retranslateFeedback,
@@ -1358,7 +1315,6 @@ export default {
   deleteSupportDocument,
   parseDocumentForCalendar,
   importCalendarEvents,
-  listFiles,
   getAccommodationPresets,
   saveAccommodationPreset,
   deleteAccommodationPreset,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Icon from "./Icon";
-import { getAuthHeaders, browse as apiBrowse } from "../services/api";
+import { getAuthHeaders } from "../services/api";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "../data/rubricPresets";
 
 const STEPS = [
@@ -10,7 +10,6 @@ const STEPS = [
   { title: "Grading Style", icon: "ClipboardCheck" },
   { title: "Rubric Setup", icon: "ClipboardList" },
   { title: "AI Connection", icon: "Cpu" },
-  { title: "Assignments Folder", icon: "FolderOpen" },
   { title: "Import Roster", icon: "Users" },
   { title: "All Set!", icon: "PartyPopper" },
 ];
@@ -137,12 +136,10 @@ export default function OnboardingWizard({
     openai_key: "",
     anthropic_key: "",
     gemini_key: "",
-    assignments_folder: config.assignments_folder || "",
   });
   const [showExtraKeys, setShowExtraKeys] = useState(false);
   const [savingKeys, setSavingKeys] = useState(false);
   const [keysSaved, setKeysSaved] = useState(false);
-  const [skipFolder, setSkipFolder] = useState(false);
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
@@ -173,8 +170,7 @@ export default function OnboardingWizard({
 
   const canContinue = () => {
     if (step === 1) return wizardData.teacher_name.trim().length > 0;
-    if (step === 6) return wizardData.assignments_folder.trim().length > 0 || skipFolder;
-    if (step === 7) return true; // Import Roster is informational
+    if (step === 6) return true; // Import Roster is informational
     return true;
   };
 
@@ -244,9 +240,6 @@ export default function OnboardingWizard({
       grading_period: wizardData.grading_period,
       onboarding_completed: true,
     };
-    if (wizardData.assignments_folder.trim()) {
-      updates.assignments_folder = wizardData.assignments_folder.trim();
-    }
     setConfig((prev) => ({ ...prev, ...updates }));
 
     // Push grading style into rubric, and apply preset categories if selected
@@ -721,7 +714,7 @@ export default function OnboardingWizard({
     </div>
   );
 
-  const renderStep6 = () => {
+  const renderStep6_FOLDER_REMOVED = () => {
     var folderSteps = [
       { num: "1", icon: "Monitor", text: "Open Microsoft Teams and click OneDrive in the left sidebar" },
       { num: "2", icon: "FolderPlus", text: "Click My files, then New > Folder. Name it something like \"Student Submissions\"" },
@@ -835,7 +828,7 @@ export default function OnboardingWizard({
     );
   };
 
-  const renderStep7 = () => {
+  const renderStep6 = () => {
     if (isCleverUser) {
       return (
         <div style={{ padding: "10px 0" }}>
@@ -948,7 +941,7 @@ export default function OnboardingWizard({
     );
   };
 
-  const renderStep8 = () => {
+  const renderStep7 = () => {
     const selectedPreset = rubricChoice === "preset"
       ? getPresetForStateSubject(wizardData.state, wizardData.subject)
       : rubricChoice === "standard"
@@ -964,7 +957,6 @@ export default function OnboardingWizard({
       { icon: "ClipboardCheck", label: "Style", value: GRADING_STYLES.find((s) => s.value === wizardData.gradingStyle)?.label || wizardData.gradingStyle },
       { icon: "ClipboardList", label: "Rubric", value: selectedPreset ? selectedPreset.name : "Custom (unchanged)" },
       { icon: "Cpu", label: "AI Provider", value: hasAnyApiKey ? "Connected" : "Not configured" },
-      { icon: "FolderOpen", label: "Folder", value: wizardData.assignments_folder ? wizardData.assignments_folder.split("/").pop() || wizardData.assignments_folder : "Not set" },
       { icon: "Users", label: "Roster", value: isCleverUser ? "Clever (auto-sync)" : "Manual upload" },
     ];
 
@@ -1032,7 +1024,6 @@ export default function OnboardingWizard({
       case 5: return renderStep5();
       case 6: return renderStep6();
       case 7: return renderStep7();
-      case 8: return renderStep8();
       default: return null;
     }
   };

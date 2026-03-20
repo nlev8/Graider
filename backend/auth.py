@@ -3,6 +3,7 @@ Supabase JWT Authentication for Graider.
 Validates Bearer tokens on all /api/ routes except public endpoints.
 Supports both ES256 (JWKS) and HS256 (legacy secret) verification.
 """
+import json
 import os
 import logging
 import jwt
@@ -12,6 +13,34 @@ from flask import request, jsonify, g, session
 logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase as _get_supabase
+
+# Clever → Supabase account linking
+_CLEVER_LINKS_PATH = os.path.expanduser("~/.graider_data/clever_links.json")
+
+
+def load_clever_links():
+    """Load the clever_id → supabase_user_id mapping."""
+    try:
+        with open(_CLEVER_LINKS_PATH, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_clever_link(clever_id, supabase_user_id):
+    """Persist a clever_id → supabase_user_id link."""
+    links = load_clever_links()
+    links[clever_id] = supabase_user_id
+    os.makedirs(os.path.dirname(_CLEVER_LINKS_PATH), exist_ok=True)
+    with open(_CLEVER_LINKS_PATH, 'w') as f:
+        json.dump(links, f)
+    logger.info("Linked Clever account %s to Supabase user %s", clever_id, supabase_user_id)
+
+
+def resolve_clever_user_id(clever_id):
+    """Resolve a clever_id to a linked Supabase user_id, or return clever:{id}."""
+    links = load_clever_links()
+    return links.get(clever_id, f"clever:{clever_id}")
 
 
 # Routes that don't require authentication
@@ -121,7 +150,7 @@ def init_auth(app):
         # Clever SSO session (cookie-based, set during OAuth callback)
         clever_user = session.get('clever_user') if hasattr(session, 'get') else None
         if clever_user and not has_bearer:
-            g.user_id = f"clever:{clever_user['clever_id']}"
+            g.user_id = resolve_clever_user_id(clever_user['clever_id'])
             g.user_email = clever_user.get('email', '')
             g.auth_source = 'clever'
             g.district_id = clever_user.get('district', '')
