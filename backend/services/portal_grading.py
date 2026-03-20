@@ -177,7 +177,8 @@ def build_result_record(student_name, student_id, assignment_title, score,
 
 def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                               teacher_config, teacher_id,
-                              supabase_table="student_submissions"):
+                              supabase_table="student_submissions",
+                              student_accommodations=None):
     """Background thread that runs the full multipass grading pipeline on a portal submission.
 
     Args:
@@ -196,15 +197,28 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                     submission_id, student_info.get("student_name", ""))
 
         # Build AI instruction string with all grading factors
-        from backend.accommodations import build_accommodation_prompt
-
         accommodation_prompt = ""
-        student_id = student_info.get("student_id", "")
-        if student_id:
+        student_name = student_info.get("student_name", "")
+
+        # Strategy 1: Use embedded accommodations from published content (works for both paths)
+        if student_accommodations and student_name:
             try:
-                accommodation_prompt = build_accommodation_prompt(student_id, teacher_id)
+                from backend.accommodations import build_prompt_from_student_accommodations
+                accommodation_prompt = build_prompt_from_student_accommodations(
+                    student_name, student_accommodations, teacher_id
+                )
             except Exception:
                 pass
+
+        # Strategy 2: Fall back to student_id lookup (works for class-based with roster data)
+        if not accommodation_prompt:
+            student_id = student_info.get("student_id", "")
+            if student_id:
+                try:
+                    from backend.accommodations import build_accommodation_prompt
+                    accommodation_prompt = build_accommodation_prompt(student_id, teacher_id)
+                except Exception:
+                    pass
 
         # Build student history context
         history_context = ""

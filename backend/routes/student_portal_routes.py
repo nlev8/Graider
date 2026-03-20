@@ -562,6 +562,9 @@ def submit_assessment(code):
             except Exception:
                 pass
 
+            # Get student accommodations from published assessment settings
+            published_accommodations = assessment_data.get("settings", {}).get("student_accommodations", {})
+
             import threading
             thread = threading.Thread(
                 target=run_portal_grading_thread,
@@ -572,8 +575,9 @@ def submit_assessment(code):
                     {"student_name": student_name, "student_id": "", "email": ""},
                     teacher_config,
                     teacher_id,
-                    "submissions",  # Join-code submissions use "submissions" table
+                    "submissions",
                 ),
+                kwargs={"student_accommodations": published_accommodations},
                 daemon=True,
             )
             thread.start()

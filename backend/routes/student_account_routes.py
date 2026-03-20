@@ -520,6 +520,9 @@ def grade_portal_submission():
             except Exception:
                 pass
 
+            # Get accommodations from published content (content var holds select('*') result)
+            published_accommodations = content.data[0].get('settings', {}).get('student_accommodations', {}) if content.data else {}
+
             import threading
             thread = threading.Thread(
                 target=run_portal_grading_thread,
@@ -532,6 +535,7 @@ def grade_portal_submission():
                     teacher_id,
                     "student_submissions",
                 ),
+                kwargs={"student_accommodations": published_accommodations},
                 daemon=True,
             )
             thread.start()
@@ -769,7 +773,7 @@ def submit_student_work(content_id):
         attempt = len(existing.data) + 1
 
         # Load published content to get assessment data for grading
-        pc = db.table('published_content').select('content, title, teacher_id').eq(
+        pc = db.table('published_content').select('content, title, teacher_id, settings').eq(
             'id', content_id).execute()
         if not pc.data:
             return jsonify({"error": "Published content not found"}), 404
@@ -845,6 +849,9 @@ def submit_student_work(content_id):
                 pass
 
             try:
+                # Get accommodations from published content settings (already fetched with settings column)
+                published_accommodations = pc.data[0].get('settings', {}).get('student_accommodations', {}) if pc.data else {}
+
                 import threading
                 grading_thread = threading.Thread(
                     target=run_portal_grading_thread,
@@ -861,6 +868,7 @@ def submit_student_work(content_id):
                         teacher_id,
                         "student_submissions",
                     ),
+                    kwargs={"student_accommodations": published_accommodations},
                     daemon=True,
                 )
                 grading_thread.start()
