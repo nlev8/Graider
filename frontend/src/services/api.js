@@ -337,7 +337,7 @@ export async function listUnits() {
   return fetchApi('/api/list-units')
 }
 
-export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'worksheet') {
+export async function generateAssignmentFromLesson(lessonPlan, config, assignmentType = 'assignment') {
   track('assignment_from_lesson_generated', { assignment_type: assignmentType })
   return fetchApi('/api/generate-assignment-from-lesson', {
     method: 'POST',

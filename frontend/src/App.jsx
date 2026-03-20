@@ -1537,7 +1537,7 @@ function App() {
   const [brainstormLoading, setBrainstormLoading] = useState(false);
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
-  const [assignmentType, setAssignmentType] = useState("worksheet");
+  const [assignmentType, setAssignmentType] = useState("assignment");
   const [assignmentSectionsOpen, setAssignmentSectionsOpen] = useState(false);
   const [assignmentSectionCategories, setAssignmentSectionCategories] = useState({
     multiple_choice: true, short_answer: true, math_computation: false,
@@ -10857,12 +10857,9 @@ ${signature}`;
                                     minWidth: "120px",
                                   }}
                                 >
-                                  <option value="worksheet">Worksheet</option>
-                                  <option value="quiz">Quiz</option>
-                                  <option value="homework">Homework</option>
+                                  <option value="assignment">Assignment</option>
                                   <option value="project">Project</option>
                                   <option value="essay">Essay</option>
-                                  <option value="lab">Lab Activity</option>
                                 </select>
                                 <button
                                   onClick={generateAssignmentFromLessonHandler}

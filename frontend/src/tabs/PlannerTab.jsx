@@ -452,7 +452,7 @@ export default React.memo(function PlannerTab({
   const [brainstormLoading, setBrainstormLoading] = useState(false);
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
-  const [assignmentType, setAssignmentType] = useState("worksheet");
+  const [assignmentType, setAssignmentType] = useState("assignment");
   const [assignmentSectionsOpen, setAssignmentSectionsOpen] = useState(false);
   const [assignmentSectionCategories, setAssignmentSectionCategories] = useState({
     multiple_choice: true, short_answer: true, math_computation: false,
@@ -1780,6 +1780,9 @@ export default React.memo(function PlannerTab({
     setAssignmentLoading(true);
     setGeneratedAssignment(null);
     try {
+      const fullStandards = selectedStandards.map((code) => {
+        return standards.find((s) => s.code === code) || { code, benchmark: code };
+      });
       const data = await api.generateAssignmentFromLesson(
         lessonPlan,
         {
@@ -1790,6 +1793,9 @@ export default React.memo(function PlannerTab({
           totalQuestions: unitConfig.totalQuestions,
           questionsPerSection: unitConfig.questionsPerSection,
           requirements: unitConfig.requirements || "",
+          standards: fullStandards,
+          referenceDocs: uploadedDocs,
+          globalAINotes: globalAINotes,
         },
         assignmentType,
       );
@@ -3211,12 +3217,9 @@ export default React.memo(function PlannerTab({
                                     minWidth: "120px",
                                   }}
                                 >
-                                  <option value="worksheet">Worksheet</option>
-                                  <option value="quiz">Quiz</option>
-                                  <option value="homework">Homework</option>
+                                  <option value="assignment">Assignment</option>
                                   <option value="project">Project</option>
                                   <option value="essay">Essay</option>
-                                  <option value="lab">Lab Activity</option>
                                 </select>
                                 <button
                                   onClick={generateAssignmentFromLessonHandler}
@@ -3737,6 +3740,15 @@ export default React.memo(function PlannerTab({
                                   )}
                                 </div>
                                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                  <button
+                                    onClick={publishAssessmentHandler}
+                                    disabled={publishingAssessment}
+                                    className="btn"
+                                    style={{ padding: "8px 16px", background: "linear-gradient(135deg, #8b5cf6, #6366f1)" }}
+                                  >
+                                    <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
+                                    {publishingAssessment ? "Publishing..." : "Publish to Portal"}
+                                  </button>
                                   <button
                                     onClick={async () => {
                                       try {

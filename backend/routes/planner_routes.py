@@ -3140,7 +3140,11 @@ def generate_assignment_from_lesson():
     data = request.json
     lesson_plan = data.get('lessonPlan', {})
     config = data.get('config', {})
-    assignment_type = data.get('assignmentType', 'worksheet')  # worksheet, quiz, project, homework
+    assignment_type = data.get('assignmentType', 'assignment')
+
+    # Validate assignment_type
+    if assignment_type not in ('assignment', 'project', 'essay'):
+        assignment_type = 'assignment'
 
     _subject = config.get('subject', '').strip()
     _grade = config.get('grade', '').strip()
@@ -3148,6 +3152,10 @@ def generate_assignment_from_lesson():
         from flask import current_app
         current_app.logger.warning(
             f"Assignment-from-lesson requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
+
+    config_standards = config.get('standards', [])
+    reference_docs = config.get('referenceDocs', [])
+    global_ai_notes = config.get('globalAINotes', '')
 
     if not lesson_plan:
         return jsonify({"error": "No lesson plan provided"})
@@ -3195,15 +3203,12 @@ def generate_assignment_from_lesson():
         is_stem = any(s in subject for s in ['math', 'algebra', 'geometry', 'calculus', 'science', 'physics', 'chemistry', 'biology'])
 
         type_instructions = {
-            'worksheet': "Create a practice worksheet with a MIX of question types: multiple choice, short answer, fill-in-the-blank, and matching questions. For STEM subjects, also include math_equation questions where students solve equations or write expressions.",
-            'quiz': "Create a quiz with multiple choice, true/false, short answer, and (for STEM subjects) math_equation questions. Follow state assessment format: multiple choice should make up 40-50% of questions.",
-            'project': "Create a creative project assignment with clear requirements, rubric, and deliverables.",
-            'homework': "Create a homework assignment that reinforces the lesson content with a mix of multiple choice, short answer, and practice problems.",
-            'essay': "Create an essay prompt with a clear thesis question, requirements, and grading criteria.",
-            'lab': "Create a lab activity or investigation with hypothesis, procedure, data collection (use data_table questions for recording data), and analysis questions."
+            'assignment': "Create an assignment with a MIX of question types based on the section categories specified below. Use the section toggles to determine format — if multiple choice is enabled, include MC questions; if extended writing is enabled, include essay/written response questions; etc.",
+            'project': "Create a multi-day project assignment with clear requirements, milestones, and a rubric. Include specific deliverables and evaluation criteria.",
+            'essay': "Create an essay prompt with a clear thesis question, required length, and grading criteria. Include pre-writing guidance and evaluation rubric."
         }
 
-        type_instruction = type_instructions.get(assignment_type, type_instructions['worksheet'])
+        type_instruction = type_instructions.get(assignment_type, type_instructions['assignment'])
 
         if is_stem:
             type_instruction += " IMPORTANT: For Math/Science subjects, align with Florida FAST assessment format. Include multiple_choice questions (4 answer choices, one correct) and short_answer questions. For math, use math_equation type for solving/simplifying. If the lesson involves data or measurements, include data_table questions with actual numeric values. EVERY table referenced in a question MUST use question_type 'data_table' with column_headers, row_labels, and expected_data — NEVER put table data as raw text inside the question string."
@@ -3279,9 +3284,33 @@ NO TECHNOLOGY TOOLS SPECIFIED: Focus on paper-based or physical deliverables onl
         subject_boundary = _build_subject_boundary_prompt(
             config.get('subject', ''), config.get('grade', ''))
 
+        # Build standards text block
+        standards_text = ""
+        if config_standards:
+            standards_text = "\nSTANDARDS TO ASSESS (align questions to these standards):"
+            for i, s in enumerate(config_standards, 1):
+                if isinstance(s, dict):
+                    code = s.get('code', '')
+                    benchmark = s.get('benchmark', '')
+                    standards_text += f"\n{i}. {code}: {benchmark}"
+                else:
+                    standards_text += f"\n{i}. {s}"
+
+        # Build reference documents block
+        ref_docs_block = ""
+        if reference_docs:
+            ref_docs_block = "\n=== REFERENCE DOCUMENTS (use this content to inform questions) ===\n"
+            for doc in reference_docs:
+                doc_name = doc.get('filename', 'Document')
+                doc_text = doc.get('text', '')[:6000]
+                ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
+            ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when creating questions.\n"
+
         prompt = f"""You are an expert teacher creating an assessment/assignment based on a lesson plan.
 {subject_boundary}
 {tools_instruction}
+{standards_text}
+{ref_docs_block}
 LESSON PLAN DETAILS:
 Title: {lesson_title}
 Overview: {lesson_overview}
