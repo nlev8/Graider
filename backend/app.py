@@ -7,6 +7,7 @@ Then open: http://localhost:3000
 """
 
 import os
+import re
 import sys
 import json
 import csv
@@ -118,7 +119,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Session configuration — Redis in production, filesystem locally
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-change-in-production')
+is_dev = os.getenv('FLASK_ENV', '').lower() in ('development', 'dev')
+_secret = os.getenv('FLASK_SECRET_KEY')
+if not _secret and not is_dev:
+    raise RuntimeError("FLASK_SECRET_KEY must be set in production")
+app.secret_key = _secret or 'dev-secret-change-in-production'
+app.config['SESSION_COOKIE_SECURE'] = not is_dev  # HTTPS only in production
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # No JavaScript access
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 from datetime import timedelta
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)  # Session inactivity timeout
 if os.getenv('REDIS_URL'):
@@ -281,6 +289,41 @@ def load_support_documents_for_grading(subject: str = None) -> str:
     ])
 
 
+def _sanitize_student_name(name):
+    """Fix student names that contain assignment titles from bad filename parsing.
+
+    Examples of corrupted names:
+      'Berriozabal, Daniel 📓 CORNELL NOTES Chapter 10 – Section 2'
+      'Deloach, Rylee M. 📓 CORNELL NOTES Chapter 10 – Section 2'
+
+    Returns the cleaned student name.
+    """
+    if not name:
+        return name
+    # Strip at emoji boundary (📓 etc.) — emoji never appears in real student names
+    emoji_pattern = re.compile(
+        r'[\U0001F300-\U0001F9FF\U00002702-\U000027B0\U0000FE00-\U0000FE0F'
+        r'\U0000200D\U00002600-\U000026FF\U00002B50]'
+    )
+    match = emoji_pattern.search(name)
+    if match:
+        name = name[:match.start()].strip()
+    # Strip common assignment title patterns that got appended to names
+    assignment_markers = [
+        ' CORNELL NOTES', ' Cornell Notes', ' cornell notes',
+        ' Chapter ', ' chapter ',
+        ' Section ', ' section ',
+        ' Unit ', ' unit ',
+    ]
+    for marker in assignment_markers:
+        idx = name.find(marker)
+        if idx > 0:
+            name = name[:idx].strip()
+    # Remove trailing punctuation left over from stripping (preserve periods for initials like "M.")
+    name = name.rstrip(' ,;:-–—')
+    return name
+
+
 def load_saved_results(teacher_id='local-dev'):
     """Load results from storage (Supabase in prod, file locally)."""
     if storage_load:
@@ -289,6 +332,11 @@ def load_saved_results(teacher_id='local-dev'):
             for r in data:
                 if 'graded_at' not in r:
                     r['graded_at'] = None
+                # Sanitize corrupted student names (filename leaking into name)
+                sn = r.get('student_name', '')
+                cleaned = _sanitize_student_name(sn)
+                if cleaned != sn:
+                    r['student_name'] = cleaned
             return data
     # Fallback to direct file read
     if os.path.exists(RESULTS_FILE):
@@ -298,6 +346,10 @@ def load_saved_results(teacher_id='local-dev'):
                 for r in results:
                     if 'graded_at' not in r:
                         r['graded_at'] = None
+                    sn = r.get('student_name', '')
+                    cleaned = _sanitize_student_name(sn)
+                    if cleaned != sn:
+                        r['student_name'] = cleaned
                 return results
         except Exception:
             pass
@@ -1925,93 +1977,6 @@ register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 
 
 # ══════════════════════════════════════════════════════════════
-# GRADING START ROUTE (kept here due to thread management)
-# ══════════════════════════════════════════════════════════════
-
-@app.route('/api/grade', methods=['POST'])
-@limiter.limit("10/minute")
-def start_grading():
-    """Start the grading process."""
-    print("🚀 BACKEND/APP.PY - /api/grade called")  # DEBUG: Confirm this file is being used
-
-    # Capture teacher_id before thread start (g is request-scoped)
-    teacher_id = getattr(g, 'user_id', 'local-dev')
-    grading_state = _get_state(teacher_id)
-
-    if grading_state["is_running"]:
-        return jsonify({"error": "Grading already in progress"}), 400
-
-    data = request.json
-    assignments_folder = data.get('assignments_folder', os.path.expanduser('~/Downloads/Graider/Assignments'))
-    output_folder = data.get('output_folder', os.path.expanduser('~/Downloads/Graider/Results'))
-    roster_file = data.get('roster_file', os.path.expanduser('~/Downloads/Graider/all_students_updated.xlsx'))
-    grading_period = data.get('grading_period', 'Q3')
-    grade_level = data.get('grade_level', '7')
-    subject = data.get('subject', 'US History')
-    teacher_name = data.get('teacher_name', '')
-    school_name = data.get('school_name', '')
-    ai_model = data.get('ai_model', 'gpt-4o-mini')
-    extraction_mode = data.get('extraction_mode', 'structured')  # "structured" or "ai"
-
-    # Get custom assignment config and global AI notes
-    assignment_config = data.get('assignmentConfig')
-    global_ai_notes = data.get('globalAINotes', '')
-
-    # Get selected files (if any) for selective grading
-    selected_files = data.get('selectedFiles', None)  # None means grade all
-    print(f"📋 selectedFiles received: {type(selected_files)} — {len(selected_files) if selected_files else 'None'}")
-    if selected_files:
-        print(f"📋 First 5 files: {selected_files[:5]}")
-
-    # Skip verified grades on regrade (only regrade unverified assignments)
-    skip_verified = data.get('skipVerified', False)
-
-    # Get class period for differentiated grading (e.g., "Period 4" for different expectations)
-    class_period = data.get('classPeriod', '')
-
-    # Get custom rubric from Settings
-    rubric = data.get('rubric', None)
-
-    # Get ensemble models for multi-model grading
-    ensemble_models = data.get('ensemble_models', None)
-
-    # Get trusted students list (skip AI/plagiarism detection for these students)
-    trusted_students = data.get('trustedStudents', [])
-    print(f"🔐 Trusted students received: {trusted_students}")  # DEBUG
-
-    # Get grading style (lenient / standard / strict)
-    grading_style = data.get('gradingStyle', 'standard')
-
-    if not os.path.exists(assignments_folder):
-        return jsonify({"error": f"Assignments folder not found: {assignments_folder}"}), 400
-    if not os.path.exists(roster_file):
-        return jsonify({"error": f"Roster file not found: {roster_file}"}), 400
-
-    reset_state(teacher_id)
-    _update_state(teacher_id,
-        is_running=True,
-        cost_limit=float(data.get('cost_limit_per_session', 0)),
-        cost_warning_pct=float(data.get('cost_warning_pct', 80)),
-    )
-
-    # BYOK: Pre-resolve API keys for this teacher before spawning thread
-    from backend.api_keys import resolve_keys_for_teacher
-    user_api_keys = resolve_keys_for_teacher(teacher_id)
-
-    # FERPA: Audit log grading session start
-    file_count = len(selected_files) if selected_files else "all"
-    audit_log("START_GRADING", f"Started grading session for {subject} grade {grade_level} ({file_count} files)")
-
-    thread = threading.Thread(
-        target=run_grading_thread,
-        args=(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id, user_api_keys)
-    )
-    thread.start()
-
-    return jsonify({"status": "started"})
-
-
-# ══════════════════════════════════════════════════════════════
 # INDIVIDUAL FILE GRADING (for paper/handwritten assignments)
 # ══════════════════════════════════════════════════════════════
 
@@ -2178,64 +2143,6 @@ def grade_individual():
     except Exception as e:
         _logger.exception("Individual grading error")
         return jsonify({"error": "An internal error occurred"}), 500
-
-
-# ══════════════════════════════════════════════════════════════
-# LIST FILES IN FOLDER
-# ══════════════════════════════════════════════════════════════
-
-@app.route('/api/list-files', methods=['POST'])
-def list_files():
-    """List assignment files in a folder for selective grading."""
-    data = request.json
-    folder = data.get('folder', '')
-
-    if not folder or not os.path.exists(folder):
-        return jsonify({"files": [], "error": "Folder not found"})
-
-    # Stage files first — canonicalize and deduplicate
-    from backend.staging import stage_files, MANIFEST_NAME
-    try:
-        stage_result = stage_files(folder)
-        staging_folder = stage_result["staging_folder"]
-    except Exception as e:
-        _logger.exception("Staging failed for list-files")
-        return jsonify({"files": [], "error": "Staging failed"})
-
-    # Get already graded files (canonicalize so they match staged names)
-    from backend.staging import canonicalize_filename as _canon
-    teacher_id = getattr(g, 'user_id', 'local-dev')
-    already_graded = set()
-    for result in _get_state(teacher_id).get("results", []):
-        if result.get("filename"):
-            already_graded.add(result["filename"])
-            already_graded.add(_canon(result["filename"]))
-
-    # List staged files (canonical names, deduplicated)
-    supported_extensions = ['.docx', '.txt', '.jpg', '.jpeg', '.png', '.pdf']
-    files = []
-
-    try:
-        for f in os.listdir(staging_folder):
-            if f == MANIFEST_NAME:
-                continue
-            ext = os.path.splitext(f)[1].lower()
-            if ext in supported_extensions:
-                filepath = os.path.join(staging_folder, f)
-                stat = os.stat(filepath)
-                files.append({
-                    "name": f,
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    "graded": f in already_graded
-                })
-
-        # Sort by name
-        files.sort(key=lambda x: x["name"].lower())
-        return jsonify({"files": files})
-    except Exception as e:
-        _logger.exception("Failed to list files in folder")
-        return jsonify({"files": [], "error": "An internal error occurred"})
 
 
 def _remove_from_master_csv(result):
@@ -3371,6 +3278,14 @@ def serve_frontend():
 @app.route('/join/<path:code>')
 def serve_student_portal(code=None):
     """Serve React app for student portal routes."""
+    return send_from_directory(app.static_folder, 'index.html')
+
+
+@app.route('/student')
+@app.route('/student/')
+@app.route('/student/<path:subpath>')
+def serve_student_app(subpath=None):
+    """Serve React app for authenticated student portal."""
     return send_from_directory(app.static_folder, 'index.html')
 
 
