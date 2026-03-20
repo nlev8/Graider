@@ -2510,39 +2510,6 @@ export default React.memo(function PlannerTab({
                             </div>
                           )}
 
-                          {/* Brainstorm Button */}
-                          <button
-                            onClick={brainstormIdeasHandler}
-                            disabled={
-                              brainstormLoading ||
-                              selectedStandards.length === 0
-                            }
-                            className="btn btn-secondary"
-                            style={{
-                              width: "100%",
-                              justifyContent: "center",
-                              marginBottom: "10px",
-                              opacity:
-                                brainstormLoading ||
-                                selectedStandards.length === 0
-                                  ? 0.5
-                                  : 1,
-                            }}
-                          >
-                            {brainstormLoading ? (
-                              <Icon
-                                name="Loader2"
-                                size={18}
-                                style={{ animation: "spin 1s linear infinite" }}
-                              />
-                            ) : (
-                              <Icon name="Lightbulb" size={18} />
-                            )}
-                            {brainstormLoading
-                              ? "Brainstorming..."
-                              : "Brainstorm " + unitConfig.type + " Ideas"}
-                          </button>
-
                           {/* Generate Plan Button */}
                           <button
                             onClick={() => generateLessonPlan(false)}
@@ -2602,109 +2569,9 @@ export default React.memo(function PlannerTab({
 
                     {/* Main Content */}
                     <div>
-                      {/* Brainstormed Ideas Section - Full Width */}
-                      {brainstormIdeas.length > 0 &&
-                        !lessonPlan &&
-                        lessonVariations.length === 0 && (
-                          <div
-                            className="glass-card"
-                            style={{ padding: "25px", marginBottom: "20px" }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                marginBottom: "20px",
-                              }}
-                            >
-                              <h3
-                                style={{
-                                  fontSize: "1.2rem",
-                                  fontWeight: 700,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "10px",
-                                  margin: 0,
-                                }}
-                              >
-                                <Icon
-                                  name="Lightbulb"
-                                  size={24}
-                                  style={{ color: "#f59e0b" }}
-                                />{" "}
-                                {unitConfig.type + " Ideas"}
-                              </h3>
-                              <button
-                                onClick={() => { setBrainstormIdeas([]); setSelectedIdea(null); }}
-                                className="btn btn-secondary"
-                                style={{
-                                  padding: "6px 12px",
-                                  fontSize: "0.85rem",
-                                }}
-                              >
-                                <Icon name="X" size={14} /> Clear
-                              </button>
-                            </div>
-                            <p
-                              style={{
-                                fontSize: "0.9rem",
-                                color: "var(--text-secondary)",
-                                marginBottom: "20px",
-                              }}
-                            >
-                              Select an idea to develop into a full lesson plan,
-                              or use it as inspiration.
-                            </p>
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns:
-                                  "repeat(auto-fill, minmax(300px, 1fr))",
-                                gap: "15px",
-                              }}
-                            >
-                              {brainstormIdeas.map((idea) => (
-                                <div
-                                  key={idea.id}
-                                  onClick={() => {
-                                    setSelectedIdea(
-                                      selectedIdea?.id === idea.id
-                                        ? null
-                                        : idea,
-                                    );
-                                    if (selectedIdea?.id !== idea.id) {
-                                      setUnitConfig((prev) => ({
-                                        ...prev,
-                                        title: idea.title,
-                                      }));
-                                    }
-                                  }}
-                                  style={{
-                                    padding: "20px",
-                                    borderRadius: "12px",
-                                    background:
-                                      selectedIdea?.id === idea.id
-                                        ? "rgba(99,102,241,0.15)"
-                                        : "var(--input-bg)",
-                                    border:
-                                      selectedIdea?.id === idea.id
-                                        ? "2px solid var(--accent-primary)"
-                                        : "1px solid var(--glass-border)",
-                                    cursor: "pointer",
-                                    transition: "all 0.2s",
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      justifyContent: "space-between",
-                                      alignItems: "flex-start",
-                                      marginBottom: "10px",
-                                    }}
-                                  >
-                                    <h4
-                                      style={{
+                      {/* (Brainstorm ideas feature removed) */}
+                      {false && (
+                                <div style={{display:"none"}}>
                                         fontWeight: 600,
                                         fontSize: "1.05rem",
                                         margin: 0,
