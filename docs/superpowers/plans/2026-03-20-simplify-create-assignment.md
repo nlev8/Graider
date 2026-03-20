@@ -133,9 +133,13 @@ export async function generateAssignmentFromLesson(lessonPlan, config, assignmen
 
 ### Step 3.1: Update `assignment_type` default and accept new fields
 
-- [ ] At line 3143, update the default from `'worksheet'` to `'assignment'`:
+- [ ] At line 3143, update the default from `'worksheet'` to `'assignment'` and validate:
 ```python
 assignment_type = data.get('assignmentType', 'assignment')  # assignment, project, essay
+
+# Validate assignment_type — fall back to 'assignment' for any invalid value
+if assignment_type not in ('assignment', 'project', 'essay'):
+    assignment_type = 'assignment'
 ```
 After the existing `config` extraction at line 3142, add extraction for the new fields:
 ```python

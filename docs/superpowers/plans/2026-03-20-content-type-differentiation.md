@@ -492,6 +492,7 @@ const contentType = publishSettings.contentType;
         const settings = {
           teacher_name: config.teacher_name || "Teacher",
           teacher_email: config.teacher_email,
+          content_type: publishSettings.contentType,
           show_correct_answers: publishSettings.showCorrectAnswers,
           show_score_immediately: publishSettings.showScoreImmediately,
           allow_multiple_attempts: publishSettings.allowMultipleAttempts,
@@ -767,11 +768,31 @@ data = await api.publishAssessmentToPortal(contentToPublish, {
 
 ---
 
-## Task 5: Backend timing enforcement for submissions
+## Task 5: Backend timing enforcement for submissions and class-based `show_score_immediately`
 
 **Files:** `backend/routes/student_portal_routes.py`, `backend/routes/student_account_routes.py`
 
 This task enforces `available_from` / `available_until` windows on the join-code path (assessments) and `due_date` late-flagging on the class-based path (assignments). The `available_from` and `available_until` fields are already stored inside the `settings` dict in `published_assessments` (added in Task 4 Step 4.1). The `published_content` table already has a `due_date` column.
+
+### Step 5.0: Class-based submission respects `show_score_immediately`
+
+- [ ] In `backend/routes/student_account_routes.py`, in `submit_student_work()`, after loading `published_content` and building the response dict, check `settings.get('show_score_immediately', True)`. If false, return a `pending_review` response instead of scores:
+
+```python
+# After building the response dict in submit_student_work:
+content_settings = pc.data[0].get('settings', {})
+if not content_settings.get('show_score_immediately', True):
+    # Assessment: hide all scores until teacher approval
+    response = {
+        "success": True,
+        "submission_id": submission_id,
+        "grading_status": "pending_review",
+        "message": "Your response has been recorded. Your teacher will review and share your results.",
+    }
+    return jsonify(response)
+```
+
+> **Note:** This check runs before the existing partial/full results logic (Task 4 Step 4.3) and short-circuits the entire response. This is simpler than the dual-check approach in the join-code path because class-based publish always has `settings` available in `published_content`.
 
 ### Step 5.1: Enforce availability window in join-code submit handler
 
@@ -829,9 +850,23 @@ If not present, add the import. `student_portal_routes.py` likely already has `d
 
 ---
 
-## Task 6: Update StudentPortal.jsx to handle `pending_review` grading status
+## Task 6: Update StudentPortal.jsx to handle `pending_review` grading status and show due date
 
 **File:** `frontend/src/components/StudentPortal.jsx`
+
+### Step 5.0: Display due date in assessment header
+
+- [ ] In `frontend/src/components/StudentPortal.jsx`, when `preloadedSettings` or `assessment.settings` contains a `due_date`, display it in the assessment header:
+
+```javascript
+{assessment?.settings?.due_date && (
+  <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.5)" }}>
+    Due: {new Date(assessment.settings.due_date).toLocaleDateString()}
+  </span>
+)}
+```
+
+Insert this in the assessment header area (near the title/teacher name section) so students can see when the work is due.
 
 ### Step 5.1: Handle `pending_review` status in submission response
 

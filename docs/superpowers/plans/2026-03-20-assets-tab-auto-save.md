@@ -155,7 +155,21 @@ Expected: All 4 tests pass.
 
 Add these 4 endpoints at the end of the file (after the last existing route). They follow the exact same pattern as the existing `save_lesson` / `list_lessons` / `load_lesson` / `delete_lesson` endpoints already in this file.
 
-> **Auth guard:** All 4 endpoints below MUST use the `@require_teacher` decorator. This decorator is imported from `backend.auth` and is already used by other endpoints in `lesson_routes.py` (e.g., `save_lesson`, `list_lessons`). It validates the JWT token and sets `g.user_id` for teacher-scoped storage access.
+> **Auth guard:** All 4 endpoints below MUST use the `@require_teacher` decorator. This decorator should be defined locally in `lesson_routes.py` following the same pattern as `student_portal_routes.py` and `student_account_routes.py`. It checks `g.user_id` and returns 401 if missing:
+>
+> ```python
+> def require_teacher(f):
+>     @functools.wraps(f)
+>     def wrapper(*args, **kwargs):
+>         teacher_id = getattr(g, 'user_id', None)
+>         if not teacher_id:
+>             return jsonify({"error": "Authentication required"}), 401
+>         g.teacher_id = teacher_id
+>         return f(*args, **kwargs)
+>     return wrapper
+> ```
+>
+> **Required imports** at the top of `lesson_routes.py`: `import functools` and `from flask import g` (if not already present).
 
 ```python
 # ============ Resources (Assets) ============
@@ -165,7 +179,7 @@ Add these 4 endpoints at the end of the file (after the last existing route). Th
 def save_resource():
     """Save a generated resource (assessment, assignment, lesson) for the Assets library."""
     data = request.json
-    teacher_id = getattr(g, 'user_id', 'local-dev')
+    teacher_id = g.teacher_id  # Set by @require_teacher decorator
 
     content = data.get('content')
     content_type = data.get('content_type', 'assessment')  # assessment, assignment, lesson
@@ -202,7 +216,7 @@ def save_resource():
 @require_teacher
 def list_resources():
     """List all saved resources for the teacher."""
-    teacher_id = getattr(g, 'user_id', 'local-dev')
+    teacher_id = g.teacher_id  # Set by @require_teacher decorator
     content_type_filter = request.args.get('type')  # optional filter
 
     resources = []
@@ -234,7 +248,7 @@ def load_resource():
     """Load a saved resource by ID."""
     data = request.json
     resource_id = data.get('resource_id')
-    teacher_id = getattr(g, 'user_id', 'local-dev')
+    teacher_id = g.teacher_id  # Set by @require_teacher decorator
 
     if not resource_id:
         return jsonify({"error": "No resource_id provided"}), 400
@@ -254,7 +268,7 @@ def delete_resource():
     """Delete a saved resource by ID."""
     data = request.json
     resource_id = data.get('resource_id')
-    teacher_id = getattr(g, 'user_id', 'local-dev')
+    teacher_id = g.teacher_id  # Set by @require_teacher decorator
 
     if not resource_id:
         return jsonify({"error": "No resource_id provided"}), 400
