@@ -757,32 +757,109 @@ def submit_student_work(content_id):
 
         attempt = len(existing.data) + 1
 
-        result = db.table('student_submissions').insert({
+        # Load published content to get assessment data for grading
+        pc = db.table('published_content').select('content, title, teacher_id').eq(
+            'id', content_id).execute()
+        if not pc.data:
+            return jsonify({"error": "Published content not found"}), 404
+
+        assessment_content = pc.data[0].get('content', {})
+        content_title = pc.data[0].get('title', 'Assignment')
+        teacher_id = pc.data[0].get('teacher_id', s.get('teacher_id', ''))
+
+        # Grade instant questions (MC/TF/matching) immediately
+        from backend.services.portal_grading import has_written_questions, run_portal_grading_thread
+        from backend.routes.student_portal_routes import grade_instant_only, grade_student_submission
+        needs_multipass = has_written_questions(assessment_content)
+
+        if needs_multipass:
+            instant_results = grade_instant_only(assessment_content, answers)
+        else:
+            instant_results = grade_student_submission(assessment_content, answers)
+
+        # Build submission row with instant grading results
+        submission_row = {
             'student_id': student_id,
             'content_id': content_id,
             'student_name': student_name,
             'student_id_number': s['student_id_number'],
             'period': s.get('period', ''),
             'answers': answers,
-            'status': 'submitted',
+            'results': instant_results,
             'time_taken_seconds': time_taken,
             'attempt_number': attempt,
-        }).execute()
+        }
+
+        if needs_multipass:
+            submission_row['status'] = 'partial'
+            submission_row['score'] = None
+            submission_row['percentage'] = None
+            submission_row['grading_status'] = 'partial'
+        else:
+            submission_row['status'] = 'graded'
+            submission_row['score'] = instant_results.get('score')
+            submission_row['percentage'] = instant_results.get('percentage')
+            submission_row['total_points'] = instant_results.get('total_points')
+
+        result = db.table('student_submissions').insert(submission_row).execute()
 
         if not result.data:
             return jsonify({"error": "Failed to submit"}), 500
 
-        # Queue confirmation email for batch sending via Outlook
+        submission_id = result.data[0]['id']
+
+        # Spawn multipass grading thread for written questions
+        if needs_multipass:
+            teacher_config = {
+                "global_ai_notes": "",
+                "grade_level": "",
+                "subject": "",
+                "grading_style": "standard",
+                "rubric": None,
+                "ai_model": "gpt-4o-mini",
+                "period": s.get("period", ""),
+            }
+            try:
+                from backend.storage import load as storage_load
+                settings = storage_load("settings", teacher_id)
+                if settings:
+                    teacher_config["global_ai_notes"] = settings.get("global_ai_notes", "")
+                    teacher_config["grade_level"] = settings.get("grade_level", "")
+                    teacher_config["subject"] = settings.get("subject", "")
+                rubric_data = storage_load("rubric", teacher_id)
+                if rubric_data:
+                    teacher_config["rubric"] = rubric_data
+                    teacher_config["grading_style"] = rubric_data.get("gradingStyle", "standard")
+            except Exception:
+                pass
+
+            try:
+                import threading
+                grading_thread = threading.Thread(
+                    target=run_portal_grading_thread,
+                    args=(
+                        submission_id,
+                        assessment_content,
+                        answers,
+                        {
+                            "student_name": student_name,
+                            "student_id": s.get("student_id_number", ""),
+                            "email": s.get("email", ""),
+                        },
+                        teacher_config,
+                        teacher_id,
+                        "student_submissions",
+                    ),
+                    daemon=True,
+                )
+                grading_thread.start()
+            except Exception as grading_err:
+                _logger.warning("Failed to spawn portal grading: %s", str(grading_err))
+
+        # Queue confirmation email (keep existing logic)
         student_email = s.get('email')
-        teacher_id = s.get('teacher_id')
         if student_email and teacher_id:
             try:
-                # Get assignment title
-                pc = db.table('published_content').select('title').eq(
-                    'id', content_id).execute()
-                assignment_title = pc.data[0]['title'] if pc.data else 'Assignment'
-
-                # Compute missing assignments for this student
                 missing = []
                 all_content = db.table('published_content').select('id, title').eq(
                     'class_id', class_id).eq('is_active', True).execute()
@@ -801,25 +878,39 @@ def submit_student_work(content_id):
 
                 now_ts = datetime.now(tz=timezone.utc).isoformat()
                 db.table('submission_confirmations').insert({
-                    'submission_id': result.data[0]['id'],
+                    'submission_id': submission_id,
                     'teacher_id': teacher_id,
                     'student_email': student_email,
                     'student_name': student_name,
-                    'assignment_title': assignment_title,
+                    'assignment_title': content_title,
                     'attempt_number': attempt,
                     'missing_assignments': missing,
                     'submitted_at': now_ts,
                     'status': 'pending',
                 }).execute()
             except Exception as conf_err:
-                # UNIQUE conflict or other error — skip silently, submission still succeeds
-                print(f"Confirmation queue insert skipped: {conf_err}")
+                _logger.debug("Confirmation queue insert skipped: %s", conf_err)
 
-        return jsonify({
+        # Return instant results to student (MC scores immediately)
+        response = {
             "success": True,
-            "submission_id": result.data[0]['id'],
-            "message": "Submitted successfully!",
-        })
+            "submission_id": submission_id,
+        }
+        if needs_multipass:
+            mc_correct = sum(1 for q in (instant_results.get("questions") or []) if q.get("is_correct") and q.get("type") in ("multiple_choice", "true_false", "matching"))
+            mc_total = sum(1 for q in (instant_results.get("questions") or []) if q.get("type") in ("multiple_choice", "true_false", "matching"))
+            written_count = sum(1 for q in (instant_results.get("questions") or []) if q.get("status") == "pending_review")
+            response["grading_status"] = "partial"
+            response["mc_correct"] = mc_correct
+            response["mc_total"] = mc_total
+            response["written_pending"] = written_count
+            response["message"] = "Multiple choice graded. Written responses pending teacher review."
+        else:
+            response["message"] = "Submitted and graded successfully!"
+            response["score"] = instant_results.get("score")
+            response["percentage"] = instant_results.get("percentage")
+
+        return jsonify(response)
     except Exception as e:
         _logger.exception("Request failed: %s", request.path)
         return jsonify({"error": "An internal error occurred"}), 500

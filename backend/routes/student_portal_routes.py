@@ -55,7 +55,7 @@ def publish_assessment():
 
         # Get period and student restrictions
         period = settings.get('period', '')
-        restricted_students = settings.get('restricted_students', [])  # Empty = open to all
+        restricted_students = settings.get('restricted_students') or []  # Empty = open to all
         student_accommodations = settings.get('student_accommodations', {})  # {student_name: accommodation_settings}
 
         # Prepare settings
@@ -189,7 +189,11 @@ def load_saved_assessment():
         if not filename:
             return jsonify({"error": "No filename provided"}), 400
 
+        # Prevent path traversal
         filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+        if not os.path.realpath(filepath).startswith(os.path.realpath(SAVED_ASSESSMENTS_DIR)):
+            return jsonify({"error": "Invalid filename"}), 400
+
         if not os.path.exists(filepath):
             return jsonify({"error": "Assessment not found"}), 404
 
@@ -217,7 +221,11 @@ def delete_saved_assessment():
         if not filename:
             return jsonify({"error": "No filename provided"}), 400
 
+        # Prevent path traversal
         filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+        if not os.path.realpath(filepath).startswith(os.path.realpath(SAVED_ASSESSMENTS_DIR)):
+            return jsonify({"error": "Invalid filename"}), 400
+
         if os.path.exists(filepath):
             os.remove(filepath)
 
@@ -488,42 +496,120 @@ def submit_assessment(code):
                     "previous_results": existing.data[0].get('results')
                 }), 400
 
-        # Grade the assessment
+        # Determine grading strategy
         assessment = assessment_data.get('assessment', {})
-        results = grade_student_submission(assessment, answers)
+        from backend.services.portal_grading import has_written_questions
+        needs_multipass = has_written_questions(assessment)
+
+        if needs_multipass:
+            # Mixed assignment: grade MC/TF instantly, queue written for multipass
+            results = grade_instant_only(assessment, answers)
+        else:
+            # MC-only: use existing instant grader (no AI calls needed)
+            results = grade_student_submission(assessment, answers)
 
         # Insert submission
-        submission_result = db.table('submissions').insert({
+        submission_row = {
             "assessment_id": assessment_data.get('id'),
             "join_code": code,
             "student_name": student_name,
             "answers": answers,
             "results": results,
-            "score": results.get('score'),
-            "total_points": results.get('total_points'),
-            "percentage": results.get('percentage'),
             "time_taken_seconds": time_taken_seconds,
             "graded_at": datetime.now().isoformat(),
-        }).execute()
+        }
+        if needs_multipass:
+            submission_row["score"] = None
+            submission_row["total_points"] = results.get('total_points')
+            submission_row["percentage"] = None
+            submission_row["grading_status"] = "partial"
+        else:
+            submission_row["score"] = results.get('score')
+            submission_row["total_points"] = results.get('total_points')
+            submission_row["percentage"] = results.get('percentage')
+
+        submission_result = db.table('submissions').insert(submission_row).execute()
 
         if not submission_result.data:
             return jsonify({"error": "Failed to save submission"}), 500
 
+        submission_id = submission_result.data[0].get('id')
+
+        # Spawn multipass grading thread for written questions
+        if needs_multipass:
+            from backend.services.portal_grading import run_portal_grading_thread
+            teacher_id = assessment_data.get("teacher_id") or ""
+            teacher_config = {
+                "global_ai_notes": "",
+                "grade_level": "",
+                "subject": "",
+                "grading_style": "standard",
+                "rubric": None,
+                "ai_model": "gpt-4o-mini",
+                "period": "",
+            }
+            try:
+                from backend.storage import load as storage_load
+                settings = storage_load("settings", teacher_id)
+                if settings:
+                    teacher_config["global_ai_notes"] = settings.get("global_ai_notes", "")
+                    teacher_config["grade_level"] = settings.get("grade_level", "")
+                    teacher_config["subject"] = settings.get("subject", "")
+                rubric_data = storage_load("rubric", teacher_id)
+                if rubric_data:
+                    teacher_config["rubric"] = rubric_data
+                    teacher_config["grading_style"] = rubric_data.get("gradingStyle", "standard")
+            except Exception:
+                pass
+
+            import threading
+            thread = threading.Thread(
+                target=run_portal_grading_thread,
+                args=(
+                    submission_id,
+                    assessment,
+                    answers,
+                    {"student_name": student_name, "student_id": "", "email": ""},
+                    teacher_config,
+                    teacher_id,
+                    "submissions",  # Join-code submissions use "submissions" table
+                ),
+                daemon=True,
+            )
+            thread.start()
+
+            # Mark results as partially graded for frontend
+            results["grading_status"] = "partial"
+            results["message"] = "Multiple choice and true/false graded. Written responses pending teacher review."
+
         # Prepare response based on settings
         response = {
             "success": True,
-            "submission_id": submission_result.data[0].get('id'),
+            "submission_id": submission_id,
             "student_name": student_name,
         }
 
-        if settings.get('show_score_immediately', True):
-            response["score"] = results.get('score')
-            response["total_points"] = results.get('total_points')
-            response["percentage"] = results.get('percentage')
-            response["feedback_summary"] = results.get('feedback_summary')
-
-        if settings.get('show_correct_answers', True):
-            response["detailed_results"] = results.get('questions')
+        if results.get("grading_status") == "partial":
+            # Mixed assignment: show MC scores but not percentage
+            mc_correct = sum(1 for q in (results.get("questions") or []) if q.get("is_correct") and q.get("type") in ("multiple_choice", "true_false", "matching"))
+            mc_total = sum(1 for q in (results.get("questions") or []) if q.get("type") in ("multiple_choice", "true_false", "matching"))
+            written_count = sum(1 for q in (results.get("questions") or []) if q.get("type") in ("short_answer", "extended_response", "essay", "written"))
+            response["grading_status"] = "partial"
+            response["mc_correct"] = mc_correct
+            response["mc_total"] = mc_total
+            response["written_pending"] = written_count
+            response["message"] = results["message"]
+            if settings.get('show_correct_answers', True):
+                response["detailed_results"] = [q for q in (results.get("questions") or []) if q.get("type") in ("multiple_choice", "true_false", "matching")]
+        else:
+            # MC-only: show full results
+            if settings.get('show_score_immediately', True):
+                response["score"] = results.get('score')
+                response["total_points"] = results.get('total_points')
+                response["percentage"] = results.get('percentage')
+                response["feedback_summary"] = results.get('feedback_summary')
+            if settings.get('show_correct_answers', True):
+                response["detailed_results"] = results.get('questions')
 
         return jsonify(response)
 
@@ -702,7 +788,7 @@ Respond in JSON format:
                 results["questions"][item["index"]] = q_result
 
         except Exception as e:
-            print(f"AI grading error: {e}")
+            _logger.error("AI grading error: %s", str(e))
             for item in ai_grading_needed:
                 q_result = item["result"]
                 q_result["feedback"] = "Answer recorded. Your teacher will review this response."
@@ -729,5 +815,113 @@ Respond in JSON format:
         grade_comment = "Don't give up - review the material and try again!"
 
     results["feedback_summary"] = f"{grade_comment} You scored {results['score']}/{results['total_points']} points ({results['percentage']}%), answering {correct_count} out of {total_questions} questions correctly."
+
+    return results
+
+
+def grade_instant_only(assessment, answers):
+    """Grade ONLY deterministic questions (MC/TF/matching). Skip AI for written questions.
+
+    Used when the multipass pipeline will handle written questions in a background thread.
+    Written questions are marked as 'pending_review' with 0 points (scored later by multipass).
+    """
+    results = {
+        "questions": [],
+        "score": 0,
+        "total_points": 0,
+        "percentage": 0,
+        "feedback_summary": ""
+    }
+
+    for sIdx, section in enumerate(assessment.get('sections', [])):
+        for qIdx, question in enumerate(section.get('questions', [])):
+            answer_key = f"{sIdx}-{qIdx}"
+            student_answer = answers.get(answer_key)
+            q_type = question.get('type', 'multiple_choice')
+            points = question.get('points', 1)
+            correct_answer = question.get('answer')
+
+            results["total_points"] += points
+
+            question_result = {
+                "number": question.get('number', qIdx + 1),
+                "question": question.get('question', ''),
+                "type": q_type,
+                "student_answer": student_answer,
+                "correct_answer": correct_answer,
+                "points_possible": points,
+                "points_earned": 0,
+                "is_correct": False,
+                "feedback": ""
+            }
+
+            if q_type in ("short_answer", "extended_response", "essay", "written"):
+                # Skip — will be graded by multipass pipeline
+                question_result["feedback"] = "Pending teacher review"
+                question_result["status"] = "pending_review"
+                results["questions"].append(question_result)
+                continue
+
+            if student_answer is None or student_answer == "":
+                question_result["feedback"] = "No answer provided"
+                results["questions"].append(question_result)
+                continue
+
+            # MC/TF/matching grading — same logic as grade_student_submission
+            if q_type == "multiple_choice":
+                options = question.get('options', [])
+                student_letter = None
+                if isinstance(student_answer, int) and student_answer < len(options):
+                    student_letter = chr(65 + student_answer)
+                elif isinstance(student_answer, str):
+                    student_letter = student_answer.upper().strip()
+                    if len(student_letter) > 1 and student_letter[1] == ')':
+                        student_letter = student_letter[0]
+                correct_letter = correct_answer.upper().strip() if correct_answer else ""
+                if len(correct_letter) > 1 and correct_letter[1] == ')':
+                    correct_letter = correct_letter[0]
+                is_correct = student_letter == correct_letter
+                question_result["is_correct"] = is_correct
+                question_result["points_earned"] = points if is_correct else 0
+                question_result["feedback"] = "Correct!" if is_correct else f"Incorrect. The correct answer is {correct_answer}."
+
+            elif q_type == "true_false":
+                is_correct = str(student_answer).lower() == str(correct_answer).lower()
+                question_result["is_correct"] = is_correct
+                question_result["points_earned"] = points if is_correct else 0
+                explanation = question.get('explanation', '')
+                question_result["feedback"] = "Correct!" if is_correct else f"Incorrect. The answer is {correct_answer}. {explanation}"
+
+            elif q_type == "matching":
+                correct_matches = question.get('answer', {})
+                terms = question.get('terms', [])
+                definitions = question.get('definitions', [])
+                total_matches = len(terms)
+                correct_count = 0
+                for tIdx in range(total_matches):
+                    match_key = f"{sIdx}-{qIdx}-match-{tIdx}"
+                    student_match = answers.get(match_key, "")
+                    term = terms[tIdx] if tIdx < len(terms) else ""
+                    correct_letter = None
+                    if term in correct_matches:
+                        correct_def = correct_matches[term]
+                        try:
+                            def_idx = definitions.index(correct_def)
+                            correct_letter = chr(65 + def_idx)
+                        except ValueError:
+                            pass
+                    if correct_letter and student_match.upper() == correct_letter:
+                        correct_count += 1
+                earned = round(points * (correct_count / total_matches)) if total_matches > 0 else 0
+                question_result["points_earned"] = earned
+                question_result["is_correct"] = correct_count == total_matches
+                question_result["feedback"] = f"Got {correct_count}/{total_matches} matches correct."
+
+            results["score"] += question_result["points_earned"]
+            results["questions"].append(question_result)
+
+    # Only calculate percentage from instant-graded questions
+    instant_possible = sum(q["points_possible"] for q in results["questions"] if q.get("status") != "pending_review")
+    results["percentage"] = round((results["score"] / instant_possible * 100) if instant_possible > 0 else 0)
 
     return results
