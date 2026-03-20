@@ -3,17 +3,30 @@ Student Assessment Portal Routes for Graider.
 Handles publishing assessments, student access via join codes, and submission grading.
 Uses Supabase for cloud storage - students can submit anytime.
 """
+import functools
 import json
 import logging
 import os
 import random
 import string
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as get_supabase
 
 student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
+
+
+def require_teacher(f):
+    """Decorator that enforces teacher authentication for join-code management endpoints."""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        teacher_id = getattr(g, 'user_id', None)
+        if not teacher_id:
+            return jsonify({"error": "Authentication required"}), 401
+        g.teacher_id = teacher_id
+        return f(*args, **kwargs)
+    return wrapper
 
 
 def generate_join_code():
@@ -31,6 +44,7 @@ def generate_join_code():
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
+@require_teacher
 def publish_assessment():
     """
     Publish an assessment for students to take.
@@ -77,6 +91,7 @@ def publish_assessment():
             "title": assessment.get('title', 'Untitled Assessment'),
             "assessment": assessment,
             "settings": db_settings,
+            "teacher_id": g.teacher_id,
             "teacher_name": settings.get('teacher_name', 'Teacher'),
             "teacher_email": settings.get('teacher_email'),
             "is_active": True,
@@ -237,6 +252,7 @@ def delete_saved_assessment():
 
 
 @student_portal_bp.route('/api/teacher/assessments', methods=['GET'])
+@require_teacher
 def list_published_assessments():
     """List all published assessments for the teacher."""
     try:
@@ -244,7 +260,7 @@ def list_published_assessments():
 
         result = db.table('published_assessments').select(
             'id, join_code, title, created_at, submission_count, is_active, teacher_name, settings'
-        ).order('created_at', desc=True).execute()
+        ).eq('teacher_id', g.teacher_id).order('created_at', desc=True).execute()
 
         assessments = [{
             "id": a.get('id'),
@@ -266,14 +282,17 @@ def list_published_assessments():
 
 
 @student_portal_bp.route('/api/teacher/assessment/<code>/results', methods=['GET'])
+@require_teacher
 def get_assessment_results(code):
     """Get all submissions for a published assessment."""
     try:
         db = get_supabase()
         code = code.upper()
 
-        # Get assessment
-        assessment_result = db.table('published_assessments').select('*').eq('join_code', code).execute()
+        # Get assessment — scoped to this teacher
+        assessment_result = db.table('published_assessments').select('*').eq(
+            'join_code', code
+        ).eq('teacher_id', g.teacher_id).execute()
 
         if not assessment_result.data:
             return jsonify({"error": "Assessment not found"}), 404
@@ -311,14 +330,17 @@ def get_assessment_results(code):
 
 
 @student_portal_bp.route('/api/teacher/assessment/<code>/toggle', methods=['POST'])
+@require_teacher
 def toggle_assessment(code):
     """Activate or deactivate a published assessment."""
     try:
         db = get_supabase()
         code = code.upper()
 
-        # Get current status
-        result = db.table('published_assessments').select('is_active').eq('join_code', code).execute()
+        # Get current status — scoped to this teacher
+        result = db.table('published_assessments').select('is_active').eq(
+            'join_code', code
+        ).eq('teacher_id', g.teacher_id).execute()
 
         if not result.data:
             return jsonify({"error": "Assessment not found"}), 404
@@ -327,7 +349,9 @@ def toggle_assessment(code):
         new_active = not current_active
 
         # Update
-        db.table('published_assessments').update({'is_active': new_active}).eq('join_code', code).execute()
+        db.table('published_assessments').update({'is_active': new_active}).eq(
+            'join_code', code
+        ).eq('teacher_id', g.teacher_id).execute()
 
         status = "activated" if new_active else "deactivated"
         return jsonify({
@@ -342,17 +366,27 @@ def toggle_assessment(code):
 
 
 @student_portal_bp.route('/api/teacher/assessment/<code>', methods=['DELETE'])
+@require_teacher
 def delete_published_assessment(code):
     """Delete a published assessment and all its submissions."""
     try:
         db = get_supabase()
         code = code.upper()
 
+        # Verify ownership before deleting
+        ownership = db.table('published_assessments').select('id').eq(
+            'join_code', code
+        ).eq('teacher_id', g.teacher_id).execute()
+        if not ownership.data:
+            return jsonify({"error": "Assessment not found"}), 404
+
         # Delete submissions first (cascade should handle this, but be explicit)
         db.table('submissions').delete().eq('join_code', code).execute()
 
-        # Delete assessment
-        result = db.table('published_assessments').delete().eq('join_code', code).execute()
+        # Delete assessment — scoped to this teacher
+        result = db.table('published_assessments').delete().eq(
+            'join_code', code
+        ).eq('teacher_id', g.teacher_id).execute()
 
         return jsonify({"success": True, "message": "Assessment deleted"})
 
