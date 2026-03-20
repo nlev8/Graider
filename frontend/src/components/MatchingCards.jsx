@@ -66,7 +66,7 @@ export default function MatchingCards({
       });
       setMatched(allMatched);
     }
-  }, [showAnswers]);
+  }, [showAnswers, correctDefForTerm]);
 
   var allDone = Object.keys(matched).length === terms.length;
 
@@ -125,10 +125,14 @@ export default function MatchingCards({
     } else if (Array.isArray(correctAnswer)) {
       // Array format: ["Term: definition", "Term - definition"]
       correctAnswer.forEach(function(entry) {
-        var parts = entry.split(/\s*[-:]\s*/);
-        if (parts.length >= 2) {
-          var answerTerm = parts[0].trim();
-          var answerDef = parts.slice(1).join(" - ").trim();
+        // Split on first colon or " - " only, to avoid breaking definitions containing colons/hyphens
+        var sepIdx = entry.indexOf(": ");
+        if (sepIdx === -1) sepIdx = entry.indexOf(" - ");
+        if (sepIdx === -1) sepIdx = entry.indexOf(":");
+        if (sepIdx === -1) return;
+        var answerTerm = entry.substring(0, sepIdx).trim();
+        var answerDef = entry.substring(sepIdx + (entry.charAt(sepIdx + 1) === " " ? 2 : 1)).trim();
+        if (answerTerm && answerDef) {
           var tIdx = terms.indexOf(answerTerm);
           if (tIdx === -1) {
             // Try case-insensitive
