@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 import logging
+import functools
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
@@ -510,3 +511,117 @@ def import_calendar_events():
         "holidays_added": holidays_added,
         "calendar": cal,
     })
+
+
+# ============ Resources (Assets) ============
+
+def require_teacher(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        teacher_id = getattr(g, 'user_id', None)
+        if not teacher_id:
+            return jsonify({"error": "Authentication required"}), 401
+        g.teacher_id = teacher_id
+        return f(*args, **kwargs)
+    return wrapper
+
+
+@lesson_bp.route('/api/save-resource', methods=['POST'])
+@require_teacher
+def save_resource():
+    """Save a generated resource for the Assets library."""
+    data = request.json
+    teacher_id = g.teacher_id
+
+    content = data.get('content')
+    content_type = data.get('content_type', 'assessment')
+    title = data.get('title', 'Untitled')
+    resource_id = data.get('resource_id')
+
+    if not content:
+        return jsonify({"error": "No content provided"}), 400
+
+    if not resource_id:
+        resource_id = str(uuid.uuid4())[:8]
+
+    resource = {
+        "id": resource_id,
+        "title": title,
+        "content_type": content_type,
+        "content": content,
+        "created_at": data.get('created_at', datetime.now().isoformat()),
+        "updated_at": datetime.now().isoformat(),
+    }
+
+    if storage_save:
+        storage_save(f'resource:{resource_id}', resource, teacher_id)
+    else:
+        return jsonify({"error": "Storage not available"}), 500
+
+    return jsonify({"success": True, "resource_id": resource_id})
+
+
+@lesson_bp.route('/api/list-resources', methods=['GET'])
+@require_teacher
+def list_resources():
+    """List all saved resources for the teacher."""
+    teacher_id = g.teacher_id
+    content_type_filter = request.args.get('type')
+
+    resources = []
+    if storage_list_keys and storage_load:
+        keys = storage_list_keys('resource:', teacher_id)
+        for key in keys:
+            data = storage_load(key, teacher_id)
+            if data is None:
+                continue
+            if content_type_filter and data.get('content_type') != content_type_filter:
+                continue
+            resources.append({
+                "id": data.get('id', key.split(':', 1)[1]),
+                "title": data.get('title', 'Untitled'),
+                "content_type": data.get('content_type', 'unknown'),
+                "created_at": data.get('created_at', ''),
+                "updated_at": data.get('updated_at', ''),
+            })
+
+    resources.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+    return jsonify({"resources": resources})
+
+
+@lesson_bp.route('/api/load-resource', methods=['POST'])
+@require_teacher
+def load_resource():
+    """Load a saved resource by ID."""
+    data = request.json
+    resource_id = data.get('resource_id')
+    teacher_id = g.teacher_id
+
+    if not resource_id:
+        return jsonify({"error": "No resource_id provided"}), 400
+
+    if storage_load:
+        resource = storage_load(f'resource:{resource_id}', teacher_id)
+        if resource:
+            return jsonify({"success": True, "resource": resource})
+        return jsonify({"error": "Resource not found"}), 404
+
+    return jsonify({"error": "Storage not available"}), 500
+
+
+@lesson_bp.route('/api/delete-resource', methods=['POST'])
+@require_teacher
+def delete_resource():
+    """Delete a saved resource by ID."""
+    data = request.json
+    resource_id = data.get('resource_id')
+    teacher_id = g.teacher_id
+
+    if not resource_id:
+        return jsonify({"error": "No resource_id provided"}), 400
+
+    if storage_delete:
+        storage_delete(f'resource:{resource_id}', teacher_id)
+        return jsonify({"success": True})
+
+    return jsonify({"error": "Storage not available"}), 500

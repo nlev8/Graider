@@ -1236,6 +1236,35 @@ export async function shareMaterial(materialType, title, teacherName) {
   })
 }
 
+// ============ Resources (Assets) ============
+
+export async function saveResource(content, contentType, title, resourceId) {
+  return fetchApi('/api/save-resource', {
+    method: 'POST',
+    body: JSON.stringify({ content, content_type: contentType, title, resource_id: resourceId }),
+  })
+}
+
+export async function listResources(typeFilter) {
+  var url = '/api/list-resources'
+  if (typeFilter) url += '?type=' + encodeURIComponent(typeFilter)
+  return fetchApi(url)
+}
+
+export async function loadResource(resourceId) {
+  return fetchApi('/api/load-resource', {
+    method: 'POST',
+    body: JSON.stringify({ resource_id: resourceId }),
+  })
+}
+
+export async function deleteResource(resourceId) {
+  return fetchApi('/api/delete-resource', {
+    method: 'POST',
+    body: JSON.stringify({ resource_id: resourceId }),
+  })
+}
+
 // ============ Clever SSO & Sync ============
 
 export async function getCleverLoginUrl() {
@@ -1422,6 +1451,11 @@ export default {
   notebookLMCancel,
   notebookLMRetry,
   shareMaterial,
+  // Resources (Assets)
+  saveResource,
+  listResources,
+  loadResource,
+  deleteResource,
   // Clever SSO & Sync
   getCleverLoginUrl,
   getCleverSession,

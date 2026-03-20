@@ -35,6 +35,7 @@ PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 ACCOMMODATIONS_DIR = os.path.join(GRAIDER_DATA_DIR, "accommodations")
 LESSONS_DIR = os.path.join(HOME, ".graider_lessons")
 STUDENT_HISTORY_DIR = os.path.join(GRAIDER_DATA_DIR, "student_history")
+RESOURCES_DIR = os.path.join(GRAIDER_DATA_DIR, "resources")
 
 
 def _key_to_filepath(data_key):
@@ -94,6 +95,9 @@ def _key_to_filepath(data_key):
             unit = parts[1]
             title = parts[2]
             return os.path.join(LESSONS_DIR, unit, f"{title}.json")
+    elif data_key.startswith('resource:'):
+        resource_id = data_key[len('resource:'):]
+        return os.path.join(RESOURCES_DIR, f"{resource_id}.json")
     return None
 
 
@@ -195,6 +199,13 @@ def _file_list_keys(prefix):
                     # Strip .meta.json to get original filename
                     orig = f[:-10]
                     keys.append(f"period_meta:{orig}")
+
+    elif prefix == 'resource:' or prefix.startswith('resource:'):
+        if os.path.exists(RESOURCES_DIR):
+            for f in os.listdir(RESOURCES_DIR):
+                if f.endswith('.json'):
+                    resource_id = f[:-5]
+                    keys.append(f"resource:{resource_id}")
 
     return sorted(keys)
 
@@ -570,6 +581,16 @@ def sync_all_to_cloud(teacher_id):
                 _sb_save(key, {"headers": headers, "rows": rows}, teacher_id)
             except Exception as e:
                 logger.warning("Failed to sync period CSV %s: %s", key, e)
+
+    # Sync resources
+    resource_keys = _file_list_keys('resource:')
+    synced_resources = 0
+    for key in resource_keys:
+        data = _file_load(key)
+        if data:
+            _sb_save(key, data, teacher_id)
+            synced_resources += 1
+    summary['resources'] = f"{synced_resources} synced"
 
     # Student history
     history_dir = STUDENT_HISTORY_DIR
