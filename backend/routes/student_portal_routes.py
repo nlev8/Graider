@@ -417,7 +417,7 @@ def get_assessment_for_student(code):
                 student_question = {
                     "number": q.get('number'),
                     "question": q.get('question'),
-                    "type": q.get('type'),
+                    "type": q.get('type') or q.get('question_type', 'short_answer'),
                     "points": q.get('points'),
                     "options": q.get('options'),
                     "terms": q.get('terms'),
@@ -638,7 +638,7 @@ def grade_student_submission(assessment, answers):
         for qIdx, question in enumerate(section.get('questions', [])):
             answer_key = f"{sIdx}-{qIdx}"
             student_answer = answers.get(answer_key)
-            q_type = question.get('type', 'multiple_choice')
+            q_type = question.get('type') or question.get('question_type', 'multiple_choice')
             points = question.get('points', 1)
             correct_answer = question.get('answer')
 
@@ -755,7 +755,7 @@ def grade_student_submission(assessment, answers):
                 grading_prompt = f"""Grade this student answer for the following question.
 
 Question: {q.get('question', '')}
-Question Type: {q.get('type', 'short_answer')}
+Question Type: {q.get('type') or q.get('question_type', 'short_answer')}
 Points Possible: {points}
 Correct/Model Answer: {q.get('answer', 'N/A')}
 Rubric: {q.get('rubric', 'N/A')}
@@ -837,7 +837,7 @@ def grade_instant_only(assessment, answers):
         for qIdx, question in enumerate(section.get('questions', [])):
             answer_key = f"{sIdx}-{qIdx}"
             student_answer = answers.get(answer_key)
-            q_type = question.get('type', 'multiple_choice')
+            q_type = question.get('type') or question.get('question_type', 'multiple_choice')
             points = question.get('points', 1)
             correct_answer = question.get('answer')
 

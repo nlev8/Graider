@@ -576,7 +576,7 @@ export default function StudentPortal() {
                 background: "linear-gradient(135deg, #22c55e, #16a34a)",
               }}
             >
-              {loading ? "Submitting..." : "Submit Assessment"}
+              {loading ? "Submitting..." : (assessment?.sections ? "Submit Assignment" : "Submit Assessment")}
               <Icon name="Send" />
             </button>
           </div>
