@@ -911,11 +911,17 @@ def submit_student_work(content_id):
                 _logger.debug("Confirmation queue insert skipped: %s", conf_err)
 
         # Return instant results to student (MC scores immediately)
+        publish_settings = pc.data[0].get('settings', {}) if pc.data else {}
         response = {
             "success": True,
             "submission_id": submission_id,
         }
-        if needs_multipass:
+
+        # Assessment mode: if both score and answers are hidden, return pending_review
+        if not publish_settings.get('show_score_immediately', True) and not publish_settings.get('show_correct_answers', True):
+            response["grading_status"] = "pending_review"
+            response["message"] = "Submitted! Your teacher will review and share your results."
+        elif needs_multipass:
             mc_correct = sum(1 for q in (instant_results.get("questions") or []) if q.get("is_correct") and q.get("type") in ("multiple_choice", "true_false", "matching"))
             mc_total = sum(1 for q in (instant_results.get("questions") or []) if q.get("type") in ("multiple_choice", "true_false", "matching"))
             written_count = sum(1 for q in (instant_results.get("questions") or []) if q.get("status") == "pending_review")
@@ -926,8 +932,12 @@ def submit_student_work(content_id):
             response["message"] = "Multiple choice graded. Written responses pending teacher review."
         else:
             response["message"] = "Submitted and graded successfully!"
-            response["score"] = instant_results.get("score")
-            response["percentage"] = instant_results.get("percentage")
+            if publish_settings.get('show_score_immediately', True):
+                response["score"] = instant_results.get("score")
+                response["percentage"] = instant_results.get("percentage")
+            else:
+                response["grading_status"] = "pending_review"
+                response["message"] = "Submitted! Your teacher will review and share your results."
 
         return jsonify(response)
     except Exception as e:

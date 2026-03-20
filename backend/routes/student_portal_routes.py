@@ -72,6 +72,11 @@ def publish_assessment():
         restricted_students = settings.get('restricted_students') or []  # Empty = open to all
         student_accommodations = settings.get('student_accommodations', {})  # {student_name: accommodation_settings}
 
+        # Validate content_type
+        content_type = settings.get('content_type', 'assessment')
+        if content_type not in ('assessment', 'assignment'):
+            content_type = 'assessment'
+
         # Prepare settings
         db_settings = {
             "time_limit_minutes": settings.get('time_limit_minutes'),
@@ -79,10 +84,14 @@ def publish_assessment():
             "show_correct_answers": settings.get('show_correct_answers', True),
             "show_score_immediately": settings.get('show_score_immediately', True),
             "require_name": settings.get('require_name', True),
+            "content_type": content_type,
             "period": period,
             "restricted_students": restricted_students,
             "student_accommodations": student_accommodations,
             "is_makeup": len(restricted_students) > 0,
+            "available_from": settings.get('available_from'),
+            "available_until": settings.get('available_until'),
+            "due_date": settings.get('due_date'),
         }
 
         # Insert into Supabase
@@ -621,13 +630,19 @@ def submit_assessment(code):
             results["message"] = "Multiple choice and true/false graded. Written responses pending teacher review."
 
         # Prepare response based on settings
+        # Use assessment_data settings (not shadowed variable) for display decisions
+        publish_settings = assessment_data.get('settings', {})
         response = {
             "success": True,
             "submission_id": submission_id,
             "student_name": student_name,
         }
 
-        if results.get("grading_status") == "partial":
+        # Assessment mode: if both score and answers are hidden, return pending_review
+        if not publish_settings.get('show_score_immediately', True) and not publish_settings.get('show_correct_answers', True):
+            response["grading_status"] = "pending_review"
+            response["message"] = "Submitted! Your teacher will review and share your results."
+        elif results.get("grading_status") == "partial":
             # Mixed assignment: show MC scores but not percentage
             mc_correct = sum(1 for q in (results.get("questions") or []) if q.get("is_correct") and q.get("type") in ("multiple_choice", "true_false", "matching"))
             mc_total = sum(1 for q in (results.get("questions") or []) if q.get("type") in ("multiple_choice", "true_false", "matching"))
@@ -637,16 +652,16 @@ def submit_assessment(code):
             response["mc_total"] = mc_total
             response["written_pending"] = written_count
             response["message"] = results["message"]
-            if settings.get('show_correct_answers', True):
+            if publish_settings.get('show_correct_answers', True):
                 response["detailed_results"] = [q for q in (results.get("questions") or []) if q.get("type") in ("multiple_choice", "true_false", "matching")]
         else:
             # MC-only: show full results
-            if settings.get('show_score_immediately', True):
+            if publish_settings.get('show_score_immediately', True):
                 response["score"] = results.get('score')
                 response["total_points"] = results.get('total_points')
                 response["percentage"] = results.get('percentage')
                 response["feedback_summary"] = results.get('feedback_summary')
-            if settings.get('show_correct_answers', True):
+            if publish_settings.get('show_correct_answers', True):
                 response["detailed_results"] = results.get('questions')
 
         return jsonify(response)

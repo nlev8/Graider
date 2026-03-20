@@ -1978,6 +1978,13 @@ function App() {
     selectedStudents: [],
     timeLimit: null,
     applyAccommodations: true,
+    contentType: 'assessment',
+    showScoreImmediately: false,
+    showCorrectAnswers: false,
+    allowMultipleAttempts: false,
+    dueDate: '',
+    availableFrom: '',
+    availableUntil: '',
   });
   const [publishModalStudents, setPublishModalStudents] = useState([]);
   const [loadingPublishStudents, setLoadingPublishStudents] = useState(false);
@@ -4522,6 +4529,31 @@ ${signature}`;
     }
   };
 
+  const handleContentTypeChange = (type) => {
+    if (type === 'assessment') {
+      setPublishSettings(prev => ({
+        ...prev,
+        contentType: 'assessment',
+        showScoreImmediately: false,
+        showCorrectAnswers: false,
+        allowMultipleAttempts: false,
+        dueDate: '',
+      }));
+    } else {
+      setPublishSettings(prev => ({
+        ...prev,
+        contentType: 'assignment',
+        showScoreImmediately: true,
+        showCorrectAnswers: true,
+        allowMultipleAttempts: true,
+        isMakeup: false,
+        selectedStudents: [],
+        availableFrom: '',
+        availableUntil: '',
+      }));
+    }
+  };
+
   // Confirm and publish assessment with settings
   const confirmPublishAssessment = async () => {
     var contentToPublish = getActiveAssignment();
@@ -4549,28 +4581,38 @@ ${signature}`;
 
       let data;
       if (publishClassId) {
-        const contentType = contentToPublish.sections ? 'assignment' : 'assessment';
+        const contentType = publishSettings.contentType;
         const settings = {
           teacher_name: config.teacher_name || "Teacher",
           teacher_email: config.teacher_email,
-          show_correct_answers: true,
-          show_score_immediately: true,
+          show_correct_answers: publishSettings.showCorrectAnswers,
+          show_score_immediately: publishSettings.showScoreImmediately,
+          content_type: publishSettings.contentType,
+          allow_multiple_attempts: publishSettings.allowMultipleAttempts,
           period: publishSettings.period,
           restricted_students: restrictedStudents,
           student_accommodations: studentAccommodationsMap,
           time_limit_minutes: publishSettings.timeLimit,
+          due_date: publishSettings.dueDate || null,
+          available_from: publishSettings.availableFrom || null,
+          available_until: publishSettings.availableUntil || null,
         };
-        data = await api.publishToClass(publishClassId, contentToPublish, contentType, contentToPublish.title || 'Untitled', settings, null);
+        data = await api.publishToClass(publishClassId, contentToPublish, contentType, contentToPublish.title || 'Untitled', settings, publishSettings.dueDate || null);
       } else {
         data = await api.publishAssessmentToPortal(contentToPublish, {
           teacher_name: config.teacher_name || "Teacher",
           teacher_email: config.teacher_email,
-          show_correct_answers: true,
-          show_score_immediately: true,
+          show_correct_answers: publishSettings.showCorrectAnswers,
+          show_score_immediately: publishSettings.showScoreImmediately,
+          content_type: publishSettings.contentType,
+          allow_multiple_attempts: publishSettings.allowMultipleAttempts,
           period: publishSettings.period,
           restricted_students: restrictedStudents,
           student_accommodations: studentAccommodationsMap,
           time_limit_minutes: publishSettings.timeLimit,
+          due_date: publishSettings.dueDate || null,
+          available_from: publishSettings.availableFrom || null,
+          available_until: publishSettings.availableUntil || null,
         });
       }
 
@@ -15980,8 +16022,46 @@ ${signature}`;
           >
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
               <Icon name="Share2" size={24} style={{ color: "var(--accent-primary)" }} />
-              Publish
+              {'Publish ' + (publishSettings.contentType === 'assessment' ? 'Assessment' : 'Assignment')}
             </h2>
+
+            {/* Content Type Toggle */}
+            <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+              <button
+                onClick={() => handleContentTypeChange('assessment')}
+                style={{
+                  flex: 1,
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  border: publishSettings.contentType === 'assessment' ? "2px solid #8b5cf6" : "1px solid var(--glass-border)",
+                  background: publishSettings.contentType === 'assessment' ? "rgba(139, 92, 246, 0.2)" : "var(--glass-bg)",
+                  color: publishSettings.contentType === 'assessment' ? "#c4b5fd" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "0.95rem", marginBottom: "4px" }}>Assessment</div>
+                <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>Timed, single attempt, scores after review</div>
+              </button>
+              <button
+                onClick={() => handleContentTypeChange('assignment')}
+                style={{
+                  flex: 1,
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  border: publishSettings.contentType === 'assignment' ? "2px solid #22c55e" : "1px solid var(--glass-border)",
+                  background: publishSettings.contentType === 'assignment' ? "rgba(34, 197, 94, 0.2)" : "var(--glass-bg)",
+                  color: publishSettings.contentType === 'assignment' ? "#86efac" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "0.95rem", marginBottom: "4px" }}>Assignment</div>
+                <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>Due date, retakes allowed, instant MC scores</div>
+              </button>
+            </div>
 
             {/* Class Selection */}
             <div style={{ marginBottom: "15px" }}>
@@ -16032,7 +16112,8 @@ ${signature}`;
               </select>
             </div>)}
 
-            {/* Makeup Exam Toggle */}
+            {/* Makeup Exam Toggle — assessments only */}
+            {publishSettings.contentType === 'assessment' && (
             <div style={{ marginBottom: "20px" }}>
               <label
                 style={{
@@ -16060,6 +16141,7 @@ ${signature}`;
                 </div>
               </label>
             </div>
+            )}
 
             {/* Student Selection (only shown for makeup exams with a period selected) */}
             {publishSettings.isMakeup && publishSettings.periodFilename && (
@@ -16188,10 +16270,10 @@ ${signature}`;
               </div>
             )}
 
-            {/* Time Limit */}
+            {/* Timing — content-type aware */}
             <div style={{ marginBottom: "25px" }}>
               <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "0.95rem" }}>
-                Time Limit (Optional)
+                {'Time Limit' + (publishSettings.contentType === 'assessment' ? ' *' : ' (Optional)')}
               </label>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <input
@@ -16199,7 +16281,7 @@ ${signature}`;
                   min="0"
                   value={publishSettings.timeLimit || ''}
                   onChange={(e) => setPublishSettings({ ...publishSettings, timeLimit: e.target.value ? parseInt(e.target.value) : null })}
-                  placeholder="No limit"
+                  placeholder={publishSettings.contentType === 'assessment' ? "Required" : "No limit"}
                   style={{
                     width: "120px",
                     padding: "10px 12px",
@@ -16212,6 +16294,63 @@ ${signature}`;
                 />
                 <span style={{ color: "var(--text-secondary)" }}>minutes</span>
               </div>
+              {publishSettings.contentType === 'assessment' ? (
+                <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Available From</label>
+                    <input
+                      type="datetime-local"
+                      value={publishSettings.availableFrom}
+                      onChange={(e) => setPublishSettings({ ...publishSettings, availableFrom: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--glass-border)",
+                        background: "var(--surface)",
+                        color: "var(--text-primary)",
+                        fontSize: "0.85rem",
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Available Until</label>
+                    <input
+                      type="datetime-local"
+                      value={publishSettings.availableUntil}
+                      onChange={(e) => setPublishSettings({ ...publishSettings, availableUntil: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--glass-border)",
+                        background: "var(--surface)",
+                        color: "var(--text-primary)",
+                        fontSize: "0.85rem",
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginTop: "12px" }}>
+                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Due Date</label>
+                  <input
+                    type="datetime-local"
+                    value={publishSettings.dueDate}
+                    onChange={(e) => setPublishSettings({ ...publishSettings, dueDate: e.target.value })}
+                    style={{
+                      width: "100%",
+                      maxWidth: "250px",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--glass-border)",
+                      background: "var(--surface)",
+                      color: "var(--text-primary)",
+                      fontSize: "0.85rem",
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -16225,15 +16364,15 @@ ${signature}`;
               </button>
               <button
                 onClick={confirmPublishAssessment}
-                disabled={publishingAssessment || (publishSettings.isMakeup && publishSettings.selectedStudents.length === 0)}
+                disabled={publishingAssessment || (publishSettings.isMakeup && publishSettings.selectedStudents.length === 0) || (publishSettings.contentType === 'assessment' && !publishSettings.timeLimit)}
                 className="btn btn-primary"
                 style={{
                   padding: "10px 24px",
-                  background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+                  background: publishSettings.contentType === 'assignment' ? "linear-gradient(135deg, #22c55e, #16a34a)" : "linear-gradient(135deg, #8b5cf6, #6366f1)",
                 }}
               >
                 <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
-                {publishingAssessment ? "Publishing..." : "Publish"}
+                {publishingAssessment ? "Publishing..." : 'Publish ' + (publishSettings.contentType === 'assessment' ? 'Assessment' : 'Assignment')}
               </button>
             </div>
           </div>
