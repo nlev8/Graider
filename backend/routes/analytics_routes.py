@@ -555,26 +555,38 @@ def export_district_report():
     import json
     from datetime import datetime
 
-    # Get output folder and teacher info from settings
+    from flask import g
+
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    # Get teacher info from settings
     teacher_name = "Unknown Teacher"
     school_name = "Unknown School"
     subject = "Social Studies"
 
-    settings_file = os.path.expanduser("~/.graider_global_settings.json")
-    if os.path.exists(settings_file):
-        try:
-            with open(settings_file, 'r') as f:
-                settings = json.load(f)
-                teacher_name = settings.get('teacher_name', teacher_name)
-                school_name = settings.get('school_name', school_name)
-                subject = settings.get('subject', subject)
-        except Exception:
-            pass
+    # Try storage-based settings first (works for Clever/portal users)
+    try:
+        from backend.storage import load as storage_load
+        settings = storage_load("settings", teacher_id)
+        if settings:
+            teacher_name = settings.get("teacher_name", teacher_name)
+            school_name = settings.get("school_name", school_name)
+            subject = settings.get("subject", subject)
+    except Exception:
+        pass
 
-    master_file = _find_master_grades()
-
-    if not master_file:
-        return jsonify({"error": "No grading data available to export"})
+    # Fallback to local file settings
+    if teacher_name == "Unknown Teacher":
+        settings_file = os.path.expanduser("~/.graider_global_settings.json")
+        if os.path.exists(settings_file):
+            try:
+                with open(settings_file, 'r') as f:
+                    file_settings = json.load(f)
+                    teacher_name = file_settings.get('teacher_name', teacher_name)
+                    school_name = file_settings.get('school_name', school_name)
+                    subject = file_settings.get('subject', subject)
+            except Exception:
+                pass
 
     # Collect anonymized aggregate data
     all_grades = []
@@ -583,29 +595,53 @@ def export_district_report():
     quarters = defaultdict(list)
     categories = {"content": [], "completeness": [], "writing": [], "effort": []}
 
+    # Try results storage first (includes portal + file-based results)
     try:
-        with open(master_file, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                score = int(float(row.get("Overall Score", 0) or 0))
+        from backend.storage import load as storage_load
+        results = storage_load("results", teacher_id)
+        if results and isinstance(results, list):
+            for r in results:
+                score = int(r.get("score", 0) or 0)
                 all_grades.append(score)
-                students.add(row.get("Student ID", row.get("Student Name", "unknown")))
-
-                assignment = row.get("Assignment", "Unknown")
-                assignments[assignment].append(score)
-
-                quarter = row.get("Quarter", "")
+                students.add(r.get("student_id", r.get("student_name", "unknown")))
+                assignment_name = r.get("assignment", "Unknown")
+                assignments[assignment_name].append(score)
+                quarter = r.get("period", "")
                 if quarter:
                     quarters[quarter].append(score)
+                bd = r.get("breakdown", {})
+                categories["content"].append(int(bd.get("content_accuracy", 0) or 0))
+                categories["completeness"].append(int(bd.get("completeness", 0) or 0))
+                categories["writing"].append(int(bd.get("writing_quality", 0) or 0))
+                categories["effort"].append(int(bd.get("effort_engagement", 0) or 0))
+    except Exception:
+        pass
 
-                # Category scores
-                categories["content"].append(int(float(row.get("Content Accuracy", 0) or 0)))
-                categories["completeness"].append(int(float(row.get("Completeness", 0) or 0)))
-                categories["writing"].append(int(float(row.get("Writing Quality", 0) or 0)))
-                categories["effort"].append(int(float(row.get("Effort Engagement", 0) or 0)))
-    except Exception as e:
-        _logger.exception("Error reading grades")
-        return jsonify({"error": "An internal error occurred"}), 500
+    # Fall back to master_grades.csv if no results in storage
+    if not all_grades:
+        master_file = _find_master_grades()
+        if not master_file:
+            return jsonify({"error": "No grading data available to export"})
+
+        try:
+            with open(master_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    score = int(float(row.get("Overall Score", 0) or 0))
+                    all_grades.append(score)
+                    students.add(row.get("Student ID", row.get("Student Name", "unknown")))
+                    assignment_name = row.get("Assignment", "Unknown")
+                    assignments[assignment_name].append(score)
+                    quarter = row.get("Quarter", "")
+                    if quarter:
+                        quarters[quarter].append(score)
+                    categories["content"].append(int(float(row.get("Content Accuracy", 0) or 0)))
+                    categories["completeness"].append(int(float(row.get("Completeness", 0) or 0)))
+                    categories["writing"].append(int(float(row.get("Writing Quality", 0) or 0)))
+                    categories["effort"].append(int(float(row.get("Effort Engagement", 0) or 0)))
+        except Exception as e:
+            _logger.exception("Error reading grades")
+            return jsonify({"error": "An internal error occurred"}), 500
 
     if not all_grades:
         return jsonify({"error": "No grades found in data"})
