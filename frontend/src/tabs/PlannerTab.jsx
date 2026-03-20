@@ -812,7 +812,11 @@ export default React.memo(function PlannerTab({
   const [assessmentAnswers, setAssessmentAnswers] = useState({}); // Track interactive answers for preview
   const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
   const [gradingAssessment, setGradingAssessment] = useState(false);
-  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", or "calendar"
+  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", "calendar", "tools", or "assets"
+  const [assets, setAssets] = useState([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetsFilter, setAssetsFilter] = useState('all');
+  const [assetsSearch, setAssetsSearch] = useState('');
 
   // Reset edit state when assessment changes
   useEffect(() => {
@@ -949,6 +953,26 @@ export default React.memo(function PlannerTab({
       fetch('/api/calendar').then(r => r.json()).then(setCalendarData).catch(() => {})
     }
   }, [plannerMode])
+
+  // Fetch assets for Assets tab
+  const fetchAssets = async (filter) => {
+    setAssetsLoading(true);
+    try {
+      var typeFilter = filter && filter !== 'all' ? filter : undefined;
+      var data = await api.listResources(typeFilter);
+      setAssets(data.resources || []);
+    } catch (e) {
+      console.error("Failed to load assets:", e);
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (plannerMode === 'assets') {
+      fetchAssets(assetsFilter);
+    }
+  }, [plannerMode, assetsFilter]);
 
   // Calendar helper functions
   function loadCalendar() {
@@ -1172,6 +1196,8 @@ export default React.memo(function PlannerTab({
       } else {
         setLessonPlan(data.plan || data);
       }
+      // Auto-save to Assets library
+      try { api.saveResource(data.plan || data, 'lesson', (data.plan || data).title || 'Lesson Plan'); } catch(e) {}
       if (data.usage) addToast("Generation cost: " + data.usage.cost_display + " (" + data.usage.total_tokens.toLocaleString() + " tokens)", "info");
     } catch (e) {
       addToast("Error generating plan: " + e.message, "error");
@@ -1405,6 +1431,8 @@ export default React.memo(function PlannerTab({
           data.assessment.time_limit = match ? parseInt(match[1]) : null;
         }
         setGeneratedAssessment(data.assessment);
+        // Auto-save to Assets library
+        try { api.saveResource(data.assessment, 'assessment', data.assessment.title || 'Assessment'); } catch(e) {}
         setAssessmentAnswers({}); // Clear previous answers
         addToast("Assessment generated successfully!", "success");
         if (data.usage) addToast("Generation cost: " + data.usage.cost_display + " (" + data.usage.total_tokens.toLocaleString() + " tokens)", "info");
@@ -1841,6 +1869,8 @@ export default React.memo(function PlannerTab({
       }
       if (data.assignment) {
         setGeneratedAssignment(data.assignment);
+        // Auto-save to Assets library
+        try { api.saveResource(data.assignment, 'assignment', data.assignment.title || 'Assignment'); } catch(e) {}
         addToast(
           `${assignmentType.charAt(0).toUpperCase() + assignmentType.slice(1)} generated from lesson!`,
           "success",
@@ -2229,6 +2259,31 @@ export default React.memo(function PlannerTab({
                     >
                       <Icon name="Wrench" size={18} />
                       Tools
+                    </button>
+                    <button
+                      onClick={() => setPlannerMode("assets")}
+                      style={{
+                        padding: "10px 20px",
+                        cursor: "pointer",
+                        fontSize: "0.9rem",
+                        background:
+                          plannerMode === "assets"
+                            ? "linear-gradient(135deg, #f59e0b, #d97706)"
+                            : "var(--glass-bg)",
+                        border:
+                          plannerMode === "assets"
+                            ? "none"
+                            : "1px solid var(--glass-border)",
+                        color: plannerMode === "assets" ? "#fff" : "var(--text-secondary)",
+                        fontWeight: 600,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Icon name="FolderOpen" size={18} />
+                      Assets
                     </button>
                   </div>
 
@@ -7602,6 +7657,212 @@ export default React.memo(function PlannerTab({
                             )}
                           </>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Assets Mode */}
+                  {plannerMode === "assets" && (
+                    <div className="glass-card" style={{ padding: "25px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                        <h2 style={{ fontSize: "1.3rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
+                          <Icon name="FolderOpen" size={24} style={{ color: "#f59e0b" }} />
+                          My Resources
+                        </h2>
+                        <button onClick={() => fetchAssets(assetsFilter)} className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: "0.85rem" }}>
+                          <Icon name="RefreshCw" size={14} /> Refresh
+                        </button>
+                      </div>
+
+                      {/* Filter buttons */}
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+                        {["all", "assessment", "assignment", "lesson"].map(function(filterType) {
+                          var labels = { all: "All", assessment: "Assessments", assignment: "Assignments", lesson: "Lessons" };
+                          return (
+                            <button
+                              key={filterType}
+                              onClick={function() { setAssetsFilter(filterType); }}
+                              className="btn btn-secondary"
+                              style={{
+                                padding: "6px 14px",
+                                fontSize: "0.85rem",
+                                background: assetsFilter === filterType ? "rgba(245,158,11,0.2)" : undefined,
+                                border: assetsFilter === filterType ? "1px solid rgba(245,158,11,0.4)" : undefined,
+                                fontWeight: assetsFilter === filterType ? 600 : 400,
+                              }}
+                            >
+                              {labels[filterType]}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Search */}
+                      <input
+                        type="text"
+                        value={assetsSearch}
+                        onChange={function(e) { setAssetsSearch(e.target.value); }}
+                        placeholder="Search resources..."
+                        className="input"
+                        style={{ marginBottom: "20px", width: "100%" }}
+                      />
+
+                      {/* Loading */}
+                      {assetsLoading && (
+                        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                          <Icon name="Loader2" size={24} style={{ animation: "spin 1s linear infinite" }} /> Loading...
+                        </div>
+                      )}
+
+                      {/* Resource list */}
+                      {!assetsLoading && assets.filter(function(a) {
+                        if (!assetsSearch) return true;
+                        return (a.title || '').toLowerCase().indexOf(assetsSearch.toLowerCase()) !== -1;
+                      }).length === 0 && (
+                        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                          {assets.length === 0 ? "No saved resources yet. Generate an assessment or assignment to get started." : "No resources match your search."}
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {assets.filter(function(a) {
+                          if (!assetsSearch) return true;
+                          return (a.title || '').toLowerCase().indexOf(assetsSearch.toLowerCase()) !== -1;
+                        }).map(function(asset) {
+                          var typeColors = {
+                            assessment: { bg: "rgba(139,92,246,0.15)", border: "rgba(139,92,246,0.3)", text: "#a78bfa" },
+                            assignment: { bg: "rgba(34,197,94,0.15)", border: "rgba(34,197,94,0.3)", text: "#4ade80" },
+                            lesson: { bg: "rgba(59,130,246,0.15)", border: "rgba(59,130,246,0.3)", text: "#60a5fa" },
+                          };
+                          var colors = typeColors[asset.content_type] || typeColors.assessment;
+
+                          return (
+                            <div
+                              key={asset.id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "14px 18px",
+                                background: "var(--glass-bg)",
+                                borderRadius: "10px",
+                                border: "1px solid var(--glass-border)",
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                                <span style={{
+                                  padding: "3px 10px",
+                                  borderRadius: "12px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 600,
+                                  background: colors.bg,
+                                  border: "1px solid " + colors.border,
+                                  color: colors.text,
+                                }}>
+                                  {(asset.content_type || 'resource').charAt(0).toUpperCase() + (asset.content_type || 'resource').slice(1)}
+                                </span>
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{asset.title}</div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                    {asset.updated_at ? new Date(asset.updated_at).toLocaleDateString() : ''}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <button
+                                  onClick={async function() {
+                                    try {
+                                      var data = await api.loadResource(asset.id);
+                                      if (data.resource && data.resource.content) {
+                                        var content = data.resource.content;
+                                        var type = data.resource.content_type;
+                                        // Clear conflicting state before setting
+                                        if (type === 'assessment') {
+                                          setGeneratedAssignment(null);
+                                          setLessonPlan(null);
+                                          setGeneratedAssessment(content);
+                                          setPlannerMode('assessment');
+                                        } else if (type === 'assignment') {
+                                          setGeneratedAssessment(null);
+                                          setLessonPlan(null);
+                                          setGeneratedAssignment(content);
+                                          setPlannerMode('lesson');
+                                        } else {
+                                          setGeneratedAssessment(null);
+                                          setGeneratedAssignment(null);
+                                          setLessonPlan(content);
+                                          setPlannerMode('lesson');
+                                        }
+                                        addToast("Loaded: " + asset.title, "success");
+                                      }
+                                    } catch(e) {
+                                      addToast("Failed to load resource", "error");
+                                    }
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ padding: "5px 10px", fontSize: "0.8rem" }}
+                                  title="Load into editor"
+                                >
+                                  <Icon name="Download" size={14} /> Load
+                                </button>
+                                <button
+                                  onClick={async function() {
+                                    try {
+                                      var data = await api.loadResource(asset.id);
+                                      if (data.resource && data.resource.content) {
+                                        var content = data.resource.content;
+                                        var type = data.resource.content_type;
+                                        // Clear conflicting state and set content for publish
+                                        if (type === 'lesson') {
+                                          addToast("Publish is not available for lesson plans", "info");
+                                          return;
+                                        }
+                                        setGeneratedAssignment(null);
+                                        setLessonPlan(null);
+                                        setGeneratedAssessment(null);
+                                        if (type === 'assignment') {
+                                          setGeneratedAssignment(content);
+                                        } else {
+                                          setGeneratedAssessment(content);
+                                        }
+                                        setPublishSettings(function(prev) { return Object.assign({}, prev, { timeLimit: content.time_limit || null }); });
+                                        setShowPublishModal(true);
+                                        addToast("Publishing: " + asset.title, "info");
+                                      }
+                                    } catch(e) {
+                                      addToast("Failed to load resource for publish", "error");
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ padding: "5px 10px", fontSize: "0.8rem" }}
+                                  title="Publish to student portal"
+                                >
+                                  <Icon name="Share2" size={14} /> Publish
+                                </button>
+                                <button
+                                  onClick={async function() {
+                                    if (!confirm("Delete this resource?")) return;
+                                    try {
+                                      await api.deleteResource(asset.id);
+                                      setAssets(function(prev) { return prev.filter(function(a) { return a.id !== asset.id; }); });
+                                      addToast("Resource deleted", "info");
+                                    } catch(e) {
+                                      addToast("Failed to delete resource", "error");
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "5px 10px", fontSize: "0.8rem", background: "rgba(239,68,68,0.1)",
+                                    border: "1px solid rgba(239,68,68,0.3)", borderRadius: "6px",
+                                    color: "#fca5a5", cursor: "pointer",
+                                  }}
+                                  title="Delete resource"
+                                >
+                                  <Icon name="Trash2" size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
