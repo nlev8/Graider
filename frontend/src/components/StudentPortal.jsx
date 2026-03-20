@@ -27,15 +27,30 @@ const Icon = ({ name, size = 20, style = {} }) => {
   );
 };
 
-export default function StudentPortal() {
-  // URL path parsing
+export default function StudentPortal({
+  preloadedAssessment = null,
+  preloadedStudentName = "",
+  contentId = null,
+  studentToken = null,
+  onBack = null,
+  preloadedSettings = null,
+} = {}) {
+  // URL path parsing (join-code path only)
   const pathParts = window.location.pathname.split("/");
   const urlCode = pathParts[2] || ""; // /join/ABC123 -> ABC123
 
-  const [stage, setStage] = useState(urlCode ? "loading" : "join"); // join, loading, assessment, results
+  // Determine initial state based on whether content was preloaded (Clever/class path)
+  const isPreloaded = !!preloadedAssessment;
+  const [stage, setStage] = useState(
+    isPreloaded ? "assessment" : (urlCode ? "loading" : "join")
+  );
   const [joinCode, setJoinCode] = useState(urlCode.toUpperCase());
-  const [studentName, setStudentName] = useState("");
-  const [assessment, setAssessment] = useState(null);
+  const [studentName, setStudentName] = useState(preloadedStudentName || "");
+  const [assessment, setAssessment] = useState(preloadedAssessment ? {
+    ...preloadedAssessment,
+    settings: preloadedSettings || preloadedAssessment.settings || {},
+    student_accommodations: (preloadedSettings || {}).student_accommodations || {},
+  } : null);
   const [answers, setAnswers] = useState({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,12 +58,19 @@ export default function StudentPortal() {
   const [results, setResults] = useState(null);
   const [studentAccommodation, setStudentAccommodation] = useState(null);
 
-  // Load assessment if URL has code
+  // Load assessment if URL has code (join-code path)
   useEffect(() => {
     if (urlCode && stage === "loading") {
       loadAssessment(urlCode);
     }
   }, [urlCode]);
+
+  // Start timer immediately for preloaded (Clever/class) path
+  useEffect(() => {
+    if (isPreloaded && !startTime) {
+      setStartTime(Date.now());
+    }
+  }, [isPreloaded]);
 
   const loadAssessment = async (code) => {
     setLoading(true);
@@ -122,12 +144,27 @@ export default function StudentPortal() {
     setError("");
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
     try {
-      const data = await api.submitStudentAssessment(
-        joinCode,
-        studentName,
-        answers,
-        timeTaken
-      );
+      var data;
+      if (isPreloaded && contentId && studentToken) {
+        // Class-based submission (Clever/authenticated student)
+        var response = await fetch("/api/student/submit/" + contentId, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Student-Token": studentToken,
+          },
+          body: JSON.stringify({ answers: answers, time_taken_seconds: timeTaken }),
+        });
+        data = await response.json();
+      } else {
+        // Join-code submission (anonymous)
+        data = await api.submitStudentAssessment(
+          joinCode,
+          studentName,
+          answers,
+          timeTaken
+        );
+      }
       if (data.error) {
         setError(data.error);
         if (data.previous_results) {
@@ -704,10 +741,10 @@ export default function StudentPortal() {
           {/* Done Button */}
           <div style={{ textAlign: "center", padding: "30px 0" }}>
             <button
-              onClick={() => (window.location.href = "/join")}
+              onClick={() => onBack ? onBack() : (window.location.href = "/join")}
               style={{ ...buttonStyle, maxWidth: "300px", margin: "0 auto" }}
             >
-              Take Another Assessment
+              {onBack ? "Back to Dashboard" : "Take Another Assessment"}
             </button>
           </div>
         </div>

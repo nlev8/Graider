@@ -57,6 +57,7 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
         preloadedStudentName={activeContent.studentName}
         contentId={activeContent.content_id}
         studentToken={token}
+        preloadedSettings={activeContent.settings}
         onBack={() => { setActiveContent(null); loadDashboard(); }}
       />
     );

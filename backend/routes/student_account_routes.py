@@ -705,17 +705,24 @@ def get_student_content(content_id):
         item = result.data[0]
         content = item['content']
 
-        # Strip answer keys
+        # Strip answer keys and normalize question types
+        def _sanitize_question(q):
+            q.pop('correct_answer', None)
+            q.pop('answer', None)
+            q.pop('rubric', None)
+            q.pop('expected_answer', None)
+            q.pop('answer_key', None)
+            # Normalize question_type → type for frontend consistency
+            if not q.get('type') and q.get('question_type'):
+                q['type'] = q['question_type']
+
         if 'questions' in content:
             for q in content['questions']:
-                q.pop('correct_answer', None)
-                q.pop('answer', None)
-                q.pop('rubric', None)
-                q.pop('expected_answer', None)
-                q.pop('answer_key', None)
-                if q.get('question_type') in ('matching', 'drag_drop', 'ordering'):
-                    if 'options' in q and isinstance(q['options'], list):
-                        random.shuffle(q['options'])
+                _sanitize_question(q)
+        if 'sections' in content:
+            for section in content.get('sections', []):
+                for q in section.get('questions', []):
+                    _sanitize_question(q)
 
         return jsonify({
             "content_id": item['id'],
