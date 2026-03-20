@@ -467,81 +467,85 @@ def grade_portal_submission():
 
         assessment = content.data[0]['content']
         student_answers = submission.get('answers', {})
-        questions = assessment.get('questions', [])
 
-        # Auto-grade each question
-        total_points = 0
-        earned_points = 0
-        graded_results = []
+        # Use the portal grading service for consistent grading
+        from backend.services.portal_grading import has_written_questions, run_portal_grading_thread
+        from backend.routes.student_portal_routes import grade_instant_only, grade_student_submission
 
-        for i, q in enumerate(questions):
-            q_points = q.get('points', 1)
-            total_points += q_points
-            student_ans = student_answers.get(str(i), student_answers.get(str(i + 1), ''))
-            correct_ans = q.get('correct_answer', q.get('answer', ''))
-            q_type = q.get('question_type', 'short_answer')
+        needs_multipass = has_written_questions(assessment)
 
-            points_earned = 0
+        if needs_multipass:
+            instant_results = grade_instant_only(assessment, student_answers)
+        else:
+            instant_results = grade_student_submission(assessment, student_answers)
 
-            if q_type == 'multiple_choice':
-                if str(student_ans).strip().lower() == str(correct_ans).strip().lower():
-                    points_earned = q_points
-            elif q_type == 'true_false':
-                if str(student_ans).strip().lower() == str(correct_ans).strip().lower():
-                    points_earned = q_points
-            elif q_type == 'matching':
-                if isinstance(student_ans, dict) and isinstance(correct_ans, dict):
-                    correct_count = sum(1 for k, v in correct_ans.items()
-                                        if student_ans.get(k, '').strip().lower() == v.strip().lower())
-                    if correct_ans:
-                        points_earned = round(q_points * correct_count / len(correct_ans), 1)
-            elif q_type in ('fill_in_blank', 'fitb'):
-                if str(student_ans).strip().lower() == str(correct_ans).strip().lower():
-                    points_earned = q_points
-            else:
-                # Short answer / written — mark as needs_review for teacher
-                points_earned = 0  # Teacher reviews these
-
-            earned_points += points_earned
-            graded_results.append({
-                'question_index': i,
-                'question_text': q.get('question_text', q.get('question', '')),
-                'student_answer': student_ans,
-                'correct_answer': correct_ans,
-                'points_earned': points_earned,
-                'points_possible': q_points,
-                'auto_graded': q_type in ('multiple_choice', 'true_false', 'matching', 'fill_in_blank', 'fitb'),
-            })
-
-        percentage = round((earned_points / total_points * 100) if total_points > 0 else 0, 1)
-        letter_grade = (
-            'A' if percentage >= 90 else
-            'B' if percentage >= 80 else
-            'C' if percentage >= 70 else
-            'D' if percentage >= 60 else 'F'
-        )
-
-        # Update the submission with grading results
-        db.table('student_submissions').update({
-            'results': graded_results,
-            'score': earned_points,
-            'total_points': total_points,
-            'percentage': percentage,
-            'letter_grade': letter_grade,
-            'status': 'graded',
+        # Update submission with instant results
+        update_data = {
+            'results': instant_results,
+            'status': 'partial' if needs_multipass else 'graded',
             'graded_at': datetime.now(tz=timezone.utc).isoformat(),
-        }).eq('id', submission_id).execute()
+        }
+        if not needs_multipass:
+            update_data['score'] = instant_results.get('score')
+            update_data['total_points'] = instant_results.get('total_points')
+            update_data['percentage'] = instant_results.get('percentage')
 
-        needs_review = [r for r in graded_results if not r['auto_graded']]
+        db.table('student_submissions').update(update_data).eq('id', submission_id).execute()
+
+        # Spawn multipass for written questions
+        if needs_multipass:
+            student_name = submission.get('student_name', '')
+            student_id_number = submission.get('student_id_number', '')
+
+            teacher_config = {
+                "global_ai_notes": "",
+                "grade_level": "",
+                "subject": "",
+                "grading_style": "standard",
+                "rubric": None,
+                "ai_model": "gpt-4o-mini",
+                "period": submission.get('period', ''),
+            }
+            try:
+                from backend.storage import load as storage_load
+                settings = storage_load("settings", teacher_id)
+                if settings:
+                    teacher_config["global_ai_notes"] = settings.get("global_ai_notes", "")
+                    teacher_config["grade_level"] = settings.get("grade_level", "")
+                    teacher_config["subject"] = settings.get("subject", "")
+                rubric_data = storage_load("rubric", teacher_id)
+                if rubric_data:
+                    teacher_config["rubric"] = rubric_data
+                    teacher_config["grading_style"] = rubric_data.get("gradingStyle", "standard")
+            except Exception:
+                pass
+
+            import threading
+            thread = threading.Thread(
+                target=run_portal_grading_thread,
+                args=(
+                    submission_id,
+                    assessment,
+                    student_answers,
+                    {"student_name": student_name, "student_id": student_id_number, "email": ""},
+                    teacher_config,
+                    teacher_id,
+                    "student_submissions",
+                ),
+                daemon=True,
+            )
+            thread.start()
+
+        needs_review = sum(1 for q in instant_results.get('questions', []) if q.get('status') == 'pending_review')
 
         return jsonify({
             "success": True,
-            "score": earned_points,
-            "total_points": total_points,
-            "percentage": percentage,
-            "letter_grade": letter_grade,
-            "results": graded_results,
-            "needs_review": len(needs_review),
+            "score": instant_results.get('score', 0),
+            "total_points": instant_results.get('total_points', 0),
+            "percentage": instant_results.get('percentage', 0),
+            "results": instant_results.get('questions', []),
+            "needs_review": needs_review,
+            "grading_status": "partial" if needs_multipass else "complete",
         })
     except Exception as e:
         _logger.exception("Request failed: %s", request.path)
