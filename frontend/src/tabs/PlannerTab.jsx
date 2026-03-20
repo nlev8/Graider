@@ -1479,19 +1479,20 @@ export default React.memo(function PlannerTab({
     }
   };
 
-  // Open publish modal for assessment
+  // Open publish modal for assessment or assignment
   const publishAssessmentHandler = () => {
-    if (!generatedAssessment) {
-      addToast("No assessment to publish", "warning");
+    var content = getActiveAssignment();
+    if (!content) {
+      addToast("No content to publish", "warning");
       return;
     }
-    // Reset publish settings, pre-fill time limit from assessment
+    // Reset publish settings, pre-fill time limit from content
     setPublishSettings({
       period: '',
       periodFilename: '',
       isMakeup: false,
       selectedStudents: [],
-      timeLimit: generatedAssessment.time_limit || null,
+      timeLimit: content.time_limit || null,
       applyAccommodations: true,
     });
     setPublishModalStudents([]);
@@ -1518,9 +1519,10 @@ export default React.memo(function PlannerTab({
     }
   };
 
-  // Confirm and publish assessment with settings
+  // Confirm and publish assessment or assignment with settings
   const confirmPublishAssessment = async () => {
-    if (!generatedAssessment) return;
+    var contentToPublish = getActiveAssignment();
+    if (!contentToPublish) return;
 
     setPublishingAssessment(true);
     try {
@@ -1542,7 +1544,7 @@ export default React.memo(function PlannerTab({
         restrictedStudents = publishSettings.selectedStudents;
       }
 
-      const data = await api.publishAssessmentToPortal(generatedAssessment, {
+      const data = await api.publishAssessmentToPortal(contentToPublish, {
         teacher_name: config.teacher_name || "Teacher",
         teacher_email: config.teacher_email,
         show_correct_answers: true,
@@ -1562,7 +1564,7 @@ export default React.memo(function PlannerTab({
           joinCode: data.join_code,
           joinLink: data.join_link,
         });
-        addToast("Assessment published to student portal!", "success");
+        addToast("Published to student portal!", "success");
         // Refresh published assessments list
         fetchPublishedAssessments();
       }
@@ -3318,6 +3320,15 @@ export default React.memo(function PlannerTab({
                                 title="Save for use in assessment generation"
                               >
                                 <Icon name="FolderPlus" size={16} /> Save to Unit
+                              </button>
+                              <button
+                                onClick={publishAssessmentHandler}
+                                disabled={publishingAssessment}
+                                className="btn"
+                                style={{ padding: "8px 16px", background: "linear-gradient(135deg, #8b5cf6, #6366f1)" }}
+                              >
+                                <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
+                                {publishingAssessment ? "Publishing..." : "Publish to Portal"}
                               </button>
                               {/* Hide Create Assignment when already viewing an assignment or project (but show for lesson plans even if they have sections) */}
                               {(!lessonPlan.sections || lessonPlan.days) && !lessonPlan.phases && (
@@ -5957,13 +5968,16 @@ export default React.memo(function PlannerTab({
                                         <MatchingCards
                                           terms={q.terms}
                                           definitions={q.definitions}
+                                          correctAnswer={q.answer}
                                           showAnswers={previewShowAnswers}
-                                          onMatch={function(matches) {
+                                          onMatch={function(matches, shuffledDefs) {
                                             var newAnswers = Object.assign({}, assessmentAnswers);
                                             Object.entries(matches).forEach(function(entry) {
                                               var tIdx = entry[0];
+                                              var sdIdx = entry[1];
+                                              var originalIdx = shuffledDefs && shuffledDefs[sdIdx] ? shuffledDefs[sdIdx].originalIdx : sdIdx;
                                               var matchKey = sIdx + "-" + qIdx + "-match-" + tIdx;
-                                              newAnswers[matchKey] = String.fromCharCode(65 + parseInt(tIdx));
+                                              newAnswers[matchKey] = String.fromCharCode(65 + originalIdx);
                                             });
                                             setAssessmentAnswers(newAnswers);
                                           }}

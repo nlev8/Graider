@@ -517,12 +517,17 @@ export default function StudentPortal() {
                       <MatchingCards
                         terms={q.terms}
                         definitions={q.definitions}
-                        onMatch={function(matches) {
+                        correctAnswer={q.answer}
+                        onMatch={function(matches, shuffledDefs) {
                           // Store matches as letter answers for grading compatibility
+                          // matches is { termIdx: shuffledDefIdx }
+                          // Convert shuffled index back to original definition index for grading
                           Object.entries(matches).forEach(function(entry) {
                             var tIdx = entry[0];
+                            var sdIdx = entry[1];
+                            var originalIdx = shuffledDefs && shuffledDefs[sdIdx] ? shuffledDefs[sdIdx].originalIdx : sdIdx;
                             var matchKey = sIdx + "-" + qIdx + "-match-" + tIdx;
-                            setAnswer(matchKey, String.fromCharCode(65 + parseInt(tIdx)));
+                            setAnswer(matchKey, String.fromCharCode(65 + originalIdx));
                           });
                         }}
                       />

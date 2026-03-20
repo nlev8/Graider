@@ -19,6 +19,7 @@ import React, { useState, useMemo, useEffect } from "react";
 export default function MatchingCards({
   terms = [],
   definitions = [],
+  correctAnswer = null,
   onMatch,
   readOnly = false,
   showAnswers = false,
@@ -55,9 +56,10 @@ export default function MatchingCards({
     if (showAnswers && terms.length > 0) {
       var allMatched = {};
       terms.forEach(function(_, tIdx) {
-        // Find the shuffled index that maps to this term's definition
+        // Find the shuffled index that maps to this term's correct definition
+        var expectedDefIdx = correctDefForTerm[tIdx];
         shuffledDefs.forEach(function(sd, sdIdx) {
-          if (sd.originalIdx === tIdx) {
+          if (sd.originalIdx === expectedDefIdx) {
             allMatched[tIdx] = sdIdx;
           }
         });
@@ -100,10 +102,62 @@ export default function MatchingCards({
     }
   }
 
+  // Build a lookup: for each term, which original definition index is correct?
+  var correctDefForTerm = useMemo(function() {
+    var lookup = {};
+    if (correctAnswer && typeof correctAnswer === "object" && !Array.isArray(correctAnswer)) {
+      // Dict format: { "Term": "B" } or { "Term": "definition text" }
+      terms.forEach(function(term, tIdx) {
+        var val = correctAnswer[term];
+        if (!val) return;
+        // If value is a single letter like "A", "B", map to definition index
+        if (val.length === 1 && val >= "A" && val <= "Z") {
+          lookup[tIdx] = val.charCodeAt(0) - 65;
+        } else {
+          // Value is the definition text — find its index
+          definitions.forEach(function(d, dIdx) {
+            if (d === val || d.replace(/^[A-Z]\)\s*/, "") === val) {
+              lookup[tIdx] = dIdx;
+            }
+          });
+        }
+      });
+    } else if (Array.isArray(correctAnswer)) {
+      // Array format: ["Term: definition", "Term - definition"]
+      correctAnswer.forEach(function(entry) {
+        var parts = entry.split(/\s*[-:]\s*/);
+        if (parts.length >= 2) {
+          var answerTerm = parts[0].trim();
+          var answerDef = parts.slice(1).join(" - ").trim();
+          var tIdx = terms.indexOf(answerTerm);
+          if (tIdx === -1) {
+            // Try case-insensitive
+            terms.forEach(function(t, i) {
+              if (t.toLowerCase() === answerTerm.toLowerCase()) tIdx = i;
+            });
+          }
+          if (tIdx !== -1) {
+            definitions.forEach(function(d, dIdx) {
+              if (d === answerDef || d.startsWith(answerDef.substring(0, 30))) {
+                lookup[tIdx] = dIdx;
+              }
+            });
+          }
+        }
+      });
+    }
+    // Fallback: if no correctAnswer provided, assume terms[i] matches definitions[i]
+    if (Object.keys(lookup).length === 0) {
+      terms.forEach(function(_, i) { lookup[i] = i; });
+    }
+    return lookup;
+  }, [terms.join("|||"), definitions.join("|||"), JSON.stringify(correctAnswer)]);
+
   function tryMatch(tIdx, sdIdx) {
     var defOriginalIdx = shuffledDefs[sdIdx].originalIdx;
+    var expectedDefIdx = correctDefForTerm[tIdx];
 
-    if (defOriginalIdx === tIdx) {
+    if (defOriginalIdx === expectedDefIdx) {
       // Correct match!
       setJustMatched({ term: tIdx, def: sdIdx });
       setTimeout(function() {
@@ -114,7 +168,7 @@ export default function MatchingCards({
         setSelectedTerm(null);
         setSelectedDef(null);
         if (onMatch) {
-          onMatch(newMatched);
+          onMatch(newMatched, shuffledDefs);
         }
       }, 600);
     } else {

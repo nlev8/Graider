@@ -590,13 +590,6 @@ def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=No
                     'severity': 'error',
                 })
 
-    # CHECK 16: Missing standard field (required for subject enforcement)
-    if valid_standard_codes and not q.get('standard'):
-        issues.append({
-            'issue': 'Missing standard code — cannot verify subject alignment',
-            'severity': 'warning',
-        })
-
     return issues
 
 
@@ -4085,6 +4078,50 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 3600)  # 2.5 inches
 
+            elif q.get('terms') and q.get('definitions'):
+                # Matching: two-column layout with draw-a-line instruction
+                if not visual_dict:
+                    q_para = doc.add_paragraph()
+                    q_para.add_run(f"{q_number}. ").bold = True
+                    q_para.add_run(q_text)
+                    if q_points:
+                        run = q_para.add_run(f" ({q_points} pts)")
+                        run.italic = True
+
+                inst_para = doc.add_paragraph()
+                inst_para.add_run("Directions: ").bold = True
+                inst_para.add_run("Draw a line from each term to its matching definition.")
+                inst_para.italic = True
+
+                terms = q.get('terms', [])
+                definitions = q.get('definitions', [])
+                max_len = max(len(terms), len(definitions))
+
+                tbl = doc.add_table(rows=max_len + 1, cols=3)
+                tbl.style = 'Table Grid'
+
+                # Header row
+                tbl.rows[0].cells[0].text = "Term"
+                tbl.rows[0].cells[1].text = ""
+                tbl.rows[0].cells[2].text = "Definition"
+                for cell in tbl.rows[0].cells:
+                    for paragraph in cell.paragraphs:
+                        for run_obj in paragraph.runs:
+                            run_obj.bold = True
+
+                # Set narrow middle column
+                for row in tbl.rows:
+                    row.cells[1].width = Inches(0.5)
+
+                for i in range(max_len):
+                    if i < len(terms):
+                        tbl.rows[i + 1].cells[0].text = f"{i + 1}. {terms[i]}"
+                    if i < len(definitions):
+                        letter_char = chr(65 + i)
+                        tbl.rows[i + 1].cells[2].text = f"{letter_char}. {definitions[i]}"
+
+                doc.add_paragraph()  # Space after table
+
             elif q_type in ('essay', 'extended_response'):
                 if not visual_dict:
                     _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts)",
@@ -5664,23 +5701,45 @@ def export_assessment():
                                        graider_style, 720)  # 0.5 inch
 
                 elif q.get('terms') and q.get('definitions'):
-                    # Matching: render terms/defs as paragraphs, then Graider table
+                    # Matching: two-column table with draw-a-line instruction
                     q_para = doc.add_paragraph()
                     q_para.add_run(f"{q_num}. ").bold = True
                     q_para.add_run(f"{q_text} ")
                     q_para.add_run(f"({q_points} pt{'s' if q_points > 1 else ''})").italic = True
 
-                    doc.add_paragraph("Terms:")
-                    for i, term in enumerate(q.get('terms', []), 1):
-                        doc.add_paragraph(f"    {i}. {term}")
-                    doc.add_paragraph("Definitions:")
-                    for letter_idx, defn in enumerate(q.get('definitions', [])):
-                        letter_char = chr(65 + letter_idx)  # A, B, C...
-                        doc.add_paragraph(f"    {letter_char}. {defn}")
+                    inst_para = doc.add_paragraph()
+                    inst_para.add_run("Directions: ").bold = True
+                    inst_para.add_run("Draw a line from each term to its matching definition.")
+                    inst_para.italic = True
 
-                    _add_graider_table(doc, f"Matching Answers for Question {q_num}",
-                                       f"GRAIDER:QUESTION:{q_num}", q_points,
-                                       graider_style, 1440)  # 1 inch
+                    terms = q.get('terms', [])
+                    definitions = q.get('definitions', [])
+                    max_len = max(len(terms), len(definitions))
+
+                    tbl = doc.add_table(rows=max_len + 1, cols=3)
+                    tbl.style = 'Table Grid'
+
+                    # Header row
+                    tbl.rows[0].cells[0].text = "Term"
+                    tbl.rows[0].cells[1].text = ""
+                    tbl.rows[0].cells[2].text = "Definition"
+                    for cell in tbl.rows[0].cells:
+                        for paragraph in cell.paragraphs:
+                            for run_obj in paragraph.runs:
+                                run_obj.bold = True
+
+                    # Set narrow middle column for drawing lines
+                    for row in tbl.rows:
+                        row.cells[1].width = Inches(0.5)
+
+                    for i in range(max_len):
+                        if i < len(terms):
+                            tbl.rows[i + 1].cells[0].text = f"{i + 1}. {terms[i]}"
+                        if i < len(definitions):
+                            letter_char = chr(65 + i)
+                            tbl.rows[i + 1].cells[2].text = f"{letter_char}. {definitions[i]}"
+
+                    doc.add_paragraph()  # Space after table
 
                 elif q_type == 'extended_response':
                     # Extended response: Graider table with 3" height

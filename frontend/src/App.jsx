@@ -823,6 +823,8 @@ function App() {
         'token_exchange_failed': 'Could not complete login with Clever. Please try again.',
         'user_fetch_failed': 'Could not retrieve your account information from Clever.',
         'students_use_portal': 'Student accounts should use the student portal, not the teacher login.',
+        'student_not_enrolled': 'Your account was not found. Ask your teacher to sync the class roster.',
+        'unsupported_role': 'This account type is not supported.',
       };
       var friendlyMsg = cleverErrorMessages[cleverError] || ('Clever login failed: ' + cleverError);
       // Store error so LoginScreen can display it
@@ -1382,14 +1384,8 @@ function App() {
   const [skipVerified, setSkipVerified] = useState(false); // When true, regrade ALL including verified
   const [excludeGradedStudents, setExcludeGradedStudents] = useState(false); // Exclude students already in results
   const [excludeApprovedStudents, setExcludeApprovedStudents] = useState(false); // Exclude students already approved
-  const [autoGrade, setAutoGrade] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
-  const [watchStatus, setWatchStatus] = useState({
-    watching: false,
-    lastCheck: null,
-    newFiles: 0,
-  });
 
   // Fetch portal submissions for Results tab
   useEffect(() => {
@@ -1956,6 +1952,8 @@ function App() {
   const [editingEvent, setEditingEvent] = useState(null)
   const [quickAddForm, setQuickAddForm] = useState({ title: '', unit: '', color: '#6366f1' })
   const [publishingAssessment, setPublishingAssessment] = useState(false);
+  const [teacherClasses, setTeacherClasses] = useState([]);
+  const [publishClassId, setPublishClassId] = useState('');
   const [publishedAssessmentModal, setPublishedAssessmentModal] = useState({ show: false, joinCode: "", joinLink: "" });
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
@@ -2439,62 +2437,6 @@ function App() {
     }
   }, [gradeFilterStudent, config.assignments_folder]);
 
-  // Auto-grade watcher
-  useEffect(() => {
-    if (!autoGrade) return;
-    const watchInterval = setInterval(async () => {
-      if (status.is_running) return;
-      try {
-        const data = await api.checkNewFiles(
-          config.assignments_folder,
-          config.output_folder,
-        );
-        setWatchStatus({
-          watching: true,
-          lastCheck: new Date().toLocaleTimeString(),
-          newFiles: data.new_files || 0,
-        });
-        if (data.new_files > 0 && !status.is_running) {
-          // Load files and filter by period before auto-grading
-          const filesData = await api.listFiles(config.assignments_folder);
-          if (filesData.files) {
-            let filesToGrade = filesData.files.filter((f) => !f.graded);
-
-            // Filter by period if one is selected
-            if (selectedPeriod && periodStudents.length > 0) {
-              filesToGrade = filesToGrade.filter((f) =>
-                fileMatchesPeriodStudent(f.name, periodStudents),
-              );
-            }
-
-            if (filesToGrade.length > 0) {
-              // Update selected files and start grading
-              const fileNames = filesToGrade.map((f) => f.name);
-              setSelectedFiles(fileNames);
-              setAvailableFiles(filesData.files);
-              // Small delay to ensure state updates before grading starts
-              setTimeout(() => handleStartGrading(), 100);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Watch error:", e);
-      }
-    }, 10000);
-    setWatchStatus({ watching: true, lastCheck: "Starting...", newFiles: 0 });
-    return () => {
-      clearInterval(watchInterval);
-      setWatchStatus({ watching: false, lastCheck: null, newFiles: 0 });
-    };
-  }, [
-    autoGrade,
-    config.assignments_folder,
-    config.output_folder,
-    status.is_running,
-    selectedPeriod,
-    periodStudents,
-  ]);
-
   // Clear selected standards when grade/subject/state changes
   useEffect(() => {
     setSelectedStandards([]);
@@ -2533,6 +2475,12 @@ function App() {
       }).catch(function() {});
     }
   }, [activeTab]);
+
+  useEffect(function() {
+    if (plannerMode === "dashboard") {
+      fetchTeacherClasses();
+    }
+  }, [plannerMode]);
 
   // NotebookLM generation status polling
   useEffect(function() {
@@ -2925,22 +2873,9 @@ function App() {
     lastResultCount.current = currentCount;
   }, [status.results, config.showToastNotifications]);
 
-  // Load files from assignments folder
+  // Load available files (placeholder for portal-based workflow)
   const loadAvailableFiles = async () => {
-    if (!config.assignments_folder) return;
-    setFilesLoading(true);
-    try {
-      const data = await api.listFiles(config.assignments_folder);
-      if (data.files) {
-        setAvailableFiles(data.files);
-        // By default, select all ungraded files
-        const ungraded = data.files.filter((f) => !f.graded).map((f) => f.name);
-        setSelectedFiles(ungraded);
-      }
-    } catch (e) {
-      console.error("Failed to load files:", e);
-    }
-    setFilesLoading(false);
+    // No-op: files come from portal submissions, not local folders
   };
 
   // Load students from selected period
@@ -3025,319 +2960,11 @@ function App() {
 
   // Grading functions
   const handleStartGrading = async () => {
-    try {
-      // Auto-save assignment config if it has a title and content
-      const hasGradeConfig =
-        gradeAssignment.title &&
-        (gradeAssignment.customMarkers.length > 0 ||
-          gradeAssignment.gradingNotes ||
-          (gradeAssignment.responseSections || []).length > 0 ||
-          gradeImportedDoc.filename);
-
-      if (hasGradeConfig) {
-        try {
-          const dataToSave = {
-            ...gradeAssignment,
-            importedDoc: gradeImportedDoc.filename ? gradeImportedDoc : null,
-          };
-          await api.saveAssignmentConfig(dataToSave);
-          // Refresh saved assignments list
-          const list = await api.listAssignments();
-          if (list.assignments) setSavedAssignments(list.assignments);
-          if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
-        } catch (saveError) {
-          console.error("Failed to auto-save assignment config:", saveError);
-        }
-      }
-
-      // Determine which files to grade
-      // If filters are active, ALWAYS use filtered files (not the selectedFiles state which may be stale)
-      let filesToGrade = null;
-      const hasActiveFilter = selectedPeriod || gradeFilterStudent || gradeFilterAssignment;
-
-      // If filters are active, load and filter files (takes precedence over checkbox selection)
-      if (hasActiveFilter) {
-        try {
-          const filesData = await api.listFiles(config.assignments_folder);
-          if (filesData.files) {
-            let filtered = filesData.files.filter((f) => !f.graded);
-
-            // Filter by period students
-            if (selectedPeriod && periodStudents.length > 0) {
-              filtered = filtered.filter((f) =>
-                fileMatchesPeriodStudent(f.name, periodStudents),
-              );
-            }
-
-            // Filter by individual student name
-            if (gradeFilterStudent) {
-              filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase();
-                let studentName = gradeFilterStudent.toLowerCase();
-                // Handle "Last; First" or "Last, First" roster format - convert to "first last"
-                if (studentName.includes(';') || studentName.includes(',')) {
-                  const parts = studentName.split(/[;,]/).map(p => p.trim());
-                  if (parts.length >= 2) {
-                    const lastName = parts[0];
-                    const firstName = parts[1].split(' ')[0]; // Take first word of first name
-                    studentName = firstName + ' ' + lastName;
-                  }
-                }
-                // Strip apostrophes for comparison (Da'Jaun matches Dajaun)
-                studentName = studentName.replace(/['\u2019]/g, "");
-                // Word-based matching: each word in studentName appears in filename
-                const nameWords = studentName.split(/\s+/).filter(Boolean);
-                const fileNameNorm = fileName.replace(/[_\-.,;''\u2019]/g, " ");
-                const wordMatch = nameWords.every((w) =>
-                  fileNameNorm.includes(w)
-                );
-                // Also try direct string matching for edge cases
-                return (
-                  wordMatch ||
-                  fileName.includes(studentName.replace(/\s+/g, "")) ||
-                  fileName.includes(studentName.replace(/\s+/g, "_")) ||
-                  fileName.includes(studentName.replace(/\s+/g, "-")) ||
-                  fileName.includes(studentName)
-                );
-              });
-            }
-
-            // Filter by assignment name in filename (including aliases, title, and original imported filename)
-            if (gradeFilterAssignment) {
-              // Get all name variations to match: assignment name, title, aliases, and imported filename
-              const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
-              const importedFilename = (assignmentConfig.importedFilename || assignmentConfig.importedDoc?.filename || "").toLowerCase().replace(/\.[^/.]+$/, ""); // Remove extension
-
-              // Clean function to remove emojis and special chars for better matching
-              const cleanForMatch = (str) => str.replace(/[\u{1F300}-\u{1F9FF}]/gu, "").replace(/[–—]/g, "-").replace(/[^\w\s-]/g, "").trim();
-
-              // Extract chapter/section patterns like "chapter 10 section 2"
-              const extractChapterSection = (str) => {
-                const match = str.match(/chapter\s*(\d+)\s*[-–—]?\s*section\s*(\d+)/i);
-                return match ? `chapter ${match[1]} section ${match[2]}` : null;
-              };
-
-              const chapterSection = extractChapterSection(importedFilename) || extractChapterSection(assignmentConfig.title || "");
-
-              const namesToMatch = [
-                gradeFilterAssignment,
-                assignmentConfig.title || "",
-                ...(assignmentConfig.aliases || []),
-                importedFilename,
-                cleanForMatch(importedFilename),
-                cleanForMatch(assignmentConfig.title || ""),
-                chapterSection
-              ].filter(Boolean).map(n => n.toLowerCase());
-
-              filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase();
-                const fileNameNoExt = fileName.replace(/\.[^/.]+$/, ""); // Remove extension for matching
-                const fileNameClean = cleanForMatch(fileNameNoExt);
-                const fileChapterSection = extractChapterSection(fileName);
-
-                // Extract assignment part from filename (remove student name prefix)
-                // Handles "FirstName_LastName_AssignmentName" or "First Last - Assignment" formats
-                let assignmentPart = fileNameNoExt;
-                if (fileNameNoExt.includes(' - ')) {
-                  assignmentPart = fileNameNoExt.split(' - ').slice(1).join(' - ');
-                } else if (fileNameNoExt.includes('_')) {
-                  const parts = fileNameNoExt.split('_');
-                  assignmentPart = parts.length > 2 ? parts.slice(2).join('_') : fileNameNoExt;
-                }
-                const assignmentPartClean = cleanForMatch(assignmentPart);
-
-                // Check if filename contains any of the assignment names/aliases/imported filename
-                return namesToMatch.some(name => {
-                  if (!name) return false;
-                  const nameClean = cleanForMatch(name);
-
-                  // Check various spacing formats
-                  if (fileName.includes(name.replace(/\s+/g, "")) ||
-                      fileName.includes(name.replace(/\s+/g, "_")) ||
-                      fileName.includes(name.replace(/\s+/g, "-")) ||
-                      fileName.includes(name) ||
-                      fileNameClean.includes(nameClean) ||
-                      nameClean.includes(fileNameClean)) {
-                    return true;
-                  }
-                  // Check if assignment part matches (handles truncated filenames)
-                  if (assignmentPartClean && (
-                      nameClean.includes(assignmentPartClean) ||
-                      assignmentPartClean.includes(nameClean))) {
-                    return true;
-                  }
-                  // Check chapter/section match
-                  if (chapterSection && fileChapterSection && chapterSection === fileChapterSection) {
-                    return true;
-                  }
-                  // Also check if the imported filename matches this file (for exact original document match)
-                  if (importedFilename && (fileNameNoExt.includes(importedFilename) || importedFilename.includes(fileNameNoExt))) {
-                    return true;
-                  }
-                  return false;
-                });
-              });
-            }
-
-            // Exclude students who already have results for THIS assignment
-            if (excludeGradedStudents && status.results.length > 0) {
-              // Filter results to only those matching the current assignment filter
-              let relevantResults = status.results;
-              if (gradeFilterAssignment) {
-                const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
-                const importedFilename = (assignmentConfig.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
-                const assignmentNamesToMatch = [
-                  gradeFilterAssignment,
-                  assignmentConfig.title || "",
-                  ...(assignmentConfig.aliases || []),
-                  importedFilename
-                ].filter(Boolean).map(n => n.toLowerCase());
-
-                relevantResults = status.results.filter((r) => {
-                  const resultAssignment = (r.assignment || "").toLowerCase();
-                  const resultFilename = (r.filename || "").toLowerCase();
-                  return assignmentNamesToMatch.some(name =>
-                    resultAssignment.includes(name) ||
-                    resultFilename.includes(name) ||
-                    name.includes(resultAssignment)
-                  );
-                });
-              }
-
-              const gradedStudentNames = relevantResults.map((r) =>
-                (r.student_name || "").toLowerCase().replace(/\s+/g, "")
-              );
-              filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase().replace(/\s+/g, "");
-                // Check if any graded student name appears in the filename
-                return !gradedStudentNames.some((name) =>
-                  name && fileName.includes(name)
-                );
-              });
-            }
-
-            // Exclude students whose results have been approved
-            if (excludeApprovedStudents && status.results.length > 0) {
-              let relevantResults = status.results;
-              if (gradeFilterAssignment) {
-                const assignmentConfig = savedAssignmentData[gradeFilterAssignment] || {};
-                const importedFilename = (assignmentConfig.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
-                const assignmentNamesToMatch = [
-                  gradeFilterAssignment,
-                  assignmentConfig.title || "",
-                  ...(assignmentConfig.aliases || []),
-                  importedFilename
-                ].filter(Boolean).map(n => n.toLowerCase());
-
-                relevantResults = status.results.filter((r, idx) => {
-                  const resultAssignment = (r.assignment || "").toLowerCase();
-                  const resultFilename = (r.filename || "").toLowerCase();
-                  return assignmentNamesToMatch.some(name =>
-                    resultAssignment.includes(name) ||
-                    resultFilename.includes(name) ||
-                    name.includes(resultAssignment)
-                  );
-                });
-              }
-
-              // Keep only approved results and get their original indices
-              const approvedResults = status.results
-                .map((r, idx) => ({ ...r, _origIdx: idx }))
-                .filter((r) => emailApprovals[r._origIdx] === "approved");
-              // If filtering by assignment, intersect with relevant results
-              let approvedRelevant = approvedResults;
-              if (gradeFilterAssignment) {
-                const relevantNames = new Set(relevantResults.map(r => (r.student_name || "").toLowerCase()));
-                approvedRelevant = approvedResults.filter(r => relevantNames.has((r.student_name || "").toLowerCase()));
-              }
-
-              const approvedStudentNames = approvedRelevant.map((r) =>
-                (r.student_name || "").toLowerCase().replace(/['\u2019\s]+/g, "")
-              );
-              filtered = filtered.filter((f) => {
-                const fileName = f.name.toLowerCase().replace(/['\u2019\s]+/g, "");
-                return !approvedStudentNames.some((name) =>
-                  name && fileName.includes(name)
-                );
-              });
-            }
-
-            if (filtered.length > 0) {
-              filesToGrade = filtered.map((f) => f.name);
-              // Log which files will be graded based on filter
-              const filterDesc = [
-                gradeFilterStudent ? `student "${gradeFilterStudent}"` : null,
-                gradeFilterAssignment ? `assignment "${gradeFilterAssignment}"` : null,
-                selectedPeriod ? "selected period" : null,
-              ].filter(Boolean).join(" and ");
-              console.log(`Grading ${filtered.length} files for ${filterDesc}:`, filesToGrade);
-              addToast(`Grading ${filtered.length} files for ${filterDesc}`, "info");
-            } else {
-              const filterDesc = [
-                gradeFilterStudent ? `student "${gradeFilterStudent}"` : null,
-                gradeFilterAssignment
-                  ? `assignment "${gradeFilterAssignment}"`
-                  : null,
-                selectedPeriod ? "selected period" : null,
-              ]
-                .filter(Boolean)
-                .join(" and ");
-              addToast(`No ungraded files found for ${filterDesc}`, "warning");
-              return;
-            }
-          }
-        } catch (e) {
-          console.error("Failed to load files for filter:", e);
-        }
-      } else if (selectedFiles.length > 0) {
-        // No filter active, but user has manually selected files via checkboxes
-        filesToGrade = selectedFiles;
-      }
-      // If no filter and no selection, filesToGrade stays null (grade all new files)
-
-      // Get the period name for differentiated grading
-      const selectedPeriodName = selectedPeriod
-        ? periods.find(p => p.filename === selectedPeriod)?.period_name || ''
-        : '';
-
-      await api.startGrading({
-        ...config,
-        grade_level: config.grade_level,
-        subject: config.subject,
-        teacher_name: config.teacher_name,
-        school_name: config.school_name,
-        assignmentConfig:
-          gradeAssignment.customMarkers.length > 0 ||
-          gradeAssignment.gradingNotes ||
-          (gradeAssignment.responseSections || []).length > 0
-            ? gradeAssignment
-            : null,
-        globalAINotes,
-        // Pass the custom rubric from Settings
-        rubric: rubric,
-        // Pass selected files (null means grade all new files)
-        selectedFiles: filesToGrade,
-        // Skip verified grades on regrade (only regrade unverified)
-        skipVerified: !skipVerified,
-        // Pass the period name for differentiated grading expectations
-        classPeriod: selectedPeriodName,
-        // Pass ensemble models if enabled (need at least 2 models)
-        ensemble_models: config.ensemble_enabled && config.ensemble_models?.length >= 2 ? config.ensemble_models : null,
-        // Pass trusted students list to skip AI/plagiarism detection
-        trustedStudents: config.trustedStudents || [],
-        // Pass grading style (lenient / standard / strict)
-        gradingStyle: rubric.gradingStyle || 'standard',
-      });
-      setStatus((prev) => ({
-        ...prev,
-        is_running: true,
-        log: ["Starting..."],
-      }));
-      setShowActivityLog(true); // Auto-expand log when grading starts
-    } catch (error) {
-      console.error("Failed to start grading:", error);
-    }
+    // Folder-based bulk grading removed — grading happens via portal submissions.
+    // This function is kept as a stub for UI references.
+    addToast("Grading happens automatically when students submit via the portal.", "info");
   };
+
 
   const handleStopGrading = async () => {
     try {
@@ -3469,19 +3096,6 @@ function App() {
       })
       .slice(0, 5); // Limit to 5 suggestions
   };
-
-  const handleBrowse = async (type, field) => {
-    try {
-      const result = await api.browse(type);
-      if (result.path) {
-        setConfig((prev) => ({ ...prev, [field]: result.path }));
-      }
-    } catch (error) {
-      console.error("Browse error:", error);
-    }
-  };
-
-  const openResults = () => api.openFolder(config.output_folder);
 
   // Generate default email body for a result (matches exactly what backend sends)
   const getDefaultEmailBody = (index) => {
@@ -4856,22 +4470,35 @@ ${signature}`;
     }
   };
 
+  // Fetch teacher's Clever classes for publish modal
+  const fetchTeacherClasses = async () => {
+    try {
+      const data = await api.listClasses();
+      if (data.classes) setTeacherClasses(data.classes);
+    } catch (e) {
+      console.error("Failed to load classes:", e);
+    }
+  };
+
   // Open publish modal for assessment
   const publishAssessmentHandler = () => {
-    if (!generatedAssessment) {
-      addToast("No assessment to publish", "warning");
+    var content = getActiveAssignment();
+    if (!content) {
+      addToast("No content to publish", "warning");
       return;
     }
-    // Reset publish settings, pre-fill time limit from assessment
+    // Reset publish settings, pre-fill time limit from content
     setPublishSettings({
       period: '',
       periodFilename: '',
       isMakeup: false,
       selectedStudents: [],
-      timeLimit: generatedAssessment.time_limit || null,
+      timeLimit: content.time_limit || null,
       applyAccommodations: true,
     });
     setPublishModalStudents([]);
+    setPublishClassId('');
+    fetchTeacherClasses();
     setShowPublishModal(true);
   };
 
@@ -4897,7 +4524,8 @@ ${signature}`;
 
   // Confirm and publish assessment with settings
   const confirmPublishAssessment = async () => {
-    if (!generatedAssessment) return;
+    var contentToPublish = getActiveAssignment();
+    if (!contentToPublish) return;
 
     setPublishingAssessment(true);
     try {
@@ -4919,27 +4547,46 @@ ${signature}`;
         restrictedStudents = publishSettings.selectedStudents;
       }
 
-      const data = await api.publishAssessmentToPortal(generatedAssessment, {
-        teacher_name: config.teacher_name || "Teacher",
-        teacher_email: config.teacher_email,
-        show_correct_answers: true,
-        show_score_immediately: true,
-        period: publishSettings.period,
-        restricted_students: restrictedStudents,
-        student_accommodations: studentAccommodationsMap,
-        time_limit_minutes: publishSettings.timeLimit,
-      });
+      let data;
+      if (publishClassId) {
+        const contentType = contentToPublish.sections ? 'assignment' : 'assessment';
+        const settings = {
+          teacher_name: config.teacher_name || "Teacher",
+          teacher_email: config.teacher_email,
+          show_correct_answers: true,
+          show_score_immediately: true,
+          period: publishSettings.period,
+          restricted_students: restrictedStudents,
+          student_accommodations: studentAccommodationsMap,
+          time_limit_minutes: publishSettings.timeLimit,
+        };
+        data = await api.publishToClass(publishClassId, contentToPublish, contentType, contentToPublish.title || 'Untitled', settings, null);
+      } else {
+        data = await api.publishAssessmentToPortal(contentToPublish, {
+          teacher_name: config.teacher_name || "Teacher",
+          teacher_email: config.teacher_email,
+          show_correct_answers: true,
+          show_score_immediately: true,
+          period: publishSettings.period,
+          restricted_students: restrictedStudents,
+          student_accommodations: studentAccommodationsMap,
+          time_limit_minutes: publishSettings.timeLimit,
+        });
+      }
 
       if (data.error) {
         addToast("Error publishing: " + data.error, "error");
       } else if (data.success) {
         setShowPublishModal(false);
+        var selectedClass = publishClassId ? teacherClasses.find(function(c) { return c.id === publishClassId; }) : null;
         setPublishedAssessmentModal({
           show: true,
-          joinCode: data.join_code,
-          joinLink: data.join_link,
+          joinCode: publishClassId ? (selectedClass ? selectedClass.join_code : "") : data.join_code,
+          joinLink: publishClassId ? (window.location.origin + "/student") : data.join_link,
+          isClassBased: !!publishClassId,
+          className: selectedClass ? selectedClass.name : "",
         });
-        addToast("Assessment published to student portal!", "success");
+        addToast("Published to student portal!", "success");
         // Refresh published assessments list
         fetchPublishedAssessments();
       }
@@ -6143,42 +5790,6 @@ ${signature}`;
                           Raw Text
                         </button>
                       </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api.openFolder(r.filepath);
-                          } catch (e) {
-                            addToast(
-                              "Could not open file: " + e.message,
-                              "error",
-                            );
-                          }
-                        }}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: "8px",
-                          border: "1px solid var(--glass-border)",
-                          background: "var(--glass-bg)",
-                          color: "var(--text-secondary)",
-                          fontSize: "0.8rem",
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          transition: "all 0.2s",
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.background =
-                            "var(--glass-hover)")
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.background = "var(--glass-bg)")
-                        }
-                      >
-                        <Icon name="ExternalLink" size={14} />
-                        Open Original
-                      </button>
                     </div>
 
                     {/* Tab Content */}
@@ -7742,40 +7353,6 @@ ${signature}`;
           >
             {/* Left: Auto-Grade & Start/Stop */}
             <div data-tutorial="grade-toolbar" style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "10px" }}
-              >
-                <Icon
-                  name="Zap"
-                  size={18}
-                  style={{ color: autoGrade ? "#4ade80" : "var(--text-muted)" }}
-                />
-                <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>
-                  Auto-Grade
-                </span>
-                <button
-                  onClick={() => setAutoGrade(!autoGrade)}
-                  style={{
-                    padding: "4px 12px",
-                    borderRadius: "6px",
-                    border: "none",
-                    background: autoGrade ? "#4ade80" : "var(--glass-bg)",
-                    color: autoGrade ? "#000" : "var(--text-primary)",
-                    fontWeight: 600,
-                    fontSize: "0.8rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  {autoGrade ? "ON" : "OFF"}
-                </button>
-                {autoGrade && watchStatus.lastCheck && (
-                  <span
-                    style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}
-                  >
-                    Last: {watchStatus.lastCheck}
-                  </span>
-                )}
-              </div>
               <div
                 style={{
                   width: "1px",
@@ -9484,20 +9061,6 @@ ${signature}`;
                       </div>
                     )}
 
-                    {status.complete && (
-                      <button
-                        onClick={openResults}
-                        className="btn btn-secondary"
-                        style={{
-                          width: "100%",
-                          marginTop: "15px",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Icon name="FolderOpen" size={18} />
-                        Open Results Folder
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
@@ -9571,7 +9134,6 @@ ${signature}`;
                   setConfirmationStudentFilter={setConfirmationStudentFilter}
                   setCcParents={setCcParents}
                   addToast={addToast}
-                  openResults={openResults}
                   openReview={openReview}
                   sendSingleEmail={sendSingleEmail}
                   getDefaultEmailBody={getDefaultEmailBody}
@@ -9884,7 +9446,6 @@ ${signature}`;
                   filesLoading={filesLoading}
                   sortedPeriods={sortedPeriods}
                   accommodationPresets={accommodationPresets}
-                  handleBrowse={handleBrowse}
                   EDTECH_TOOLS={EDTECH_TOOLS}
                   MODEL_COST_PER_ASSIGNMENT={MODEL_COST_PER_ASSIGNMENT}
                   addToast={addToast}
@@ -9908,7 +9469,7 @@ ${signature}`;
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                   <AssistantChat addToast={addToast} subject={config.subject} />
                 </div>
-                <BehaviorPanel addToast={addToast} />
+                {window.location.hostname === 'localhost' && <BehaviorPanel addToast={addToast} />}
               </div>
 
               {/* Builder Tab */}
@@ -11271,6 +10832,17 @@ ${signature}`;
                               >
                                 <Icon name="Sparkles" size={16} /> Materials
                               </button>
+                              {(lessonPlan.sections || generatedAssignment) && !lessonPlan.phases && (
+                                <button
+                                  onClick={publishAssessmentHandler}
+                                  disabled={publishingAssessment}
+                                  className="btn"
+                                  style={{ padding: "8px 16px", background: "linear-gradient(135deg, #8b5cf6, #6366f1)" }}
+                                >
+                                  <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
+                                  {publishingAssessment ? "Publishing..." : "Publish to Portal"}
+                                </button>
+                              )}
                               {/* Hide Create Assignment when already viewing an assignment or project (but show for lesson plans even if they have sections) */}
                               {(!lessonPlan.sections || lessonPlan.days) && !lessonPlan.phases && (
                               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -13899,13 +13471,16 @@ ${signature}`;
                                         <MatchingCards
                                           terms={q.terms}
                                           definitions={q.definitions}
+                                          correctAnswer={q.answer}
                                           showAnswers={previewShowAnswers}
-                                          onMatch={function(matches) {
+                                          onMatch={function(matches, shuffledDefs) {
                                             var newAnswers = Object.assign({}, assessmentAnswers);
                                             Object.entries(matches).forEach(function(entry) {
                                               var tIdx = entry[0];
+                                              var sdIdx = entry[1];
+                                              var originalIdx = shuffledDefs && shuffledDefs[sdIdx] ? shuffledDefs[sdIdx].originalIdx : sdIdx;
                                               var matchKey = sIdx + "-" + qIdx + "-match-" + tIdx;
-                                              newAnswers[matchKey] = String.fromCharCode(65 + parseInt(tIdx));
+                                              newAnswers[matchKey] = String.fromCharCode(65 + originalIdx);
                                             });
                                             setAssessmentAnswers(newAnswers);
                                           }}
@@ -14008,6 +13583,46 @@ ${signature}`;
                   {/* Student Portal Dashboard */}
                   {plannerMode === "dashboard" && (
                     <div className="fade-in">
+                      {/* Teacher's Classes */}
+                      <div className="glass-card" style={{ padding: "20px", marginBottom: "20px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
+                                  <Icon name="School" size={20} />
+                                  Your Classes
+                              </h3>
+                              <button onClick={fetchTeacherClasses} className="btn btn-secondary" style={{ padding: "8px 12px", fontSize: "0.85rem" }}>
+                                  <Icon name="RefreshCw" size={16} /> Refresh
+                              </button>
+                          </div>
+                          {teacherClasses.length === 0 ? (
+                              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                                  No classes yet. Classes are created automatically when you sync your Clever roster.
+                              </p>
+                          ) : (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                  {teacherClasses.map(function(cls) {
+                                      return (
+                                          <div key={cls.id} style={{
+                                              padding: "12px 15px",
+                                              background: "rgba(255,255,255,0.03)",
+                                              borderRadius: "10px",
+                                              border: "1px solid rgba(255,255,255,0.1)",
+                                              display: "flex",
+                                              justifyContent: "space-between",
+                                              alignItems: "center",
+                                          }}>
+                                              <div>
+                                                  <div style={{ fontWeight: 600 }}>{cls.name}</div>
+                                                  <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                                      {"Code: " + cls.join_code + " | " + (cls.subject || "No subject") + " | " + ((cls.class_students || [{}])[0]?.count || 0) + " students"}
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      );
+                                  })}
+                              </div>
+                          )}
+                      </div>
                       <div style={{ display: "grid", gridTemplateColumns: selectedAssessmentResults ? "1fr 1fr" : "1fr", gap: "25px" }}>
                         {/* Published Assessments List */}
                         <div className="glass-card" style={{ padding: "20px" }}>
@@ -16368,11 +15983,25 @@ ${signature}`;
           >
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
               <Icon name="Share2" size={24} style={{ color: "var(--accent-primary)" }} />
-              Publish Assessment
+              Publish
             </h2>
 
-            {/* Period Selection */}
-            <div style={{ marginBottom: "20px" }}>
+            {/* Class Selection */}
+            <div style={{ marginBottom: "15px" }}>
+              <label className="label" style={{ marginBottom: "6px" }}>Publish to Class (optional)</label>
+              <select className="input" value={publishClassId} onChange={(e) => setPublishClassId(e.target.value)} style={{ width: "100%" }}>
+                <option value="">Join Code Only (no class)</option>
+                {teacherClasses.map((cls) => (
+                  <option key={cls.id} value={cls.id}>{cls.name} ({cls.join_code})</option>
+                ))}
+              </select>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                {publishClassId ? "Students log in with email + class code to access this." : "Anyone with the join code can access this (anonymous)."}
+              </p>
+            </div>
+
+            {/* Period Selection — only show when NOT publishing to a class */}
+            {!publishClassId && (<div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "0.95rem" }}>
                 Period (Optional)
               </label>
@@ -16404,7 +16033,7 @@ ${signature}`;
                   <option key={p.filename} value={p.filename}>{p.name}</option>
                 ))}
               </select>
-            </div>
+            </div>)}
 
             {/* Makeup Exam Toggle */}
             <div style={{ marginBottom: "20px" }}>
@@ -16607,7 +16236,7 @@ ${signature}`;
                 }}
               >
                 <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
-                {publishingAssessment ? "Publishing..." : "Publish Assessment"}
+                {publishingAssessment ? "Publishing..." : "Publish"}
               </button>
             </div>
           </div>
@@ -16646,10 +16275,10 @@ ${signature}`;
               <Icon name="CheckCircle" size={48} style={{ color: "#22c55e" }} />
             </div>
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "10px" }}>
-              Assessment Published!
+              Published!
             </h2>
             <p style={{ color: "var(--text-secondary)", marginBottom: "25px" }}>
-              Students can now take this assessment using the code below.
+              Students can now access this using the code below.
             </p>
 
             {/* Join Code Display */}
@@ -16663,7 +16292,7 @@ ${signature}`;
               }}
             >
               <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                Join Code
+                {publishedAssessmentModal.isClassBased ? "Class Code" : "Join Code"}
               </div>
               <div
                 style={{
@@ -16681,7 +16310,7 @@ ${signature}`;
             {/* Link */}
             <div style={{ marginBottom: "25px" }}>
               <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                Or share this link:
+                {publishedAssessmentModal.isClassBased ? "Student portal link:" : "Or share this link:"}
               </div>
               <div
                 style={{
@@ -16732,13 +16361,21 @@ ${signature}`;
             >
               <div style={{ fontWeight: 600, marginBottom: "8px", color: "#22c55e" }}>
                 <Icon name="Info" size={16} style={{ marginRight: "8px" }} />
-                How students join:
+                How students access this:
               </div>
-              <ol style={{ margin: 0, paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                <li>Go to <strong>graider.live/join</strong></li>
-                <li>Enter code: <strong>{publishedAssessmentModal.joinCode}</strong></li>
-                <li>Enter their name and start the assessment</li>
-              </ol>
+              {publishedAssessmentModal.isClassBased ? (
+                <ol style={{ margin: 0, paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                  <li>Go to <strong>app.graider.live/student</strong></li>
+                  <li>Log in with school email + class code: <strong>{publishedAssessmentModal.joinCode}</strong></li>
+                  <li>Find the assignment on their dashboard</li>
+                </ol>
+              ) : (
+                <ol style={{ margin: 0, paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                  <li>Go to <strong>app.graider.live/join</strong></li>
+                  <li>Enter code: <strong>{publishedAssessmentModal.joinCode}</strong></li>
+                  <li>Enter their name and start</li>
+                </ol>
+              )}
             </div>
 
             <button
