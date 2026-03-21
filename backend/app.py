@@ -143,10 +143,36 @@ if os.getenv('REDIS_URL'):
 # AUTHENTICATION
 # ══════════════════════════════════════════════════════════════
 try:
+    from utils.logging_utils import configure_logging
+    configure_logging(app)
+except Exception as e:
+    print(f"Warning: Logging configuration failed: {e}")
+
+try:
     from auth import init_auth
     init_auth(app)
 except Exception as e:
     print(f"Warning: Auth middleware not loaded: {e}")
+
+# Recover stale partial submissions from prior deploys (daemon threads killed on restart)
+try:
+    from supabase_client import get_supabase as _recovery_sb
+    _sb = _recovery_sb()
+    if _sb:
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(minutes=30)).isoformat()
+        for table in ['submissions', 'student_submissions']:
+            try:
+                stale = _sb.table(table).select('id').eq('status', 'partial').lt('graded_at', cutoff).execute()
+                if stale.data:
+                    ids = [r['id'] for r in stale.data]
+                    for sid in ids:
+                        _sb.table(table).update({'status': 'grading_failed'}).eq('id', sid).execute()
+                    print(f"Recovered {len(ids)} stale partial submissions in {table}")
+            except Exception:
+                pass
+except Exception:
+    pass
 
 # ══════════════════════════════════════════════════════════════
 # GRADING STATE MANAGEMENT
@@ -161,19 +187,36 @@ DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
 # FERPA COMPLIANCE - AUDIT LOGGING
 # ══════════════════════════════════════════════════════════════
 
-def audit_log(action: str, details: str = "", user: str = "teacher"):
+def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id: str = ""):
     """
     FERPA Compliance: Log all data access and modifications.
-    Logs are kept locally and do not contain actual student data.
+    Writes to both local file AND Supabase for persistence across deploys.
+    Logs do not contain actual student data — only action metadata.
     """
-    try:
-        timestamp = datetime.now().isoformat()
-        log_entry = f"{timestamp} | {user} | {action} | {details}\n"
+    timestamp = datetime.now().isoformat()
 
+    # Local file (immediate, always works)
+    try:
+        log_entry = f"{timestamp} | {user} | {action} | {details}\n"
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(log_entry)
-    except Exception as e:
-        print(f"Audit log error: {e}")
+    except Exception:
+        pass
+
+    # Supabase (persistent across deploys)
+    try:
+        from supabase_client import get_supabase
+        sb = get_supabase()
+        if sb:
+            sb.table('audit_log').insert({
+                'timestamp': timestamp,
+                'teacher_id': teacher_id or getattr(g, 'user_id', 'unknown'),
+                'action': action,
+                'details': details[:500],  # Truncate to prevent bloat
+                'user_type': user,
+            }).execute()
+    except Exception:
+        pass  # Supabase unavailable — local file is the fallback
 
 
 def get_audit_logs(limit: int = 100):

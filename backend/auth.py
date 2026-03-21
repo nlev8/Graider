@@ -161,6 +161,12 @@ def init_auth(app):
     Call this BEFORE registering blueprints.
     """
     @app.before_request
+    def set_request_id():
+        """Generate a unique request ID for correlation across logs."""
+        import uuid
+        g.request_id = str(uuid.uuid4())[:8]
+
+    @app.before_request
     def check_auth():
         # Skip auth on localhost ONLY if no JWT is present.
         # Behind a reverse proxy (Railway/gunicorn), request.host may resolve

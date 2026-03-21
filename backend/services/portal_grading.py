@@ -482,3 +482,14 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
 
     except Exception as e:
         logger.error("Portal grading thread failed: %s", str(e))
+        # Update submission status to grading_failed so it doesn't stay in 'partial' forever
+        try:
+            from backend.supabase_client import get_supabase
+            sb = get_supabase()
+            if sb and submission_id:
+                sb.table(supabase_table).update({
+                    "status": "grading_failed",
+                }).eq("id", submission_id).execute()
+                logger.info("Marked submission %s as grading_failed", submission_id)
+        except Exception:
+            pass
