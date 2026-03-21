@@ -407,9 +407,43 @@ python graider_app.py
 - `POST /api/publish-to-class` — Publish content to a class
 
 ### Portal (Join Code)
-- `POST /api/publish-assessment` — Publish via join code
+- `POST /api/publish-assessment` — Publish via join code (requires teacher auth)
 - `GET /api/student/join/<code>` — Get assessment by join code
 - `POST /api/student/submit/<code>` — Submit via join code
+- `GET /api/teacher/assessments` — List teacher's published assessments
+- `GET /api/teacher/assessment/<code>/results` — Get submissions for assessment
+- `POST /api/teacher/assessment/<code>/toggle` — Activate/deactivate assessment
+- `DELETE /api/teacher/assessment/<code>` — Delete assessment + submissions
+
+### Resources (Assets)
+- `POST /api/save-resource` — Auto-save generated content (requires teacher auth)
+- `GET /api/list-resources` — List saved resources with optional type filter
+- `POST /api/load-resource` — Load a saved resource by ID
+- `POST /api/delete-resource` — Delete a saved resource
+
+### Behavior Tracking
+- `POST /api/behavior/session` — Start behavior tracking session
+- `GET /api/behavior/data` — Get behavior data
+- `GET /api/behavior/events` — Get behavior events
+- `DELETE /api/behavior/data` — Clear behavior data
+
+### Automations
+- `GET /api/automations` — List automation workflows
+- `POST /api/automations` — Create automation workflow
+- `DELETE /api/automations/<id>` — Delete workflow
+- `POST /api/automations/<id>/run` — Run a workflow
+
+### NotebookLM Integration
+- `GET /api/notebooklm/auth-status` — Check auth status
+- `POST /api/notebooklm/create-notebook` — Create notebook
+- `POST /api/notebooklm/generate` — Generate study materials
+- `GET /api/notebooklm/download/<type>` — Download generated material
+
+### Surveys
+- `POST /api/survey/create` — Create feedback survey
+- `GET /api/survey/results` — Get survey results
+- `GET /api/survey/list` — List surveys
+- `POST /api/survey/<code>/submit` — Submit survey response
 
 ---
 
@@ -445,10 +479,21 @@ python graider_app.py
 - `student_sessions` — Hashed session tokens with expiry
 
 ### Content & Submissions
-- `published_assessments` — Join-code published content
-- `published_content` — Class-based published content
-- `student_submissions` — Student answers and grading results
+- `published_assessments` — Join-code published content (anonymous portal, has teacher_id)
+- `published_content` — Class-based published content (Clever/roster, has class_id + content_type + due_date)
+- `student_submissions` — Authenticated student submissions (class-based path)
 - `submissions` — Anonymous join-code submissions
+
+### Storage & Audit
+- `teacher_data` — Key-value storage per teacher (assignments, lessons, resources, settings, rubric)
+- `audit_log` — FERPA-compliant audit trail (action, teacher_id, timestamp, details)
+
+### Two Publish Paths
+Graider has two parallel publishing systems:
+1. **Join-code** (`published_assessments` + `submissions`): Anonymous access via 6-char code. No enrollment required. Used for quick sharing, makeup exams. Teacher endpoints require `@require_teacher`.
+2. **Class-based** (`published_content` + `student_submissions`): Authenticated access via Clever SSO or email+code login. Requires class enrollment. Supports due dates, content types, student tracking.
+
+Both paths use the same grading functions (`grade_instant_only`, `grade_student_submission`, `run_portal_grading_thread`) and the same `StudentPortal.jsx` component for the student-facing UI.
 
 ---
 
@@ -510,7 +555,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 
 ---
 
-*Last updated: March 2026*
+*Last updated: March 20, 2026*
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
