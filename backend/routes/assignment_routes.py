@@ -4,10 +4,12 @@ Handles saving, loading, listing, deleting, and exporting assignments.
 """
 import logging
 import os
+import re
 import sys
 import json
 import subprocess
 from flask import Blueprint, request, jsonify, send_from_directory, g
+from werkzeug.utils import secure_filename
 
 _logger = logging.getLogger(__name__)
 
@@ -215,6 +217,8 @@ def list_assignments():
 def load_assignment():
     """Load a saved assignment configuration."""
     name = request.args.get('name', '')
+    if not name or not re.match(r'^[\w\s\-\.]+$', name):
+        return jsonify({"error": "Invalid assignment name"}), 400
     teacher_id = getattr(g, 'user_id', 'local-dev')
 
     if storage_load:
@@ -239,6 +243,8 @@ def load_assignment():
 def delete_assignment():
     """Delete a saved assignment configuration."""
     name = request.args.get('name', '')
+    if not name or not re.match(r'^[\w\s\-\.]+$', name):
+        return jsonify({"error": "Invalid assignment name"}), 400
     teacher_id = getattr(g, 'user_id', 'local-dev')
 
     if storage_delete:
@@ -469,6 +475,9 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
 @assignment_bp.route('/api/download-document/<filename>')
 def download_document(filename):
     """Serve a generated document for download."""
+    filename = secure_filename(filename)
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
     docs_dir = os.path.expanduser("~/Downloads/Graider/Documents")
     if not os.path.exists(os.path.join(docs_dir, filename)):
         return jsonify({"error": "Document not found"}), 404
@@ -478,6 +487,9 @@ def download_document(filename):
 @assignment_bp.route('/api/download-worksheet/<filename>')
 def download_worksheet(filename):
     """Serve a generated worksheet for download."""
+    filename = secure_filename(filename)
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
     worksheets_dir = os.path.expanduser("~/Downloads/Graider/Worksheets")
     if not os.path.exists(os.path.join(worksheets_dir, filename)):
         return jsonify({"error": "Worksheet not found"}), 404
@@ -487,6 +499,9 @@ def download_worksheet(filename):
 @assignment_bp.route('/api/download-csv/<filename>')
 def download_csv(filename):
     """Serve a generated CSV file for download."""
+    filename = secure_filename(filename)
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
     csv_dir = os.path.expanduser("~/Downloads/Graider/Exports")
     if not os.path.exists(os.path.join(csv_dir, filename)):
         return jsonify({"error": "CSV not found"}), 404
@@ -496,6 +511,9 @@ def download_csv(filename):
 @assignment_bp.route('/api/download-export/<filename>')
 def download_export(filename):
     """Serve an exported CSV file for download."""
+    filename = secure_filename(filename)
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
     exports_dir = os.path.expanduser("~/.graider_exports/focus")
     if not os.path.exists(os.path.join(exports_dir, filename)):
         return jsonify({"error": "Export not found"}), 404

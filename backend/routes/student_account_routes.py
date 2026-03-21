@@ -11,7 +11,6 @@ Review fixes applied:
 5. Rate-limited login — 5 attempts per student per 10 minutes
 """
 import csv
-import functools
 import hashlib
 import io
 import json
@@ -43,18 +42,7 @@ def _get_teacher_id():
     return teacher_id
 
 
-def require_teacher(f):
-    """Decorator that enforces teacher authentication.
-    Sets g.teacher_id for use in the wrapped route handler.
-    Returns 401 if no authenticated teacher session exists."""
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        teacher_id = getattr(g, 'user_id', None)
-        if not teacher_id:
-            return jsonify({"error": "Authentication required"}), 401
-        g.teacher_id = teacher_id
-        return f(*args, **kwargs)
-    return wrapper
+from backend.utils.auth_decorators import require_teacher
 
 
 def _generate_class_code():

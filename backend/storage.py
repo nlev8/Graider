@@ -13,7 +13,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +250,7 @@ def _sb_save(data_key, data, teacher_id):
                 'teacher_id': teacher_id,
                 'data_key': data_key,
                 'data': data,
-                'updated_at': datetime.utcnow().isoformat(),
+                'updated_at': datetime.now(tz=timezone.utc).isoformat(),
             }).execute()
             return True
         except Exception as e:
@@ -372,7 +372,7 @@ def _sb_save_student_history(teacher_id, student_id, history):
                 'teacher_id': teacher_id,
                 'student_id': student_id,
                 'history': history,
-                'updated_at': datetime.utcnow().isoformat(),
+                'updated_at': datetime.now(tz=timezone.utc).isoformat(),
             }).execute()
             return True
         except Exception as e:

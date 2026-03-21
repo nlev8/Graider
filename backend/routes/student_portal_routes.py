@@ -3,7 +3,6 @@ Student Assessment Portal Routes for Graider.
 Handles publishing assessments, student access via join codes, and submission grading.
 Uses Supabase for cloud storage - students can submit anytime.
 """
-import functools
 import json
 import logging
 import os
@@ -16,17 +15,7 @@ from backend.supabase_client import get_supabase_or_raise as get_supabase
 student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
 
-
-def require_teacher(f):
-    """Decorator that enforces teacher authentication for join-code management endpoints."""
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        teacher_id = getattr(g, 'user_id', None)
-        if not teacher_id:
-            return jsonify({"error": "Authentication required"}), 401
-        g.teacher_id = teacher_id
-        return f(*args, **kwargs)
-    return wrapper
+from backend.utils.auth_decorators import require_teacher
 
 
 def generate_join_code():

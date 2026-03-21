@@ -7,7 +7,6 @@ import os
 import json
 import uuid
 import logging
-import functools
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
@@ -515,15 +514,7 @@ def import_calendar_events():
 
 # ============ Resources (Assets) ============
 
-def require_teacher(f):
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        teacher_id = getattr(g, 'user_id', None)
-        if not teacher_id:
-            return jsonify({"error": "Authentication required"}), 401
-        g.teacher_id = teacher_id
-        return f(*args, **kwargs)
-    return wrapper
+from backend.utils.auth_decorators import require_teacher
 
 
 @lesson_bp.route('/api/save-resource', methods=['POST'])

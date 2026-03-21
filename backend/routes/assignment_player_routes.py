@@ -366,7 +366,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
             'latex': '',
             'confidence': 0,
             'ocr_source': 'gpt4o_vision',
-            'error': str(e),
+            'error': 'An internal error occurred',
         }
 
 
@@ -684,7 +684,7 @@ def grade_question(question, student_answer, q_type):
             return grade_short_answer(question, answer_value)
 
     except Exception as e:
-        return {'correct': False, 'feedback': f'Error grading: {str(e)}', 'error': True}
+        return {'correct': False, 'feedback': 'An internal error occurred', 'error': True}
 
 
 def grade_number_line(question, answer):
@@ -1045,7 +1045,7 @@ def grade_coordinates(question, answer):
         else:
             return {'correct': False, 'feedback': f'Off by {distance:.1f} km. Expected: ({correct_lat}, {correct_lng})'}
     except Exception as e:
-        return {'correct': False, 'feedback': f'Error: {str(e)}'}
+        return {'correct': False, 'feedback': 'An internal error occurred'}
 
 
 def grade_data_table(question, answer):
@@ -1093,7 +1093,7 @@ def grade_data_table(question, answer):
                 'feedback': f'{correct_cells}/{total_cells} cells correct'
             }
     except Exception as e:
-        return {'correct': False, 'feedback': f'Error: {str(e)}'}
+        return {'correct': False, 'feedback': 'An internal error occurred'}
 
 
 def grade_bar_chart(question, answer):
