@@ -696,7 +696,12 @@ def grade_student_submission(assessment, answers):
                 "feedback": ""
             }
 
-            if student_answer is None or student_answer == "":
+            # For matching questions, check match-specific keys instead of base key
+            has_match_keys = q_type == "matching" and any(
+                k.startswith(f"{answer_key}-match-") for k in answers
+            )
+
+            if (student_answer is None or student_answer == "") and not has_match_keys:
                 question_result["feedback"] = "No answer provided"
                 results["questions"].append(question_result)
                 continue
@@ -902,7 +907,12 @@ def grade_instant_only(assessment, answers):
                 results["questions"].append(question_result)
                 continue
 
-            if student_answer is None or student_answer == "":
+            # For matching questions, check match-specific keys instead of base key
+            has_match_keys = q_type == "matching" and any(
+                k.startswith(f"{answer_key}-match-") for k in answers
+            )
+
+            if (student_answer is None or student_answer == "") and not has_match_keys:
                 question_result["feedback"] = "No answer provided"
                 results["questions"].append(question_result)
                 continue
