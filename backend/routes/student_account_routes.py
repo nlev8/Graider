@@ -928,6 +928,19 @@ def check_student_session():
             return jsonify({"valid": False}), 401
 
         s = student.data[0]
+
+        # Include class info for Clever SSO students (dashboard header)
+        class_info = {}
+        try:
+            cls = db.table('classes').select('name, subject').eq('id', class_id).execute()
+            if cls.data:
+                class_info = {
+                    "name": cls.data[0].get('name', ''),
+                    "subject": cls.data[0].get('subject', ''),
+                }
+        except Exception:
+            pass
+
         return jsonify({
             "valid": True,
             "student": {
@@ -936,6 +949,7 @@ def check_student_session():
                 "email": s.get('email', ''),
                 "student_id": s['student_id_number'],
             },
+            "class_info": class_info,
         })
     except Exception:
         return jsonify({"valid": False}), 401
