@@ -10,7 +10,11 @@ class RequestIdFilter(logging.Filter):
     """Inject request_id into every log record for request tracing."""
 
     def filter(self, record):
-        record.request_id = getattr(g, 'request_id', '-')
+        try:
+            record.request_id = getattr(g, 'request_id', '-')
+        except RuntimeError:
+            # Outside Flask request context (e.g., httpx logging in background thread)
+            record.request_id = '-'
         return True
 
 
