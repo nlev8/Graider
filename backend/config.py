@@ -35,7 +35,7 @@ DEFAULT_ROSTER_FILE = ""
 # Server configuration
 HOST = "0.0.0.0"
 PORT = 3000
-DEBUG = True
+DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
 # Grading configuration
 SUPPORTED_FILE_TYPES = ['.docx', '.doc', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp']

@@ -247,6 +247,14 @@ def _create_clever_student_session(clever_id, email):
 
     try:
         # Look up student by Clever ID (stored as student_id_number)
+        # NOTE: Not scoped by teacher_id because this runs during student SSO
+        # (OAuth callback) where we only have the student's Clever identity —
+        # teacher_id is unknown.  If the same Clever student exists under
+        # multiple teachers, the first DB row wins.  The subsequent enrollment
+        # lookup (class_students join) naturally narrows to a valid class, so
+        # the session is still usable.  A fully correct fix would query
+        # class_students joined with students to find all enrollments, then
+        # let the student pick a class — but that requires a UI flow change.
         res = sb.table("students").select("*").eq("student_id_number", clever_id).execute()
         student_row = res.data[0] if res and res.data else None
 

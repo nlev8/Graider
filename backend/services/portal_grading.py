@@ -6,10 +6,33 @@ Skips Pass 1 (extraction) since portal answers are already structured JSON.
 Calls grade_per_question (Pass 2) + generate_feedback (Pass 3) from assignment_grader.py.
 """
 import logging
+import signal
+import sys
 import threading
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
+
+# Track active grading threads for graceful shutdown
+_active_threads = set()
+_shutdown_event = threading.Event()
+
+
+def _handle_shutdown(signum, frame):
+    """Wait for active grading threads to finish before exiting."""
+    logger.info("Shutdown signal received — waiting for %d grading threads", len(_active_threads))
+    _shutdown_event.set()
+    for t in list(_active_threads):
+        t.join(timeout=30)
+    logger.info("All grading threads finished, exiting")
+    sys.exit(0)
+
+
+# Register SIGTERM handler (Railway sends this on deploy)
+try:
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+except (OSError, ValueError):
+    pass  # Can't set signal handler in non-main thread
 
 # Import grade_per_question at module level so it can be patched in tests
 try:
@@ -192,9 +215,23 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         supabase_table: Which table to update — "submissions" for join-code,
                        "student_submissions" for class-based
     """
+    # Register this thread for graceful shutdown tracking
+    current_thread = threading.current_thread()
+    _active_threads.add(current_thread)
     try:
         logger.info("Portal grading started: submission=%s student=%s",
                     submission_id, student_info.get("student_name", ""))
+
+        if _shutdown_event.is_set():
+            logger.info("Shutdown in progress — skipping grading for submission %s", submission_id)
+            try:
+                from backend.supabase_client import get_supabase
+                sb = get_supabase()
+                if sb and submission_id:
+                    sb.table(supabase_table).update({"status": "grading_deferred"}).eq("id", submission_id).execute()
+            except Exception:
+                pass
+            return
 
         # Build AI instruction string with all grading factors
         accommodation_prompt = ""
@@ -493,3 +530,6 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                 logger.info("Marked submission %s as grading_failed", submission_id)
         except Exception:
             pass
+    finally:
+        # Cleanup thread tracking
+        _active_threads.discard(current_thread)
