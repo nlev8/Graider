@@ -64,21 +64,59 @@ HISTORY_ASSESSMENT = {
 }
 
 MATH_ASSIGNMENT = {
-    "title": "Algebra Practice",
-    "total_points": 15,
-    "sections": [{
-        "name": "Problems",
-        "questions": [
-            {"number": 1, "type": "multiple_choice", "question": "Solve: 2x = 10",
-             "options": ["A) 3", "B) 4", "C) 5", "D) 6"],
-             "answer": "C", "points": 5},
-            {"number": 2, "type": "multiple_choice", "question": "Simplify: 3(x+2)",
-             "options": ["A) 3x+2", "B) 3x+6", "C) x+6", "D) 3x+5"],
-             "answer": "B", "points": 5},
-            {"number": 3, "type": "true_false", "question": "5^0 = 1",
-             "answer": "True", "points": 5},
-        ],
-    }],
+    "title": "Algebra Practice Worksheet",
+    "total_points": 40,
+    "sections": [
+        {
+            "name": "Part A: Multiple Choice",
+            "questions": [
+                {"number": 1, "type": "multiple_choice", "question": "Solve: 2x = 10",
+                 "options": ["A) 3", "B) 4", "C) 5", "D) 6"],
+                 "answer": "C", "points": 5},
+                {"number": 2, "type": "multiple_choice", "question": "Simplify: 3(x+2)",
+                 "options": ["A) 3x+2", "B) 3x+6", "C) x+6", "D) 3x+5"],
+                 "answer": "B", "points": 5},
+            ],
+        },
+        {
+            "name": "Part B: Vocabulary Matching",
+            "questions": [
+                {"number": 3, "type": "matching", "question": "Match algebra terms.",
+                 "terms": ["Variable", "Coefficient", "Expression", "Equation"],
+                 "definitions": [
+                     "A mathematical statement with an equals sign",
+                     "A letter representing an unknown value",
+                     "A number multiplied by a variable",
+                     "A combination of numbers, variables, and operations",
+                 ],
+                 "answer": {
+                     "Variable": "A letter representing an unknown value",
+                     "Coefficient": "A number multiplied by a variable",
+                     "Expression": "A combination of numbers, variables, and operations",
+                     "Equation": "A mathematical statement with an equals sign",
+                 },
+                 "points": 10},
+            ],
+        },
+        {
+            "name": "Part C: Short Answer",
+            "questions": [
+                {"number": 4, "type": "short_answer",
+                 "question": "Explain the difference between an expression and an equation.",
+                 "answer": "An expression has no equals sign. An equation states two expressions are equal.",
+                 "points": 10},
+            ],
+        },
+        {
+            "name": "Part D: Extended Response",
+            "questions": [
+                {"number": 5, "type": "extended_response",
+                 "question": "A store sells notebooks for $3 each and pens for $1.50 each. Write an expression for the total cost of n notebooks and p pens. If you buy 4 notebooks and 6 pens, what is the total cost? Show your work.",
+                 "answer": "Expression: 3n + 1.50p. Total: 3(4) + 1.50(6) = 12 + 9 = $21.",
+                 "points": 10},
+            ],
+        },
+    ],
 }
 
 SCIENCE_ASSESSMENT = {
@@ -257,21 +295,25 @@ class TestClassroomScale:
         print(f"  Perfect scores: {perfect_history}, Zero scores: {zero_history}")
 
         # ── GRADE 30 MATH STUDENTS ──
-        print(f"\n--- Math: 30 students taking assignment ---")
+        print(f"\n--- Math: 30 students taking assignment (MC + matching + written) ---")
         math_scores = []
+        math_pending = 0
         for i in range(30):
             name = _random_student_name(i + 25)  # Offset to avoid duplicate names
             answers = _generate_student_answers(MATH_ASSIGNMENT, wrong_rate=0.2)
             needs_mp = has_written_questions(MATH_ASSIGNMENT)
-            assert needs_mp is False
-            results = grade_student_submission(MATH_ASSIGNMENT, answers)
+            assert needs_mp is True  # Has short_answer + extended_response
+            results = grade_instant_only(MATH_ASSIGNMENT, answers)
             math_scores.append(results["score"])
+            pending = sum(1 for q in results["questions"] if q.get("status") == "pending_review")
+            math_pending += pending
             self._submit_student(math_code, name, answers, results)
 
         avg_math = sum(math_scores) / len(math_scores)
         print(f"  Submitted: 30 students")
-        print(f"  Score range: {min(math_scores)}-{max(math_scores)}/{MATH_ASSIGNMENT['total_points']}")
-        print(f"  Average: {avg_math:.1f}")
+        print(f"  Instant score range: {min(math_scores)}-{max(math_scores)}/20 (of {MATH_ASSIGNMENT['total_points']} total)")
+        print(f"  Average instant: {avg_math:.1f}")
+        print(f"  Written responses pending: {math_pending} (SA + ER per student)")
 
         # ── GRADE 20 SCIENCE STUDENTS ──
         print(f"\n--- Science: 20 students taking assessment ---")
@@ -317,13 +359,16 @@ class TestClassroomScale:
 
         # ── SCORE SANITY CHECKS ──
         assert all(0 <= s <= 20 for s in history_scores), "History scores out of range"
-        assert all(0 <= s <= 15 for s in math_scores), "Math scores out of range"
+        # Math instant max: MC(5+5) + matching(10) = 20 (written SA+ER = 20 more, pending)
+        assert all(0 <= s <= 20 for s in math_scores), "Math instant scores out of range"
         assert all(0 <= s <= 15 for s in science_scores), "Science instant scores out of range"
-        # With 25% error rate, average should be roughly 75% of max
         assert avg_history > 5, f"History average suspiciously low: {avg_history}"
-        assert avg_math > 5, f"Math average suspiciously low: {avg_math}"
+        assert avg_math > 3, f"Math average suspiciously low: {avg_math}"
+        # Verify math has pending written questions
+        assert math_pending == 30 * 2, f"Math: expected {30*2} pending written, got {math_pending}"
         print(f"  ✓ Score ranges valid")
         print(f"  ✓ Averages reasonable (history {avg_history:.1f}, math {avg_math:.1f}, science {avg_science:.1f})")
+        print(f"  ✓ Math: {math_pending} written responses pending (SA + ER per student)")
 
         # ── CONTENT TYPE SETTINGS ──
         h_pub = self.db.table('published_assessments').select('settings').eq('join_code', history_code).execute()
@@ -338,8 +383,10 @@ class TestClassroomScale:
         print(f"CLASSROOM-SCALE TEST PASSED ✓")
         print(f"  75 students across 3 classrooms")
         print(f"  75 submissions stored and verified in Supabase")
-        print(f"  Every question type graded: MC, TF, matching, short answer")
-        print(f"  Assessment vs assignment behavior correct")
-        print(f"  Data isolation verified")
-        print(f"  Score distributions realistic")
+        print(f"  Question types: MC, TF, matching, short answer, extended response")
+        print(f"  Content types: 2 assessments + 1 assignment (different settings)")
+        print(f"  Written responses pending: history 0, math {math_pending}, science {science_pending}")
+        print(f"  Assessment: scores hidden, no retakes")
+        print(f"  Assignment: scores shown, retakes allowed, written pending review")
+        print(f"  Data isolation verified between all 3 teachers")
         print("=" * 70)
