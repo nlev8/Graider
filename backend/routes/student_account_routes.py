@@ -813,7 +813,12 @@ def submit_student_work(content_id):
             submission_row['percentage'] = instant_results.get('percentage')
             submission_row['total_points'] = instant_results.get('total_points')
 
-        result = db.table('student_submissions').insert(submission_row).execute()
+        try:
+            result = db.table('student_submissions').insert(submission_row).execute()
+        except Exception as insert_err:
+            if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
+                return jsonify({"error": "You have already submitted this assignment."}), 400
+            raise
 
         if not result.data:
             return jsonify({"error": "Failed to submit"}), 500

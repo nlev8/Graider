@@ -14,26 +14,42 @@ logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase as _get_supabase
 
-# Clever → Supabase account linking
-_CLEVER_LINKS_PATH = os.path.expanduser("~/.graider_data/clever_links.json")
-
-
+# Clever → Supabase account linking (uses storage.py for Supabase persistence)
 def load_clever_links():
-    """Load the clever_id → supabase_user_id mapping."""
+    """Load all clever_id → supabase_user_id mappings."""
     try:
-        with open(_CLEVER_LINKS_PATH, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        from backend.storage import list_keys, load
+        keys = list_keys('clever_link:', 'system')
+        links = {}
+        for key in keys:
+            data = load(key, 'system')
+            if data and isinstance(data, dict):
+                clever_id = key[len('clever_link:'):]
+                links[clever_id] = data.get('supabase_user_id', '')
+        return links
+    except Exception:
+        # Fallback to legacy file if storage not available
+        legacy_path = os.path.expanduser("~/.graider_data/clever_links.json")
+        try:
+            with open(legacy_path, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
 
 
 def save_clever_link(clever_id, supabase_user_id):
     """Persist a clever_id → supabase_user_id link."""
-    links = load_clever_links()
-    links[clever_id] = supabase_user_id
-    os.makedirs(os.path.dirname(_CLEVER_LINKS_PATH), exist_ok=True)
-    with open(_CLEVER_LINKS_PATH, 'w') as f:
-        json.dump(links, f)
+    try:
+        from backend.storage import save
+        save(f'clever_link:{clever_id}', {'supabase_user_id': supabase_user_id}, 'system')
+    except Exception:
+        # Fallback to legacy file
+        legacy_path = os.path.expanduser("~/.graider_data/clever_links.json")
+        links = load_clever_links()
+        links[clever_id] = supabase_user_id
+        os.makedirs(os.path.dirname(legacy_path), exist_ok=True)
+        with open(legacy_path, 'w') as f:
+            json.dump(links, f)
     logger.info("Linked Clever account %s to Supabase user %s", clever_id, supabase_user_id)
 
 
@@ -44,9 +60,12 @@ def resolve_clever_user_id(clever_id):
 
 
 # Routes that don't require authentication
+# SECURITY: Be explicit — only list endpoints that truly need to be public.
+# Student dashboard/content endpoints use X-Student-Token (not JWT) for their own auth.
 PUBLIC_PREFIXES = [
-    '/api/student/',       # Student portal (public, students don't have accounts)
-    '/api/clever/',        # Clever OAuth flow (callback must be unauthenticated)
+    '/api/student/join/',      # Anonymous join-code portal (GET assessment by code)
+    '/api/student/submit/',    # Anonymous submission (join-code path, POST)
+    '/api/clever/',            # Clever OAuth flow (callback must be unauthenticated)
 ]
 
 PUBLIC_EXACT = [
@@ -54,6 +73,15 @@ PUBLIC_EXACT = [
     '/api/stripe/webhook',      # Stripe webhook (verified via Stripe-Signature header)
     '/api/auth/notify-signup',  # Public signup notification (no JWT needed)
     '/api/auth/approve-user',   # One-click approval from admin email (HMAC-protected)
+    '/api/student/login',       # Student email+code login (creates session token)
+    '/api/student/session',     # Session validation (uses X-Student-Token)
+    '/api/student/dashboard',   # Student dashboard (uses X-Student-Token, not JWT)
+    '/api/student/shared-media', # Shared media access (public via join code)
+]
+
+# Student endpoints that use prefix matching (X-Student-Token auth, not JWT)
+PUBLIC_PREFIXES += [
+    '/api/student/content/',    # Class-based content access (uses X-Student-Token)
 ]
 
 # JWKS client for ES256 verification (cached, refreshes automatically)

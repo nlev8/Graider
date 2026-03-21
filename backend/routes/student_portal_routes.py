@@ -571,7 +571,14 @@ def submit_assessment(code):
             submission_row["total_points"] = results.get('total_points')
             submission_row["percentage"] = results.get('percentage')
 
-        submission_result = db.table('submissions').insert(submission_row).execute()
+        try:
+            submission_result = db.table('submissions').insert(submission_row).execute()
+        except Exception as insert_err:
+            if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
+                return jsonify({
+                    "error": "You have already submitted this assessment.",
+                }), 400
+            raise
 
         if not submission_result.data:
             return jsonify({"error": "Failed to save submission"}), 500

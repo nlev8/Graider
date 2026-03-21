@@ -98,6 +98,10 @@ def _key_to_filepath(data_key):
     elif data_key.startswith('resource:'):
         resource_id = data_key[len('resource:'):]
         return os.path.join(RESOURCES_DIR, f"{resource_id}.json")
+    elif data_key.startswith('clever_link:'):
+        clever_id = data_key[len('clever_link:'):]
+        clever_dir = os.path.join(GRAIDER_DATA_DIR, "clever_links")
+        return os.path.join(clever_dir, f"{clever_id}.json")
     return None
 
 
