@@ -348,10 +348,9 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
               fontWeight: 500,
               fontFamily: 'inherit',
             }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#4274F6"/>
-              <path d="M15.5 8.5L12 12l-3.5-3.5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-              <path d="M12 12v5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            <svg width="18" height="18" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="56" height="56" rx="14" fill="#4274F6"/>
+              <path d="M32.8 16.4C29.2 14.3 24.6 14.5 21.2 17C17.8 19.5 16.2 23.7 17 27.8C17.8 31.9 20.8 35.1 24.8 36.2C28.8 37.3 33 35.9 35.6 32.8" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
             </svg>
             Log in with Clever
           </button>

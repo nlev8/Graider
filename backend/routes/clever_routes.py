@@ -413,7 +413,7 @@ def clever_callback():
             return redirect("/?clever_error=student_not_enrolled")
 
     # Reject unknown roles
-    if clever_user["type"] not in ("teacher", "district_admin", "staff"):
+    if clever_user["type"] not in ("teacher", "district_admin", "school_admin", "staff"):
         return redirect("/?clever_error=unsupported_role")
 
     # Clear any existing session (shared device support — Clever requirement)
