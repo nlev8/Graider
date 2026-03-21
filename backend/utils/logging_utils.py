@@ -6,16 +6,16 @@ import time
 from flask import g
 
 
-class RequestIdFilter(logging.Filter):
-    """Inject request_id into every log record for request tracing."""
+class SafeRequestIdFormatter(logging.Formatter):
+    """Formatter that safely includes request_id even if not set on the record."""
 
-    def filter(self, record):
-        try:
-            record.request_id = getattr(g, 'request_id', '-')
-        except RuntimeError:
-            # Outside Flask request context (e.g., httpx logging in background thread)
-            record.request_id = '-'
-        return True
+    def format(self, record):
+        if not hasattr(record, 'request_id'):
+            try:
+                record.request_id = getattr(g, 'request_id', '-')
+            except RuntimeError:
+                record.request_id = '-'
+        return super().format(record)
 
 
 class JsonFormatter(logging.Formatter):
@@ -26,11 +26,16 @@ class JsonFormatter(logging.Formatter):
     """
 
     def format(self, record):
+        if not hasattr(record, 'request_id'):
+            try:
+                record.request_id = getattr(g, 'request_id', '-')
+            except RuntimeError:
+                record.request_id = '-'
         log_obj = {
             "timestamp": self.formatTime(record),
             "level": record.levelname,
             "logger": record.name,
-            "request_id": getattr(record, 'request_id', '-'),
+            "request_id": record.request_id,
             "message": record.getMessage(),
         }
         if record.exc_info and record.exc_info[0]:
@@ -48,20 +53,15 @@ def configure_logging(app):
     """
     is_prod = os.getenv('FLASK_ENV', '').lower() not in ('development', 'dev', '')
 
-    # Add filter to root logger so all loggers inherit it
-    request_filter = RequestIdFilter()
     root = logging.getLogger()
-
-    # Only add if not already added
-    if not any(isinstance(f, RequestIdFilter) for f in root.filters):
-        root.addFilter(request_filter)
 
     if is_prod:
         # Production: JSON structured logging
         formatter = JsonFormatter()
     else:
         # Development: human-readable with request_id
-        formatter = logging.Formatter(
+        # Uses SafeRequestIdFormatter which handles missing request_id gracefully
+        formatter = SafeRequestIdFormatter(
             '%(asctime)s [%(request_id)s] %(name)s %(levelname)s: %(message)s'
         )
 
