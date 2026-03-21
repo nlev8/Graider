@@ -588,29 +588,9 @@ def submit_assessment(code):
         # Spawn multipass grading thread for written questions
         if needs_multipass:
             from backend.services.portal_grading import run_portal_grading_thread
+            from backend.services.grading_service import load_teacher_config
             teacher_id = assessment_data.get("teacher_id") or ""
-            teacher_config = {
-                "global_ai_notes": "",
-                "grade_level": "",
-                "subject": "",
-                "grading_style": "standard",
-                "rubric": None,
-                "ai_model": "gpt-4o-mini",
-                "period": "",
-            }
-            try:
-                from backend.storage import load as storage_load
-                settings = storage_load("settings", teacher_id)
-                if settings:
-                    teacher_config["global_ai_notes"] = settings.get("global_ai_notes", "")
-                    teacher_config["grade_level"] = settings.get("grade_level", "")
-                    teacher_config["subject"] = settings.get("subject", "")
-                rubric_data = storage_load("rubric", teacher_id)
-                if rubric_data:
-                    teacher_config["rubric"] = rubric_data
-                    teacher_config["grading_style"] = rubric_data.get("gradingStyle", "standard")
-            except Exception:
-                pass
+            teacher_config = load_teacher_config(teacher_id)
 
             # Get student accommodations from published assessment settings
             published_accommodations = assessment_data.get("settings", {}).get("student_accommodations", {})
