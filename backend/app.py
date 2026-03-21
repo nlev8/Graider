@@ -143,8 +143,9 @@ if os.getenv('REDIS_URL'):
 # AUTHENTICATION
 # ══════════════════════════════════════════════════════════════
 try:
-    from utils.logging_utils import configure_logging
+    from utils.logging_utils import configure_logging, log_request_timing
     configure_logging(app)
+    log_request_timing(app)
 except Exception as e:
     print(f"Warning: Logging configuration failed: {e}")
 

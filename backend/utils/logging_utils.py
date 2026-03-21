@@ -1,5 +1,8 @@
 """Logging utilities for Graider — request correlation and structured output."""
+import json
 import logging
+import os
+import time
 from flask import g
 
 
@@ -11,13 +14,36 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
+class JsonFormatter(logging.Formatter):
+    """Structured JSON log formatter for production (Railway).
+
+    Outputs each log line as a JSON object with: timestamp, level, logger,
+    request_id, message, and optional exception info.
+    """
+
+    def format(self, record):
+        log_obj = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "request_id": getattr(record, 'request_id', '-'),
+            "message": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0]:
+            log_obj["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_obj)
+
+
 def configure_logging(app):
     """Set up logging with request_id correlation.
 
+    In production (FLASK_ENV != development), uses JSON structured logging.
+    In development, uses human-readable format with request_id.
+
     Call this after app creation, before init_auth().
-    Adds request_id to all log output for tracing requests
-    through route handlers and background threads.
     """
+    is_prod = os.getenv('FLASK_ENV', '').lower() not in ('development', 'dev', '')
+
     # Add filter to root logger so all loggers inherit it
     request_filter = RequestIdFilter()
     root = logging.getLogger()
@@ -26,14 +52,41 @@ def configure_logging(app):
     if not any(isinstance(f, RequestIdFilter) for f in root.filters):
         root.addFilter(request_filter)
 
-    # Update format to include request_id
-    handler_format = '%(asctime)s [%(request_id)s] %(name)s %(levelname)s: %(message)s'
+    if is_prod:
+        # Production: JSON structured logging
+        formatter = JsonFormatter()
+    else:
+        # Development: human-readable with request_id
+        formatter = logging.Formatter(
+            '%(asctime)s [%(request_id)s] %(name)s %(levelname)s: %(message)s'
+        )
+
+    # Apply formatter to existing handlers
     for handler in root.handlers:
-        handler.setFormatter(logging.Formatter(handler_format))
+        handler.setFormatter(formatter)
 
     # If no handlers exist, add a basic one
     if not root.handlers:
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(handler_format))
+        handler.setFormatter(formatter)
         root.addHandler(handler)
         root.setLevel(logging.INFO)
+
+
+def log_request_timing(app):
+    """Add before/after request hooks to log API response times."""
+
+    @app.before_request
+    def start_timer():
+        g._request_start_time = time.time()
+
+    @app.after_request
+    def log_response(response):
+        if hasattr(g, '_request_start_time'):
+            from flask import request
+            duration_ms = round((time.time() - g._request_start_time) * 1000)
+            if duration_ms > 500:  # Only log slow requests
+                logger = logging.getLogger('performance')
+                logger.info("Slow request: %s %s — %dms (status %d)",
+                            request.method, request.path, duration_ms, response.status_code)
+        return response
