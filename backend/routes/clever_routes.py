@@ -521,6 +521,9 @@ def clever_sync_roster():
     Optional body: { "section_ids": ["id1", "id2"] } to sync only specific sections.
     If omitted, syncs all sections.
     """
+    if not session.get("clever_user"):
+        return jsonify({"error": "Clever session required"}), 401
+
     district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
     if not district_token:
         return jsonify({"error": "District token not configured"}), 503
@@ -606,6 +609,9 @@ def clever_apply_accommodations():
         }
     }
     """
+    if not session.get("clever_user"):
+        return jsonify({"error": "Clever session required"}), 401
+
     data = request.json or {}
     accommodations = data.get("accommodations", {})
     teacher_id = getattr(g, "user_id", "local-dev")
