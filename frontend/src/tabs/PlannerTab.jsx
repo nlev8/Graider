@@ -1182,9 +1182,11 @@ export default React.memo(function PlannerTab({
           title: autoTitle, // Empty string tells backend to auto-generate title
           standardCodes: standardCodes, // Pass for title generation if needed
           sectionCategories: unitConfig.type === "Assignment" ? assignmentSectionCategories : undefined,
+          globalAINotes: globalAINotes,
         },
         selectedIdea: selectedIdea,
         generateVariations: generateVariations,
+        referenceDocs: uploadedDocs.length > 0 ? uploadedDocs : undefined,
       });
       if (data.error) addToast("Error: " + data.error, "error");
       else if (data.variations) {
