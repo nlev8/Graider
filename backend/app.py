@@ -3308,6 +3308,27 @@ def get_user_manual():
 
 
 # ══════════════════════════════════════════════════════════════
+# HEALTH CHECK
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/healthz')
+def healthz():
+    """General health check for Railway load balancer."""
+    status = {"app": "ok"}
+    try:
+        from supabase_client import get_supabase
+        sb = get_supabase()
+        if sb:
+            sb.table('published_assessments').select('id').limit(1).execute()
+            status["supabase"] = "ok"
+        else:
+            status["supabase"] = "not configured"
+    except Exception as e:
+        status["supabase"] = "error"
+    return jsonify(status)
+
+
+# ══════════════════════════════════════════════════════════════
 # STATIC FILE SERVING
 # ══════════════════════════════════════════════════════════════
 

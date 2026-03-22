@@ -458,7 +458,7 @@ def grade_portal_submission():
 
         # Use the portal grading service for consistent grading
         from backend.services.portal_grading import has_written_questions, run_portal_grading_thread
-        from backend.routes.student_portal_routes import grade_instant_only, grade_student_submission
+        from backend.services.grading_service import grade_instant_only, grade_student_submission
 
         needs_multipass = has_written_questions(assessment)
 
@@ -761,7 +761,7 @@ def submit_student_work(content_id):
 
         # Grade instant questions (MC/TF/matching) immediately
         from backend.services.portal_grading import has_written_questions, run_portal_grading_thread
-        from backend.routes.student_portal_routes import grade_instant_only, grade_student_submission
+        from backend.services.grading_service import grade_instant_only, grade_student_submission
         needs_multipass = has_written_questions(assessment_content)
 
         if needs_multipass:

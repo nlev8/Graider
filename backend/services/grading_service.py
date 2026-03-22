@@ -4,6 +4,7 @@ Shared grading utilities for Graider.
 Contains helper functions used by multiple grading paths
 (join-code, class-based, teacher regrade).
 """
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -106,3 +107,220 @@ def load_teacher_config(teacher_id):
         logger.debug("Failed to load teacher config for %s: %s", teacher_id, e)
 
     return teacher_config
+
+
+def grade_student_submission(assessment, answers):
+    """
+    Grade a student's submission against the assessment.
+    Handles all question types with immediate grading.
+    """
+    results = {
+        "questions": [],
+        "score": 0,
+        "total_points": 0,
+        "percentage": 0,
+        "feedback_summary": ""
+    }
+
+    ai_grading_needed = []
+
+    # Process each section and question
+    for sIdx, section in enumerate(assessment.get('sections', [])):
+        for qIdx, question in enumerate(section.get('questions', [])):
+            answer_key = f"{sIdx}-{qIdx}"
+            student_answer = answers.get(answer_key)
+            q_type = question.get('type') or question.get('question_type', 'multiple_choice')
+            points = question.get('points', 1)
+            correct_answer = question.get('answer')
+
+            results["total_points"] += points
+
+            question_result = {
+                "number": question.get('number', qIdx + 1),
+                "question": question.get('question', ''),
+                "type": q_type,
+                "student_answer": student_answer,
+                "correct_answer": correct_answer,
+                "points_possible": points,
+                "points_earned": 0,
+                "is_correct": False,
+                "feedback": ""
+            }
+
+            # For matching questions, check match-specific keys instead of base key
+            has_match_keys = q_type == "matching" and any(
+                k.startswith(f"{answer_key}-match-") for k in answers
+            )
+
+            if (student_answer is None or student_answer == "") and not has_match_keys:
+                question_result["feedback"] = "No answer provided"
+                results["questions"].append(question_result)
+                continue
+
+            # Grade based on question type
+            if q_type in ["short_answer", "extended_response"]:
+                ai_grading_needed.append({
+                    "index": len(results["questions"]),
+                    "question": question,
+                    "student_answer": student_answer,
+                    "result": question_result
+                })
+            else:
+                # MC/TF/matching grading via shared deterministic grader
+                earned, is_correct, feedback = grade_deterministic_question(
+                    question, student_answer, answer_key, answers
+                )
+                question_result["points_earned"] = earned
+                question_result["is_correct"] = is_correct
+                question_result["feedback"] = feedback
+
+            results["questions"].append(question_result)
+
+    # AI grading for open-ended questions
+    if ai_grading_needed:
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+
+            for item in ai_grading_needed:
+                q = item["question"]
+                student_ans = item["student_answer"]
+                q_result = item["result"]
+                points = q.get('points', 1)
+
+                grading_prompt = f"""Grade this student answer for the following question.
+
+Question: {q.get('question', '')}
+Question Type: {q.get('type') or q.get('question_type', 'short_answer')}
+Points Possible: {points}
+Correct/Model Answer: {q.get('answer', 'N/A')}
+Rubric: {q.get('rubric', 'N/A')}
+
+Student's Answer: {student_ans}
+
+Evaluate the student's response and provide:
+1. Points earned (0 to {points})
+2. Brief, encouraging feedback (2-3 sentences)
+3. Whether the answer demonstrates understanding
+
+Respond in JSON format:
+{{"points_earned": <number>, "feedback": "<string>", "is_correct": <boolean>}}"""
+
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "You are a fair and encouraging teacher grading student work. Be supportive but accurate. Provide constructive feedback that helps students learn."},
+                        {"role": "user", "content": grading_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=300
+                )
+
+                ai_result = json.loads(response.choices[0].message.content)
+                q_result["points_earned"] = min(ai_result.get("points_earned", 0), points)
+                q_result["feedback"] = ai_result.get("feedback", "")
+                q_result["is_correct"] = ai_result.get("is_correct", False)
+
+                results["questions"][item["index"]] = q_result
+
+        except Exception as e:
+            logger.error("AI grading error: %s", str(e))
+            for item in ai_grading_needed:
+                q_result = item["result"]
+                q_result["feedback"] = "Answer recorded. Your teacher will review this response."
+                q_result["points_earned"] = 0
+                results["questions"][item["index"]] = q_result
+
+    # Calculate final score
+    results["score"] = sum(q["points_earned"] for q in results["questions"])
+    results["percentage"] = round((results["score"] / results["total_points"]) * 100) if results["total_points"] > 0 else 0
+
+    # Generate summary feedback
+    correct_count = sum(1 for q in results["questions"] if q["is_correct"])
+    total_questions = len(results["questions"])
+
+    if results["percentage"] >= 90:
+        grade_comment = "Excellent work!"
+    elif results["percentage"] >= 80:
+        grade_comment = "Great job!"
+    elif results["percentage"] >= 70:
+        grade_comment = "Good effort!"
+    elif results["percentage"] >= 60:
+        grade_comment = "Keep practicing!"
+    else:
+        grade_comment = "Don't give up - review the material and try again!"
+
+    results["feedback_summary"] = f"{grade_comment} You scored {results['score']}/{results['total_points']} points ({results['percentage']}%), answering {correct_count} out of {total_questions} questions correctly."
+
+    return results
+
+
+def grade_instant_only(assessment, answers):
+    """Grade ONLY deterministic questions (MC/TF/matching). Skip AI for written questions.
+
+    Used when the multipass pipeline will handle written questions in a background thread.
+    Written questions are marked as 'pending_review' with 0 points (scored later by multipass).
+    """
+    results = {
+        "questions": [],
+        "score": 0,
+        "total_points": 0,
+        "percentage": 0,
+        "feedback_summary": ""
+    }
+
+    for sIdx, section in enumerate(assessment.get('sections', [])):
+        for qIdx, question in enumerate(section.get('questions', [])):
+            answer_key = f"{sIdx}-{qIdx}"
+            student_answer = answers.get(answer_key)
+            q_type = question.get('type') or question.get('question_type', 'multiple_choice')
+            points = question.get('points', 1)
+            correct_answer = question.get('answer')
+
+            results["total_points"] += points
+
+            question_result = {
+                "number": question.get('number', qIdx + 1),
+                "question": question.get('question', ''),
+                "type": q_type,
+                "student_answer": student_answer,
+                "correct_answer": correct_answer,
+                "points_possible": points,
+                "points_earned": 0,
+                "is_correct": False,
+                "feedback": ""
+            }
+
+            if q_type in ("short_answer", "extended_response", "essay", "written"):
+                # Skip — will be graded by multipass pipeline
+                question_result["feedback"] = "Pending teacher review"
+                question_result["status"] = "pending_review"
+                results["questions"].append(question_result)
+                continue
+
+            # For matching questions, check match-specific keys instead of base key
+            has_match_keys = q_type == "matching" and any(
+                k.startswith(f"{answer_key}-match-") for k in answers
+            )
+
+            if (student_answer is None or student_answer == "") and not has_match_keys:
+                question_result["feedback"] = "No answer provided"
+                results["questions"].append(question_result)
+                continue
+
+            # MC/TF/matching grading via shared deterministic grader
+            earned, is_correct, feedback = grade_deterministic_question(
+                question, student_answer, answer_key, answers
+            )
+            question_result["points_earned"] = earned
+            question_result["is_correct"] = is_correct
+            question_result["feedback"] = feedback
+
+            results["score"] += question_result["points_earned"]
+            results["questions"].append(question_result)
+
+    # Only calculate percentage from instant-graded questions
+    instant_possible = sum(q["points_possible"] for q in results["questions"] if q.get("status") != "pending_review")
+    results["percentage"] = round((results["score"] / instant_possible * 100) if instant_possible > 0 else 0)
+
+    return results
