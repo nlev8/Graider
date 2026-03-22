@@ -10,6 +10,8 @@ import json
 from collections import defaultdict
 from flask import Blueprint, request, jsonify
 from backend.services.assistant_tools import _normalize_assignment_name
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 analytics_bp = Blueprint('analytics', __name__)
 _logger = logging.getLogger(__name__)
@@ -265,6 +267,8 @@ def _assignment_matches_config(assignment_name, valid_names):
 
 
 @analytics_bp.route('/api/analytics')
+@require_teacher
+@handle_route_errors
 def get_analytics():
     """Load master CSV and return analytics data for charts."""
     # Get filters from query params
@@ -546,6 +550,8 @@ def get_analytics():
 
 
 @analytics_bp.route('/api/export-district-report')
+@require_teacher
+@handle_route_errors
 def export_district_report():
     """
     Export anonymized aggregate data for district reporting.
@@ -718,6 +724,8 @@ def export_district_report():
 
 
 @analytics_bp.route('/api/analytics/cleanup', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def cleanup_master_csv():
     """
     One-time cleanup of master_grades.csv:

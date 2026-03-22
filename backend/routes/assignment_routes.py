@@ -10,6 +10,8 @@ import json
 import subprocess
 from flask import Blueprint, request, jsonify, send_from_directory, g
 from werkzeug.utils import secure_filename
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 _logger = logging.getLogger(__name__)
 
@@ -31,6 +33,8 @@ ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
 
 
 @assignment_bp.route('/api/save-assignment-config', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_assignment_config():
     """Save assignment configuration for grading.
 
@@ -75,6 +79,8 @@ def save_assignment_config():
 
 
 @assignment_bp.route('/api/generate-model-answers', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def generate_model_answers():
     """Generate AI model answers for each section/marker in an assignment config."""
     data = request.json
@@ -153,6 +159,8 @@ Return ONLY valid JSON:
 
 
 @assignment_bp.route('/api/list-assignments')
+@require_teacher
+@handle_route_errors
 def list_assignments():
     """List saved assignment configurations with aliases."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -214,6 +222,8 @@ def list_assignments():
 
 
 @assignment_bp.route('/api/load-assignment')
+@require_teacher
+@handle_route_errors
 def load_assignment():
     """Load a saved assignment configuration."""
     name = request.args.get('name', '')
@@ -240,6 +250,8 @@ def load_assignment():
 
 
 @assignment_bp.route('/api/delete-assignment', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_assignment():
     """Delete a saved assignment configuration."""
     name = request.args.get('name', '')
@@ -263,6 +275,8 @@ def delete_assignment():
 
 
 @assignment_bp.route('/api/export-assignment', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_assignment():
     """Export assignment to Word or PDF format."""
     data = request.json
@@ -473,6 +487,8 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
 
 
 @assignment_bp.route('/api/download-document/<filename>')
+@require_teacher
+@handle_route_errors
 def download_document(filename):
     """Serve a generated document for download."""
     filename = secure_filename(filename)
@@ -485,6 +501,8 @@ def download_document(filename):
 
 
 @assignment_bp.route('/api/download-worksheet/<filename>')
+@require_teacher
+@handle_route_errors
 def download_worksheet(filename):
     """Serve a generated worksheet for download."""
     filename = secure_filename(filename)
@@ -497,6 +515,8 @@ def download_worksheet(filename):
 
 
 @assignment_bp.route('/api/download-csv/<filename>')
+@require_teacher
+@handle_route_errors
 def download_csv(filename):
     """Serve a generated CSV file for download."""
     filename = secure_filename(filename)
@@ -509,6 +529,8 @@ def download_csv(filename):
 
 
 @assignment_bp.route('/api/download-export/<filename>')
+@require_teacher
+@handle_route_errors
 def download_export(filename):
     """Serve an exported CSV file for download."""
     filename = secure_filename(filename)

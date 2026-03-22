@@ -11,12 +11,16 @@ import threading
 from collections import defaultdict
 from datetime import datetime
 from flask import Blueprint, request, jsonify
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 email_bp = Blueprint('email', __name__)
 _logger = logging.getLogger(__name__)
 
 
 @email_bp.route('/api/send-emails', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def send_emails():
     """Send grade emails to students via Resend."""
     try:
@@ -137,6 +141,8 @@ def send_emails():
 
 
 @email_bp.route('/api/test-email', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def test_email():
     """Send a test email to verify configuration."""
     try:
@@ -161,6 +167,8 @@ def test_email():
 
 
 @email_bp.route('/api/email-status', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def email_status():
     """Check if email is configured."""
     try:
@@ -188,6 +196,8 @@ def email_status():
 
 
 @email_bp.route('/api/save-email-config', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_email_config():
     """Save teacher email configuration."""
     try:
@@ -218,6 +228,8 @@ os.makedirs(OUTLOOK_EXPORTS_DIR, exist_ok=True)
 
 
 @email_bp.route('/api/export-outlook-emails', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_outlook_emails():
     """
     Build email payloads for parent notification via Outlook.
@@ -449,6 +461,8 @@ def _read_outlook_output(proc):
 
 
 @email_bp.route('/api/send-outlook-emails', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def send_outlook_emails():
     """Start sending emails via Playwright Outlook automation."""
     try:
@@ -566,6 +580,8 @@ def send_outlook_emails():
 
 
 @email_bp.route('/api/outlook-send/status')
+@require_teacher
+@handle_route_errors
 def outlook_send_status():
     """Get current Outlook sending progress."""
     return jsonify({
@@ -578,6 +594,8 @@ def outlook_send_status():
 
 
 @email_bp.route('/api/outlook-login', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def outlook_login():
     """Open Outlook in browser for login verification."""
     try:
@@ -794,6 +812,8 @@ def _edit_distance(a, b):
 
 
 @email_bp.route('/api/send-confirmation-emails', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def send_confirmation_emails():
     """Send submission-received confirmations for ALL files in the assignments folder.
 
@@ -1047,6 +1067,8 @@ CONFIRMATIONS_FILE = os.path.expanduser("~/.graider_data/confirmations_sent.json
 
 
 @email_bp.route('/api/pending-confirmations', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def pending_confirmations():
     """Count how many files in the assignments folder need confirmation emails.
 
@@ -1155,6 +1177,8 @@ def _save_confirmed_filenames(filenames_set):
 
 
 @email_bp.route('/api/mark-confirmations-sent-file', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def mark_confirmations_sent_file():
     """Mark files as confirmation_sent after Outlook send completes.
 
@@ -1334,6 +1358,8 @@ def _read_focus_comms_output(proc):
 
 
 @email_bp.route('/api/send-focus-comms', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def send_focus_comms():
     """Start sending messages via Focus SIS Communications."""
     try:
@@ -1356,6 +1382,8 @@ def send_focus_comms():
 
 
 @email_bp.route('/api/focus-comms/status')
+@require_teacher
+@handle_route_errors
 def focus_comms_status():
     """Get current Focus Communications sending progress."""
     return jsonify({
@@ -1369,6 +1397,8 @@ def focus_comms_status():
 
 
 @email_bp.route('/api/focus-comms/stop', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def focus_comms_stop():
     """Kill the Focus Communications subprocess if running."""
     proc = _focus_comms_state.get("process")
@@ -1381,6 +1411,8 @@ def focus_comms_stop():
 
 
 @email_bp.route('/api/confirm-send', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def confirm_send():
     """Execute a confirmed send action from the assistant preview.
 

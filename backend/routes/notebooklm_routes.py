@@ -8,6 +8,8 @@ import os
 import json
 import threading
 from flask import Blueprint, request, jsonify, send_file, g
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 _logger = logging.getLogger(__name__)
 
@@ -49,6 +51,8 @@ def _on_register(state):
 # ── Routes ───────────────────────────────────────────────────────────────
 
 @notebooklm_bp.route("/api/notebooklm/auth-status")
+@require_teacher
+@handle_route_errors
 def nlm_auth_status():
     if not _check_nlm_available():
         return jsonify({
@@ -62,6 +66,8 @@ def nlm_auth_status():
 
 
 @notebooklm_bp.route("/api/notebooklm/login", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def nlm_login():
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"})
@@ -100,6 +106,8 @@ ALLOWED_CONTEXT_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", 
 
 
 @notebooklm_bp.route("/api/notebooklm/upload-context", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def nlm_upload_context():
     """Upload a reference document (PDF, image, docx) for NotebookLM context."""
     teacher_id = _get_teacher_id()
@@ -134,6 +142,8 @@ def nlm_upload_context():
 
 
 @notebooklm_bp.route("/api/notebooklm/create-notebook", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def nlm_create_notebook():
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"})
@@ -170,6 +180,8 @@ def nlm_create_notebook():
 
 
 @notebooklm_bp.route("/api/notebooklm/generate", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def nlm_generate():
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"})
@@ -218,6 +230,8 @@ def nlm_generate():
 
 
 @notebooklm_bp.route("/api/notebooklm/status")
+@require_teacher
+@handle_route_errors
 def nlm_status():
     if not _check_nlm_available():
         return jsonify({"is_running": False, "progress": [], "completed": [], "errors": [], "materials": {}})
@@ -235,6 +249,8 @@ def nlm_status():
 
 
 @notebooklm_bp.route("/api/notebooklm/download/<material_type>")
+@require_teacher
+@handle_route_errors
 def nlm_download(material_type):
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"}), 400
@@ -281,6 +297,8 @@ def nlm_download(material_type):
 
 
 @notebooklm_bp.route("/api/notebooklm/preview/<material_type>")
+@require_teacher
+@handle_route_errors
 def nlm_preview(material_type):
     """Return preview data for JSON/markdown materials."""
     if not _check_nlm_available():
@@ -307,6 +325,8 @@ def nlm_preview(material_type):
 
 
 @notebooklm_bp.route("/api/notebooklm/cancel", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def nlm_cancel():
     if not _check_nlm_available():
         return jsonify({"status": "not_running"})
@@ -323,6 +343,8 @@ def nlm_cancel():
 
 
 @notebooklm_bp.route("/api/notebooklm/retry", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def nlm_retry():
     if not _check_nlm_available():
         return jsonify({"error": "NotebookLM not installed"})
@@ -367,6 +389,8 @@ def nlm_retry():
 
 
 @notebooklm_bp.route("/api/notebooklm/share-material", methods=["POST"])
+@require_teacher
+@handle_route_errors
 def share_material():
     """Publish any NotebookLM material for students via join code."""
     from backend.supabase_client import get_supabase_or_raise as get_supabase

@@ -7,6 +7,8 @@ import random
 from datetime import datetime
 from flask import Blueprint, request, jsonify, make_response
 from backend.supabase_client import get_supabase_or_raise as get_supabase
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 survey_bp = Blueprint('survey', __name__)
 
@@ -53,6 +55,8 @@ def _generate_survey_code():
 # ============ Teacher Endpoints ============
 
 @survey_bp.route('/api/survey/create', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def create_survey():
     """Create a new parent survey and return the link."""
     data = request.json or {}
@@ -86,6 +90,8 @@ def create_survey():
 
 
 @survey_bp.route('/api/survey/results')
+@require_teacher
+@handle_route_errors
 def survey_results():
     """Get aggregate survey results for the teacher."""
     code = request.args.get('code')
@@ -136,6 +142,8 @@ def survey_results():
 
 
 @survey_bp.route('/api/survey/list')
+@require_teacher
+@handle_route_errors
 def list_surveys():
     """List all surveys created by the teacher."""
     db = get_supabase()

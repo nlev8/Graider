@@ -12,6 +12,8 @@ import threading
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 # Import accommodation module
 try:
@@ -155,6 +157,8 @@ def get_students_from_period_file(filepath):
 
 
 @settings_bp.route('/api/save-rubric', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_rubric():
     """Save rubric configuration."""
     data = request.json
@@ -174,6 +178,8 @@ def save_rubric():
 
 
 @settings_bp.route('/api/load-rubric')
+@require_teacher
+@handle_route_errors
 def load_rubric():
     """Load rubric configuration."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -195,6 +201,8 @@ def load_rubric():
 
 
 @settings_bp.route('/api/save-global-settings', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_global_settings():
     """Save global AI notes and settings."""
     data = request.json
@@ -214,6 +222,8 @@ def save_global_settings():
 
 
 @settings_bp.route('/api/load-global-settings')
+@require_teacher
+@handle_route_errors
 def load_global_settings():
     """Load global AI notes and settings."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -253,6 +263,8 @@ def parse_csv_headers(filepath):
 
 
 @settings_bp.route('/api/upload-roster', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def upload_roster():
     """Upload and process a roster CSV file."""
     if 'file' not in request.files:
@@ -296,6 +308,8 @@ def upload_roster():
 
 
 @settings_bp.route('/api/save-roster-mapping', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_roster_mapping():
     """Save column mapping for a roster file."""
     data = request.json
@@ -320,6 +334,8 @@ def save_roster_mapping():
 
 
 @settings_bp.route('/api/list-rosters')
+@require_teacher
+@handle_route_errors
 def list_rosters():
     """List all uploaded roster files."""
     rosters = []
@@ -335,6 +351,8 @@ def list_rosters():
 
 
 @settings_bp.route('/api/delete-roster', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def delete_roster():
     """Delete a roster file."""
     data = request.json
@@ -358,6 +376,8 @@ def delete_roster():
 
 
 @settings_bp.route('/api/upload-period', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def upload_period():
     """Upload a period/class CSV file."""
     if 'file' not in request.files:
@@ -445,6 +465,8 @@ def _get_students_from_period_rows(rows):
 
 
 @settings_bp.route('/api/list-periods')
+@require_teacher
+@handle_route_errors
 def list_periods():
     """List all uploaded period files with their students."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -490,6 +512,8 @@ def list_periods():
 
 
 @settings_bp.route('/api/delete-period', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def delete_period():
     """Delete a period file."""
     data = request.json
@@ -513,6 +537,8 @@ def delete_period():
 
 
 @settings_bp.route('/api/update-period-level', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def update_period_level():
     """Update the class level (standard/advanced/support) for a period."""
     data = request.json
@@ -551,6 +577,8 @@ def update_period_level():
 
 
 @settings_bp.route('/api/get-period-students', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def get_period_students():
     """Get student names from a period CSV file."""
     data = request.json
@@ -573,6 +601,8 @@ def get_period_students():
 
 
 @settings_bp.route('/api/upload-document', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def upload_document():
     """Upload a supporting document for lesson planning/grading."""
     if 'file' not in request.files:
@@ -612,6 +642,8 @@ def upload_document():
 
 
 @settings_bp.route('/api/list-documents')
+@require_teacher
+@handle_route_errors
 def list_documents():
     """List all uploaded supporting documents."""
     documents = []
@@ -627,6 +659,8 @@ def list_documents():
 
 
 @settings_bp.route('/api/delete-document', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def delete_document():
     """Delete a supporting document."""
     data = request.json
@@ -759,6 +793,8 @@ def _suggest_mapping(headers, sample_rows):
 
 
 @settings_bp.route('/api/preview-parent-contacts', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def preview_parent_contacts():
     """
     Step 1: Upload class list file and return headers + suggested mapping.
@@ -862,6 +898,8 @@ def preview_parent_contacts():
 
 
 @settings_bp.route('/api/save-parent-contact-mapping', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_parent_contact_mapping():
     """
     Step 2: Process the uploaded file using the teacher's confirmed column mapping.
@@ -1073,6 +1111,8 @@ def save_parent_contact_mapping():
 
 
 @settings_bp.route('/api/parent-contacts')
+@require_teacher
+@handle_route_errors
 def get_parent_contacts():
     """Return stored parent contacts with summary stats."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1129,6 +1169,8 @@ def get_parent_contacts():
 # ══════════════════════════════════════════════════════════════
 
 @settings_bp.route('/api/accommodation-presets')
+@require_teacher
+@handle_route_errors
 def get_accommodation_presets():
     """Get all available accommodation presets (default + custom)."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1137,6 +1179,8 @@ def get_accommodation_presets():
 
 
 @settings_bp.route('/api/accommodation-presets', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def create_accommodation_preset():
     """Create or update a custom accommodation preset."""
     data = request.json
@@ -1151,6 +1195,8 @@ def create_accommodation_preset():
 
 
 @settings_bp.route('/api/accommodation-presets/<preset_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_accommodation_preset(preset_id):
     """Delete a custom accommodation preset."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1161,6 +1207,8 @@ def delete_accommodation_preset(preset_id):
 
 
 @settings_bp.route('/api/student-accommodations')
+@require_teacher
+@handle_route_errors
 def get_all_student_accommodations():
     """
     Get all student accommodation mappings.
@@ -1230,6 +1278,8 @@ def get_all_student_accommodations():
 
 
 @settings_bp.route('/api/student-accommodations/<student_id>', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_single_student_accommodation(student_id):
     """Get accommodation settings for a specific student."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1241,6 +1291,8 @@ def get_single_student_accommodation(student_id):
 
 
 @settings_bp.route('/api/student-accommodations/<student_id>', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def set_single_student_accommodation(student_id):
     """Set accommodation presets for a student."""
     data = request.json
@@ -1257,6 +1309,8 @@ def set_single_student_accommodation(student_id):
 
 
 @settings_bp.route('/api/student-accommodations/<student_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_student_accommodation(student_id):
     """Remove accommodation settings for a student."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1267,6 +1321,8 @@ def delete_student_accommodation(student_id):
 
 
 @settings_bp.route('/api/import-accommodations', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def import_accommodations():
     """
     Import accommodations from CSV file.
@@ -1307,6 +1363,8 @@ def import_accommodations():
 
 
 @settings_bp.route('/api/export-accommodations')
+@require_teacher
+@handle_route_errors
 def export_accommodations():
     """
     Export all accommodation data for backup.
@@ -1321,6 +1379,8 @@ def export_accommodations():
 
 
 @settings_bp.route('/api/clear-accommodations', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def clear_accommodations():
     """
     Delete all student accommodation data.
@@ -1334,6 +1394,8 @@ def clear_accommodations():
 
 
 @settings_bp.route('/api/accommodation-stats')
+@require_teacher
+@handle_route_errors
 def accommodation_stats():
     """Get statistics about accommodation usage."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1344,6 +1406,8 @@ def accommodation_stats():
 # ============ API Keys Management (BYOK) ============
 
 @settings_bp.route('/api/save-api-keys', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_api_keys():
     """Save API keys securely via BYOK module."""
     from backend.api_keys import save_user_keys, check_user_keys
@@ -1396,6 +1460,8 @@ def save_api_keys():
 
 
 @settings_bp.route('/api/check-api-keys')
+@require_teacher
+@handle_route_errors
 def check_api_keys():
     """Check which API keys are configured (without exposing the keys)."""
     from backend.api_keys import check_user_keys
@@ -1636,6 +1702,8 @@ def _process_focus_import(import_data):
 
 
 @settings_bp.route('/api/import-from-focus', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def import_from_focus():
     """Trigger Focus SIS roster import via Playwright."""
     # Write per-teacher creds to temp file for subprocess access
@@ -1656,6 +1724,8 @@ def import_from_focus():
 
 
 @settings_bp.route('/api/focus-import-status')
+@require_teacher
+@handle_route_errors
 def focus_import_status():
     """Get current status of the Focus import process."""
     return jsonify({
@@ -1740,6 +1810,8 @@ def _save_parent_contacts(contacts):
 
 
 @settings_bp.route('/api/add-student', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def add_student():
     """Add a student to a period CSV and optionally to parent contacts."""
     data = request.json
@@ -1826,6 +1898,8 @@ def add_student():
 
 
 @settings_bp.route('/api/remove-student', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def remove_student():
     """Remove a student from period CSV and parent contacts."""
     data = request.json
@@ -1875,6 +1949,8 @@ def remove_student():
 
 
 @settings_bp.route('/api/update-student', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def update_student():
     """Update a student's info in the period CSV and/or parent contacts."""
     data = request.json
@@ -1976,6 +2052,8 @@ def update_student():
 # ══════════════════════════════════════════════════════════════
 
 @settings_bp.route('/api/sync-to-cloud', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def sync_to_cloud():
     """Upload all local ~/.graider_* data to Supabase for the logged-in teacher."""
     teacher_id = getattr(g, 'user_id', 'local-dev')

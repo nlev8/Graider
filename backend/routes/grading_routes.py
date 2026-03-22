@@ -15,6 +15,8 @@ import threading
 from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 grading_bp = Blueprint('grading', __name__)
 _logger = logging.getLogger(__name__)
@@ -43,6 +45,8 @@ def init_grading_routes(get_state_fn, thread_fn, reset_fn, get_lock_fn=None):
 
 
 @grading_bp.route('/api/status')
+@require_teacher
+@handle_route_errors
 def get_status():
     """Get current grading status."""
     if _get_state is None:
@@ -70,6 +74,8 @@ def get_status():
 
 
 @grading_bp.route('/api/stop-grading', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def stop_grading():
     """Stop grading and save progress."""
     if _get_state is None:
@@ -97,6 +103,8 @@ def stop_grading():
 
 
 @grading_bp.route('/api/clear-results', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def clear_results():
     """Clear grading results. Optionally filter by assignment name."""
     if _get_state is None:
@@ -280,6 +288,8 @@ def _sync_result_to_master_csv(result):
 
 
 @grading_bp.route('/api/update-result', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def update_result():
     """Update a single grading result (score, feedback, etc.)."""
     import json
@@ -368,6 +378,8 @@ def update_result():
 # =============================================================================
 
 @grading_bp.route('/api/grade-math', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def grade_math():
     """
     Grade a math question using SymPy for equivalence checking.
@@ -397,6 +409,8 @@ def grade_math():
 
 
 @grading_bp.route('/api/grade-data-table', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def grade_data_table():
     """
     Grade a science data table with tolerance for numerical values.
@@ -431,6 +445,8 @@ def grade_data_table():
 
 
 @grading_bp.route('/api/grade-coordinates', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def grade_coordinates():
     """
     Grade a geography coordinate question with distance tolerance.
@@ -457,6 +473,8 @@ def grade_coordinates():
 
 
 @grading_bp.route('/api/grade-place-name', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def grade_place_name():
     """
     Grade a geography place name question accepting alternatives.
@@ -481,6 +499,8 @@ def grade_place_name():
 
 
 @grading_bp.route('/api/check-math-equivalence', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def check_math_equivalence():
     """
     Check if two math expressions are equivalent (utility endpoint).
@@ -505,6 +525,8 @@ def check_math_equivalence():
 
 
 @grading_bp.route('/api/export-focus-csv', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_focus_csv():
     """
     Export grades as CSV for Focus SIS import.
@@ -755,6 +777,8 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
 
 
 @grading_bp.route('/api/export-focus-batch', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_focus_batch():
     """
     Export grades as per-period CSV files for Focus SIS bulk import.
@@ -853,6 +877,8 @@ os.makedirs(POWERSCHOOL_EXPORTS_DIR, exist_ok=True)
 
 
 @grading_bp.route('/api/export-lms-csv', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_lms_csv():
     """
     Export grades as CSV for Canvas or PowerSchool LMS import.
@@ -962,6 +988,8 @@ def export_lms_csv():
 
 
 @grading_bp.route('/api/export-focus-comments', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_focus_comments():
     """
     Export per-student comments/feedback for Focus SIS.
@@ -1082,6 +1110,8 @@ def _read_focus_comments_output(proc):
 
 
 @grading_bp.route('/api/upload-focus-comments', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def upload_focus_comments():
     """Start uploading comments to Focus via Playwright automation."""
     if _focus_comments_state.get("status") == "running":
@@ -1163,6 +1193,8 @@ def upload_focus_comments():
 
 
 @grading_bp.route('/api/focus-comments/status')
+@require_teacher
+@handle_route_errors
 def focus_comments_status():
     """Get current Focus comments upload progress."""
     return jsonify({
@@ -1183,6 +1215,8 @@ ELL_DATA_FILE = os.path.expanduser("~/.graider_data/ell_students.json")
 
 
 @grading_bp.route('/api/ell-students', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_ell_students():
     """Get all ELL student designations."""
     if os.path.exists(ELL_DATA_FILE):
@@ -1197,6 +1231,8 @@ def get_ell_students():
 
 
 @grading_bp.route('/api/ell-students', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_ell_students():
     """Save ELL student designations."""
     data = request.json
@@ -1214,6 +1250,8 @@ def save_ell_students():
 
 
 @grading_bp.route('/api/student-history', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def list_student_history():
     """List all students with saved history/writing profiles."""
     import json
@@ -1334,6 +1372,8 @@ def _build_student_name_lookup():
 
 
 @grading_bp.route('/api/student-history/<student_id>', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_student_history(student_id):
     """Get detailed history for a specific student."""
     import json
@@ -1354,6 +1394,8 @@ def get_student_history(student_id):
 
 
 @grading_bp.route('/api/student-history/<student_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_student_history(student_id):
     """Delete history for a specific student."""
     history_dir = os.path.expanduser("~/.graider_data/student_history")
@@ -1371,6 +1413,8 @@ def delete_student_history(student_id):
 
 
 @grading_bp.route('/api/student-history', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_all_student_history():
     """Delete ALL student history (fresh start)."""
     history_dir = os.path.expanduser("~/.graider_data/student_history")
@@ -1397,6 +1441,8 @@ def delete_all_student_history():
 
 
 @grading_bp.route('/api/student-history/migrate-names', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def migrate_student_names():
     """Add student names to existing profiles by looking up from roster."""
     import json

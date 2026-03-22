@@ -12,6 +12,8 @@ import threading
 from datetime import datetime
 
 from flask import Blueprint, request, jsonify
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 automation_bp = Blueprint('automation', __name__)
 
@@ -118,6 +120,8 @@ def _read_picker_output(proc):
 # ── CRUD ──────────────────────────────────────────────────────
 
 @automation_bp.route('/api/automations', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def list_automations():
     """List all saved workflow files."""
     workflows = []
@@ -140,6 +144,8 @@ def list_automations():
 
 
 @automation_bp.route('/api/automations/<workflow_id>', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_automation(workflow_id):
     """Load a specific workflow JSON."""
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
@@ -151,6 +157,8 @@ def get_automation(workflow_id):
 
 
 @automation_bp.route('/api/automations', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_automation():
     """Save or create a workflow."""
     data = request.json
@@ -173,6 +181,8 @@ def save_automation():
 
 
 @automation_bp.route('/api/automations/<workflow_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_automation(workflow_id):
     """Delete a workflow file."""
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
@@ -183,6 +193,8 @@ def delete_automation(workflow_id):
 
 
 @automation_bp.route('/api/automations/templates', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def list_templates():
     """Return built-in template workflows."""
     templates = []
@@ -206,6 +218,8 @@ def list_templates():
 
 
 @automation_bp.route('/api/automations/templates/<template_id>', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_template(template_id):
     """Load a specific template by ID."""
     if not os.path.isdir(TEMPLATES_DIR):
@@ -225,6 +239,8 @@ def get_template(template_id):
 
 
 @automation_bp.route('/api/automations/templates/<template_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_template(template_id):
     """Delete a template file by matching its JSON id field."""
     if not os.path.isdir(TEMPLATES_DIR):
@@ -247,6 +263,8 @@ def delete_template(template_id):
 # ── Run ──────────────────────────────────────────────────────
 
 @automation_bp.route('/api/automations/<workflow_id>/run', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def run_automation(workflow_id):
     """Launch workflow as subprocess."""
     if _run_state.get("status") == "running":
@@ -284,6 +302,8 @@ def run_automation(workflow_id):
 
 
 @automation_bp.route('/api/automations/run/status', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def run_status():
     """Poll current automation run state."""
     return jsonify({
@@ -298,6 +318,8 @@ def run_status():
 
 
 @automation_bp.route('/api/automations/run/stop', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def stop_run():
     """Kill running automation subprocess."""
     proc = _run_state.get("process")
@@ -311,6 +333,8 @@ def stop_run():
 # ── Element Picker ───────────────────────────────────────────
 
 @automation_bp.route('/api/automations/picker/start', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def start_picker():
     """Launch element picker browser."""
     if _picker_state.get("status") == "picking":
@@ -340,6 +364,8 @@ def start_picker():
 
 
 @automation_bp.route('/api/automations/picker/events', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def picker_events():
     """Drain and return accumulated picker events."""
     events = list(_picker_state.get("events", []))
@@ -348,6 +374,8 @@ def picker_events():
 
 
 @automation_bp.route('/api/automations/picker/stop', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def stop_picker():
     """Close picker browser."""
     proc = _picker_state.get("process")

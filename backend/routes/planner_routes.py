@@ -14,6 +14,8 @@ from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 from pathlib import Path
 from backend.extensions import limiter
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
@@ -2218,6 +2220,8 @@ def load_standards(state, subject, grade=None):
 
 
 @planner_bp.route('/api/get-standards', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def get_standards():
     """Get standards for a specific state, grade, and subject."""
     data = request.json
@@ -2236,6 +2240,8 @@ def get_standards():
 
 
 @planner_bp.route('/api/align-document-to-standards', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def align_document_to_standards():
     """Analyze a document and identify which standards it aligns to."""
     data = request.json
@@ -2327,6 +2333,8 @@ def align_document_to_standards():
 
 
 @planner_bp.route('/api/rewrite-for-alignment', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def rewrite_for_alignment():
     """Rewrite specific questions to better align with selected standards."""
     data = request.json
@@ -2413,6 +2421,8 @@ def rewrite_for_alignment():
 
 
 @planner_bp.route('/api/get-lesson-templates', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def get_lesson_templates():
     """Get subject-specific lesson activity templates."""
     data = request.json
@@ -2456,6 +2466,8 @@ def get_lesson_templates():
 
 @planner_bp.route('/api/brainstorm-lesson-ideas', methods=['POST'])
 @limiter.limit("10 per minute")
+@require_teacher
+@handle_route_errors
 def brainstorm_lesson_ideas():
     """Generate multiple lesson plan ideas/concepts for selected standards."""
     data = request.json
@@ -2628,6 +2640,8 @@ Make each idea distinct - vary the approaches (hands-on activities, discussions,
 
 @planner_bp.route('/api/generate-lesson-plan', methods=['POST'])
 @limiter.limit("10 per minute")
+@require_teacher
+@handle_route_errors
 def generate_lesson_plan():
     """Generate a lesson plan using AI."""
     data = request.json
@@ -3139,6 +3153,8 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
 @planner_bp.route('/api/generate-assignment-from-lesson', methods=['POST'])
 @limiter.limit("10 per minute")
+@require_teacher
+@handle_route_errors
 def generate_assignment_from_lesson():
     """Generate an assignment based on an existing lesson plan."""
     data = request.json
@@ -3568,6 +3584,8 @@ Make the questions specific to the lesson content. Include a variety of question
 
 
 @planner_bp.route('/api/export-lesson-plan', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_lesson_plan():
     """Export the lesson plan to a Word document."""
     data = request.json
@@ -4204,6 +4222,8 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
 
 
 @planner_bp.route('/api/export-generated-assignment', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_generated_assignment():
     """Export a generated assignment to PDF or DOCX (with Graider tables) format."""
     data = request.json
@@ -5155,6 +5175,8 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
 
 @planner_bp.route('/api/generate-assessment', methods=['POST'])
 @limiter.limit("10 per minute")
+@require_teacher
+@handle_route_errors
 def generate_assessment():
     """
     Generate a standards-aligned assessment with DOK level distribution.
@@ -5655,6 +5677,8 @@ Generate a complete assessment in this JSON format:
 
 
 @planner_bp.route('/api/export-assessment', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_assessment():
     """Export assessment to Word document with Graider table extraction tags."""
     data = request.json
@@ -5843,6 +5867,8 @@ TEMPLATES_DIR = os.path.expanduser("~/.graider_data/assessment_templates")
 
 
 @planner_bp.route('/api/upload-assessment-template', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def upload_assessment_template():
     """Upload a sample template from an assessment platform (e.g., Wayground, Canvas)."""
     import uuid
@@ -5942,6 +5968,8 @@ def parse_template_structure(filepath, ext):
 
 
 @planner_bp.route('/api/assessment-templates', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_assessment_templates():
     """Get all uploaded assessment templates."""
     templates = []
@@ -5965,6 +5993,8 @@ def get_assessment_templates():
 
 
 @planner_bp.route('/api/assessment-template/<template_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_assessment_template(template_id):
     """Delete an assessment template."""
     if not os.path.exists(TEMPLATES_DIR):
@@ -5995,6 +6025,8 @@ def delete_assessment_template(template_id):
 
 
 @planner_bp.route('/api/export-assessment-platform', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_assessment_for_platform():
     """Export assessment in a specific platform's format."""
     data = request.json
@@ -6299,6 +6331,8 @@ def generate_qti_xml(assessment, questions):
 
 
 @planner_bp.route('/api/grade-assessment-answers', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def grade_assessment_answers():
     """
     Grade student answers against the assessment using AI for open-ended questions.
@@ -6517,6 +6551,8 @@ Respond in JSON format:
 
 
 @planner_bp.route('/api/regenerate-questions', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def regenerate_questions():
     """Regenerate specific questions in an assessment/assignment using AI.
 
@@ -6641,6 +6677,8 @@ Make questions grade-appropriate, clear, and assessable by AI grading systems.""
 
 
 @planner_bp.route('/api/planner/costs', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_planner_costs():
     """Return planner API cost summary."""
     try:
@@ -6651,6 +6689,8 @@ def get_planner_costs():
 
 
 @planner_bp.route('/api/adjust-reading-level', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def adjust_reading_level():
     """Rewrite text at a target reading level while preserving key terms."""
     from backend.api_keys import get_api_key as _gak
@@ -6728,6 +6768,8 @@ TEXT TO REWRITE:
 
 
 @planner_bp.route('/api/extract-text', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def extract_text_from_file():
     """Extract plain text from uploaded documents (docx, pdf, txt) or images (png, jpg, etc.)."""
     if 'file' not in request.files:

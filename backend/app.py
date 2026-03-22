@@ -155,6 +155,17 @@ try:
 except Exception as e:
     print(f"Warning: Auth middleware not loaded: {e}")
 
+@app.errorhandler(500)
+def handle_500(e):
+    return jsonify({"error": "Internal server error"}), 500
+
+@app.errorhandler(404)
+def handle_404(e):
+    # Don't return JSON for HTML pages (SPA routing)
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Not found"}), 404
+    return send_from_directory(app.static_folder, 'index.html')
+
 # Recover stale partial submissions from prior deploys (daemon threads killed on restart)
 try:
     from supabase_client import get_supabase as _recovery_sb
@@ -2025,6 +2036,7 @@ register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/grade-individual', methods=['POST'])
+@limiter.limit("5 per minute")
 def grade_individual():
     """Grade a single uploaded image file (for paper/handwritten assignments).
 
