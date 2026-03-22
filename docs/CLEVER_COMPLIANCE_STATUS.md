@@ -58,6 +58,35 @@
 
 ---
 
+## Data Handling & FERPA
+
+| Requirement | Status | Implementation |
+|---|---|---|
+| Data stored only for educational purpose | ✅ | Roster data used for grading + accommodations only |
+| Data deletion on district disconnect | ✅ | Full cascade: local files + Supabase (classes, students, enrollments, submissions, sessions) |
+| Audit trail for data access | ✅ | `_clever_audit()` logs all sync, delete, accommodation, and key operations to Supabase `audit_log` |
+| Teacher sees only their own students | ✅ | Server-side section filtering by teacher Clever ID |
+| Student PII not sent to AI | ✅ | Only accommodation type sent (not names, IDs) |
+| Analytics opt-out for districts | ✅ | `GRAIDER_DISABLE_ANALYTICS` or `disableAnalytics()` |
+| Privacy Policy published | ✅ | graider.live |
+| DPA available | ✅ | Available for district agreements |
+
+## Data Retention
+
+- **Roster data**: Refreshed on every teacher login. Deleted on district disconnect.
+- **Student submissions**: Retained until teacher deletes or district disconnects.
+- **Grading results**: Retained in teacher's results storage. Deleted with FERPA data deletion.
+- **Audit logs**: Retained indefinitely for compliance review.
+
+## COPPA Compliance
+
+- No student accounts created without district/school authorization via Clever
+- No direct collection of student data — all data comes through Clever API
+- No advertising or third-party data sharing
+- Analytics (PostHog) can be disabled per district
+
+---
+
 ## Remaining Items (Post-Beta)
 
 | Item | Priority | Notes |

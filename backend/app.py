@@ -92,6 +92,18 @@ CORS(app, resources={r"/api/*": {"origins": [
 from backend.extensions import limiter
 limiter.init_app(app)
 
+# CSRF protection strategy:
+# 1. SameSite=Lax cookies prevent cross-site POST (configured above)
+# 2. CORS restricts origins to app.graider.live (configured above)
+# 3. JWT Bearer tokens required on all /api/ teacher endpoints (@require_teacher)
+# 4. Clever endpoints use session-based auth (@require_clever_session)
+# 5. Student endpoints validate X-Student-Token header
+#
+# This triple-layer protection (SameSite + CORS + token auth) provides
+# equivalent or stronger CSRF protection than traditional CSRF tokens
+# for a JSON API. CSRF tokens are not added because the React frontend
+# sends JSON via fetch() with Bearer tokens, not HTML form submissions.
+
 _logger = logging.getLogger(__name__)
 
 

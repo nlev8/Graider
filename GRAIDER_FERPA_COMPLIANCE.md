@@ -617,13 +617,13 @@ To be FERPA compliant, Graider needs:
 |-------------|--------|
 | Name sanitization | ✅ Implemented |
 | Full PII sanitization | ✅ Implemented (SSN, IDs, emails, phones, addresses, dates) |
-| Privacy Policy | ⏳ Template provided |
-| Terms of Service | ⏳ Need to create |
-| DPA Template | ⏳ Template provided |
-| Data deletion feature | ✅ Implemented (Settings > Privacy & Data) |
-| Audit logging | ✅ Implemented (~/.graider_audit.log) |
+| Privacy Policy | ✅ Published at graider.live |
+| Terms of Service | ✅ Published at graider.live |
+| DPA Template | ✅ Available for districts |
+| Data deletion feature | ✅ Implemented (Settings > Privacy & Data + Clever disconnect cascade) |
+| Audit logging | ✅ Implemented (Supabase audit_log table + _clever_audit) |
 | Data export | ✅ Implemented (FERPA data portability) |
-| Encryption at rest | ⏳ For stored data |
+| Encryption at rest | ✅ Supabase encrypts at rest; Railway filesystem is ephemeral |
 
 **Technical Implementation Complete!**
 
