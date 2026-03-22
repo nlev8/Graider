@@ -259,7 +259,7 @@ def parse_csv_headers(filepath):
             row_count = sum(1 for _ in reader)
         return {'headers': headers, 'row_count': row_count}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': 'An internal error occurred'}
 
 
 @settings_bp.route('/api/upload-roster', methods=['POST'])

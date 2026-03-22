@@ -13,6 +13,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from flask import Blueprint, request, jsonify, g
+from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 
 _logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ def _get_teacher_id():
 
 
 @behavior_bp.route('/api/behavior/session', methods=['POST'])
+@require_teacher
 @handle_route_errors
 def save_behavior_session():
     """Save a completed behavior tracking session.
@@ -121,6 +123,7 @@ def save_behavior_session():
 
 
 @behavior_bp.route('/api/behavior/data', methods=['GET'])
+@require_teacher
 @handle_route_errors
 def get_behavior_data():
     """Get behavior tracking data.
@@ -243,6 +246,7 @@ def get_behavior_data():
 
 
 @behavior_bp.route('/api/behavior/events', methods=['GET'])
+@require_teacher
 @handle_route_errors
 def get_behavior_events():
     """Get individual behavior events (not aggregated).
@@ -311,6 +315,7 @@ def get_behavior_events():
 
 
 @behavior_bp.route('/api/behavior/data', methods=['DELETE'])
+@require_teacher
 @handle_route_errors
 def delete_behavior_data():
     """Delete behavior data.
@@ -348,6 +353,7 @@ def delete_behavior_data():
 
 
 @behavior_bp.route('/api/behavior/debug', methods=['GET'])
+@require_teacher
 @handle_route_errors
 def debug_behavior_data():
     """Diagnostic: show teacher_id, event count, session count, and stored student names."""
@@ -400,6 +406,7 @@ def debug_behavior_data():
 
 
 @behavior_bp.route('/api/behavior/roster', methods=['GET'])
+@require_teacher
 @handle_route_errors
 def get_roster_for_behavior():
     """Return a lightweight roster for name matching in the behavior panel.

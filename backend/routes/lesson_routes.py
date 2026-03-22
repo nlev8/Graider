@@ -16,6 +16,8 @@ except ImportError:
     anthropic = None
 
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,8 @@ def _safe_filename(name):
 
 
 @lesson_bp.route('/api/save-lesson', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_lesson():
     """Save a lesson plan for later use in assessment generation."""
     data = request.json
@@ -78,6 +82,8 @@ def save_lesson():
 
 
 @lesson_bp.route('/api/list-lessons')
+@require_teacher
+@handle_route_errors
 def list_lessons():
     """List all saved lessons organized by unit."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -139,6 +145,8 @@ def list_lessons():
 
 
 @lesson_bp.route('/api/load-lesson')
+@require_teacher
+@handle_route_errors
 def load_lesson():
     """Load a specific lesson by unit and filename."""
     unit = request.args.get('unit', '')
@@ -165,6 +173,8 @@ def load_lesson():
 
 
 @lesson_bp.route('/api/delete-lesson', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def delete_lesson():
     """Delete a saved lesson."""
     unit = request.args.get('unit', '')
@@ -188,6 +198,8 @@ def delete_lesson():
 
 
 @lesson_bp.route('/api/list-units')
+@require_teacher
+@handle_route_errors
 def list_units():
     """List all unit names."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -260,6 +272,8 @@ def _save_calendar(data, teacher_id='local-dev'):
 
 
 @lesson_bp.route('/api/calendar', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_calendar():
     """Return full calendar data."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -267,6 +281,8 @@ def get_calendar():
 
 
 @lesson_bp.route('/api/calendar/schedule', methods=['PUT'])
+@require_teacher
+@handle_route_errors
 def schedule_lesson():
     """Add or update a scheduled lesson on the calendar."""
     data = request.json
@@ -307,6 +323,8 @@ def schedule_lesson():
 
 
 @lesson_bp.route('/api/calendar/schedule/<entry_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def unschedule_lesson(entry_id):
     """Remove a scheduled lesson from the calendar."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -320,6 +338,8 @@ def unschedule_lesson(entry_id):
 
 
 @lesson_bp.route('/api/calendar/holiday', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def add_holiday():
     """Add a holiday or break to the calendar."""
     data = request.json
@@ -346,6 +366,8 @@ def add_holiday():
 
 
 @lesson_bp.route('/api/calendar/holiday', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def remove_holiday():
     """Remove a holiday by date."""
     date = request.args.get('date')
@@ -363,6 +385,8 @@ def remove_holiday():
 
 
 @lesson_bp.route('/api/calendar/school-days', methods=['PUT'])
+@require_teacher
+@handle_route_errors
 def update_school_days():
     """Update which days of the week are school days."""
     data = request.json
@@ -379,6 +403,8 @@ def update_school_days():
 
 
 @lesson_bp.route('/api/calendar/parse-document', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def parse_document_for_calendar():
     """Parse an uploaded document and extract calendar events using AI."""
     data = request.json
@@ -461,6 +487,8 @@ def parse_document_for_calendar():
 
 
 @lesson_bp.route('/api/calendar/import-events', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def import_calendar_events():
     """Bulk import events into the teaching calendar."""
     data = request.json
@@ -513,8 +541,6 @@ def import_calendar_events():
 
 
 # ============ Resources (Assets) ============
-
-from backend.utils.auth_decorators import require_teacher
 
 
 @lesson_bp.route('/api/save-resource', methods=['POST'])

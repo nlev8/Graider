@@ -18,6 +18,8 @@ import logging
 from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response, stream_with_context, g
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 try:
     import anthropic
@@ -301,7 +303,7 @@ def _extract_text_from_pdf(file_bytes):
     except ImportError:
         return "[PDF extraction requires PyMuPDF: pip install pymupdf]"
     except Exception as e:
-        return "[Error extracting PDF: " + str(e) + "]"
+        return "[Error extracting PDF]"
 
 
 def _extract_text_from_docx(file_bytes):
@@ -331,7 +333,7 @@ def _extract_text_from_docx(file_bytes):
     except ImportError:
         return "[DOCX extraction requires python-docx: pip install python-docx]"
     except Exception as e:
-        return "[Error extracting DOCX: " + str(e) + "]"
+        return "[Error extracting DOCX]"
 
 
 def _build_file_content_blocks(files):
@@ -1143,6 +1145,8 @@ def _cleanup_stale_sessions():
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/chat', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def assistant_chat():
     """Stream chat responses with tool use via SSE."""
     model_info = _get_assistant_model()
@@ -1670,6 +1674,8 @@ def assistant_chat():
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/clear', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def clear_conversation():
     """Clear conversation history for a session."""
     data = request.json or {}
@@ -1681,6 +1687,8 @@ def clear_conversation():
 
 
 @assistant_bp.route('/api/assistant/mute-tts', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def mute_tts():
     """Mute TTS for a session — stops sending text to TTS mid-stream."""
     data = request.json or {}
@@ -1691,6 +1699,8 @@ def mute_tts():
 
 
 @assistant_bp.route('/api/assistant/cancel', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def cancel_stream():
     """Cancel an active assistant stream — stops tool execution loop."""
     data = request.json or {}
@@ -1706,6 +1716,8 @@ def cancel_stream():
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/costs', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_assistant_costs():
     """Return assistant API cost summary (total + daily breakdown)."""
     try:
@@ -1732,6 +1744,8 @@ def get_assistant_costs():
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/memory', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_memory():
     """Return all saved assistant memories."""
     if os.path.exists(MEMORY_FILE):
@@ -1750,6 +1764,8 @@ def get_memory():
 
 
 @assistant_bp.route('/api/assistant/memory', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
 def clear_memory():
     """Clear all saved assistant memories."""
     if os.path.exists(MEMORY_FILE):
@@ -1767,6 +1783,8 @@ def clear_memory():
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/credentials', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def save_credentials():
     """Save VPortal credentials (base64 obfuscated, per-teacher in Supabase)."""
     data = request.json
@@ -1797,6 +1815,8 @@ def save_credentials():
 
 
 @assistant_bp.route('/api/assistant/credentials', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_credentials():
     """Check if VPortal credentials are configured (never returns password)."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -1863,6 +1883,8 @@ def write_temp_creds_file(teacher_id='local-dev'):
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/voice-config', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_voice_config():
     """Return voice TTS configuration status."""
     from backend.api_keys import get_api_key

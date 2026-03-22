@@ -7,6 +7,7 @@ import os
 import logging
 import stripe
 from flask import Blueprint, request, jsonify, g
+from backend.utils.auth_decorators import require_teacher
 
 stripe_bp = Blueprint('stripe', __name__)
 _logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ def _get_or_create_customer(user_id, user_email):
 
 
 @stripe_bp.route('/api/stripe/subscription-status', methods=['GET'])
+@require_teacher
 def subscription_status():
     """Get the current user's subscription status from Stripe."""
     if _is_clever_user():
@@ -117,6 +119,7 @@ def subscription_status():
 
 
 @stripe_bp.route('/api/stripe/create-checkout-session', methods=['POST'])
+@require_teacher
 def create_checkout_session():
     """Create a Stripe Checkout session for a new subscription."""
     if not _init_stripe():
@@ -153,6 +156,7 @@ def create_checkout_session():
 
 
 @stripe_bp.route('/api/stripe/create-portal-session', methods=['POST'])
+@require_teacher
 def create_portal_session():
     """Create a Stripe Customer Portal session for subscription management."""
     if not _init_stripe():
