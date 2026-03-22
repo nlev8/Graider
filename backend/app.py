@@ -3338,6 +3338,7 @@ def list_periods():
 _user_manual_cache = {}
 
 @app.route('/api/user-manual', methods=['GET'])
+@handle_route_errors
 def get_user_manual():
     """Return User_Manual.md content as JSON."""
     try:

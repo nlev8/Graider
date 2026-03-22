@@ -159,6 +159,7 @@ def list_surveys():
 # ============ Parent-Facing Endpoints ============
 
 @survey_bp.route('/survey/<code>')
+@handle_route_errors
 def survey_page(code):
     """Serve the self-contained survey HTML page."""
     db = get_supabase()
@@ -321,6 +322,7 @@ textarea:focus {{ outline: none; border-color: #6366f1; }}
 
 
 @survey_bp.route('/api/survey/<code>/submit', methods=['POST'])
+@handle_route_errors
 def submit_survey(code):
     """Submit a parent's survey response."""
     db = get_supabase()

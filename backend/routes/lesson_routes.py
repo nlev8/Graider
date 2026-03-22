@@ -545,6 +545,7 @@ def import_calendar_events():
 
 @lesson_bp.route('/api/save-resource', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def save_resource():
     """Save a generated resource for the Assets library."""
     data = request.json
@@ -580,6 +581,7 @@ def save_resource():
 
 @lesson_bp.route('/api/list-resources', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def list_resources():
     """List all saved resources for the teacher."""
     teacher_id = g.teacher_id
@@ -608,6 +610,7 @@ def list_resources():
 
 @lesson_bp.route('/api/load-resource', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def load_resource():
     """Load a saved resource by ID."""
     data = request.json
@@ -628,6 +631,7 @@ def load_resource():
 
 @lesson_bp.route('/api/delete-resource', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def delete_resource():
     """Delete a saved resource by ID."""
     data = request.json

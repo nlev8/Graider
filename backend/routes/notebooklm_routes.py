@@ -476,6 +476,7 @@ def share_material():
 
 
 @notebooklm_bp.route("/api/student/shared-media/<code>")
+@handle_route_errors
 def serve_shared_media(code):
     """Serve media files for shared materials (student-accessible)."""
     from backend.supabase_client import get_supabase_or_raise as get_supabase
