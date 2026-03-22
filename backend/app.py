@@ -21,8 +21,6 @@ import logging
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
-from backend.utils.auth_decorators import require_teacher
-from backend.utils.errors import handle_route_errors
 
 # Load environment variables and set up path FIRST
 # (storage.py reads SUPABASE_* at import time; backend modules need root on sys.path)
@@ -30,6 +28,9 @@ _app_dir = os.path.dirname(os.path.abspath(__file__))
 _root_dir = os.path.dirname(_app_dir)
 sys.path.insert(0, _root_dir)
 load_dotenv(os.path.join(_root_dir, '.env'), override=True)
+
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 # Import student history for progress tracking
 try:
