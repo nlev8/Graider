@@ -32,6 +32,25 @@ logger = logging.getLogger(__name__)
 
 clever_bp = Blueprint("clever", __name__)
 
+
+def _clever_audit(action, details="", teacher_id=""):
+    """FERPA audit log for Clever operations."""
+    logger.info("AUDIT: %s | teacher=%s | %s", action, teacher_id, details)
+    try:
+        from backend.supabase_client import get_supabase
+        sb = get_supabase()
+        if sb:
+            from datetime import datetime
+            sb.table('audit_log').insert({
+                'timestamp': datetime.now().isoformat(),
+                'teacher_id': teacher_id,
+                'action': action,
+                'details': details[:500],
+                'user_type': 'teacher',
+            }).execute()
+    except Exception:
+        pass
+
 # Short-lived auth codes for student Clever SSO (code → {token, expires})
 _pending_student_auth_codes = {}
 _AUTH_CODE_TTL = 60  # seconds
@@ -538,6 +557,28 @@ def clever_sync_roster():
         logger.error("Clever roster sync failed: %s", str(e))
         return jsonify({"error": "Failed to sync roster from Clever"}), 502
 
+    # SECURITY: Server-side section filtering — teachers only see their own sections
+    clever_user = session.get("clever_user", {})
+    teacher_clever_id = clever_user.get("clever_id", "")
+    if teacher_clever_id:
+        all_sections = roster.get("sections", [])
+        own_sections = []
+        for sec in all_sections:
+            sd = sec.get("data", sec)
+            section_teachers = sd.get("teachers", [])
+            # teachers can be a list of IDs or a list of dicts with 'id'
+            teacher_ids = []
+            for t in section_teachers:
+                if isinstance(t, str):
+                    teacher_ids.append(t)
+                elif isinstance(t, dict):
+                    teacher_ids.append(t.get("id", ""))
+            if teacher_clever_id in teacher_ids:
+                own_sections.append(sec)
+        roster["sections"] = own_sections
+        logger.info("Filtered sections for teacher %s: %d of %d",
+                     teacher_clever_id, len(own_sections), len(all_sections))
+
     # Filter sections if teacher selected specific ones
     sections = roster.get("sections", [])
     if selected_section_ids is not None:
@@ -574,6 +615,14 @@ def clever_sync_roster():
 
     # Extract accommodation suggestions (teacher reviews before applying)
     accomm_data = extract_student_accommodations(students)
+
+    # Sync to Supabase (class-based student portal)
+    if sections:
+        _sync_classes_to_db(sections, students, teacher_id)
+
+    _clever_audit("clever_roster_sync",
+                  f"Synced {len(students)} students, {len(sections)} sections",
+                  teacher_id)
 
     # Return all available sections so the frontend can show a selection UI
     all_sections_mapped = map_sections_to_periods(roster.get("sections", []))
@@ -643,6 +692,10 @@ def clever_apply_accommodations():
             logger.error("Error applying accommodation for %s: %s", student_id, str(e))
             errors.append(f"Error for {student_id}")
 
+    _clever_audit("clever_apply_accommodations",
+                  f"Applied {applied} accommodations",
+                  teacher_id)
+
     return jsonify({
         "applied": applied,
         "total": len(accommodations),
@@ -668,6 +721,49 @@ def clever_delete_data():
 
     try:
         result = delete_clever_data(teacher_id)
+
+        # Also delete Supabase records created by Clever sync
+        try:
+            sb = _get_supabase_safe()
+            if sb:
+                # Get classes for this teacher
+                classes = sb.table('classes').select('id').eq('teacher_id', teacher_id).execute()
+                class_ids = [c['id'] for c in (classes.data or [])]
+
+                student_ids = []
+                if class_ids:
+                    # Delete student_submissions for these classes' content
+                    content = sb.table('published_content').select('id').in_('class_id', class_ids).execute()
+                    content_ids = [c['id'] for c in (content.data or [])]
+                    if content_ids:
+                        sb.table('student_submissions').delete().in_('content_id', content_ids).execute()
+                        sb.table('published_content').delete().in_('id', content_ids).execute()
+
+                    # Delete enrollments
+                    for cid in class_ids:
+                        sb.table('class_students').delete().eq('class_id', cid).execute()
+
+                    # Get student IDs for this teacher
+                    students_res = sb.table('students').select('id').eq('teacher_id', teacher_id).execute()
+                    student_ids = [s['id'] for s in (students_res.data or [])]
+                    if student_ids:
+                        for sid in student_ids:
+                            sb.table('student_sessions').delete().eq('student_id', sid).execute()
+                        sb.table('students').delete().eq('teacher_id', teacher_id).execute()
+
+                    # Delete classes
+                    sb.table('classes').delete().eq('teacher_id', teacher_id).execute()
+
+                result["supabase_deleted"] = {
+                    "classes": len(class_ids),
+                    "students": len(student_ids),
+                }
+                logger.info("AUDIT: Clever Supabase data deleted for %s: %s", teacher_id, result.get("supabase_deleted"))
+        except Exception as sb_err:
+            logger.error("Supabase deletion failed for %s: %s", teacher_id, str(sb_err))
+            result["supabase_error"] = "Partial deletion — local files removed, Supabase cleanup failed"
+
+        _clever_audit("clever_data_deletion", f"Deleted: {result}", teacher_id)
         logger.info("Clever data deletion for %s: %s", teacher_id, result)
         return jsonify({"status": "deleted", "deleted": result})
     except Exception as e:
@@ -723,6 +819,10 @@ def clever_save_district_keys():
     from backend.api_keys import save_district_keys
     ok = save_district_keys(district_id, keys)
     if ok:
+        teacher_id = resolve_clever_user_id(clever_user.get("clever_id", ""))
+        _clever_audit("clever_district_keys_saved",
+                      "District API keys updated",
+                      teacher_id)
         logger.info("District API keys updated by %s for district %s",
                      clever_user.get("email"), district_id)
         return jsonify({"status": "saved", "district_id": district_id})
