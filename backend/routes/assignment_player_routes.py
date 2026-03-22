@@ -18,6 +18,7 @@ import sys
 import json
 import time
 from flask import Blueprint, request, jsonify, g
+from backend.utils.errors import handle_route_errors
 
 _logger = logging.getLogger(__name__)
 from pathlib import Path
@@ -94,6 +95,7 @@ def _load_teacher_context():
 
 
 @assignment_player_bp.route('/api/assignment/<assignment_id>', methods=['GET'])
+@handle_route_errors
 def get_assignment(assignment_id):
     """Get an assignment for a student to complete."""
     try:
@@ -116,6 +118,7 @@ def get_assignment(assignment_id):
 
 
 @assignment_player_bp.route('/api/assignment', methods=['POST'])
+@handle_route_errors
 def create_assignment():
     """Create/publish an assignment for students."""
     try:
@@ -151,6 +154,7 @@ def create_assignment():
 
 
 @assignment_player_bp.route('/api/assignment/<assignment_id>/submit', methods=['POST'])
+@handle_route_errors
 def submit_assignment(assignment_id):
     """Submit and grade an assignment."""
     try:
@@ -194,6 +198,7 @@ def submit_assignment(assignment_id):
 
 
 @assignment_player_bp.route('/api/assignment/<assignment_id>/submissions', methods=['GET'])
+@handle_route_errors
 def get_submissions(assignment_id):
     """Get all submissions for an assignment (teacher view)."""
     try:

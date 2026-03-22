@@ -3371,6 +3371,20 @@ def healthz():
             status["supabase"] = "not configured"
     except Exception as e:
         status["supabase"] = "error"
+
+    # Check Redis if configured
+    try:
+        redis_url = os.getenv('REDIS_URL')
+        if redis_url:
+            import redis
+            r = redis.from_url(redis_url)
+            r.ping()
+            status["redis"] = "ok"
+        else:
+            status["redis"] = "not configured"
+    except Exception:
+        status["redis"] = "error"
+
     return jsonify(status)
 
 

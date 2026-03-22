@@ -27,6 +27,8 @@ from backend.clever import (
 from backend.accommodations import set_student_accommodation
 from backend.auth import load_clever_links, save_clever_link, resolve_clever_user_id
 from backend.supabase_client import get_supabase as _get_supabase_safe
+from backend.utils.errors import handle_route_errors
+from backend.utils.auth_decorators import require_clever_session
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +361,7 @@ def _background_roster_sync(district_token, teacher_id):
 
 
 @clever_bp.route("/api/clever/login-url", methods=["GET"])
+@handle_route_errors
 def clever_login_url():
     """Return the Clever OAuth authorization URL."""
     config = get_clever_config()
@@ -372,6 +375,7 @@ def clever_login_url():
 
 
 @clever_bp.route("/api/clever/callback", methods=["GET"])
+@handle_route_errors
 def clever_callback():
     """Handle the OAuth redirect from Clever.
 
@@ -499,6 +503,7 @@ def clever_callback():
 
 
 @clever_bp.route("/api/clever/session", methods=["GET"])
+@handle_route_errors
 def clever_session_check():
     """Return current Clever session info (if logged in via Clever)."""
     clever_user = session.get("clever_user")
@@ -531,6 +536,8 @@ def clever_session_check():
 
 
 @clever_bp.route("/api/clever/sync-roster", methods=["POST"])
+@require_clever_session
+@handle_route_errors
 def clever_sync_roster():
     """Trigger a roster sync from Clever.
 
@@ -540,14 +547,11 @@ def clever_sync_roster():
     Optional body: { "section_ids": ["id1", "id2"] } to sync only specific sections.
     If omitted, syncs all sections.
     """
-    if not session.get("clever_user"):
-        return jsonify({"error": "Clever session required"}), 401
-
     district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
     if not district_token:
         return jsonify({"error": "District token not configured"}), 503
 
-    teacher_id = getattr(g, "user_id", "local-dev")
+    teacher_id = g.teacher_id
     data = request.get_json(silent=True) or {}
     selected_section_ids = data.get("section_ids")  # None = all sections
 
@@ -642,6 +646,8 @@ def clever_sync_roster():
 
 
 @clever_bp.route("/api/clever/apply-accommodations", methods=["POST"])
+@require_clever_session
+@handle_route_errors
 def clever_apply_accommodations():
     """Apply Clever-sourced IEP/ELL flags as Graider accommodation presets.
 
@@ -658,12 +664,9 @@ def clever_apply_accommodations():
         }
     }
     """
-    if not session.get("clever_user"):
-        return jsonify({"error": "Clever session required"}), 401
-
     data = request.json or {}
     accommodations = data.get("accommodations", {})
-    teacher_id = getattr(g, "user_id", "local-dev")
+    teacher_id = g.teacher_id
 
     applied = 0
     errors = []
@@ -704,6 +707,8 @@ def clever_apply_accommodations():
 
 
 @clever_bp.route("/api/clever/delete-data", methods=["POST"])
+@require_clever_session
+@handle_route_errors
 def clever_delete_data():
     """Delete all Clever-sourced student data for the current teacher.
 
@@ -711,11 +716,7 @@ def clever_delete_data():
     This endpoint removes roster CSVs, period files, parent contacts,
     and accommodation data sourced from Clever.
     """
-    # Require active Clever session for data deletion
-    if not session.get("clever_user"):
-        return jsonify({"error": "Not authenticated via Clever"}), 403
-
-    teacher_id = getattr(g, "user_id", "")
+    teacher_id = g.teacher_id
     if not teacher_id.startswith("clever:"):
         return jsonify({"error": "Not a Clever user"}), 403
 
@@ -772,11 +773,11 @@ def clever_delete_data():
 
 
 @clever_bp.route("/api/clever/district-keys", methods=["GET"])
+@require_clever_session
+@handle_route_errors
 def clever_district_keys_status():
     """Check which API keys are configured at the district level."""
-    clever_user = session.get("clever_user")
-    if not clever_user:
-        return jsonify({"error": "Not authenticated via Clever"}), 403
+    clever_user = g.clever_user
 
     district_id = clever_user.get("district", "")
     if not district_id:
@@ -788,15 +789,15 @@ def clever_district_keys_status():
 
 
 @clever_bp.route("/api/clever/district-keys", methods=["POST"])
+@require_clever_session
+@handle_route_errors
 def clever_save_district_keys():
     """Save district-level API keys. Only district_admin users can do this.
 
     Body: { "openai": "sk-...", "anthropic": "sk-ant-...", "gemini": "AI..." }
     Empty strings are ignored (won't overwrite existing keys).
     """
-    clever_user = session.get("clever_user")
-    if not clever_user:
-        return jsonify({"error": "Not authenticated via Clever"}), 403
+    clever_user = g.clever_user
 
     # Only district admins can set district-wide keys
     if clever_user.get("type") != "district_admin":
@@ -831,6 +832,7 @@ def clever_save_district_keys():
 
 
 @clever_bp.route("/api/clever/student-token", methods=["POST"])
+@handle_route_errors
 def exchange_student_auth_code():
     """Exchange a short-lived auth code for a student session token."""
     data = request.json or {}
@@ -847,6 +849,7 @@ def exchange_student_auth_code():
 
 
 @clever_bp.route("/api/clever/health", methods=["GET"])
+@handle_route_errors
 def clever_health():
     """Health check for Clever integration — verifies config and connectivity."""
     config = get_clever_config()
@@ -868,6 +871,7 @@ def clever_health():
 
 
 @clever_bp.route("/api/clever/logout", methods=["POST"])
+@handle_route_errors
 def clever_logout():
     """Clear the Clever session."""
     session.pop("clever_user", None)

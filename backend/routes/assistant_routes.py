@@ -20,6 +20,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, Response, stream_with_context, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.extensions import limiter
 
 try:
     import anthropic
@@ -1145,6 +1146,7 @@ def _cleanup_stale_sessions():
 # ═══════════════════════════════════════════════════════
 
 @assistant_bp.route('/api/assistant/chat', methods=['POST'])
+@limiter.limit("20 per minute")
 @require_teacher
 @handle_route_errors
 def assistant_chat():

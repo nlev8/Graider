@@ -43,6 +43,7 @@ def _get_teacher_id():
 
 
 from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 
 def _generate_class_code():
@@ -104,6 +105,7 @@ def _validate_student_session():
 
 @student_account_bp.route('/api/classes', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def create_class():
     """Create a class. Generates join code."""
     teacher_id = g.teacher_id
@@ -144,6 +146,7 @@ def create_class():
 
 @student_account_bp.route('/api/classes', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def list_classes():
     """List teacher's classes with student counts."""
     teacher_id = g.teacher_id
@@ -162,6 +165,7 @@ def list_classes():
 
 @student_account_bp.route('/api/classes/<class_id>/sync-roster', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def sync_roster_to_class(class_id):
     """Sync students from an uploaded CSV into the class.
     Accepts multipart/form-data with a 'file' field containing the CSV.
@@ -283,6 +287,7 @@ def sync_roster_to_class(class_id):
 
 @student_account_bp.route('/api/classes/<class_id>/students', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def list_class_students(class_id):
     """List students enrolled in a class."""
     teacher_id = g.teacher_id
@@ -309,6 +314,7 @@ def list_class_students(class_id):
 
 @student_account_bp.route('/api/publish-to-class', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def publish_to_class():
     """Publish an assessment or assignment to a class."""
     teacher_id = g.teacher_id
@@ -359,6 +365,7 @@ def publish_to_class():
 
 @student_account_bp.route('/api/portal-submissions', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def get_portal_submissions():
     """Get all student submissions for the Results tab."""
     teacher_id = g.teacher_id
@@ -424,6 +431,7 @@ def get_portal_submissions():
 
 @student_account_bp.route('/api/grade-portal-submission', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def grade_portal_submission():
     """Grade a portal submission using the existing grading pipeline.
     Takes a submission_id and runs it through the assessment auto-grader.
@@ -529,6 +537,7 @@ def grade_portal_submission():
 
 @student_account_bp.route('/api/student/login', methods=['POST'])
 @limiter.limit("10/minute")
+@handle_route_errors
 def student_login():
     """Student login with email + class join code.
     Returns a session token valid for 8 hours.
@@ -610,6 +619,7 @@ def student_login():
 
 
 @student_account_bp.route('/api/student/dashboard', methods=['GET'])
+@handle_route_errors
 def student_dashboard():
     """Get student's assigned work (assessments + assignments)."""
     session = _validate_student_session()
@@ -655,6 +665,7 @@ def student_dashboard():
 
 
 @student_account_bp.route('/api/student/content/<content_id>', methods=['GET'])
+@handle_route_errors
 def get_student_content(content_id):
     """Get assessment/assignment content for a student to complete.
     Strips answer keys before sending.
@@ -711,6 +722,7 @@ def get_student_content(content_id):
 
 
 @student_account_bp.route('/api/student/submit/<content_id>', methods=['POST'])
+@handle_route_errors
 def submit_student_work(content_id):
     """Submit answers for an assessment or assignment."""
     session = _validate_student_session()
@@ -911,6 +923,7 @@ def submit_student_work(content_id):
 
 
 @student_account_bp.route('/api/student/session', methods=['GET'])
+@handle_route_errors
 def check_student_session():
     """Check if current student session is valid."""
     session = _validate_student_session()
@@ -957,6 +970,7 @@ def check_student_session():
 
 @student_account_bp.route('/api/send-submission-confirmations', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def send_submission_confirmations():
     """Batch-send pending submission confirmations via Outlook."""
     teacher_id = g.teacher_id
@@ -1060,6 +1074,7 @@ def send_submission_confirmations():
 
 @student_account_bp.route('/api/mark-confirmations-sent', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def mark_confirmations_sent():
     """Mark confirmations as sent after Outlook send completes."""
     teacher_id = g.teacher_id

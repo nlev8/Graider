@@ -14,6 +14,7 @@ auth_bp = Blueprint('auth', __name__)
 logger = logging.getLogger(__name__)
 
 from backend.extensions import limiter
+from backend.utils.errors import handle_route_errors
 
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
 
@@ -47,6 +48,7 @@ def _build_approve_url(user_id, email):
 
 @auth_bp.route('/api/auth/approve-user', methods=['GET', 'POST'])
 @limiter.limit("10/minute")
+@handle_route_errors
 def approve_user_route():
     """One-click user approval from admin notification email.
 
@@ -96,6 +98,7 @@ def _approval_page(message, success=True):
 
 
 @auth_bp.route('/api/auth/approval-status', methods=['GET'])
+@handle_route_errors
 def approval_status():
     """
     Check if the current user is approved.
@@ -123,6 +126,7 @@ def approval_status():
 
 @auth_bp.route('/api/auth/notify-signup', methods=['POST'])
 @limiter.limit("5/minute")
+@handle_route_errors
 def notify_signup_route():
     """
     PUBLIC endpoint — no JWT required.

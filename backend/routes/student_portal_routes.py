@@ -16,6 +16,7 @@ student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
 
 from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
 
 
@@ -35,6 +36,7 @@ def generate_join_code():
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def publish_assessment():
     """
     Publish an assessment for students to take.
@@ -123,6 +125,7 @@ SAVED_ASSESSMENTS_DIR = os.path.expanduser("~/.graider_saved_assessments")
 
 @student_portal_bp.route('/api/save-assessment', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def save_assessment():
     """Save a generated assessment locally for later use."""
     try:
@@ -160,6 +163,7 @@ def save_assessment():
 
 @student_portal_bp.route('/api/list-saved-assessments', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def list_saved_assessments():
     """List all saved assessments."""
     try:
@@ -199,6 +203,7 @@ def list_saved_assessments():
 
 @student_portal_bp.route('/api/load-saved-assessment', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def load_saved_assessment():
     """Load a saved assessment by filename."""
     try:
@@ -235,6 +240,7 @@ def load_saved_assessment():
 
 @student_portal_bp.route('/api/delete-saved-assessment', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def delete_saved_assessment():
     """Delete a saved assessment."""
     try:
@@ -264,6 +270,7 @@ def delete_saved_assessment():
 
 @student_portal_bp.route('/api/teacher/assessments', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def list_published_assessments():
     """List all published assessments for the teacher."""
     try:
@@ -294,6 +301,7 @@ def list_published_assessments():
 
 @student_portal_bp.route('/api/teacher/assessment/<code>/results', methods=['GET'])
 @require_teacher
+@handle_route_errors
 def get_assessment_results(code):
     """Get all submissions for a published assessment."""
     try:
@@ -342,6 +350,7 @@ def get_assessment_results(code):
 
 @student_portal_bp.route('/api/teacher/assessment/<code>/toggle', methods=['POST'])
 @require_teacher
+@handle_route_errors
 def toggle_assessment(code):
     """Activate or deactivate a published assessment."""
     try:
@@ -378,6 +387,7 @@ def toggle_assessment(code):
 
 @student_portal_bp.route('/api/teacher/assessment/<code>', methods=['DELETE'])
 @require_teacher
+@handle_route_errors
 def delete_published_assessment(code):
     """Delete a published assessment and all its submissions."""
     try:
@@ -409,6 +419,7 @@ def delete_published_assessment(code):
 # ============ Student Endpoints ============
 
 @student_portal_bp.route('/api/student/join/<code>', methods=['GET'])
+@handle_route_errors
 def get_assessment_for_student(code):
     """
     Get assessment details for a student joining with a code.
@@ -504,6 +515,7 @@ def get_assessment_for_student(code):
 
 
 @student_portal_bp.route('/api/student/submit/<code>', methods=['POST'])
+@handle_route_errors
 def submit_assessment(code):
     """
     Submit student answers for grading.

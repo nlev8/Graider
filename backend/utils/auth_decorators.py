@@ -15,3 +15,19 @@ def require_teacher(f):
         g.teacher_id = teacher_id
         return f(*args, **kwargs)
     return wrapper
+
+
+def require_clever_session(f):
+    """Decorator that enforces Clever session authentication.
+    Used for Clever-specific teacher endpoints that use OAuth session
+    instead of JWT. Returns 401 if no active Clever session exists."""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        from flask import session
+        clever_user = session.get("clever_user")
+        if not clever_user:
+            return jsonify({"error": "Clever session required"}), 401
+        g.clever_user = clever_user
+        g.teacher_id = getattr(g, 'user_id', clever_user.get('clever_id', ''))
+        return f(*args, **kwargs)
+    return wrapper
