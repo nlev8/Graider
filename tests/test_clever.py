@@ -455,7 +455,7 @@ class TestExtractParentContacts:
 class TestPersistParentContacts:
     @pytest.fixture(autouse=True)
     def _clean_dirs(self):
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_test.json")
         if os.path.exists(contacts_file):
             os.remove(contacts_file)
         yield
@@ -463,14 +463,14 @@ class TestPersistParentContacts:
     def test_creates_contacts_file(self):
         contact_map = {"s1": {"parent_emails": ["p@test.com"], "parent_phones": ["555"]}}
         clever.persist_parent_contacts(contact_map, "test")
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_test.json")
         assert os.path.exists(contacts_file)
         with open(contacts_file) as f:
             data = json.load(f)
         assert "s1" in data
 
     def test_merges_with_existing(self):
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_test.json")
         os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
         with open(contacts_file, "w") as f:
             json.dump({"s1": {"parent_emails": ["existing@test.com"], "parent_phones": []}}, f)
@@ -513,7 +513,8 @@ class TestDeleteCleverData:
             os.makedirs(d, exist_ok=True)
         # Clean contacts, accommodations, ELL
         for f in [
-            os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json"),
+            os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json"),
+            os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_test.json"),
             os.path.join(clever.GRAIDER_DATA_DIR, "ell_students.json"),
         ]:
             if os.path.exists(f):
@@ -555,7 +556,7 @@ class TestDeleteCleverData:
         # Create roster with students a, b
         clever.persist_roster_as_csv(self._make_students(["a", "b"]), "clever:t1")
         # Create contacts for a (Clever), b (Clever), and manual_student (manual)
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json")
         with open(contacts_file, "w") as f:
             json.dump({
                 "a": {"parent_emails": ["pa@t.com"], "parent_phones": []},
@@ -618,7 +619,7 @@ class TestDeleteCleverData:
         """Corrupt JSON should not crash deletion."""
         clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
         # Write corrupt contacts
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json")
         with open(contacts_file, "w") as f:
             f.write("{invalid json")
         # Should not raise
@@ -639,7 +640,7 @@ class TestDeleteCleverData:
         ]
         clever.persist_sections_as_periods(sections, "clever:t1")
         # Add contacts for p1
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "parent_contacts.json")
+        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json")
         with open(contacts_file, "w") as f:
             json.dump({"p1": {"parent_emails": ["parent@t.com"], "parent_phones": []}}, f)
 

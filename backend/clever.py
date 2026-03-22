@@ -512,14 +512,15 @@ def extract_parent_contacts(contacts, students):
 
 
 def persist_parent_contacts(contact_map, teacher_id="local-dev"):
-    """Merge Clever parent contacts into the existing parent_contacts.json file.
+    """Merge Clever parent contacts into a per-teacher contacts file.
 
-    Note: Local file backend uses a single global file because Graider runs
-    single-tenant per server. Multi-tenant isolation is handled by the Supabase
-    storage layer (teacher_data table keyed by teacher_id). The teacher_id param
-    is accepted for future scoping but currently unused for file paths.
+    Files are scoped by teacher_id to prevent cross-teacher data access.
+    Multi-tenant isolation is also handled by the Supabase storage layer.
     """
-    contacts_file = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
+    safe_id = _safe_teacher_id(teacher_id)
+    contacts_dir = os.path.join(GRAIDER_DATA_DIR, "contacts")
+    os.makedirs(contacts_dir, exist_ok=True)
+    contacts_file = os.path.join(contacts_dir, f"parent_contacts_{safe_id}.json")
 
     existing = {}
     if os.path.exists(contacts_file):
@@ -615,9 +616,13 @@ def delete_clever_data(teacher_id="local-dev"):
         except OSError as e:
             logger.warning("Failed to delete %s: %s", filepath, e)
 
-    # ── Step 3: Remove only Clever students from parent_contacts.json ──
+    # ── Step 3: Remove only Clever students from parent contacts ──
     if clever_student_ids:
-        contacts_file = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
+        # Check per-teacher file first, fall back to legacy global file
+        contacts_dir = os.path.join(GRAIDER_DATA_DIR, "contacts")
+        contacts_file = os.path.join(contacts_dir, f"parent_contacts_{safe_id}.json")
+        if not os.path.exists(contacts_file):
+            contacts_file = os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
         if os.path.exists(contacts_file):
             try:
                 with open(contacts_file, "r") as f:
