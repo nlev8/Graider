@@ -60,11 +60,11 @@ Document this in your privacy policy to reassure schools.
 | Requirement | Implementation | Status |
 |-------------|----------------|--------|
 | **Encryption in transit** | HTTPS for all connections | ✅ Done |
-| **Encryption at rest** | Encrypt saved grades/rosters | ⏳ Needed |
-| **Access controls** | Only the teacher sees their data | ✅ Done |
-| **Audit logging** | Log who accessed what, when | ⏳ Needed |
+| **Encryption at rest** | Supabase encrypts at rest; local dev files on ephemeral Railway filesystem | ✅ Done (production) |
+| **Access controls** | @require_teacher on all 210+ endpoints; teacher-scoped data | ✅ Done |
+| **Audit logging** | Supabase audit_log table; Clever operations logged via _clever_audit | ✅ Done |
 | **Data minimization** | Only collect what's needed | ✅ Done |
-| **Secure deletion** | Actually delete, not just hide | ⏳ Needed |
+| **Secure deletion** | delete_clever_data purges local files + Supabase (classes, students, submissions) | ✅ Done |
 
 ---
 
