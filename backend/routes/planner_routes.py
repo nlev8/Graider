@@ -13,6 +13,7 @@ import subprocess
 from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 from pathlib import Path
+from backend.extensions import limiter
 
 ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
@@ -2454,6 +2455,7 @@ def get_lesson_templates():
 
 
 @planner_bp.route('/api/brainstorm-lesson-ideas', methods=['POST'])
+@limiter.limit("10 per minute")
 def brainstorm_lesson_ideas():
     """Generate multiple lesson plan ideas/concepts for selected standards."""
     data = request.json
@@ -2625,6 +2627,7 @@ Make each idea distinct - vary the approaches (hands-on activities, discussions,
 
 
 @planner_bp.route('/api/generate-lesson-plan', methods=['POST'])
+@limiter.limit("10 per minute")
 def generate_lesson_plan():
     """Generate a lesson plan using AI."""
     data = request.json
@@ -3135,6 +3138,7 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
 
 @planner_bp.route('/api/generate-assignment-from-lesson', methods=['POST'])
+@limiter.limit("10 per minute")
 def generate_assignment_from_lesson():
     """Generate an assignment based on an existing lesson plan."""
     data = request.json
@@ -5150,6 +5154,7 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
 # =============================================================================
 
 @planner_bp.route('/api/generate-assessment', methods=['POST'])
+@limiter.limit("10 per minute")
 def generate_assessment():
     """
     Generate a standards-aligned assessment with DOK level distribution.

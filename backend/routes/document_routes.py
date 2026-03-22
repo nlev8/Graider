@@ -7,6 +7,7 @@ import os
 import base64
 from pathlib import Path
 from flask import Blueprint, request, jsonify
+from backend.utils.errors import handle_route_errors
 
 _logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ document_bp = Blueprint('document', __name__)
 
 
 @document_bp.route('/api/parse-document', methods=['POST'])
+@handle_route_errors
 def parse_document():
     """Parse an uploaded Word/PDF document and convert to HTML."""
     if 'file' not in request.files:
@@ -31,19 +33,14 @@ def parse_document():
 
     file_data = file.read()
 
-    try:
-        if filename.endswith('.docx'):
-            return _parse_docx(file_data, file.filename)
-        elif filename.endswith('.pdf'):
-            return _parse_pdf(file_data, file.filename)
-        elif filename.endswith('.txt'):
-            return _parse_txt(file_data, file.filename)
-        else:
-            return jsonify({"error": "Unsupported file type. Use .docx, .pdf, or .txt"}), 400
-
-    except Exception:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"error": "An internal error occurred"}), 500
+    if filename.endswith('.docx'):
+        return _parse_docx(file_data, file.filename)
+    elif filename.endswith('.pdf'):
+        return _parse_pdf(file_data, file.filename)
+    elif filename.endswith('.txt'):
+        return _parse_txt(file_data, file.filename)
+    else:
+        return jsonify({"error": "Unsupported file type. Use .docx, .pdf, or .txt"}), 400
 
 
 def _parse_docx(file_data, filename):

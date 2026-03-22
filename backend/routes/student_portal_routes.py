@@ -16,6 +16,7 @@ student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
 
 from backend.utils.auth_decorators import require_teacher
+from backend.services.grading_service import grade_deterministic_question
 
 
 def generate_join_code():
@@ -121,10 +122,12 @@ def publish_assessment():
 SAVED_ASSESSMENTS_DIR = os.path.expanduser("~/.graider_saved_assessments")
 
 @student_portal_bp.route('/api/save-assessment', methods=['POST'])
+@require_teacher
 def save_assessment():
     """Save a generated assessment locally for later use."""
     try:
-        os.makedirs(SAVED_ASSESSMENTS_DIR, exist_ok=True)
+        teacher_dir = os.path.join(SAVED_ASSESSMENTS_DIR, g.teacher_id)
+        os.makedirs(teacher_dir, exist_ok=True)
 
         data = request.json
         assessment = data.get('assessment')
@@ -136,7 +139,7 @@ def save_assessment():
         # Sanitize filename
         safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
         filename = f"{safe_name}.json"
-        filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+        filepath = os.path.join(teacher_dir, filename)
 
         # Save with metadata
         save_data = {
@@ -156,15 +159,17 @@ def save_assessment():
 
 
 @student_portal_bp.route('/api/list-saved-assessments', methods=['GET'])
+@require_teacher
 def list_saved_assessments():
     """List all saved assessments."""
     try:
-        os.makedirs(SAVED_ASSESSMENTS_DIR, exist_ok=True)
+        teacher_dir = os.path.join(SAVED_ASSESSMENTS_DIR, g.teacher_id)
+        os.makedirs(teacher_dir, exist_ok=True)
 
         assessments = []
-        for filename in os.listdir(SAVED_ASSESSMENTS_DIR):
+        for filename in os.listdir(teacher_dir):
             if filename.endswith('.json'):
-                filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
+                filepath = os.path.join(teacher_dir, filename)
                 try:
                     with open(filepath, 'r') as f:
                         data = json.load(f)
@@ -193,9 +198,13 @@ def list_saved_assessments():
 
 
 @student_portal_bp.route('/api/load-saved-assessment', methods=['POST'])
+@require_teacher
 def load_saved_assessment():
     """Load a saved assessment by filename."""
     try:
+        teacher_dir = os.path.join(SAVED_ASSESSMENTS_DIR, g.teacher_id)
+        os.makedirs(teacher_dir, exist_ok=True)
+
         data = request.json
         filename = data.get('filename')
 
@@ -203,8 +212,8 @@ def load_saved_assessment():
             return jsonify({"error": "No filename provided"}), 400
 
         # Prevent path traversal
-        filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
-        if not os.path.realpath(filepath).startswith(os.path.realpath(SAVED_ASSESSMENTS_DIR)):
+        filepath = os.path.join(teacher_dir, filename)
+        if not os.path.realpath(filepath).startswith(os.path.realpath(teacher_dir)):
             return jsonify({"error": "Invalid filename"}), 400
 
         if not os.path.exists(filepath):
@@ -225,9 +234,13 @@ def load_saved_assessment():
 
 
 @student_portal_bp.route('/api/delete-saved-assessment', methods=['POST'])
+@require_teacher
 def delete_saved_assessment():
     """Delete a saved assessment."""
     try:
+        teacher_dir = os.path.join(SAVED_ASSESSMENTS_DIR, g.teacher_id)
+        os.makedirs(teacher_dir, exist_ok=True)
+
         data = request.json
         filename = data.get('filename')
 
@@ -235,8 +248,8 @@ def delete_saved_assessment():
             return jsonify({"error": "No filename provided"}), 400
 
         # Prevent path traversal
-        filepath = os.path.join(SAVED_ASSESSMENTS_DIR, filename)
-        if not os.path.realpath(filepath).startswith(os.path.realpath(SAVED_ASSESSMENTS_DIR)):
+        filepath = os.path.join(teacher_dir, filename)
+        if not os.path.realpath(filepath).startswith(os.path.realpath(teacher_dir)):
             return jsonify({"error": "Invalid filename"}), 400
 
         if os.path.exists(filepath):
@@ -707,81 +720,21 @@ def grade_student_submission(assessment, answers):
                 continue
 
             # Grade based on question type
-            if q_type == "multiple_choice":
-                options = question.get('options', [])
-                student_letter = None
-                if isinstance(student_answer, int) and student_answer < len(options):
-                    student_letter = chr(65 + student_answer)
-                elif isinstance(student_answer, str):
-                    student_letter = student_answer.upper().strip()
-                    if len(student_letter) > 1 and student_letter[1] == ')':
-                        student_letter = student_letter[0]
-
-                correct_letter = correct_answer.upper().strip() if correct_answer else ""
-                if len(correct_letter) > 1 and correct_letter[1] == ')':
-                    correct_letter = correct_letter[0]
-
-                is_correct = student_letter == correct_letter
-                question_result["is_correct"] = is_correct
-                question_result["points_earned"] = points if is_correct else 0
-
-                if student_letter and ord(student_letter) - 65 < len(options):
-                    question_result["student_answer_display"] = f"{student_letter}) {options[ord(student_letter) - 65]}"
-
-                question_result["feedback"] = "Correct!" if is_correct else f"Incorrect. The correct answer is {correct_answer}."
-
-            elif q_type == "true_false":
-                is_correct = str(student_answer).lower() == str(correct_answer).lower()
-                question_result["is_correct"] = is_correct
-                question_result["points_earned"] = points if is_correct else 0
-                explanation = question.get('explanation', '')
-                question_result["feedback"] = "Correct!" if is_correct else f"Incorrect. The answer is {correct_answer}. {explanation}"
-
-            elif q_type == "matching":
-                correct_matches = question.get('answer', {})
-                terms = question.get('terms', [])
-                definitions = question.get('definitions', [])
-                total_matches = len(terms)
-                correct_count = 0
-
-                match_details = []
-                for tIdx in range(total_matches):
-                    match_key = f"{sIdx}-{qIdx}-match-{tIdx}"
-                    student_match = answers.get(match_key, "")
-                    term = terms[tIdx] if tIdx < len(terms) else f"Term {tIdx + 1}"
-
-                    correct_letter = None
-                    if term in correct_matches:
-                        correct_def = correct_matches[term]
-                        try:
-                            def_idx = definitions.index(correct_def)
-                            correct_letter = chr(65 + def_idx)
-                        except ValueError:
-                            correct_letter = None
-
-                    is_match_correct = student_match.upper() == correct_letter if correct_letter else False
-                    if is_match_correct:
-                        correct_count += 1
-                    match_details.append({
-                        "term": term,
-                        "student": student_match,
-                        "correct": correct_letter,
-                        "is_correct": is_match_correct
-                    })
-
-                earned = round(points * (correct_count / total_matches)) if total_matches > 0 else 0
-                question_result["points_earned"] = earned
-                question_result["is_correct"] = correct_count == total_matches
-                question_result["match_details"] = match_details
-                question_result["feedback"] = f"Got {correct_count}/{total_matches} matches correct."
-
-            elif q_type in ["short_answer", "extended_response"]:
+            if q_type in ["short_answer", "extended_response"]:
                 ai_grading_needed.append({
                     "index": len(results["questions"]),
                     "question": question,
                     "student_answer": student_answer,
                     "result": question_result
                 })
+            else:
+                # MC/TF/matching grading via shared deterministic grader
+                earned, is_correct, feedback = grade_deterministic_question(
+                    question, student_answer, answer_key, answers
+                )
+                question_result["points_earned"] = earned
+                question_result["is_correct"] = is_correct
+                question_result["feedback"] = feedback
 
             results["questions"].append(question_result)
 
@@ -917,55 +870,13 @@ def grade_instant_only(assessment, answers):
                 results["questions"].append(question_result)
                 continue
 
-            # MC/TF/matching grading — same logic as grade_student_submission
-            if q_type == "multiple_choice":
-                options = question.get('options', [])
-                student_letter = None
-                if isinstance(student_answer, int) and student_answer < len(options):
-                    student_letter = chr(65 + student_answer)
-                elif isinstance(student_answer, str):
-                    student_letter = student_answer.upper().strip()
-                    if len(student_letter) > 1 and student_letter[1] == ')':
-                        student_letter = student_letter[0]
-                correct_letter = correct_answer.upper().strip() if correct_answer else ""
-                if len(correct_letter) > 1 and correct_letter[1] == ')':
-                    correct_letter = correct_letter[0]
-                is_correct = student_letter == correct_letter
-                question_result["is_correct"] = is_correct
-                question_result["points_earned"] = points if is_correct else 0
-                question_result["feedback"] = "Correct!" if is_correct else f"Incorrect. The correct answer is {correct_answer}."
-
-            elif q_type == "true_false":
-                is_correct = str(student_answer).lower() == str(correct_answer).lower()
-                question_result["is_correct"] = is_correct
-                question_result["points_earned"] = points if is_correct else 0
-                explanation = question.get('explanation', '')
-                question_result["feedback"] = "Correct!" if is_correct else f"Incorrect. The answer is {correct_answer}. {explanation}"
-
-            elif q_type == "matching":
-                correct_matches = question.get('answer', {})
-                terms = question.get('terms', [])
-                definitions = question.get('definitions', [])
-                total_matches = len(terms)
-                correct_count = 0
-                for tIdx in range(total_matches):
-                    match_key = f"{sIdx}-{qIdx}-match-{tIdx}"
-                    student_match = answers.get(match_key, "")
-                    term = terms[tIdx] if tIdx < len(terms) else ""
-                    correct_letter = None
-                    if term in correct_matches:
-                        correct_def = correct_matches[term]
-                        try:
-                            def_idx = definitions.index(correct_def)
-                            correct_letter = chr(65 + def_idx)
-                        except ValueError:
-                            pass
-                    if correct_letter and student_match.upper() == correct_letter:
-                        correct_count += 1
-                earned = round(points * (correct_count / total_matches)) if total_matches > 0 else 0
-                question_result["points_earned"] = earned
-                question_result["is_correct"] = correct_count == total_matches
-                question_result["feedback"] = f"Got {correct_count}/{total_matches} matches correct."
+            # MC/TF/matching grading via shared deterministic grader
+            earned, is_correct, feedback = grade_deterministic_question(
+                question, student_answer, answer_key, answers
+            )
+            question_result["points_earned"] = earned
+            question_result["is_correct"] = is_correct
+            question_result["feedback"] = feedback
 
             results["score"] += question_result["points_earned"]
             results["questions"].append(question_result)

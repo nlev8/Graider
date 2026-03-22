@@ -123,7 +123,7 @@ The multipass grading pipeline (`grade_multipass` → `grade_per_question` → `
 18. **Writing Style Profile** — Historical patterns for detection
 
 ### Key code locations:
-- Factor accumulation: `backend/app.py` lines 982-1126 (`file_ai_notes`)
+- Factor accumulation: `backend/app.py` `file_ai_notes` built inline in grading thread
 - Rubric formatting: `backend/app.py` `format_rubric_for_prompt()`
 - Per-question grading: `assignment_grader.py` `grade_per_question()`
 - Feedback generation: `assignment_grader.py` `generate_feedback()`
