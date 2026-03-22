@@ -261,6 +261,7 @@ test_output/
 test_results/
 *.test.js
 *.spec.js
+!frontend/e2e/*.spec.js
 
 # ─────────────────────────────────────────────────────────────
 # MISC
