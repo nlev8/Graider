@@ -21,6 +21,8 @@ import logging
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 
 # Load environment variables and set up path FIRST
 # (storage.py reads SUPABASE_* at import time; backend modules need root on sys.path)
@@ -2037,6 +2039,8 @@ register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 
 @app.route('/api/grade-individual', methods=['POST'])
 @limiter.limit("5 per minute")
+@require_teacher
+@handle_route_errors
 def grade_individual():
     """Grade a single uploaded image file (for paper/handwritten assignments).
 
@@ -2310,6 +2314,8 @@ def _sync_approval_to_master_csv(result, approval_status):
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/delete-result', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def delete_single_result():
     """Delete a single grading result by filename."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -2359,6 +2365,8 @@ def delete_single_result():
 
 
 @app.route('/api/update-approval', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def update_approval():
     """Update email approval status for a result."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -2392,6 +2400,8 @@ def update_approval():
 
 
 @app.route('/api/update-approvals-bulk', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def update_approvals_bulk():
     """Update email approval status for multiple results at once."""
     teacher_id = getattr(g, 'user_id', 'local-dev')
@@ -2422,6 +2432,8 @@ def update_approvals_bulk():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/ferpa/delete-all-data', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def delete_all_student_data():
     """
     FERPA Compliance: Securely delete all student data.
@@ -2480,6 +2492,8 @@ def delete_all_student_data():
 
 
 @app.route('/api/ferpa/audit-log', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_audit_log():
     """
     FERPA Compliance: Retrieve audit log entries.
@@ -2496,6 +2510,8 @@ def get_audit_log():
 
 
 @app.route('/api/ferpa/data-summary', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_data_summary():
     """
     FERPA Compliance: Get summary of stored student data.
@@ -2538,6 +2554,8 @@ def get_data_summary():
 
 
 @app.route('/api/ferpa/export-data', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def export_student_data():
     """
     FERPA Compliance: Export all student data for portability.
@@ -2567,6 +2585,8 @@ def export_student_data():
 
 
 @app.route('/api/ferpa/export-student', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def export_individual_student_data():
     """
     FERPA Compliance: Export all stored data for a specific student.
@@ -2832,6 +2852,8 @@ def export_individual_student_data():
 
 
 @app.route('/api/ferpa/import-student', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def import_individual_student_data():
     """FERPA-compliant: Import a previously exported student data file."""
     import re as _re
@@ -3049,6 +3071,8 @@ def import_individual_student_data():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/student-history/<student_id>', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_student_history_api(student_id):
     """Get a student's grading history and progress patterns."""
     history = load_student_history(student_id)
@@ -3062,6 +3086,8 @@ def get_student_history_api(student_id):
 
 
 @app.route('/api/student-baseline/<student_id>', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def get_student_baseline_api(student_id):
     """Get a student's baseline performance metrics for deviation detection."""
     baseline = get_baseline_summary(student_id)
@@ -3075,6 +3101,8 @@ def get_student_baseline_api(student_id):
 
 
 @app.route('/api/retranslate-feedback', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def retranslate_feedback():
     """Re-translate English feedback to the target language."""
     import openai
@@ -3112,6 +3140,8 @@ def retranslate_feedback():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/extract-student-from-image', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def extract_student_from_image():
     """Use Claude Opus 4.5 to extract student info from a screenshot."""
     try:
@@ -3197,6 +3227,8 @@ Important:
 
 
 @app.route('/api/add-student-to-roster', methods=['POST'])
+@require_teacher
+@handle_route_errors
 def add_student_to_roster():
     """Add a student to the appropriate period CSV and optionally the main roster."""
     try:
@@ -3270,6 +3302,8 @@ def add_student_to_roster():
 
 
 @app.route('/api/list-periods', methods=['GET'])
+@require_teacher
+@handle_route_errors
 def list_periods():
     """List available period CSV files."""
     try:

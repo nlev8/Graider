@@ -7,6 +7,7 @@ import os
 import base64
 from pathlib import Path
 from flask import Blueprint, request, jsonify
+from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 
 _logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ document_bp = Blueprint('document', __name__)
 
 
 @document_bp.route('/api/parse-document', methods=['POST'])
+@require_teacher
 @handle_route_errors
 def parse_document():
     """Parse an uploaded Word/PDF document and convert to HTML."""
