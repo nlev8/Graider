@@ -50,9 +50,10 @@ test.describe('Student Portal — Assessment Taking', () => {
 
   test.beforeAll(async ({ request }) => {
     // Publish a test assessment via the API
+    // X-Test-Teacher-Id header simulates auth in dev mode
     try {
       const response = await request.post('/api/publish-assessment', {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Test-Teacher-Id': 'playwright-teacher' },
         data: {
           assessment: {
             title: 'Playwright Test Assessment',
@@ -114,7 +115,9 @@ test.describe('Student Portal — Assessment Taking', () => {
     // Cleanup: delete the published assessment
     if (joinCode) {
       try {
-        await request.delete(`/api/teacher/assessment/${joinCode}`)
+        await request.delete(`/api/teacher/assessment/${joinCode}`, {
+          headers: { 'X-Test-Teacher-Id': 'playwright-teacher' },
+        })
       } catch (e) {}
     }
   })
@@ -134,7 +137,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
     // Should have a name input
-    const nameInput = page.locator('input[placeholder*="name" i]').first()
+    const nameInput = page.locator('input[placeholder*="full name" i]').first()
     await expect(nameInput).toBeVisible()
   })
 
@@ -145,7 +148,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.waitForTimeout(2000)
 
     // Enter name
-    const nameInput = page.locator('input[placeholder*="name" i]').first()
+    const nameInput = page.locator('input[placeholder*="full name" i]').first()
     await nameInput.fill('Playwright Student')
 
     // Click Start button
@@ -165,7 +168,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.waitForTimeout(2000)
 
     // Enter name and start
-    await page.locator('input[placeholder*="name" i]').first().fill('MC Test Student')
+    await page.locator('input[placeholder*="full name" i]').first().fill('MC Test Student')
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
@@ -184,7 +187,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
 
-    await page.locator('input[placeholder*="name" i]').first().fill('TF Test Student')
+    await page.locator('input[placeholder*="full name" i]').first().fill('TF Test Student')
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
@@ -202,7 +205,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
 
-    await page.locator('input[placeholder*="name" i]').first().fill('Match Test Student')
+    await page.locator('input[placeholder*="full name" i]').first().fill('Match Test Student')
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
@@ -220,7 +223,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.waitForTimeout(2000)
 
     // Enter name and start
-    await page.locator('input[placeholder*="name" i]').first().fill('Submit Test Student')
+    await page.locator('input[placeholder*="full name" i]').first().fill('Submit Test Student')
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
