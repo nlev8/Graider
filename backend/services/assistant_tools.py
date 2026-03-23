@@ -243,10 +243,13 @@ def _load_results(teacher_id='local-dev'):
         return []
 
 
-def _load_master_csv(period_filter='all'):
+def _load_master_csv(period_filter='all', teacher_id='local-dev'):
     """Load and parse the master grades CSV, then merge in any results from
     the results JSON that aren't already present. This ensures the Assistant
-    always sees the most complete, up-to-date data."""
+    always sees the most complete, up-to-date data.
+
+    In multi-tenant mode (Supabase configured, teacher_id != 'local-dev'),
+    skips the shared CSV entirely and builds from teacher-scoped results."""
     import re
 
     def _norm_assign(name):
@@ -256,9 +259,39 @@ def _load_master_csv(period_filter='all'):
         n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)
         return n.strip().lower()
 
+    period_filter = _normalize_period(period_filter)
+
+    # Multi-tenant path: build entirely from teacher-scoped results
+    _sb_configured = bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY'))
+    if teacher_id != 'local-dev' and _sb_configured:
+        results = _load_results(teacher_id)
+        rows = []
+        for r in results:
+            rname = r.get('student_name', '')
+            period = r.get('period', '')
+            if period_filter != 'all' and _normalize_period(period) != period_filter and period != '':
+                continue
+            breakdown = r.get('breakdown', {})
+            rows.append({
+                'student_name': rname,
+                'student_id': r.get('student_id', rname[:6] if rname else ''),
+                'first_name': _extract_first_name(rname),
+                'assignment': r.get('assignment_name', r.get('assignment', r.get('title', ''))),
+                'score': _safe_int_score(r.get('total_score', r.get('score', 0))),
+                'letter_grade': r.get('letter_grade', ''),
+                'period': period,
+                'quarter': r.get('quarter', ''),
+                'date': (r.get('date', '') or r.get('graded_at', ''))[:10],
+                'content': _safe_int_score(breakdown.get('content_accuracy', r.get('content', 0))),
+                'completeness': _safe_int_score(breakdown.get('completeness', r.get('completeness', 0))),
+                'writing': _safe_int_score(breakdown.get('writing_quality', r.get('writing', 0))),
+                'effort': _safe_int_score(breakdown.get('effort_engagement', r.get('effort', 0))),
+            })
+        return rows
+
+    # Dev-mode fallback: shared CSV + merge from results JSON
     output_folder = _get_output_folder()
     master_file = os.path.join(output_folder, "master_grades.csv")
-    period_filter = _normalize_period(period_filter)
 
     rows = []
     seen_keys = set()  # (student_id, normalized_assignment)
@@ -299,7 +332,7 @@ def _load_master_csv(period_filter='all'):
     # 2. Merge in results JSON entries not already in master CSV.
     #    Master CSV is authoritative for scores (it's synced on edits).
     #    Results JSON fills in grades that haven't been written to CSV yet.
-    results_json = _load_results()
+    results_json = _load_results(teacher_id)
 
     # Build a name→student_id lookup from known data for resolving UNKNOWN IDs
     name_to_id = {}
