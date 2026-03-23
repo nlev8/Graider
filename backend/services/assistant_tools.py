@@ -545,11 +545,72 @@ def _load_roster(teacher_id='local-dev'):
 
     Returns list of dicts with name, id, local_id, grade, period, course_codes.
     Handles both Focus SIS CSVs (periods/) and Clever CSVs + section JSONs (rosters/ + periods/).
+
+    In multi-tenant mode (Supabase + real teacher_id), loads from teacher-scoped
+    storage instead of shared filesystem.
     """
     roster = []
     seen_ids = set()
 
-    # --- Phase 1: Focus SIS CSVs from PERIODS_DIR (existing format) ---
+    # --- Multi-tenant path: load from Supabase storage ---
+    _sb_configured = bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY'))
+    if teacher_id != 'local-dev' and _sb_configured and storage_list_keys:
+        period_keys = storage_list_keys('period:', teacher_id) or []
+        meta_keys = storage_list_keys('period_meta:', teacher_id) or []
+
+        # Load metadata for period names and course codes
+        period_meta = {}
+        for mk in meta_keys:
+            meta_data = storage_load(mk, teacher_id) if storage_load else None
+            if meta_data:
+                # key format: 'period_meta:filename.csv'
+                csv_name = mk.replace('period_meta:', '')
+                period_meta[csv_name] = meta_data
+
+        # Load period CSV data (stored as {"headers": [...], "rows": [...]})
+        for pk in period_keys:
+            csv_name = pk.replace('period:', '')
+            meta = period_meta.get(csv_name, {})
+            period_name = meta.get('period_name', csv_name.replace('.csv', '').replace('_', ' '))
+            course_codes = meta.get('course_codes', [])
+
+            period_data = storage_load(pk, teacher_id) if storage_load else None
+            if not period_data:
+                continue
+
+            headers = period_data.get('headers', [])
+            rows_data = period_data.get('rows', [])
+            for row_values in rows_data:
+                if isinstance(row_values, dict):
+                    row = row_values
+                else:
+                    row = dict(zip(headers, row_values)) if headers else {}
+                raw_name = row.get('Student', '').strip().strip('"')
+                student_id = row.get('Student ID', '').strip().strip('"')
+                local_id = row.get('Local ID', '').strip().strip('"')
+                grade = row.get('Grade', '').strip().strip('"')
+                if ';' in raw_name:
+                    parts = raw_name.split(';', 1)
+                    display_name = f"{parts[1].strip()} {parts[0].strip()}".strip()
+                elif ',' in raw_name:
+                    parts = raw_name.split(',', 1)
+                    display_name = f"{parts[1].strip()} {parts[0].strip()}".strip()
+                else:
+                    display_name = raw_name
+                if display_name:
+                    roster.append({
+                        "name": display_name,
+                        "student_id": student_id,
+                        "local_id": local_id,
+                        "grade": grade,
+                        "period": period_name,
+                        "course_codes": course_codes,
+                    })
+                    if student_id:
+                        seen_ids.add(student_id)
+        return roster
+
+    # --- Dev-mode fallback: Focus SIS CSVs from PERIODS_DIR ---
     if os.path.exists(PERIODS_DIR):
         period_meta = {}
         for f in os.listdir(PERIODS_DIR):
