@@ -27,7 +27,7 @@ from backend.services.assistant_tools import (
     ASSIGNMENTS_DIR, EXPORTS_DIR, STANDARDS_DIR, DOCUMENTS_DIR, LESSONS_DIR,
 )
 from backend.services.assistant_tools_grading import get_missing_assignments
-from backend.utils.compliance import audit_tool_action
+from backend.utils.compliance import audit_tool_action, require_teacher_id
 
 try:
     from backend.storage import load as storage_load, save as storage_save
@@ -1094,6 +1094,7 @@ def _fill_email_template(template, replacements):
 
 def create_focus_assignment(name, category=None, points=None, date=None, description=None, teacher_id='local-dev'):
     """Launch Focus automation to create an assignment."""
+    require_teacher_id(teacher_id)
     # Write per-teacher creds to temp file for subprocess access
     from backend.routes.assistant_routes import write_temp_creds_file
     if not write_temp_creds_file(teacher_id):
@@ -1133,6 +1134,7 @@ def create_focus_assignment(name, category=None, points=None, date=None, descrip
 
 def export_grades_csv(assignment=None, period=None, teacher_id='local-dev'):
     """Export grades as Focus-compatible CSV (in-memory, base64-encoded)."""
+    require_teacher_id(teacher_id)
     results = _load_results(teacher_id)
     if not results:
         return {"error": "No grading results to export"}
@@ -1206,6 +1208,7 @@ def export_grades_csv(assignment=None, period=None, teacher_id='local-dev'):
 
 def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1, teacher_id='local-dev'):
     """Analyze performance and recommend next lesson focus with period differentiation and IEP awareness."""
+    require_teacher_id(teacher_id)
     results = _load_results(teacher_id)
     if not results:
         return {"error": "No grading results available"}
@@ -1404,6 +1407,7 @@ def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1, 
 def lookup_student_info(student_name=None, student_id=None, student_ids=None, period=None, teacher_id='local-dev'):
     """Look up student roster and contact information.
     Supports batch lookup via student_ids (list of IDs)."""
+    require_teacher_id(teacher_id)
     roster = _load_roster(teacher_id)
     parent_contacts = _load_parent_contacts(teacher_id)
     results_json = _load_results(teacher_id)
@@ -1520,6 +1524,7 @@ def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=N
                             summary_prompt=None, summary_key_points=None,
                             total_points=100, style_name=None, teacher_id='local-dev'):
     """Generate a .docx worksheet and save to Grading Setup."""
+    require_teacher_id(teacher_id)
     try:
         from backend.services.worksheet_generator import generate_worksheet
         # Load subject from teacher settings
@@ -1545,6 +1550,7 @@ def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=N
 
 def generate_document_tool(title, content, style_name=None, save_to_builder=False, teacher_id='local-dev'):
     """Generate a formatted Word document with rich typography."""
+    require_teacher_id(teacher_id)
     try:
         from backend.services.document_generator import generate_document
         return generate_document(
@@ -1559,6 +1565,7 @@ def generate_document_tool(title, content, style_name=None, save_to_builder=Fals
 
 def generate_csv_tool(filename, headers, rows, teacher_id='local-dev'):
     """Generate a downloadable CSV or XLSX file based on filename extension."""
+    require_teacher_id(teacher_id)
     from urllib.parse import quote
 
     EXPORT_DIR = os.path.expanduser("~/Downloads/Graider/Exports")
@@ -1635,6 +1642,7 @@ def generate_csv_tool(filename, headers, rows, teacher_id='local-dev'):
 
 def save_document_style_tool(name, style, teacher_id='local-dev'):
     """Save a named visual style for documents."""
+    require_teacher_id(teacher_id)
     try:
         from backend.services.document_generator import save_style
         return save_style(name=name, style_dict=style)
@@ -1644,6 +1652,7 @@ def save_document_style_tool(name, style, teacher_id='local-dev'):
 
 def list_document_styles_tool(teacher_id='local-dev'):
     """List saved document visual styles."""
+    require_teacher_id(teacher_id)
     try:
         from backend.services.document_generator import list_styles
         return list_styles()
@@ -1653,6 +1662,7 @@ def list_document_styles_tool(teacher_id='local-dev'):
 
 def get_standards_tool(topic=None, dok_max=None, teacher_id='local-dev'):
     """Look up curriculum standards filtered by topic and DOK level."""
+    require_teacher_id(teacher_id)
     all_standards = _load_standards()
     if not all_standards:
         settings = _load_settings(teacher_id)
@@ -1705,6 +1715,7 @@ def get_standards_tool(topic=None, dok_max=None, teacher_id='local-dev'):
 
 def list_all_standards_tool(teacher_id='local-dev'):
     """Return a compact index of ALL curriculum standards for the teacher's subject."""
+    require_teacher_id(teacher_id)
     all_standards = _load_standards()
     if not all_standards:
         settings = _load_settings(teacher_id)
@@ -1737,6 +1748,7 @@ def list_all_standards_tool(teacher_id='local-dev'):
 
 def get_recent_lessons(unit_name=None, teacher_id='local-dev'):
     """List saved lesson plans with full detail for document generation context."""
+    require_teacher_id(teacher_id)
     if not os.path.exists(LESSONS_DIR):
         return {"error": "No saved lessons found. Generate and save lesson plans in the Planner tab first."}
 
@@ -1819,6 +1831,7 @@ def get_recent_lessons(unit_name=None, teacher_id='local-dev'):
 
 def get_calendar(start_date=None, end_date=None, teacher_id='local-dev'):
     """Read the teaching calendar for a date range."""
+    require_teacher_id(teacher_id)
     cal = _load_calendar(teacher_id)
 
     if not start_date:
@@ -1865,6 +1878,7 @@ def get_calendar(start_date=None, end_date=None, teacher_id='local-dev'):
 
 def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_file=None, teacher_id='local-dev'):
     """Schedule a lesson on the teaching calendar."""
+    require_teacher_id(teacher_id)
     import uuid as _uuid
     if not date or not lesson_title:
         return {"error": "date and lesson_title are required"}
@@ -1901,6 +1915,7 @@ def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_
 
 def unschedule_lesson_tool(date, lesson_title=None, teacher_id='local-dev'):
     """Remove a lesson from the teaching calendar by date and optional title."""
+    require_teacher_id(teacher_id)
     if not date:
         return {"error": "date is required"}
 
@@ -1928,6 +1943,7 @@ def unschedule_lesson_tool(date, lesson_title=None, teacher_id='local-dev'):
 
 def add_calendar_holiday(date, name, end_date=None, teacher_id='local-dev'):
     """Add a holiday or break to the teaching calendar."""
+    require_teacher_id(teacher_id)
     if not date or not name:
         return {"error": "date and name are required"}
 
@@ -1951,6 +1967,7 @@ MAX_RESOURCE_TEXT = 120000
 
 def list_resources_tool(teacher_id='local-dev'):
     """List all uploaded supporting documents from the documents directory."""
+    require_teacher_id(teacher_id)
     if not os.path.isdir(DOCUMENTS_DIR):
         return {"documents": [], "message": "No documents directory found. Upload documents in Settings > Resources."}
 
@@ -1988,6 +2005,7 @@ def list_resources_tool(teacher_id='local-dev'):
 
 def read_resource_tool(filename, teacher_id='local-dev'):
     """Read and return the text content of an uploaded document."""
+    require_teacher_id(teacher_id)
     if not filename or not filename.strip():
         return {"error": "No filename provided"}
 
@@ -2057,6 +2075,7 @@ def save_assignment_config(title, document_text=None, questions=None, totalPoint
     provided fields, and writes back. This lets the assistant update
     point values or questions without wiping the rest of the config.
     """
+    require_teacher_id(teacher_id)
     import time
 
     if not title or not title.strip():
@@ -2143,6 +2162,7 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
     When called from the AI assistant, this ALWAYS returns a preview.
     Actual sending is triggered by the frontend confirm action via /api/confirm-send.
     """
+    require_teacher_id(teacher_id)
     # Programmatic guard: AI assistant must never send directly
     dry_run = True
     # Load parent contacts
@@ -2321,6 +2341,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
     Actual sending is triggered by the frontend confirm action via /api/confirm-send.
     Supports email-only, SMS-only, or both.
     """
+    require_teacher_id(teacher_id)
     # Programmatic guard: AI assistant must never send directly
     dry_run = True
 
@@ -2459,6 +2480,7 @@ def confirm_and_send(teacher_id='local-dev'):
     Reads the pending payload saved by send_focus_comms or send_parent_emails,
     then triggers the actual Playwright automation.
     """
+    require_teacher_id(teacher_id)
     # Load pending payload from storage (preferred) or filesystem fallback
     pending = None
     if storage_load:

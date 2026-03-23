@@ -11,6 +11,8 @@ import random
 
 logger = logging.getLogger(__name__)
 
+from backend.utils.compliance import require_teacher_id
+
 
 def _get_supabase():
     from backend.supabase_client import get_supabase_or_raise
@@ -48,6 +50,7 @@ DEFAULT_QUESTIONS = [
 
 def create_parent_survey(title=None, teacher_name=None, questions=None, teacher_id='local-dev', **kwargs):
     """Create a parent survey and return the shareable link."""
+    require_teacher_id(teacher_id)
     db = _get_supabase()
 
     title = title or "Parent Communication Survey"
@@ -90,6 +93,7 @@ def create_parent_survey(title=None, teacher_name=None, questions=None, teacher_
 
 def get_survey_results(join_code=None, teacher_id='local-dev', **kwargs):
     """Get survey results with aggregate statistics."""
+    require_teacher_id(teacher_id)
     db = _get_supabase()
 
     if join_code:
@@ -155,6 +159,7 @@ def get_survey_results(join_code=None, teacher_id='local-dev', **kwargs):
 
 def compile_survey_report(join_code, teacher_id='local-dev', **kwargs):
     """Compile a detailed survey report with analysis and recommendations."""
+    require_teacher_id(teacher_id)
     results = get_survey_results(join_code=join_code, teacher_id=teacher_id)
     if results.get('error'):
         return results

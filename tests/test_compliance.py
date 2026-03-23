@@ -15,6 +15,7 @@ class TestRequireTeacherId:
             require_teacher_id("")
 
     @patch('backend.utils.compliance._is_supabase_configured', return_value=True)
+    @patch.dict('os.environ', {'FLASK_ENV': 'production'})
     def test_blocks_local_dev_in_prod(self, mock_sb):
         from backend.utils.compliance import require_teacher_id
         with pytest.raises(ValueError, match="local-dev"):

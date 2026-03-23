@@ -13,6 +13,7 @@ from backend.services.assistant_tools import (
     _load_accommodations, _fuzzy_name_match, _safe_int_score,
     _normalize_period, _extract_first_name, PARENT_CONTACTS_FILE,
 )
+from backend.utils.compliance import require_teacher_id
 
 
 # ═══════════════════════════════════════════════════════
@@ -156,6 +157,7 @@ def _comment_template(first_name, avg, trend, strongest_cat, weakest_cat, max_le
 
 def generate_progress_report(student_name=None, period=None, teacher_id='local-dev', **kwargs):
     """Generate structured progress report data."""
+    require_teacher_id(teacher_id)
     rows = _load_master_csv(period_filter=period or "all", teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
@@ -218,6 +220,7 @@ def generate_progress_report(student_name=None, period=None, teacher_id='local-d
 
 def generate_report_card_comments(period=None, student_name=None, max_length=None, teacher_id='local-dev', **kwargs):
     """Generate template-based report card comments."""
+    require_teacher_id(teacher_id)
     max_length = max_length or 200
     rows = _load_master_csv(period_filter=period or "all", teacher_id=teacher_id)
     if not rows:
@@ -268,6 +271,7 @@ def generate_report_card_comments(period=None, student_name=None, max_length=Non
 
 def draft_student_feedback(student_name, teacher_id='local-dev', **kwargs):
     """Structured feedback with strengths, growth areas, examples from history."""
+    require_teacher_id(teacher_id)
     if not student_name:
         return {"error": "student_name is required."}
 
@@ -367,6 +371,7 @@ def draft_student_feedback(student_name, teacher_id='local-dev', **kwargs):
 
 def generate_parent_conference_notes(student_name, teacher_id='local-dev', **kwargs):
     """Conference agenda with data, talking points, action items."""
+    require_teacher_id(teacher_id)
     if not student_name:
         return {"error": "student_name is required."}
 

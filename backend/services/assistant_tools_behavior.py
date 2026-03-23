@@ -20,7 +20,7 @@ from backend.services.assistant_tools import (
     _load_roster, _fuzzy_name_match, _normalize_period,
     _extract_first_name, PARENT_CONTACTS_FILE,
 )
-from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action
+from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action, require_teacher_id
 
 # ═══════════════════════════════════════════════════════
 # SUPABASE CLIENT (lazy, same pattern as routes)
@@ -299,6 +299,7 @@ BEHAVIOR_TOOL_DEFINITIONS = [
 
 def debug_behavior(teacher_id='local-dev'):
     """Diagnostic: show what behavior data exists for the current teacher."""
+    require_teacher_id(teacher_id)
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
     if not teacher_id or teacher_id == 'local-dev':
@@ -334,6 +335,7 @@ def debug_behavior(teacher_id='local-dev'):
 
 def get_behavior_summary(student_name=None, period=None, days=7, teacher_id='local-dev'):
     """Get behavior summary for a student or period."""
+    require_teacher_id(teacher_id)
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
     if not teacher_id or teacher_id == 'local-dev':
@@ -705,6 +707,7 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, use_behav
     If use_behavior_data=True, fetches companion app data from Supabase.
     If use_behavior_data=False, drafts using only the custom_note (chat context).
     """
+    require_teacher_id(teacher_id)
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or teacher_id
     if not teacher_id or teacher_id == 'local-dev':
@@ -803,6 +806,7 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, use_behav
 
 def send_behavior_email(student_name, subject, body, method="focus", teacher_id='local-dev', **kwargs):
     """Send a behavior email via Resend or Focus Communications automation."""
+    require_teacher_id(teacher_id)
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or 'local-dev'
 

@@ -19,11 +19,20 @@ def _is_supabase_configured():
 
 
 def require_teacher_id(teacher_id):
-    """Guard: raise ValueError if teacher_id is missing or invalid in production."""
+    """Guard: raise ValueError if teacher_id is missing or invalid in production.
+
+    Allows 'local-dev' when:
+    - Supabase is NOT configured (pure local dev), OR
+    - FLASK_ENV is 'development' or 'testing' (dev/test with Supabase credentials present)
+
+    Blocks 'local-dev' only in actual production (Supabase configured + FLASK_ENV not dev/test).
+    """
     if not teacher_id:
         raise ValueError("teacher_id is required for data access")
     if teacher_id == 'local-dev' and _is_supabase_configured():
-        raise ValueError("local-dev teacher_id not allowed when Supabase is configured")
+        env = os.getenv('FLASK_ENV', '').lower()
+        if env not in ('development', 'dev', 'testing', 'test'):
+            raise ValueError("local-dev teacher_id not allowed when Supabase is configured in production")
 
 
 def audit_tool_action(teacher_id, tool_name, action, details=None):

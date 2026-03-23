@@ -12,7 +12,7 @@ from backend.services.assistant_tools import (
     _load_master_csv, _load_results, _load_accommodations,
     _load_roster, _fuzzy_name_match, _safe_int_score,
 )
-from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action
+from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action, require_teacher_id
 
 
 # ═══════════════════════════════════════════════════════
@@ -145,6 +145,7 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
 def differentiate_content(text="", levels=None, grade_level="6th", **kwargs):
     """Rewrite text at multiple reading levels."""
     teacher_id = kwargs.get('teacher_id', 'local-dev')
+    require_teacher_id(teacher_id)
     text = (text or "").strip()
     if not text:
         return {"error": "text is required"}
@@ -171,6 +172,7 @@ def differentiate_content(text="", levels=None, grade_level="6th", **kwargs):
 def generate_questions_from_text(text="", count=5, types=None, grade_level="6th", **kwargs):
     """Generate comprehension questions from a passage."""
     teacher_id = kwargs.get('teacher_id', 'local-dev')
+    require_teacher_id(teacher_id)
     text = (text or "").strip()
     if not text:
         return {"error": "text is required"}
@@ -197,6 +199,7 @@ def generate_questions_from_text(text="", count=5, types=None, grade_level="6th"
 def generate_iep_progress_notes(student_name="", goal_area="", **kwargs):
     """Synthesize IEP progress notes from student grade data."""
     teacher_id = kwargs.get('teacher_id', 'local-dev')
+    require_teacher_id(teacher_id)
     student_name = (student_name or "").strip()
     if not student_name:
         return {"error": "student_name is required"}

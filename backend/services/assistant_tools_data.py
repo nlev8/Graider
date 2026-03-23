@@ -8,6 +8,8 @@ import os
 import json
 from datetime import datetime
 
+from backend.utils.compliance import require_teacher_id
+
 # Import storage abstraction
 try:
     from backend.storage import load as storage_load, save as storage_save
@@ -79,6 +81,7 @@ def _save_memories(memories, teacher_id='local-dev'):
 
 def save_memory(fact, teacher_id='local-dev', **kwargs):
     """Save a fact to persistent memory for future conversations."""
+    require_teacher_id(teacher_id)
     if not fact or not fact.strip():
         return {"error": "No fact provided"}
 

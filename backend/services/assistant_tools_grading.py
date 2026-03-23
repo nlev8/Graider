@@ -21,6 +21,7 @@ from backend.services.assistant_tools import (
     _normalize_assignment_name, _get_period_assignments,
     ASSIGNMENTS_DIR,
 )
+from backend.utils.compliance import require_teacher_id
 
 # Import storage abstraction
 try:
@@ -228,6 +229,7 @@ def query_grades(student_name=None, assignment=None, period=None,
                  min_score=None, max_score=None, letter_grade=None, limit=25,
                  teacher_id='local-dev'):
     """Search and filter student grades."""
+    require_teacher_id(teacher_id)
     rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
     results_json = _load_results(teacher_id)
 
@@ -280,6 +282,7 @@ def query_grades(student_name=None, assignment=None, period=None,
 
 def get_student_summary(student_name, teacher_id='local-dev'):
     """Get comprehensive summary for a specific student."""
+    require_teacher_id(teacher_id)
     rows = _load_master_csv(teacher_id=teacher_id)
 
     # Find matching student (fuzzy word match — handles compound names)
@@ -383,6 +386,7 @@ def get_student_summary(student_name, teacher_id='local-dev'):
 
 def get_class_analytics(period=None, teacher_id='local-dev'):
     """Get class-wide analytics."""
+    require_teacher_id(teacher_id)
     rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
 
     if not rows:
@@ -459,6 +463,7 @@ def get_class_analytics(period=None, teacher_id='local-dev'):
 
 def get_assignment_stats(assignment_name, teacher_id='local-dev'):
     """Get statistics for a specific assignment."""
+    require_teacher_id(teacher_id)
     rows = _load_master_csv(teacher_id=teacher_id)
 
     # Partial match on assignment name
@@ -495,6 +500,7 @@ def get_assignment_stats(assignment_name, teacher_id='local-dev'):
 
 def list_assignments_tool(teacher_id='local-dev'):
     """List all graded assignments with counts and averages."""
+    require_teacher_id(teacher_id)
     rows = _load_master_csv(teacher_id=teacher_id)
 
     assignments = defaultdict(list)
@@ -529,6 +535,7 @@ def list_assignments_tool(teacher_id='local-dev'):
 def analyze_grade_causes(assignment_name, period=None, score_threshold=None,
                          teacher_id='local-dev'):
     """Deep analysis of what caused grades on an assignment."""
+    require_teacher_id(teacher_id)
     results = _load_results(teacher_id)
 
     # Filter by assignment (partial match)
@@ -635,6 +642,7 @@ def analyze_grade_causes(assignment_name, period=None, score_threshold=None,
 
 def get_feedback_patterns(assignment_name, period=None, teacher_id='local-dev'):
     """Analyze feedback patterns across an assignment."""
+    require_teacher_id(teacher_id)
     results = _load_results(teacher_id)
 
     matched = [r for r in results if assignment_name.lower() in r.get('assignment', '').lower()]
@@ -720,6 +728,7 @@ def get_feedback_patterns(assignment_name, period=None, teacher_id='local-dev'):
 
 def compare_periods(assignment_name=None, teacher_id='local-dev'):
     """Compare performance across class periods."""
+    require_teacher_id(teacher_id)
     results = _load_results(teacher_id)
 
     if assignment_name:
@@ -815,6 +824,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None,
     """Scan the assignments folder for submitted files. Shows top assignments
     by submission count, unique students, graded/ungraded status.
     Uses centralized staging for deduplication."""
+    require_teacher_id(teacher_id)
 
     # Read from ~/.graider_settings.json (where the UI saves config)
     folder = ''
@@ -992,6 +1002,7 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
 
     If no params provided, defaults to period="all" (all-periods summary).
     """
+    require_teacher_id(teacher_id)
     student_data, saved_norms, saved_display, err = _build_missing_assignments_data(teacher_id=teacher_id)
     if err:
         return err

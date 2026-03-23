@@ -7,6 +7,8 @@ import json
 import re
 from datetime import datetime
 
+from backend.utils.compliance import require_teacher_id
+
 try:
     from backend.storage import load as storage_load, save as storage_save
 except ImportError:
@@ -69,6 +71,7 @@ AUTOMATION_TOOL_DEFINITIONS = [
 
 
 def list_automations_tool(teacher_id='local-dev', **kwargs):
+    require_teacher_id(teacher_id)
     if storage_load:
         data = storage_load('automations', teacher_id)
         if data is not None:
@@ -107,6 +110,7 @@ def list_automations_tool(teacher_id='local-dev', **kwargs):
 
 
 def create_automation_tool(name, steps, description="", browser_persistent=False, headless=False, teacher_id='local-dev', **kwargs):
+    require_teacher_id(teacher_id)
     slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
 
     for i, step in enumerate(steps):
@@ -154,6 +158,7 @@ def create_automation_tool(name, steps, description="", browser_persistent=False
 
 
 def run_automation_tool(name, teacher_id='local-dev', **kwargs):
+    require_teacher_id(teacher_id)
     if storage_load:
         data = storage_load('automations', teacher_id)
         if data is not None:

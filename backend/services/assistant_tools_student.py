@@ -20,7 +20,7 @@ from backend.services.assistant_tools import (
     _fuzzy_name_match, _safe_int_score, ACCOMMODATIONS_DIR, PERIODS_DIR,
     ROSTERS_DIR,
 )
-from backend.utils.compliance import audit_tool_action
+from backend.utils.compliance import audit_tool_action, require_teacher_id
 
 
 # ═══════════════════════════════════════════════════════
@@ -115,6 +115,7 @@ STUDENT_TOOL_DEFINITIONS = [
 
 def get_student_accommodations(student_name, teacher_id='local-dev', **kwargs):
     """Pull specific IEP/504 presets, notes, and grading impact for a student."""
+    require_teacher_id(teacher_id)
     if not student_name:
         return {"error": "student_name is required."}
 
@@ -188,6 +189,7 @@ def get_student_accommodations(student_name, teacher_id='local-dev', **kwargs):
 
 def get_student_streak(student_name, teacher_id='local-dev', **kwargs):
     """Show consecutive improvement/decline streaks with assignment history."""
+    require_teacher_id(teacher_id)
     if not student_name:
         return {"error": "student_name is required."}
 
@@ -423,6 +425,7 @@ def _delete_student_supabase(student_name):
 
 def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
     """Remove a student from ALL records: rosters, results, history, accommodations, contacts, ELL, master CSV, Supabase."""
+    require_teacher_id(teacher_id)
     if not student_name:
         return {"error": "student_name is required."}
 
@@ -619,6 +622,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
 
 def export_student_data(student_name, teacher_id='local-dev', **kwargs):
     """Export all stored data for a student as base64-encoded JSON (in-memory, no disk writes)."""
+    require_teacher_id(teacher_id)
     if not student_name:
         return {"error": "student_name is required."}
 
@@ -712,6 +716,7 @@ def export_student_data(student_name, teacher_id='local-dev', **kwargs):
 
 def import_student_data(file_path, period=None, student_id=None, teacher_id='local-dev', **kwargs):
     """Import a previously exported student data file into Graider."""
+    require_teacher_id(teacher_id)
     if not file_path:
         return {"error": "file_path is required."}
 
