@@ -164,21 +164,36 @@ def nlm_create_notebook():
     planner_docs = data.get("planner_docs", [])
 
     # Save planner reference docs as temporary text files for NotebookLM context
-    if planner_docs:
-        import tempfile
-        context_dir = os.path.join(os.path.expanduser("~/.graider_data"), "notebooklm_context")
+    if planner_docs and isinstance(planner_docs, list):
+        MAX_PLANNER_DOCS = 10
+        MAX_TEXT_SIZE = 500_000  # 500KB per doc
+        context_dir = os.path.join(os.path.expanduser("~/.graider_data"), "notebooklm_context", teacher_id or "unknown")
         os.makedirs(context_dir, exist_ok=True)
-        for pdoc in planner_docs:
+        for pdoc in planner_docs[:MAX_PLANNER_DOCS]:
+            if not isinstance(pdoc, dict):
+                continue
+            text = pdoc.get("text", "")
+            if not text or not isinstance(text, str):
+                continue
+            text = text[:MAX_TEXT_SIZE]
             fname = pdoc.get("filename", "reference.txt")
-            safe_name = "".join(c for c in fname if c.isalnum() or c in ".-_ ").strip()
-            if not safe_name:
+            # Sanitize filename — strip path separators, non-alphanumeric, and ..
+            safe_name = os.path.basename(fname)
+            safe_name = "".join(c for c in safe_name if c.isalnum() or c in ".-_ ").strip()
+            if not safe_name or safe_name.startswith("."):
                 safe_name = "reference.txt"
             if not safe_name.endswith(".txt"):
                 safe_name = os.path.splitext(safe_name)[0] + ".txt"
             save_path = os.path.join(context_dir, safe_name)
-            with open(save_path, "w", encoding="utf-8") as f:
-                f.write(pdoc.get("text", ""))
-            support_doc_paths.append(save_path)
+            # Verify path is within context_dir (prevent traversal)
+            if not os.path.realpath(save_path).startswith(os.path.realpath(context_dir)):
+                continue
+            try:
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(text)
+                support_doc_paths.append(save_path)
+            except OSError:
+                _logger.warning("Failed to write planner doc: %s", safe_name)
 
     title = "Graider: " + plan.get("title", "Lesson Plan")
 
