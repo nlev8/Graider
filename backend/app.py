@@ -2018,6 +2018,22 @@ register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 
 
 # ══════════════════════════════════════════════════════════════
+# GRACEFUL SHUTDOWN — Stop grading threads on SIGTERM
+# ══════════════════════════════════════════════════════════════
+
+import signal
+
+def _handle_sigterm(signum, frame):
+    """Graceful shutdown: stop any running grading thread before exit."""
+    logger.info("SIGTERM received — requesting grading thread stop")
+    if grading_state.get("is_running"):
+        grading_state["stop_requested"] = True
+    # Let gunicorn handle the actual process exit
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
+
+
+# ══════════════════════════════════════════════════════════════
 # INDIVIDUAL FILE GRADING (for paper/handwritten assignments)
 # ══════════════════════════════════════════════════════════════
 

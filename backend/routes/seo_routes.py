@@ -11,6 +11,7 @@ Endpoints:
     POST /api/seo/suggest-blog-topics — Blog topic ideas for keyword coverage
 """
 from flask import Blueprint, request, jsonify
+from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.services.seo_service import (
     optimize_meta, generate_schema, analyze_content, suggest_blog_topics
@@ -20,6 +21,7 @@ seo_bp = Blueprint('seo', __name__)
 
 
 @seo_bp.route('/api/seo/optimize-meta', methods=['POST'])
+@require_teacher
 @handle_route_errors
 def api_optimize_meta():
     """Optimize meta tags (title, description, keywords) for given page content."""
@@ -35,6 +37,7 @@ def api_optimize_meta():
 
 
 @seo_bp.route('/api/seo/generate-schema', methods=['POST'])
+@require_teacher
 @handle_route_errors
 def api_generate_schema():
     """Generate JSON-LD structured data for a page."""
@@ -48,6 +51,7 @@ def api_generate_schema():
 
 
 @seo_bp.route('/api/seo/analyze-content', methods=['POST'])
+@require_teacher
 @handle_route_errors
 def api_analyze_content():
     """Analyze content for SEO score and get improvement suggestions."""
@@ -63,6 +67,7 @@ def api_analyze_content():
 
 
 @seo_bp.route('/api/seo/suggest-blog-topics', methods=['POST'])
+@require_teacher
 @handle_route_errors
 def api_suggest_topics():
     """Suggest new blog topics based on existing content and target keywords."""
