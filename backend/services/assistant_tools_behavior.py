@@ -801,9 +801,10 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, use_behav
     return {"status": "success", "data": result_data}
 
 
-def send_behavior_email(student_name, subject, body, method="focus"):
+def send_behavior_email(student_name, subject, body, method="focus", teacher_id='local-dev', **kwargs):
     """Send a behavior email via Resend or Focus Communications automation."""
-    teacher_id = _get_teacher_id() or 'local-dev'
+    if not teacher_id or teacher_id == 'local-dev':
+        teacher_id = _get_teacher_id() or 'local-dev'
 
     if method == "focus":
         # Send via Focus Communications Playwright automation

@@ -920,6 +920,15 @@ def _merge_submodules():
 _merge_submodules()
 
 
+# Tools that don't access student data — exempt from INVOKE audit and teacher_id requirement
+_STATELESS_TOOLS = {
+    'check_math_equivalence', 'grade_math_question', 'grade_data_table',
+    'grade_coordinates', 'grade_place_name',  # STEM tools
+    'generate_kahoot_quiz', 'generate_blooket_set', 'generate_gimkit_kit',
+    'generate_quizlet_set', 'generate_nearpod_questions', 'generate_canvas_qti',  # EdTech tools
+}
+
+
 def execute_tool(tool_name, tool_input):
     """Execute a tool by name with the given input.
 
@@ -935,6 +944,14 @@ def execute_tool(tool_name, tool_input):
         return {"error": f"Unknown tool: {tool_name}"}
 
     try:
+        # Audit INVOKE for all data-accessing tools
+        if tool_name not in _STATELESS_TOOLS and tool_input and 'teacher_id' in tool_input:
+            try:
+                from backend.utils.compliance import audit_tool_action
+                audit_tool_action(tool_input['teacher_id'], tool_name, 'INVOKE')
+            except Exception:
+                pass  # Audit failure should never block tool execution
+
         if tool_input:
             # Strip teacher_id if the handler doesn't accept it
             kwargs = dict(tool_input)

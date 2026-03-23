@@ -79,3 +79,28 @@ def test_descriptions_non_empty():
     for td in at.TOOL_DEFINITIONS:
         desc = td.get("description", "")
         assert len(desc) >= 20, f"Description too short for '{td['name']}': '{desc}'"
+
+
+def test_data_tools_accept_teacher_id():
+    """Every tool that accesses student data must accept teacher_id."""
+    import inspect
+
+    # Tools that DON'T need teacher_id (stateless, no student data)
+    EXEMPT = {
+        'check_math_equivalence', 'grade_math_question', 'grade_data_table',
+        'grade_coordinates', 'grade_place_name',  # STEM tools
+        'generate_kahoot_quiz', 'generate_blooket_set', 'generate_gimkit_kit',
+        'generate_quizlet_set', 'generate_nearpod_questions', 'generate_canvas_qti',  # EdTech tools
+    }
+
+    for name, handler in at.TOOL_HANDLERS.items():
+        if name in EXEMPT:
+            continue
+        sig = inspect.signature(handler)
+        has_teacher_id = 'teacher_id' in sig.parameters
+        has_var_keyword = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        )
+        assert has_teacher_id or has_var_keyword, (
+            f"Tool '{name}' must accept teacher_id parameter or **kwargs"
+        )
