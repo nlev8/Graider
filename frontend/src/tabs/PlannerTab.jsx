@@ -1231,6 +1231,7 @@ export default React.memo(function PlannerTab({
     }
 
     // Must have a lesson plan OR context files to generate from
+    var importPlannerDocs = nlmOptions._importPlannerDocs && uploadedDocs.length > 0;
     if (!lessonPlan && uploadedDocs.length === 0) {
       addToast("Upload reference documents or generate a lesson plan first", "warning");
       return;
@@ -1253,10 +1254,15 @@ export default React.memo(function PlannerTab({
           var std = standards.find(function(s) { return s.code === code; });
           return std || { code: code };
         });
+        var contextPaths = uploadedDocs.filter(function(f) { return f.path; }).map(function(f) { return f.path; });
+        var plannerDocTexts = importPlannerDocs
+          ? uploadedDocs.map(function(d) { return { filename: d.filename || d.name, text: d.text }; })
+          : [];
         var nbData = await api.notebookLMCreateNotebook(
           lessonPlan || {}, enrichedStandards,
           { subject: config.subject, grade: config.grade_level },
-          uploadedDocs.filter(function(f) { return f.path; }).map(function(f) { return f.path; })
+          contextPaths,
+          plannerDocTexts
         );
         if (nbData.error) {
           if (nbData.needs_login) {
@@ -7409,6 +7415,19 @@ export default React.memo(function PlannerTab({
                                 style={{ width: "100%", fontSize: "0.85rem", resize: "vertical", minHeight: "48px" }}
                               />
                             </div>
+
+                            {/* Import reference docs from Planner */}
+                            {uploadedDocs.length > 0 && (
+                              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", padding: "8px 12px", borderRadius: "8px", background: nlmOptions._importPlannerDocs ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.04)", border: "1px solid " + (nlmOptions._importPlannerDocs ? "rgba(99,102,241,0.3)" : "rgba(99,102,241,0.1)"), marginBottom: "10px", transition: "all 0.2s" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={nlmOptions._importPlannerDocs || false}
+                                  onChange={function() { setNlmOptions(function(prev) { return Object.assign({}, prev, { _importPlannerDocs: !prev._importPlannerDocs }); }); }}
+                                />
+                                <Icon name="FileInput" size={14} style={{ color: "#6366f1" }} />
+                                <span style={{ fontSize: "0.85rem" }}>Import {uploadedDocs.length} uploaded reference doc{uploadedDocs.length > 1 ? "s" : ""} from Lesson Planning</span>
+                              </label>
+                            )}
 
                             {/* Source info — show if lesson plan exists */}
                             {lessonPlan && (

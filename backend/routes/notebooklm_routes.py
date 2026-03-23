@@ -161,6 +161,24 @@ def nlm_create_notebook():
     standards = data.get("standards", [])
     config = data.get("config", {})
     support_doc_paths = data.get("support_doc_paths", [])
+    planner_docs = data.get("planner_docs", [])
+
+    # Save planner reference docs as temporary text files for NotebookLM context
+    if planner_docs:
+        import tempfile
+        context_dir = os.path.join(os.path.expanduser("~/.graider_data"), "notebooklm_context")
+        os.makedirs(context_dir, exist_ok=True)
+        for pdoc in planner_docs:
+            fname = pdoc.get("filename", "reference.txt")
+            safe_name = "".join(c for c in fname if c.isalnum() or c in ".-_ ").strip()
+            if not safe_name:
+                safe_name = "reference.txt"
+            if not safe_name.endswith(".txt"):
+                safe_name = os.path.splitext(safe_name)[0] + ".txt"
+            save_path = os.path.join(context_dir, safe_name)
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write(pdoc.get("text", ""))
+            support_doc_paths.append(save_path)
 
     title = "Graider: " + plan.get("title", "Lesson Plan")
 

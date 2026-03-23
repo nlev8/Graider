@@ -1164,10 +1164,13 @@ export async function notebookLMUploadContext(file) {
   return response.json()
 }
 
-export async function notebookLMCreateNotebook(plan, standards, config, supportDocPaths) {
+export async function notebookLMCreateNotebook(plan, standards, config, supportDocPaths, plannerDocTexts) {
   const body = { plan: plan, standards: standards, config: config }
   if (supportDocPaths && supportDocPaths.length > 0) {
     body.support_doc_paths = supportDocPaths
+  }
+  if (plannerDocTexts && plannerDocTexts.length > 0) {
+    body.planner_docs = plannerDocTexts
   }
   return fetchApi('/api/notebooklm/create-notebook', {
     method: 'POST',
