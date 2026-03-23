@@ -7481,6 +7481,12 @@ export default React.memo(function PlannerTab({
                             </div>
 
                             {/* Progress */}
+                            {nlmGenerating && nlmProgress.length === 0 && (
+                              <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", borderRadius: "10px", background: "rgba(139, 92, 246, 0.08)" }}>
+                                <Icon name="Loader" size={18} className="spinning" style={{ color: "#8b5cf6" }} />
+                                <span style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>Preparing notebook and uploading sources...</span>
+                              </div>
+                            )}
                             {nlmProgress.length > 0 && (
                               <div style={{ marginTop: "15px" }}>
                                 {nlmGenerating && (
@@ -7537,6 +7543,13 @@ export default React.memo(function PlannerTab({
                                   );
                                 })}
                                 {nlmErrors.length > 0 && nlmErrors.map(function(err, i) {
+                                  var friendlyErr = err;
+                                  if (err.indexOf("returned null") !== -1 || err.indexOf("rLM1Ne") !== -1 || err.indexOf("RPC") !== -1) {
+                                    var failedType = err.split(":")[0] || "Material";
+                                    friendlyErr = failedType + ": Google NotebookLM server error — try again or select fewer materials";
+                                  } else if (err.indexOf("session") !== -1 || err.indexOf("auth") !== -1 || err.indexOf("cookie") !== -1) {
+                                    friendlyErr = err.split(":")[0] + ": Session expired — reconnect to NotebookLM";
+                                  }
                                   return (
                                     <div key={"err-" + i} style={{
                                       display: "flex", alignItems: "center", gap: "10px",
@@ -7544,7 +7557,7 @@ export default React.memo(function PlannerTab({
                                       background: "rgba(239, 68, 68, 0.08)", color: "var(--error)",
                                     }}>
                                       <Icon name="AlertTriangle" size={16} />
-                                      <span>{err}</span>
+                                      <span>{friendlyErr}</span>
                                     </div>
                                   );
                                 })}
