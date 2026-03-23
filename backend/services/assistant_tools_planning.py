@@ -195,13 +195,13 @@ def _get_standards_for_lesson(lesson):
 # TOOL HANDLERS
 # ═══════════════════════════════════════════════════════
 
-def suggest_remediation(assignment_name=None, weak_areas=None, period=None):
+def suggest_remediation(assignment_name=None, weak_areas=None, period=None, teacher_id='local-dev'):
     """Map weaknesses to activities using teacher's enabled edtech tools."""
-    settings = _load_settings()
+    settings = _load_settings(teacher_id)
     config = settings.get("config", {})
     available_tools = config.get("availableTools", [])
 
-    rows = _load_master_csv(period_filter=period or "all")
+    rows = _load_master_csv(period_filter=period or "all", teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 
@@ -294,7 +294,7 @@ def suggest_remediation(assignment_name=None, weak_areas=None, period=None):
     }
 
 
-def align_to_standards(topic):
+def align_to_standards(topic, teacher_id='local-dev'):
     """Show which standards a topic covers and which remain unassessed."""
     if not topic:
         return {"error": "topic is required."}
@@ -324,7 +324,7 @@ def align_to_standards(topic):
             uncovered.append(entry)
 
     # Check which standards have been assessed (appear in graded assignments)
-    rows = _load_master_csv(period_filter="all")
+    rows = _load_master_csv(period_filter="all", teacher_id=teacher_id)
     assessed_topics = set()
     for r in rows:
         assign = r.get("assignment", "").lower()
@@ -340,13 +340,13 @@ def align_to_standards(topic):
     }
 
 
-def get_pacing_status():
+def get_pacing_status(teacher_id='local-dev'):
     """Compare calendar progress vs total standards."""
     all_standards = _load_standards()
     if not all_standards:
         return {"error": "No standards loaded. Check Settings > Subject and State."}
 
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
     lessons = cal.get("scheduled_lessons", [])
 
     today = datetime.now().strftime("%Y-%m-%d")
@@ -366,7 +366,7 @@ def get_pacing_status():
     remaining = total - covered
 
     # Estimate pacing
-    settings = _load_settings()
+    settings = _load_settings(teacher_id)
     config = settings.get("config", {})
 
     # Simple heuristic: if we've covered X% of standards and are Y% through the year
@@ -401,12 +401,12 @@ def get_pacing_status():
     }
 
 
-def generate_bell_ringer(date=None, period=None):
+def generate_bell_ringer(date=None, period=None, teacher_id='local-dev'):
     """Quick warm-up from yesterday's or today's lesson vocab/standards."""
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
 
     # Try yesterday's lesson first (review), then today's
     yesterday = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -466,12 +466,12 @@ def generate_bell_ringer(date=None, period=None):
     }
 
 
-def generate_exit_ticket(date=None, topic=None, period=None):
+def generate_exit_ticket(date=None, topic=None, period=None, teacher_id='local-dev'):
     """2-3 quick check questions from today's lesson/standard."""
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
     lesson = _get_lesson_for_date(cal, date)
 
     lesson_title = topic or ""
@@ -544,7 +544,7 @@ def generate_exit_ticket(date=None, topic=None, period=None):
     }
 
 
-def suggest_grouping(period, group_type, group_size=None, assignment_name=None):
+def suggest_grouping(period, group_type, group_size=None, assignment_name=None, teacher_id='local-dev'):
     """Create student groups by performance."""
     if not period:
         return {"error": "period is required."}
@@ -553,7 +553,7 @@ def suggest_grouping(period, group_type, group_size=None, assignment_name=None):
 
     group_size = group_size or 4
 
-    rows = _load_master_csv(period_filter=period)
+    rows = _load_master_csv(period_filter=period, teacher_id=teacher_id)
     if not rows:
         return {"error": f"No grade data found for {period}."}
 
@@ -620,7 +620,7 @@ def suggest_grouping(period, group_type, group_size=None, assignment_name=None):
     }
 
 
-def generate_sub_plans(date, end_date=None):
+def generate_sub_plans(date, end_date=None, teacher_id='local-dev'):
     """Build substitute teacher plans from calendar + saved lessons."""
     if not date:
         return {"error": "date is required."}
@@ -628,8 +628,8 @@ def generate_sub_plans(date, end_date=None):
     if not end_date:
         end_date = date
 
-    cal = _load_calendar()
-    settings = _load_settings()
+    cal = _load_calendar(teacher_id)
+    settings = _load_settings(teacher_id)
     config = settings.get("config", {})
     teacher_name = config.get("teacher_name", "Teacher")
     subject = config.get("subject", "")

@@ -69,12 +69,12 @@ def _match_assignment_to_config(assign_name, saved_norms, saved_display,
 
 
 def _scan_submission_folder(roster_name_map, saved_norms, saved_display,
-                            alias_to_norm=None):
+                            alias_to_norm=None, teacher_id='local-dev'):
     """Scan the assignments folder for submitted files. Returns a dict of
     student_id -> set of matched saved config norm keys.
     This catches submissions that haven't been graded yet."""
     import re
-    settings = _load_settings()
+    settings = _load_settings(teacher_id)
     folder = settings.get('config', {}).get('assignments_folder', '')
     if not folder or not os.path.isdir(folder):
         return {}
@@ -151,11 +151,11 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display,
     return dict(result)
 
 
-def _build_missing_assignments_data():
+def _build_missing_assignments_data(teacher_id='local-dev'):
     """Shared helper: build per-student submission data from master CSV + roster +
     assignments folder. Returns (student_data, saved_norms, saved_display, error)
     where student_data is dict keyed by student_id with {assigns: set, period: str, name: str}."""
-    rows = _load_master_csv()
+    rows = _load_master_csv(teacher_id=teacher_id)
 
     saved_assignments = _load_saved_assignments()
     if not saved_assignments:
@@ -172,7 +172,7 @@ def _build_missing_assignments_data():
                 alias_to_norm[alias_norm] = a["norm"]
 
     # Roster is authoritative for student_id -> period mapping
-    roster = _load_roster()
+    roster = _load_roster(teacher_id)
     roster_period_map = {}
     roster_name_map = {}
     for s in roster:
@@ -203,7 +203,7 @@ def _build_missing_assignments_data():
                 student_data[sid]["name"] = name
 
     # Pass 2: ungraded submissions from assignments folder
-    folder_submissions = _scan_submission_folder(roster_name_map, saved_norms, saved_display, alias_to_norm)
+    folder_submissions = _scan_submission_folder(roster_name_map, saved_norms, saved_display, alias_to_norm, teacher_id=teacher_id)
     for sid, assigns in folder_submissions.items():
         student_data[sid]["assigns"].update(assigns)
         if not student_data[sid]["period"] and sid in roster_period_map:
@@ -225,10 +225,11 @@ def _build_missing_assignments_data():
 # ═══════════════════════════════════════════════════════
 
 def query_grades(student_name=None, assignment=None, period=None,
-                 min_score=None, max_score=None, letter_grade=None, limit=25):
+                 min_score=None, max_score=None, letter_grade=None, limit=25,
+                 teacher_id='local-dev'):
     """Search and filter student grades."""
-    rows = _load_master_csv(period_filter=period or 'all')
-    results_json = _load_results()
+    rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
+    results_json = _load_results(teacher_id)
 
     # Build a lookup from results JSON for feedback
     feedback_lookup = {}
@@ -277,9 +278,9 @@ def query_grades(student_name=None, assignment=None, period=None,
     }
 
 
-def get_student_summary(student_name):
+def get_student_summary(student_name, teacher_id='local-dev'):
     """Get comprehensive summary for a specific student."""
-    rows = _load_master_csv()
+    rows = _load_master_csv(teacher_id=teacher_id)
 
     # Find matching student (fuzzy word match — handles compound names)
     student_rows = [r for r in rows if _fuzzy_name_match(student_name, r["student_name"])]
@@ -380,9 +381,9 @@ def get_student_summary(student_name):
     }
 
 
-def get_class_analytics(period=None):
+def get_class_analytics(period=None, teacher_id='local-dev'):
     """Get class-wide analytics."""
-    rows = _load_master_csv(period_filter=period or 'all')
+    rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
 
     if not rows:
         return {"error": "No grading data available"}
@@ -398,7 +399,7 @@ def get_class_analytics(period=None):
     class_avg = round(sum(all_scores) / len(all_scores), 1) if all_scores else 0
 
     # Get roster count for the requested period (authoritative student count)
-    roster = _load_roster()
+    roster = _load_roster(teacher_id)
     if period and period != 'all':
         norm_p = _normalize_period(period)
         roster_for_period = [s for s in roster if _normalize_period(s["period"]) == norm_p]
@@ -456,9 +457,9 @@ def get_class_analytics(period=None):
     }
 
 
-def get_assignment_stats(assignment_name):
+def get_assignment_stats(assignment_name, teacher_id='local-dev'):
     """Get statistics for a specific assignment."""
-    rows = _load_master_csv()
+    rows = _load_master_csv(teacher_id=teacher_id)
 
     # Partial match on assignment name
     matched = [r for r in rows if assignment_name.lower() in r["assignment"].lower()]
@@ -492,9 +493,9 @@ def get_assignment_stats(assignment_name):
     }
 
 
-def list_assignments_tool():
+def list_assignments_tool(teacher_id='local-dev'):
     """List all graded assignments with counts and averages."""
-    rows = _load_master_csv()
+    rows = _load_master_csv(teacher_id=teacher_id)
 
     assignments = defaultdict(list)
     for row in rows:
@@ -525,9 +526,10 @@ def list_assignments_tool():
     }
 
 
-def analyze_grade_causes(assignment_name, period=None, score_threshold=None):
+def analyze_grade_causes(assignment_name, period=None, score_threshold=None,
+                         teacher_id='local-dev'):
     """Deep analysis of what caused grades on an assignment."""
-    results = _load_results()
+    results = _load_results(teacher_id)
 
     # Filter by assignment (partial match)
     matched = [r for r in results if assignment_name.lower() in r.get('assignment', '').lower()]
@@ -631,9 +633,9 @@ def analyze_grade_causes(assignment_name, period=None, score_threshold=None):
     }
 
 
-def get_feedback_patterns(assignment_name, period=None):
+def get_feedback_patterns(assignment_name, period=None, teacher_id='local-dev'):
     """Analyze feedback patterns across an assignment."""
-    results = _load_results()
+    results = _load_results(teacher_id)
 
     matched = [r for r in results if assignment_name.lower() in r.get('assignment', '').lower()]
     if not matched:
@@ -716,9 +718,9 @@ def get_feedback_patterns(assignment_name, period=None):
     }
 
 
-def compare_periods(assignment_name=None):
+def compare_periods(assignment_name=None, teacher_id='local-dev'):
     """Compare performance across class periods."""
-    results = _load_results()
+    results = _load_results(teacher_id)
 
     if assignment_name:
         results = [r for r in results if assignment_name.lower() in r.get('assignment', '').lower()]
@@ -732,7 +734,7 @@ def compare_periods(assignment_name=None):
         return {"error": "No grading results available"}
 
     # Load roster for authoritative student counts per period
-    roster = _load_roster()
+    roster = _load_roster(teacher_id)
     roster_by_period = defaultdict(list)
     for s in roster:
         roster_by_period[_normalize_period(s["period"])].append(s)
@@ -808,7 +810,8 @@ def compare_periods(assignment_name=None):
     }
 
 
-def scan_submissions_folder(top_n=None, assignment_filter=None):
+def scan_submissions_folder(top_n=None, assignment_filter=None,
+                            teacher_id='local-dev'):
     """Scan the assignments folder for submitted files. Shows top assignments
     by submission count, unique students, graded/ungraded status.
     Uses centralized staging for deduplication."""
@@ -825,7 +828,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None):
             pass
     if not folder:
         # Fallback: try _load_settings() (global settings) then default
-        gs = _load_settings()
+        gs = _load_settings(teacher_id)
         folder = gs.get('config', {}).get('assignments_folder', '')
     if not folder:
         folder = os.path.expanduser("~/Downloads/Graider/Assignments")
@@ -882,7 +885,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None):
         assignment_groups[assignment_norm].append((student_display, filename))
 
     # Phase 3: Cross-reference with graded results (filenames now match)
-    results = _load_results()
+    results = _load_results(teacher_id)
     graded_keys = set()  # exact filename match (canonical names)
     graded_by_student = defaultdict(set)  # student_key -> set of assignment_norms
 
@@ -973,7 +976,8 @@ def scan_submissions_folder(top_n=None, assignment_filter=None):
     }
 
 
-def get_missing_assignments(student_name=None, period=None, assignment_name=None):
+def get_missing_assignments(student_name=None, period=None, assignment_name=None,
+                            teacher_id='local-dev'):
     """Find missing/unsubmitted assignments.
 
     Compares student submissions against saved assignment configs
@@ -988,7 +992,7 @@ def get_missing_assignments(student_name=None, period=None, assignment_name=None
 
     If no params provided, defaults to period="all" (all-periods summary).
     """
-    student_data, saved_norms, saved_display, err = _build_missing_assignments_data()
+    student_data, saved_norms, saved_display, err = _build_missing_assignments_data(teacher_id=teacher_id)
     if err:
         return err
 

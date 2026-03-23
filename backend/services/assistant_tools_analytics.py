@@ -192,10 +192,10 @@ def _assignment_stats(rows):
 # TOOL HANDLERS
 # ═══════════════════════════════════════════════════════
 
-def get_grade_trends(student_name=None, period=None, num_assignments=None):
+def get_grade_trends(student_name=None, period=None, num_assignments=None, teacher_id='local-dev'):
     """Track scores over time with direction indicators."""
     num_assignments = num_assignments or 10
-    rows = _load_master_csv(period_filter=period or 'all')
+    rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 
@@ -259,9 +259,9 @@ def get_grade_trends(student_name=None, period=None, num_assignments=None):
     }
 
 
-def get_rubric_weakness(period=None):
+def get_rubric_weakness(period=None, teacher_id='local-dev'):
     """Aggregate rubric categories across ALL assignments to find systemic weaknesses."""
-    rows = _load_master_csv(period_filter=period or 'all')
+    rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 
@@ -318,10 +318,10 @@ def get_rubric_weakness(period=None):
     }
 
 
-def flag_at_risk_students(period=None, threshold=None):
+def flag_at_risk_students(period=None, threshold=None, teacher_id='local-dev'):
     """Combine signals to produce risk scores: declining trend + low scores + missing work."""
     threshold = threshold if threshold is not None else 30
-    rows = _load_master_csv(period_filter=period or 'all')
+    rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 
@@ -416,12 +416,12 @@ def flag_at_risk_students(period=None, threshold=None):
     }
 
 
-def compare_assignments(assignment_a, assignment_b):
+def compare_assignments(assignment_a, assignment_b, teacher_id='local-dev'):
     """Side-by-side stats for two assignments."""
     if not assignment_a or not assignment_b:
         return {"error": "Both assignment_a and assignment_b are required."}
 
-    rows = _load_master_csv(period_filter='all')
+    rows = _load_master_csv(period_filter='all', teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 
@@ -469,10 +469,10 @@ def compare_assignments(assignment_a, assignment_b):
     }
 
 
-def get_grade_distribution(assignment=None, period=None, group_by=None):
+def get_grade_distribution(assignment=None, period=None, group_by=None, teacher_id='local-dev'):
     """Histogram-ready A/B/C/D/F counts and percentages."""
     group_by = group_by or "none"
-    rows = _load_master_csv(period_filter=period or "all")
+    rows = _load_master_csv(period_filter=period or "all", teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 
@@ -540,10 +540,10 @@ def get_grade_distribution(assignment=None, period=None, group_by=None):
     return {"group_by": "none", **d}
 
 
-def detect_score_outliers(assignment=None, period=None, threshold=None):
+def detect_score_outliers(assignment=None, period=None, threshold=None, teacher_id='local-dev'):
     """Flag scores more than N standard deviations from the assignment mean."""
     threshold = threshold if threshold is not None else 2.0
-    rows = _load_master_csv(period_filter=period or "all")
+    rows = _load_master_csv(period_filter=period or "all", teacher_id=teacher_id)
     if not rows:
         return {"error": "No grade data found."}
 

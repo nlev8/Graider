@@ -77,13 +77,13 @@ def _save_memories(memories, teacher_id='local-dev'):
             json.dump(memories, f, indent=2)
 
 
-def save_memory(fact):
+def save_memory(fact, teacher_id='local-dev', **kwargs):
     """Save a fact to persistent memory for future conversations."""
     if not fact or not fact.strip():
         return {"error": "No fact provided"}
 
     fact = fact.strip()
-    memories = _load_memories()
+    memories = _load_memories(teacher_id)
 
     # Duplicate check — skip if a very similar fact already exists
     fact_lower = fact.lower()
@@ -100,7 +100,7 @@ def save_memory(fact):
     if len(memories) > MAX_MEMORIES:
         memories = memories[-MAX_MEMORIES:]
 
-    _save_memories(memories)
+    _save_memories(memories, teacher_id)
     return {"status": "saved", "fact": fact, "total_memories": len(memories)}
 
 
