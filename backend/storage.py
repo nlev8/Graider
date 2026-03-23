@@ -323,7 +323,7 @@ def _sb_list_keys(prefix, teacher_id):
                 _time.sleep(0.5 * (attempt + 1))
                 continue
             logger.error("Supabase list_keys failed for prefix=%s teacher=%s: %s", prefix, teacher_id, e)
-            return []
+            return None  # Signal failure — caller can fall back to files
 
 
 # ══════════════════════════════════════════════════════════════
@@ -482,9 +482,10 @@ def list_keys(prefix, teacher_id='local-dev'):
     """
     if _use_supabase(teacher_id):
         keys = _sb_list_keys(prefix, teacher_id)
-        if keys:
-            return keys
-        # Fallback to files if Supabase returns empty (pre-migration)
+        if keys is not None:
+            return keys  # Return even if empty — empty means no data for this teacher
+        # Only fall back to files if Supabase query itself failed (returned None)
+        logger.warning("list_keys: Supabase query returned None for prefix=%s, falling back to files", prefix)
         return _file_list_keys(prefix)
     return _file_list_keys(prefix)
 
