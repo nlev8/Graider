@@ -214,36 +214,7 @@ DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
 # FERPA COMPLIANCE - AUDIT LOGGING
 # ══════════════════════════════════════════════════════════════
 
-def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id: str = ""):
-    """
-    FERPA Compliance: Log all data access and modifications.
-    Writes to both local file AND Supabase for persistence across deploys.
-    Logs do not contain actual student data — only action metadata.
-    """
-    timestamp = datetime.now().isoformat()
-
-    # Local file (immediate, always works)
-    try:
-        log_entry = f"{timestamp} | {user} | {action} | {details}\n"
-        with open(AUDIT_LOG_FILE, 'a') as f:
-            f.write(log_entry)
-    except Exception:
-        pass
-
-    # Supabase (persistent across deploys)
-    try:
-        from supabase_client import get_supabase
-        sb = get_supabase()
-        if sb:
-            sb.table('audit_log').insert({
-                'timestamp': timestamp,
-                'teacher_id': teacher_id or getattr(g, 'user_id', 'unknown'),
-                'action': action,
-                'details': details[:500],  # Truncate to prevent bloat
-                'user_type': user,
-            }).execute()
-    except Exception:
-        pass  # Supabase unavailable — local file is the fallback
+from backend.utils.audit import audit_log  # noqa: E402 — extracted to avoid circular imports
 
 
 def get_audit_logs(limit: int = 100):
