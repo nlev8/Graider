@@ -98,6 +98,10 @@ def _key_to_filepath(data_key):
         return os.path.join(GRAIDER_DATA_DIR, ".api_keys.json")
     elif data_key == 'portal_credentials':
         return os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
+    elif data_key == 'pending_send':
+        return os.path.join(GRAIDER_DATA_DIR, "pending_send.json")
+    elif data_key == 'automations':
+        return os.path.join(GRAIDER_DATA_DIR, "automations.json")
     elif data_key.startswith('assignment:'):
         title = data_key[len('assignment:'):]
         return os.path.join(ASSIGNMENTS_DIR, f"{title}.json")
@@ -542,7 +546,8 @@ def sync_all_to_cloud(teacher_id):
     single_keys = [
         'settings', 'rubric', 'results', 'accommodations',
         'accommodation_presets', 'ell_students', 'parent_contacts',
-        'assistant_memory', 'teaching_calendar',
+        'assistant_memory', 'teaching_calendar', 'pending_send',
+        'automations',
     ]
 
     for key in single_keys:

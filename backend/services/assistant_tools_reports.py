@@ -7,10 +7,12 @@ parent communication, and assignment config saving.
 """
 import os
 import csv
+import io
 import json
 import subprocess
 import re
 import uuid
+import base64
 from datetime import datetime, timedelta
 from collections import defaultdict
 from urllib.parse import quote
@@ -25,6 +27,16 @@ from backend.services.assistant_tools import (
     ASSIGNMENTS_DIR, EXPORTS_DIR, STANDARDS_DIR, DOCUMENTS_DIR, LESSONS_DIR,
 )
 from backend.services.assistant_tools_grading import get_missing_assignments
+from backend.utils.compliance import audit_tool_action
+
+try:
+    from backend.storage import load as storage_load, save as storage_save
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save
+    except ImportError:
+        storage_load = None
+        storage_save = None
 
 # Constants
 CREDS_FILE = os.path.expanduser("~/.graider_data/portal_credentials.json")
@@ -1119,13 +1131,11 @@ def create_focus_assignment(name, category=None, points=None, date=None, descrip
         return {"error": f"Failed to launch automation: {str(e)}"}
 
 
-def export_grades_csv(assignment=None, period=None):
-    """Export grades as Focus-compatible CSV."""
-    results = _load_results()
+def export_grades_csv(assignment=None, period=None, teacher_id='local-dev'):
+    """Export grades as Focus-compatible CSV (in-memory, base64-encoded)."""
+    results = _load_results(teacher_id)
     if not results:
         return {"error": "No grading results to export"}
-
-    os.makedirs(EXPORTS_DIR, exist_ok=True)
 
     # Filter
     filtered = results
@@ -1153,52 +1163,50 @@ def export_grades_csv(assignment=None, period=None):
     for p, items in by_period.items():
         safe_period = p.replace(' ', '_').replace('/', '-')
         filename = f"{safe_name}_{safe_period}.csv"
-        filepath = os.path.join(EXPORTS_DIR, filename)
 
-        csv_lines = ['Student ID,Score']
+        # Build CSV in memory
+        buf = io.StringIO()
+        buf.write('Student ID,Score\n')
         matched = 0
         for r in items:
             student_id = r.get('student_id', '')
             score = r.get('score', 0)
             if student_id:
-                csv_lines.append(f"{student_id},{score}")
+                buf.write(f"{student_id},{score}\n")
                 matched += 1
             else:
                 name = r.get('student_name', 'Unknown')
-                csv_lines.append(f"# {name},{score}")
+                buf.write(f"# {name},{score}\n")
 
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(csv_lines))
+        csv_string = buf.getvalue()
 
         exported_files.append({
             "file": filename,
             "period": p,
             "rows": matched,
-            "download_url": "/api/download-export/" + filename,
+            "csv_base64": base64.b64encode(csv_string.encode()).decode(),
         })
         total_rows += matched
 
-    download_urls = [{"url": f["download_url"], "filename": f["file"]} for f in exported_files]
+    audit_tool_action(teacher_id, 'export_grades_csv', 'EXPORT')
 
     result = {
         "status": "exported",
-        "export_dir": EXPORTS_DIR,
         "files": exported_files,
         "total_rows": total_rows,
-        "download_urls": download_urls,
     }
 
-    # Single-file convenience: set top-level download_url for the simple download button path
+    # Single-file convenience
     if len(exported_files) == 1:
-        result["download_url"] = exported_files[0]["download_url"]
+        result["csv_base64"] = exported_files[0]["csv_base64"]
         result["filename"] = exported_files[0]["file"]
 
     return result
 
 
-def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1):
+def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1, teacher_id='local-dev'):
     """Analyze performance and recommend next lesson focus with period differentiation and IEP awareness."""
-    results = _load_results()
+    results = _load_results(teacher_id)
     if not results:
         return {"error": "No grading results available"}
 
@@ -1230,13 +1238,13 @@ def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1):
     analyzed_assignments = list(set(r.get('assignment', '') for r in target_results))
 
     # Load supplementary data
-    period_levels = _load_period_class_levels()
-    accommodations = _load_accommodations()
+    period_levels = _load_period_class_levels(teacher_id)
+    accommodations = _load_accommodations(teacher_id)
     standards = _load_standards()
-    settings = _load_settings()
+    settings = _load_settings(teacher_id)
     config = settings.get('config', {})
     global_notes = settings.get('globalAINotes', '')
-    saved_lessons = _load_saved_lessons()
+    saved_lessons = _load_saved_lessons(teacher_id)
 
     # === Overall weakness analysis ===
     overall = _analyze_group_weaknesses(target_results)
@@ -1393,12 +1401,12 @@ def recommend_next_lesson(assignment_name=None, period=None, num_assignments=1):
     }
 
 
-def lookup_student_info(student_name=None, student_id=None, student_ids=None, period=None):
+def lookup_student_info(student_name=None, student_id=None, student_ids=None, period=None, teacher_id='local-dev'):
     """Look up student roster and contact information.
     Supports batch lookup via student_ids (list of IDs)."""
-    roster = _load_roster()
-    parent_contacts = _load_parent_contacts()
-    results_json = _load_results()
+    roster = _load_roster(teacher_id)
+    parent_contacts = _load_parent_contacts(teacher_id)
+    results_json = _load_results(teacher_id)
 
     # Build email lookup from grading results (student_id -> email)
     email_lookup = {}
@@ -1510,12 +1518,12 @@ def lookup_student_info(student_name=None, student_id=None, student_ids=None, pe
 
 def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=None,
                             summary_prompt=None, summary_key_points=None,
-                            total_points=100, style_name=None):
+                            total_points=100, style_name=None, teacher_id='local-dev'):
     """Generate a .docx worksheet and save to Grading Setup."""
     try:
         from backend.services.worksheet_generator import generate_worksheet
         # Load subject from teacher settings
-        settings = _load_settings()
+        settings = _load_settings(teacher_id)
         config = settings.get('config', {})
         subject = config.get('subject', '')
         return generate_worksheet(
@@ -1535,7 +1543,7 @@ def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=N
         return {"error": "Failed to generate worksheet: " + str(e)}
 
 
-def generate_document_tool(title, content, style_name=None, save_to_builder=False):
+def generate_document_tool(title, content, style_name=None, save_to_builder=False, teacher_id='local-dev'):
     """Generate a formatted Word document with rich typography."""
     try:
         from backend.services.document_generator import generate_document
@@ -1549,7 +1557,7 @@ def generate_document_tool(title, content, style_name=None, save_to_builder=Fals
         return {"error": "Failed to generate document: " + str(e)}
 
 
-def generate_csv_tool(filename, headers, rows):
+def generate_csv_tool(filename, headers, rows, teacher_id='local-dev'):
     """Generate a downloadable CSV or XLSX file based on filename extension."""
     from urllib.parse import quote
 
@@ -1625,7 +1633,7 @@ def generate_csv_tool(filename, headers, rows):
     }
 
 
-def save_document_style_tool(name, style):
+def save_document_style_tool(name, style, teacher_id='local-dev'):
     """Save a named visual style for documents."""
     try:
         from backend.services.document_generator import save_style
@@ -1634,7 +1642,7 @@ def save_document_style_tool(name, style):
         return {"error": "Failed to save style: " + str(e)}
 
 
-def list_document_styles_tool():
+def list_document_styles_tool(teacher_id='local-dev'):
     """List saved document visual styles."""
     try:
         from backend.services.document_generator import list_styles
@@ -1643,11 +1651,11 @@ def list_document_styles_tool():
         return {"error": "Failed to list styles: " + str(e)}
 
 
-def get_standards_tool(topic=None, dok_max=None):
+def get_standards_tool(topic=None, dok_max=None, teacher_id='local-dev'):
     """Look up curriculum standards filtered by topic and DOK level."""
     all_standards = _load_standards()
     if not all_standards:
-        settings = _load_settings()
+        settings = _load_settings(teacher_id)
         config = settings.get('config', {})
         subj = config.get('subject', 'unknown')
         st = config.get('state', 'unknown')
@@ -1695,17 +1703,17 @@ def get_standards_tool(topic=None, dok_max=None):
     }
 
 
-def list_all_standards_tool():
+def list_all_standards_tool(teacher_id='local-dev'):
     """Return a compact index of ALL curriculum standards for the teacher's subject."""
     all_standards = _load_standards()
     if not all_standards:
-        settings = _load_settings()
+        settings = _load_settings(teacher_id)
         config = settings.get('config', {})
         subj = config.get('subject', 'unknown')
         st = config.get('state', 'unknown')
         return {"error": f"No standards found for {subj} in {st}. Check Settings > Subject and State."}
 
-    settings = _load_settings()
+    settings = _load_settings(teacher_id)
     config = settings.get('config', {})
 
     compact = []
@@ -1727,7 +1735,7 @@ def list_all_standards_tool():
     }
 
 
-def get_recent_lessons(unit_name=None):
+def get_recent_lessons(unit_name=None, teacher_id='local-dev'):
     """List saved lesson plans with full detail for document generation context."""
     if not os.path.exists(LESSONS_DIR):
         return {"error": "No saved lessons found. Generate and save lesson plans in the Planner tab first."}
@@ -1809,9 +1817,9 @@ def get_recent_lessons(unit_name=None):
     }
 
 
-def get_calendar(start_date=None, end_date=None):
+def get_calendar(start_date=None, end_date=None, teacher_id='local-dev'):
     """Read the teaching calendar for a date range."""
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
 
     if not start_date:
         start_date = datetime.now().strftime('%Y-%m-%d')
@@ -1855,13 +1863,13 @@ def get_calendar(start_date=None, end_date=None):
     return result
 
 
-def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_file=None):
+def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_file=None, teacher_id='local-dev'):
     """Schedule a lesson on the teaching calendar."""
     import uuid as _uuid
     if not date or not lesson_title:
         return {"error": "date and lesson_title are required"}
 
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
 
     # Pick a color based on unit name
     unit_colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4', '#ef4444']
@@ -1886,17 +1894,17 @@ def schedule_lesson_tool(date, lesson_title, unit=None, day_number=None, lesson_
         ))
     ]
     cal["scheduled_lessons"].append(entry)
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
 
     return {"status": "scheduled", "entry": entry}
 
 
-def unschedule_lesson_tool(date, lesson_title=None):
+def unschedule_lesson_tool(date, lesson_title=None, teacher_id='local-dev'):
     """Remove a lesson from the teaching calendar by date and optional title."""
     if not date:
         return {"error": "date is required"}
 
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
     before = len(cal["scheduled_lessons"])
 
     if lesson_title:
@@ -1914,16 +1922,16 @@ def unschedule_lesson_tool(date, lesson_title=None):
     if removed == 0:
         return {"status": "not_found", "message": f"No lessons found on {date}"}
 
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return {"status": "removed", "removed_count": removed}
 
 
-def add_calendar_holiday(date, name, end_date=None):
+def add_calendar_holiday(date, name, end_date=None, teacher_id='local-dev'):
     """Add a holiday or break to the teaching calendar."""
     if not date or not name:
         return {"error": "date and name are required"}
 
-    cal = _load_calendar()
+    cal = _load_calendar(teacher_id)
 
     holiday = {"date": date, "name": name}
     if end_date:
@@ -1934,14 +1942,14 @@ def add_calendar_holiday(date, name, end_date=None):
     cal["holidays"].append(holiday)
     cal["holidays"].sort(key=lambda h: h["date"])
 
-    _save_calendar(cal)
+    _save_calendar(cal, teacher_id)
     return {"status": "added", "holiday": holiday}
 
 
 MAX_RESOURCE_TEXT = 120000
 
 
-def list_resources_tool():
+def list_resources_tool(teacher_id='local-dev'):
     """List all uploaded supporting documents from the documents directory."""
     if not os.path.isdir(DOCUMENTS_DIR):
         return {"documents": [], "message": "No documents directory found. Upload documents in Settings > Resources."}
@@ -1978,7 +1986,7 @@ def list_resources_tool():
     return {"documents": documents, "total": len(documents)}
 
 
-def read_resource_tool(filename):
+def read_resource_tool(filename, teacher_id='local-dev'):
     """Read and return the text content of an uploaded document."""
     if not filename or not filename.strip():
         return {"error": "No filename provided"}
@@ -2042,7 +2050,7 @@ def read_resource_tool(filename):
 
 def save_assignment_config(title, document_text=None, questions=None, totalPoints=None,
                            effortPoints=None, gradingNotes=None, rubricType=None,
-                           customMarkers=None):
+                           customMarkers=None, teacher_id='local-dev'):
     """Save or update an assignment config in Grading Setup.
 
     Merge-updates: loads existing config if present, applies only the
@@ -2138,20 +2146,12 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
     # Programmatic guard: AI assistant must never send directly
     dry_run = True
     # Load parent contacts
-    if not os.path.exists(PARENT_CONTACTS_FILE):
+    contacts = _load_parent_contacts(teacher_id)
+    if not contacts:
         return {"error": "No parent contacts imported. Upload class list in Settings first."}
 
-    try:
-        with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
-            contacts = json.load(f)
-    except Exception as e:
-        return {"error": "Failed to load parent contacts: " + str(e)}
-
-    if not contacts:
-        return {"error": "Parent contacts file is empty."}
-
     # Load teacher settings
-    settings = _load_settings()
+    settings = _load_settings(teacher_id)
     config = settings.get('config', {})
     email_config = _load_email_config()
     teacher_name = email_config.get('teacher_name', '') or config.get('teacher_name', 'Your Teacher')
@@ -2280,10 +2280,15 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
                 "student_name": e["student_name"],
             })
         # Store pending payload for confirm_and_send tool
-        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
-        os.makedirs(os.path.dirname(pending_path), exist_ok=True)
-        with open(pending_path, 'w') as pf:
-            json.dump({"action": "send_parent_emails", "emails": emails}, pf)
+        if storage_save:
+            storage_save('pending_send', {"action": "send_parent_emails", "emails": emails}, teacher_id)
+        else:
+            pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+            os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+            with open(pending_path, 'w') as pf:
+                json.dump({"action": "send_parent_emails", "emails": emails}, pf)
+
+        audit_tool_action(teacher_id, 'send_parent_emails', 'SEND_EMAIL')
 
         return {
             "dry_run": True,
@@ -2325,7 +2330,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
     # Auto-generate SMS notification if email is provided but SMS is not.
     # Default behavior: always send both email + SMS unless SMS-only was requested.
     if email_body and not sms_body:
-        settings = _load_settings()
+        settings = _load_settings(teacher_id)
         config = settings.get('config', {})
         email_config = _load_email_config()
         teacher_name = email_config.get('teacher_name', '') or config.get('teacher_name', 'Your Teacher')
@@ -2417,10 +2422,15 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
                 "sms_body": m["sms_body"][:200] if m["sms_body"] else "(no SMS)",
             })
         # Store pending payload for confirm_and_send tool
-        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
-        os.makedirs(os.path.dirname(pending_path), exist_ok=True)
-        with open(pending_path, 'w') as pf:
-            json.dump({"action": "send_focus_comms", "messages": messages}, pf)
+        if storage_save:
+            storage_save('pending_send', {"action": "send_focus_comms", "messages": messages}, teacher_id)
+        else:
+            pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+            os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+            with open(pending_path, 'w') as pf:
+                json.dump({"action": "send_focus_comms", "messages": messages}, pf)
+
+        audit_tool_action(teacher_id, 'send_focus_comms', 'SEND_EMAIL')
 
         return {
             "dry_run": True,
@@ -2449,15 +2459,20 @@ def confirm_and_send(teacher_id='local-dev'):
     Reads the pending payload saved by send_focus_comms or send_parent_emails,
     then triggers the actual Playwright automation.
     """
-    pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
-    if not os.path.exists(pending_path):
-        return {"error": "No pending send action. Generate a preview first using send_focus_comms or send_parent_emails."}
+    # Load pending payload from storage (preferred) or filesystem fallback
+    pending = None
+    if storage_load:
+        pending = storage_load('pending_send', teacher_id)
 
-    try:
-        with open(pending_path, 'r') as f:
-            pending = json.load(f)
-    except Exception as e:
-        return {"error": "Failed to read pending send: " + str(e)}
+    if not pending:
+        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+        if not os.path.exists(pending_path):
+            return {"error": "No pending send action. Generate a preview first using send_focus_comms or send_parent_emails."}
+        try:
+            with open(pending_path, 'r') as f:
+                pending = json.load(f)
+        except Exception as e:
+            return {"error": "Failed to read pending send: " + str(e)}
 
     action = pending.get("action")
 
@@ -2469,13 +2484,17 @@ def confirm_and_send(teacher_id='local-dev'):
                 return {"error": "No messages in pending payload."}
             result = launch_focus_comms(messages, teacher_id=teacher_id)
             if "error" in result:
-                # Keep pending file so teacher can retry
+                # Keep pending data so teacher can retry
                 return result
-            # Success — remove pending file to prevent double-send
-            try:
-                os.remove(pending_path)
-            except OSError:
-                pass
+            # Success — clear pending to prevent double-send
+            if storage_save:
+                storage_save('pending_send', None, teacher_id)
+            else:
+                try:
+                    os.remove(os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json"))
+                except OSError:
+                    pass
+            audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_messages"] = len(messages)
             return result
         elif action == "send_parent_emails":
@@ -2486,10 +2505,15 @@ def confirm_and_send(teacher_id='local-dev'):
             result = launch_outlook_sender(emails, teacher_id=teacher_id)
             if "error" in result:
                 return result
-            try:
-                os.remove(pending_path)
-            except OSError:
-                pass
+            # Success — clear pending to prevent double-send
+            if storage_save:
+                storage_save('pending_send', None, teacher_id)
+            else:
+                try:
+                    os.remove(os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json"))
+                except OSError:
+                    pass
+            audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_emails"] = len(emails)
             return result
         else:

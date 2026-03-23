@@ -10,8 +10,9 @@ import os
 
 from backend.services.assistant_tools import (
     _load_master_csv, _load_results, _load_accommodations,
-    _fuzzy_name_match, _safe_int_score,
+    _load_roster, _fuzzy_name_match, _safe_int_score,
 )
+from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action
 
 
 # ═══════════════════════════════════════════════════════
@@ -113,9 +114,9 @@ def _get_anthropic_client(teacher_id=None):
         return None, "anthropic package not installed"
 
 
-def _call_haiku(prompt, max_tokens=1500):
+def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
     """Make a single Haiku call. Returns parsed JSON dict or error dict."""
-    client, err = _get_anthropic_client()
+    client, err = _get_anthropic_client(teacher_id=teacher_id)
     if err:
         return {"error": err}
     try:
@@ -143,6 +144,7 @@ def _call_haiku(prompt, max_tokens=1500):
 
 def differentiate_content(text="", levels=None, grade_level="6th", **kwargs):
     """Rewrite text at multiple reading levels."""
+    teacher_id = kwargs.get('teacher_id', 'local-dev')
     text = (text or "").strip()
     if not text:
         return {"error": "text is required"}
@@ -163,11 +165,12 @@ def differentiate_content(text="", levels=None, grade_level="6th", **kwargs):
         "Return ONLY a JSON object with this exact structure:\n"
         '{"versions": [{"level": "<level>", "text": "<rewritten text>"}]}'
     )
-    return _call_haiku(prompt, max_tokens=2000)
+    return _call_haiku(prompt, max_tokens=2000, teacher_id=teacher_id)
 
 
 def generate_questions_from_text(text="", count=5, types=None, grade_level="6th", **kwargs):
     """Generate comprehension questions from a passage."""
+    teacher_id = kwargs.get('teacher_id', 'local-dev')
     text = (text or "").strip()
     if not text:
         return {"error": "text is required"}
@@ -188,19 +191,21 @@ def generate_questions_from_text(text="", count=5, types=None, grade_level="6th"
         "Return ONLY a JSON object with this exact structure:\n"
         '{"questions": [{"question": "...", "type": "recall|inference|analysis|evaluation", "answer_key": "..."}]}'
     )
-    return _call_haiku(prompt, max_tokens=2000)
+    return _call_haiku(prompt, max_tokens=2000, teacher_id=teacher_id)
 
 
 def generate_iep_progress_notes(student_name="", goal_area="", **kwargs):
     """Synthesize IEP progress notes from student grade data."""
+    teacher_id = kwargs.get('teacher_id', 'local-dev')
     student_name = (student_name or "").strip()
     if not student_name:
         return {"error": "student_name is required"}
 
     # --- Gather local data ---
-    master = _load_master_csv()
-    results = _load_results()
-    accommodations = _load_accommodations()
+    master = _load_master_csv(teacher_id=teacher_id)
+    results = _load_results(teacher_id)
+    accommodations = _load_accommodations(teacher_id)
+    roster = _load_roster(teacher_id)
 
     # Find student scores from master CSV
     student_scores = []
@@ -270,7 +275,7 @@ def generate_iep_progress_notes(student_name="", goal_area="", **kwargs):
     if goal_area:
         goal_filter = f"\nFocus specifically on the goal area: {goal_area}\n"
 
-    prompt = (
+    prompt_text = (
         "You are a special education specialist writing IEP progress monitoring notes. "
         "Using the student data below, write professional progress notes suitable for "
         "an IEP progress report.\n\n"
@@ -286,7 +291,25 @@ def generate_iep_progress_notes(student_name="", goal_area="", **kwargs):
         '"current_level": "...", "trend": "improving|stable|declining", '
         '"narrative": "...", "recommendation": "..."}]}'
     )
-    return _call_haiku(prompt, max_tokens=1500)
+
+    # Anonymize student PII before sending to external AI
+    roster_for_anon = [{"student_name": s.get("name", "")} for s in roster] if roster else []
+    anon_prompt, name_mapping = anonymize_for_ai(prompt_text, roster_for_anon)
+
+    audit_tool_action(teacher_id, 'generate_iep_progress_notes', 'SEND_AI')
+
+    result = _call_haiku(anon_prompt, max_tokens=1500, teacher_id=teacher_id)
+
+    # Deanonymize the response to restore student names
+    if isinstance(result, dict) and name_mapping:
+        result_str = json.dumps(result)
+        result_str = deanonymize(result_str, name_mapping)
+        try:
+            result = json.loads(result_str)
+        except json.JSONDecodeError:
+            pass  # Keep original result if deanonymized string isn't valid JSON
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════

@@ -46,7 +46,7 @@ DEFAULT_QUESTIONS = [
 ]
 
 
-def create_parent_survey(title=None, teacher_name=None, questions=None):
+def create_parent_survey(title=None, teacher_name=None, questions=None, teacher_id='local-dev', **kwargs):
     """Create a parent survey and return the shareable link."""
     db = _get_supabase()
 
@@ -66,6 +66,7 @@ def create_parent_survey(title=None, teacher_name=None, questions=None):
         'join_code': code,
         'title': title,
         'teacher_name': teacher_name,
+        'teacher_id': teacher_id,
         'assessment': {
             'content_type': 'survey',
             'questions': questions,
@@ -87,7 +88,7 @@ def create_parent_survey(title=None, teacher_name=None, questions=None):
     }
 
 
-def get_survey_results(join_code=None):
+def get_survey_results(join_code=None, teacher_id='local-dev', **kwargs):
     """Get survey results with aggregate statistics."""
     db = _get_supabase()
 
@@ -95,11 +96,13 @@ def get_survey_results(join_code=None):
         result = db.table('published_assessments') \
             .select('join_code, assessment, title, submission_count, created_at') \
             .eq('join_code', join_code) \
+            .eq('teacher_id', teacher_id) \
             .execute()
     else:
         # Get all surveys for this teacher
         result = db.table('published_assessments') \
             .select('join_code, assessment, title, submission_count, created_at') \
+            .eq('teacher_id', teacher_id) \
             .eq('settings->>content_type', 'survey') \
             .order('created_at', desc=True) \
             .execute()
@@ -150,9 +153,9 @@ def get_survey_results(join_code=None):
     return {"surveys": surveys}
 
 
-def compile_survey_report(join_code):
+def compile_survey_report(join_code, teacher_id='local-dev', **kwargs):
     """Compile a detailed survey report with analysis and recommendations."""
-    results = get_survey_results(join_code=join_code)
+    results = get_survey_results(join_code=join_code, teacher_id=teacher_id)
     if results.get('error'):
         return results
 

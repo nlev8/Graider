@@ -2,8 +2,9 @@
 Student Info Tools
 ==================
 Tools for retrieving individual student accommodation details and performance streaks.
-Zero AI API calls — all data from local files.
+Zero AI API calls — all data from storage (Supabase or local fallback).
 """
+import base64
 import csv
 import io
 import json
@@ -15,9 +16,11 @@ from datetime import datetime
 
 from backend.services.assistant_tools import (
     _load_master_csv, _load_accommodations, _load_roster,
+    _load_results, _load_parent_contacts, _load_settings,
     _fuzzy_name_match, _safe_int_score, ACCOMMODATIONS_DIR, PERIODS_DIR,
     ROSTERS_DIR,
 )
+from backend.utils.compliance import audit_tool_action
 
 
 # ═══════════════════════════════════════════════════════
@@ -110,13 +113,15 @@ STUDENT_TOOL_DEFINITIONS = [
 # TOOL HANDLERS
 # ═══════════════════════════════════════════════════════
 
-def get_student_accommodations(student_name):
+def get_student_accommodations(student_name, teacher_id='local-dev', **kwargs):
     """Pull specific IEP/504 presets, notes, and grading impact for a student."""
     if not student_name:
         return {"error": "student_name is required."}
 
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
+
     # Find the student in the roster to get their ID
-    roster = _load_roster()
+    roster = _load_roster(teacher_id)
     student_id = None
     matched_name = None
     for entry in roster:
@@ -128,7 +133,7 @@ def get_student_accommodations(student_name):
 
     # Also try from grades data if roster is empty
     if not student_id:
-        rows = _load_master_csv(period_filter='all')
+        rows = _load_master_csv(period_filter='all', teacher_id=teacher_id)
         for row in rows:
             if _fuzzy_name_match(student_name, row.get("student_name", "")):
                 student_id = row.get("student_id", "")
@@ -138,7 +143,7 @@ def get_student_accommodations(student_name):
     if not student_id:
         return {"error": f"No student found matching '{student_name}'."}
 
-    accommodations = _load_accommodations()
+    accommodations = _load_accommodations(teacher_id)
     accomm = accommodations.get(student_id)
 
     if not accomm:
@@ -181,12 +186,14 @@ def get_student_accommodations(student_name):
     }
 
 
-def get_student_streak(student_name):
+def get_student_streak(student_name, teacher_id='local-dev', **kwargs):
     """Show consecutive improvement/decline streaks with assignment history."""
     if not student_name:
         return {"error": "student_name is required."}
 
-    rows = _load_master_csv(period_filter='all')
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
+
+    rows = _load_master_csv(period_filter='all', teacher_id=teacher_id)
 
     # Find all grades for this student
     student_rows = []
@@ -414,17 +421,20 @@ def _delete_student_supabase(student_name):
         return ""
 
 
-def remove_student_from_roster(student_name, teacher_id=None):
+def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
     """Remove a student from ALL records: rosters, results, history, accommodations, contacts, ELL, master CSV, Supabase."""
     if not student_name:
         return {"error": "student_name is required."}
 
-    if not teacher_id:
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
+    if not teacher_id or teacher_id == 'local-dev':
         try:
             from flask import g
             teacher_id = getattr(g, 'user_id', 'local-dev')
         except Exception:
             teacher_id = 'local-dev'
+
+    audit_tool_action(teacher_id, 'remove_student_from_roster', 'DELETE')
 
     search_dirs = [
         (PERIODS_DIR, "periods"),
@@ -607,13 +617,17 @@ def remove_student_from_roster(student_name, teacher_id=None):
     }
 
 
-def export_student_data(student_name):
-    """Export all stored data for a student as JSON + PDF."""
+def export_student_data(student_name, teacher_id='local-dev', **kwargs):
+    """Export all stored data for a student as base64-encoded JSON (in-memory, no disk writes)."""
     if not student_name:
         return {"error": "student_name is required."}
 
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
+
+    audit_tool_action(teacher_id, 'export_student_data', 'EXPORT')
+
     # Find student in roster
-    roster = _load_roster()
+    roster = _load_roster(teacher_id)
     matched_name = None
     matched_id = None
     matched_period = None
@@ -630,7 +644,7 @@ def export_student_data(student_name):
 
     # Also try from grades data
     if not matched_name:
-        rows = _load_master_csv(period_filter='all')
+        rows = _load_master_csv(period_filter='all', teacher_id=teacher_id)
         for row in rows:
             if _fuzzy_name_match(student_name, row.get("student_name", "")):
                 matched_name = row.get("student_name", "")
@@ -651,178 +665,57 @@ def export_student_data(student_name):
         "email": matched_email or "",
     }
 
-    # Grading results (from saved results file)
-    results_file = os.path.expanduser("~/.graider_results.json")
-    student_results = []
-    if os.path.exists(results_file):
-        try:
-            with open(results_file, 'r') as f:
-                all_results = json.load(f)
-            student_results = [r for r in all_results if _fuzzy_name_match(student_name, r.get("student_name", ""))]
-        except Exception:
-            pass
+    # Grading results (from storage)
+    all_results = _load_results(teacher_id)
+    student_results = [r for r in all_results if _fuzzy_name_match(student_name, r.get("student_name", ""))]
     export["grading_results"] = student_results
 
-    # Student history
-    history_path = os.path.expanduser(f"~/.graider_data/student_history/{safe_id}.json")
+    # Student history (from master CSV rows for this student)
     history = None
-    if os.path.exists(history_path):
-        try:
-            with open(history_path, 'r') as f:
-                history = json.load(f)
-        except Exception:
-            pass
+    history_rows = _load_master_csv(period_filter='all', teacher_id=teacher_id)
+    student_history_rows = [r for r in history_rows if _fuzzy_name_match(student_name, r.get("student_name", ""))]
+    if student_history_rows:
+        history = {"assignments": student_history_rows}
     export["student_history"] = history
 
-    # Accommodations
-    accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
-    student_accommodations = None
-    if os.path.exists(accomm_file):
-        try:
-            with open(accomm_file, 'r') as f:
-                all_acc = json.load(f)
-            student_accommodations = all_acc.get(safe_id) or all_acc.get(matched_id or '')
-        except Exception:
-            pass
+    # Accommodations (from storage)
+    all_acc = _load_accommodations(teacher_id)
+    student_accommodations = all_acc.get(safe_id) or all_acc.get(matched_id or '')
     export["accommodations"] = student_accommodations
 
-    # ELL data
-    ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
-    ell_data = None
-    if os.path.exists(ell_file):
-        try:
-            with open(ell_file, 'r') as f:
-                all_ell = json.load(f)
-            ell_data = all_ell.get(safe_id) or all_ell.get(matched_id or '')
-        except Exception:
-            pass
+    # ELL data (from settings)
+    settings = _load_settings(teacher_id)
+    ell_students = settings.get('ell_students', {})
+    ell_data = ell_students.get(safe_id) or ell_students.get(matched_id or '')
     export["ell_data"] = ell_data
 
-    # Parent contacts
-    contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
-    parent_contacts = None
-    if os.path.exists(contacts_file):
-        try:
-            with open(contacts_file, 'r') as f:
-                all_contacts = json.load(f)
-            parent_contacts = all_contacts.get(safe_id) or all_contacts.get(matched_id or '')
-        except Exception:
-            pass
+    # Parent contacts (from storage)
+    all_contacts = _load_parent_contacts(teacher_id)
+    parent_contacts = all_contacts.get(safe_id) or all_contacts.get(matched_id or '')
     export["parent_contacts"] = parent_contacts
 
     record_count = len(student_results) + (1 if history else 0) + (1 if student_accommodations else 0) + (1 if ell_data else 0) + (1 if parent_contacts else 0)
 
-    # Save JSON
-    export_dir = os.path.expanduser("~/.graider_exports/student")
-    os.makedirs(export_dir, exist_ok=True)
-    date_str = datetime.now().strftime('%Y-%m-%d')
+    # Return in-memory as base64 (no disk writes)
     safe_fname = re.sub(r'[^\w\s-]', '', matched_name).strip().replace(' ', '_')
-    json_path = os.path.join(export_dir, f"{safe_fname}_data_{date_str}.json")
-    with open(json_path, 'w') as f:
-        json.dump(export, f, indent=2, default=str)
-
-    # Generate PDF
-    pdf_path = os.path.join(export_dir, f"{safe_fname}_report_{date_str}.pdf")
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.units import inch
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib import colors as rl_colors
-
-        doc = SimpleDocTemplate(pdf_path, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle('ExTitle', parent=styles['Title'], fontSize=18, spaceAfter=6)
-        subtitle_style = ParagraphStyle('ExSub', parent=styles['Normal'], fontSize=10, textColor=rl_colors.grey, spaceAfter=12)
-        section_style = ParagraphStyle('ExSec', parent=styles['Heading2'], fontSize=13, spaceBefore=16, spaceAfter=6)
-        body_style = ParagraphStyle('ExBody', parent=styles['Normal'], fontSize=9, leading=12)
-
-        elements = []
-        elements.append(Paragraph(f"Student Data Report: {matched_name}", title_style))
-        header_parts = [f"Exported {date_str}"]
-        if matched_id:
-            header_parts.append(f"ID: {matched_id}")
-        if matched_period:
-            header_parts.append(f"Period: {matched_period}")
-        elements.append(Paragraph(" | ".join(header_parts), subtitle_style))
-        elements.append(Spacer(1, 12))
-
-        if student_results:
-            elements.append(Paragraph("Assignment Scores", section_style))
-            table_data = [["Date", "Assignment", "Score", "Grade"]]
-            for r in sorted(student_results, key=lambda x: x.get('graded_at', '')):
-                table_data.append([
-                    (r.get('graded_at') or '')[:10],
-                    (r.get('assignment') or r.get('filename', ''))[:40],
-                    str(r.get('score', '')),
-                    r.get('letter_grade', ''),
-                ])
-            t = Table(table_data, colWidths=[1*inch, 3.5*inch, 0.8*inch, 0.7*inch])
-            t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#4f46e5')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.lightgrey),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, rl_colors.HexColor('#f5f5f5')]),
-            ]))
-            elements.append(t)
-
-        if history and history.get('skill_scores'):
-            elements.append(Paragraph("Skill Patterns", section_style))
-            for skill, val in history['skill_scores'].items():
-                avg = val if isinstance(val, (int, float)) else val.get('average', 'N/A') if isinstance(val, dict) else 'N/A'
-                elements.append(Paragraph(f"<b>{skill.replace('_', ' ').title()}:</b> {avg}", body_style))
-
-        if student_accommodations:
-            elements.append(Paragraph("Accommodations (IEP/504)", section_style))
-            presets = student_accommodations.get('presets', [])
-            if presets:
-                elements.append(Paragraph("Presets: " + ", ".join(p.replace('_', ' ').title() for p in presets), body_style))
-            notes = student_accommodations.get('custom_notes') or student_accommodations.get('notes', '')
-            if notes:
-                elements.append(Paragraph(f"Notes: {notes}", body_style))
-
-        if ell_data:
-            elements.append(Paragraph("ELL Information", section_style))
-            lang = ell_data.get('language', '') if isinstance(ell_data, dict) else str(ell_data)
-            elements.append(Paragraph(f"Language: {lang}", body_style))
-
-        feedback_results = [r for r in student_results if r.get('feedback')]
-        if feedback_results:
-            elements.append(Paragraph("Recent Feedback", section_style))
-            for r in feedback_results[-3:]:
-                assign = r.get('assignment') or r.get('filename', '')
-                fb = r.get('feedback', '')[:500]
-                elements.append(Paragraph(f"<b>{assign}:</b>", body_style))
-                elements.append(Paragraph(fb, body_style))
-                elements.append(Spacer(1, 6))
-
-        doc.build(elements)
-    except Exception as e:
-        pdf_path = None
-
-    # Open folder (macOS local dev only)
-    if sys.platform == 'darwin':
-        try:
-            subprocess.run(['open', export_dir], check=False)
-        except Exception:
-            pass
 
     return {
         "status": "success",
         "student_name": matched_name,
         "student_id": matched_id or "",
         "record_count": record_count,
-        "json_path": json_path,
-        "pdf_path": pdf_path,
-        "message": f"Exported {record_count} records for {matched_name}. Files saved to {export_dir}",
+        "data_base64": base64.b64encode(json.dumps(export, default=str).encode()).decode(),
+        "filename": f"{safe_fname}_data.json",
+        "message": f"Exported {record_count} records for {matched_name}.",
     }
 
 
-def import_student_data(file_path, period=None, student_id=None):
+def import_student_data(file_path, period=None, student_id=None, teacher_id='local-dev', **kwargs):
     """Import a previously exported student data file into Graider."""
     if not file_path:
         return {"error": "file_path is required."}
+
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
 
     file_path = os.path.expanduser(file_path)
     if not os.path.exists(file_path):

@@ -7,6 +7,15 @@ import json
 import re
 from datetime import datetime
 
+try:
+    from backend.storage import load as storage_load, save as storage_save
+except ImportError:
+    try:
+        from storage import load as storage_load, save as storage_save
+    except ImportError:
+        storage_load = None
+        storage_save = None
+
 AUTOMATIONS_DIR = os.path.expanduser("~/.graider_data/automations")
 
 AUTOMATION_TOOL_DEFINITIONS = [
@@ -59,7 +68,23 @@ AUTOMATION_TOOL_DEFINITIONS = [
 ]
 
 
-def list_automations_tool():
+def list_automations_tool(teacher_id='local-dev', **kwargs):
+    if storage_load:
+        data = storage_load('automations', teacher_id)
+        if data is not None:
+            workflows = data if isinstance(data, list) else data.get('workflows', [])
+            if not workflows:
+                return {"message": "No automations saved yet. I can create one for you - just describe what you want to automate."}
+            listing = []
+            for wf in workflows:
+                listing.append({
+                    "id": wf.get("id", ""),
+                    "name": wf.get("name", ""),
+                    "description": wf.get("description", ""),
+                    "step_count": len(wf.get("steps", [])),
+                })
+            return {"automations": listing, "count": len(listing)}
+    # Fallback to filesystem for local-dev
     os.makedirs(AUTOMATIONS_DIR, exist_ok=True)
     workflows = []
     for filename in sorted(os.listdir(AUTOMATIONS_DIR)):
@@ -81,8 +106,7 @@ def list_automations_tool():
     return {"automations": workflows, "count": len(workflows)}
 
 
-def create_automation_tool(name, steps, description="", browser_persistent=False, headless=False):
-    os.makedirs(AUTOMATIONS_DIR, exist_ok=True)
+def create_automation_tool(name, steps, description="", browser_persistent=False, headless=False, teacher_id='local-dev', **kwargs):
     slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
 
     for i, step in enumerate(steps):
@@ -105,9 +129,20 @@ def create_automation_tool(name, steps, description="", browser_persistent=False
         "steps": steps,
     }
 
-    filepath = os.path.join(AUTOMATIONS_DIR, slug + ".json")
-    with open(filepath, 'w') as f:
-        json.dump(workflow, f, indent=2)
+    if storage_load and storage_save:
+        existing = storage_load('automations', teacher_id) or []
+        if not isinstance(existing, list):
+            existing = existing.get('workflows', [])
+        # Replace existing workflow with same id, or append
+        existing = [w for w in existing if w.get('id') != slug]
+        existing.append(workflow)
+        storage_save('automations', existing, teacher_id)
+    else:
+        # Fallback to filesystem for local-dev
+        os.makedirs(AUTOMATIONS_DIR, exist_ok=True)
+        filepath = os.path.join(AUTOMATIONS_DIR, slug + ".json")
+        with open(filepath, 'w') as f:
+            json.dump(workflow, f, indent=2)
 
     return {
         "success": True,
@@ -118,7 +153,22 @@ def create_automation_tool(name, steps, description="", browser_persistent=False
     }
 
 
-def run_automation_tool(name):
+def run_automation_tool(name, teacher_id='local-dev', **kwargs):
+    if storage_load:
+        data = storage_load('automations', teacher_id)
+        if data is not None:
+            workflows = data if isinstance(data, list) else data.get('workflows', [])
+            for wf in workflows:
+                if name.lower() in wf.get("name", "").lower():
+                    return {
+                        "found": True,
+                        "workflow_id": wf.get("id"),
+                        "workflow_name": wf.get("name"),
+                        "step_count": len(wf.get("steps", [])),
+                        "message": "Found automation '" + wf["name"] + "'. Switch to the Automations tab and click the Run button to start it.",
+                    }
+            return {"found": False, "error": "No automation matching '" + name + "' found. Use create_automation to make one."}
+    # Fallback to filesystem for local-dev
     os.makedirs(AUTOMATIONS_DIR, exist_ok=True)
     for filename in sorted(os.listdir(AUTOMATIONS_DIR)):
         if not filename.endswith('.json'):

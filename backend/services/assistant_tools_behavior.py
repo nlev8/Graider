@@ -20,6 +20,7 @@ from backend.services.assistant_tools import (
     _load_roster, _fuzzy_name_match, _normalize_period,
     _extract_first_name, PARENT_CONTACTS_FILE,
 )
+from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action
 
 # ═══════════════════════════════════════════════════════
 # SUPABASE CLIENT (lazy, same pattern as routes)
@@ -494,7 +495,7 @@ def _gather_email_context(teacher_id, student_name):
                 parent_name = contact.get("parent_name", "") or contact.get("contact_name", "")
             break
     if not parent_email:
-        roster = _load_roster()
+        roster = _load_roster(teacher_id)
         for s in roster:
             if _fuzzy_name_match(name, s.get("name", "")):
                 parent_email = s.get("parent_email", "") or s.get("guardian_email", "")
@@ -585,14 +586,24 @@ INSTRUCTIONS:
 - Do not use markdown formatting — plain text only
 - Do not include a subject line"""
 
+        # Anonymize student PII before sending to external AI
+        roster_for_anon = [{"student_name": ctx['name']}]
+        anon_prompt, name_mapping = anonymize_for_ai(prompt, roster_for_anon)
+
+        audit_tool_action(teacher_id, 'generate_behavior_email', 'SEND_AI')
+
         client = anthropic.Anthropic(api_key=api_key)
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=600,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": anon_prompt}],
         )
 
         body = response.content[0].text.strip()
+
+        # Deanonymize the response to restore student names
+        if name_mapping:
+            body = deanonymize(body, name_mapping)
 
         # Generate subject line
         subject_map = {
@@ -728,7 +739,7 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, use_behav
                     parent_name = contact.get("parent_name", "") or contact.get("contact_name", "")
                 break
         if not parent_email:
-            roster = _load_roster()
+            roster = _load_roster(teacher_id)
             for s in roster:
                 if _fuzzy_name_match(student_name, s.get("name", "")):
                     parent_email = s.get("parent_email", "") or s.get("guardian_email", "")
@@ -811,6 +822,8 @@ def send_behavior_email(student_name, subject, body, method="focus"):
             if result.get("error"):
                 return {"error": result["error"]}
 
+            audit_tool_action(teacher_id, 'send_behavior_email', 'SEND_EMAIL')
+
             return {
                 "status": "success",
                 "data": {
@@ -844,7 +857,7 @@ def send_behavior_email(student_name, subject, body, method="focus"):
                 break
 
         if not parent_email:
-            roster = _load_roster()
+            roster = _load_roster(teacher_id)
             for s in roster:
                 if _fuzzy_name_match(student_name, s.get("name", "")):
                     parent_email = s.get("parent_email", "") or s.get("guardian_email", "")
@@ -861,6 +874,8 @@ def send_behavior_email(student_name, subject, body, method="focus"):
         )
 
         if success:
+            audit_tool_action(teacher_id, 'send_behavior_email', 'SEND_EMAIL')
+
             return {
                 "status": "success",
                 "data": {
