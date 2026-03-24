@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName } from './helpers.js'
+import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit } from './helpers.js'
 
 const SUBJECTS = {
   worldHistory7: {
@@ -90,11 +90,52 @@ for (const [key, assessment] of Object.entries(SUBJECTS)) {
       test.slow()
       test.skip(!joinCode)
       await startAssessment(page, joinCode, uniqueName(key + 'Sub'))
-      const firstOpt = page.locator('label').first()
-      if (await firstOpt.isVisible()) await firstOpt.click()
-      await page.waitForTimeout(300)
-      await page.locator('button:has-text("Submit")').first().click()
-      await page.waitForTimeout(4000)
+
+      // Navigate through all questions one at a time.
+      // Try to answer each question: attempt MC option 0, then TF true, then fill textarea.
+      // Then advance with Next or Finish+Confirm on the last question.
+      // We use a loop that checks for question UI elements and advances.
+      let maxQuestions = 10  // safety limit
+      let finished = false
+      while (!finished && maxQuestions-- > 0) {
+        // Check if Finish button is present (last question)
+        const finishBtn = page.locator('[data-testid="btn-finish"]')
+        const nextBtn = page.locator('[data-testid="btn-next"]')
+        const mcOpt = page.locator('[data-testid="mc-option-0"]')
+        const tfOpt = page.locator('[data-testid="tf-option-true"]')
+        const textarea = page.locator('[data-testid="text-answer"]')
+
+        // Answer whichever question type is visible
+        if (await mcOpt.isVisible()) {
+          await mcOpt.click()
+          await page.waitForTimeout(400)
+        } else if (await tfOpt.isVisible()) {
+          await tfOpt.click()
+          await page.waitForTimeout(400)
+        } else if (await textarea.isVisible()) {
+          await textarea.fill('Test response.')
+          await page.waitForTimeout(300)
+        }
+
+        // Advance: Finish or Next
+        if (await finishBtn.isVisible()) {
+          await finishBtn.click()
+          await page.waitForTimeout(500)
+          const confirmBtn = page.locator('[data-testid="btn-confirm-submit"]')
+          if (await confirmBtn.isVisible()) {
+            await confirmBtn.click()
+            await page.waitForTimeout(3000)
+          }
+          finished = true
+        } else if (await nextBtn.isVisible()) {
+          await nextBtn.click()
+          await page.waitForTimeout(500)
+        } else {
+          // No navigation buttons found — assessment may already be submitted or in an unexpected state
+          finished = true
+        }
+      }
+
       const body = await page.textContent('body')
       expect(body.includes('Complete') || body.includes('Submitted') || body.includes('pending') || body.includes('points') || body.includes('Something went wrong') || body.includes('Failed')).toBeTruthy()
     })
