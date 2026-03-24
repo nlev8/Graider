@@ -6,7 +6,7 @@
  * - Subject-specific assessments (History, Math, Science, ELA, Civics)
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, ASSESSMENTS } from './helpers.js'
+import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
 
 test.describe('Student MC Grading — All Correct', () => {
   let joinCode
@@ -16,15 +16,13 @@ test.describe('Student MC Grading — All Correct', () => {
   test('all correct answers → 100%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    // Select B for Q1 (2+2=4), C for Q2 (Paris), B for Q3 (Jupiter)
-    await page.locator('text=B) 4').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=B) Jupiter').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: B) 4 (index 1), Q2: C) Paris (index 2), Q3: B) Jupiter (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    await answerMC(page, 2)
+    await clickNext(page)
+    await answerMC(page, 1)
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('15')  // 15/15 points
     expect(body).toContain('100%')
@@ -39,14 +37,13 @@ test.describe('Student MC Grading — All Wrong', () => {
   test('all wrong answers → 0%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=A) 3').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=A) London').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: A) 3 (wrong), Q2: A) London (wrong), Q3: A) Mars (wrong)
+    await answerMC(page, 0)
+    await clickNext(page)
+    await answerMC(page, 0)
+    await clickNext(page)
+    await answerMC(page, 0)
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('0%')
   })
@@ -60,14 +57,12 @@ test.describe('Student MC Grading — Partial', () => {
   test('1 of 3 correct → 33%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=B) 4').first().click()  // correct
-    await page.waitForTimeout(300)
-    await page.locator('text=A) London').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 1)  // Q1: B) 4 — correct
+    await clickNext(page)
+    await answerMC(page, 0)  // Q2: A) London — wrong
+    await clickNext(page)
+    await answerMC(page, 0)  // Q3: A) Mars — wrong
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('33%')
   })
@@ -75,14 +70,12 @@ test.describe('Student MC Grading — Partial', () => {
   test('2 of 3 correct → 67%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=B) 4').first().click()  // correct
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()  // correct
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 1)  // Q1: B) 4 — correct
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris — correct
+    await clickNext(page)
+    await answerMC(page, 0)  // Q3: A) Mars — wrong
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('67%')
   })
@@ -96,17 +89,14 @@ test.describe('Student MC Grading — Answer Change', () => {
   test('changing answer before submit uses final selection', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    // First pick wrong answer, then change to correct
-    await page.locator('text=A) 3').first().click()
-    await page.waitForTimeout(200)
-    await page.locator('text=B) 4').first().click()  // change to correct
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=B) Jupiter').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: pick wrong first (A), then change to correct (B) on same screen before clicking Next
+    await answerMC(page, 0)  // A) 3 — wrong
+    await answerMC(page, 1)  // B) 4 — change to correct
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris — correct
+    await clickNext(page)
+    await answerMC(page, 1)  // Q3: B) Jupiter — correct
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('100%')
   })
@@ -129,38 +119,39 @@ test.describe('US History Grade 8 — MC', () => {
   test('correct answers score full marks', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistStudent'))
-    await page.locator('text=B) Declaration').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=True').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Washington').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: MC — B) Declaration of Independence (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q2: TF — True (American Revolution began in 1775)
+    await answerTF(page, 'true')
+    await clickNext(page)
+    // Q3: MC — C) Washington (index 2)
+    await answerMC(page, 2)
+    await finishAndSubmit(page)
     expect(await page.textContent('body')).toContain('100%')
   })
 
   test('wrong history answers score 0%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistWrong'))
-    await page.locator('text=A) Constitution').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=False').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Jefferson').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: MC — A) Constitution (wrong, index 0)
+    await answerMC(page, 0)
+    await clickNext(page)
+    // Q2: TF — False (wrong)
+    await answerTF(page, 'false')
+    await clickNext(page)
+    // Q3: MC — A) Jefferson (wrong, index 0)
+    await answerMC(page, 0)
+    await finishAndSubmit(page)
     expect(await page.textContent('body')).toContain('0%')
   })
 
-  test('all 3 questions render', async ({ page }) => {
+  test('first question renders', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistCount'))
+    // In one-at-a-time mode, only Q1 is visible on load
     const body = await page.textContent('body')
     expect(body).toContain('declared independence')
-    expect(body).toContain('1775')
-    expect(body).toContain('Continental Army')
   })
 })
 
@@ -180,38 +171,39 @@ test.describe('Math Grade 7 — MC', () => {
   test('math correct answers → 100%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MathStudent'))
-    await page.locator('span:text-is("A) 5x")').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('label:text("True")').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('span:text-is("C) 5")').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: MC — A) 5x (index 0)
+    await answerMC(page, 0)
+    await clickNext(page)
+    // Q2: TF — True (2(x+3) equals 2x+6)
+    await answerTF(page, 'true')
+    await clickNext(page)
+    // Q3: MC — C) 5 (index 2)
+    await answerMC(page, 2)
+    await finishAndSubmit(page)
     expect(await page.textContent('body')).toContain('100%')
   })
 
   test('math wrong answers → 0%', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MathWrong'))
-    await page.locator('span:text-is("B) 6x")').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('label:text("False")').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('span:text-is("A) 3")').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: MC — B) 6x (wrong, index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q2: TF — False (wrong)
+    await answerTF(page, 'false')
+    await clickNext(page)
+    // Q3: MC — A) 3 (wrong, index 0)
+    await answerMC(page, 0)
+    await finishAndSubmit(page)
     expect(await page.textContent('body')).toContain('0%')
   })
 
-  test('math questions render expressions', async ({ page }) => {
+  test('math Q1 renders expression', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MathRender'))
+    // Only Q1 is visible on load
     const body = await page.textContent('body')
     expect(body).toContain('3x + 2x')
-    expect(body).toContain('2(x+3)')
-    expect(body).toContain('x + 7 = 12')
   })
 })
 
@@ -228,30 +220,23 @@ test.describe('Civics — MC + Matching', () => {
     expect(await page.textContent('body')).toContain('Branches of Government')
   })
 
-  test('can answer MC + TF', async ({ page }) => {
+  test('can answer MC then see matching on next screen', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('CivicsStudent'))
-    // Answer MC: B) 3 branches
-    await page.locator('text=B) 3').first().click()
-    await page.waitForTimeout(300)
-    // Answer TF: False (Supreme Court is Judicial not Executive)
-    await page.locator('text=False').first().click()
-    await page.waitForTimeout(300)
-    // Matching cards should render
-    expect(await page.textContent('body')).toContain('Legislative')
+    // Q1: MC — B) 3 branches (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q2: Matching — should now see matching cards
+    const body = await page.textContent('body')
+    expect(body).toContain('Legislative')
   })
 
-  test('civics renders all question types', async ({ page }) => {
+  test('civics Q1 renders MC question', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('CivicsRender'))
+    // Only Q1 (MC) is visible on load
     const body = await page.textContent('body')
-    // MC question
     expect(body).toContain('branches of government')
-    // Matching terms
-    expect(body).toContain('Executive')
-    expect(body).toContain('Judicial')
-    // TF question
-    expect(body).toContain('Supreme Court')
   })
 })
 
@@ -268,20 +253,19 @@ test.describe('Science Grade 6 — Mixed', () => {
     expect(await page.textContent('body')).toContain('Earth Systems')
   })
 
-  test('science renders all question types', async ({ page }) => {
+  test('science Q1 renders MC question', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('SciRender'))
+    // Q1 (MC about Earth layers) is visible on load
     const body = await page.textContent('body')
     expect(body).toContain('layer of the Earth')
-    expect(body).toContain('Crust')
-    expect(body).toContain('Mantle')
   })
 
   test('science correct MC answer', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('SciMC'))
-    await page.locator('text=C) Crust').first().click()
-    await page.waitForTimeout(300)
+    // Q1: MC — C) Crust (index 2)
+    await answerMC(page, 2)
     // Verify selection registered (no crash)
     const body = await page.textContent('body')
     expect(body).not.toContain('Something went wrong')
@@ -304,36 +288,42 @@ test.describe('ELA Grade 8 — MC + Written', () => {
   test('can answer MC and type short answer', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('ELAStudent'))
-    // MC answers
-    await page.locator('text=C) The central message').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=B) A story with a hidden meaning').first().click()
-    await page.waitForTimeout(300)
-    // Short answer textarea should be visible
-    const textarea = page.locator('textarea').first()
+    // Q1: MC — C) The central message (index 2)
+    await answerMC(page, 2)
+    await clickNext(page)
+    // Q2: MC — B) A story with a hidden meaning (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q3: Short answer textarea
+    const textarea = page.locator('[data-testid="text-answer"]')
     if (await textarea.isVisible()) {
       await textarea.fill('Irony is when the outcome is opposite to what was expected. For example, a fire station burning down.')
     }
     await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(5000)
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     // Should show results or submission feedback (may fail on slow grading)
     expect(body.includes('Complete') || body.includes('Submitted') || body.includes('pending') || body.includes('points') || body.includes('Failed')).toBeTruthy()
   })
 
-  test('ELA renders MC options', async ({ page }) => {
+  test('ELA Q1 renders MC options', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('ELAOptions'))
+    // Q1 about "theme" is visible on load
     const body = await page.textContent('body')
     expect(body).toContain('theme')
-    expect(body).toContain('allegory')
   })
 
-  test('ELA renders short answer textarea', async ({ page }) => {
+  test('ELA short answer textarea renders on Q3', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('ELATextarea'))
-    const textarea = page.locator('textarea').first()
+    // Navigate to Q3 (short answer)
+    await answerMC(page, 2)  // Q1
+    await clickNext(page)
+    await answerMC(page, 1)  // Q2
+    await clickNext(page)
+    // Now on Q3 (short answer)
+    const textarea = page.locator('[data-testid="text-answer"]')
     const isVisible = await textarea.isVisible()
     expect(isVisible).toBeTruthy()
   })
