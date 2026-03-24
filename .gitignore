@@ -290,3 +290,5 @@ test_results/
 *.mp3
 *.wav
 .gitnexus
+.worktrees/
+.superpowers/
