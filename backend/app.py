@@ -2025,7 +2025,7 @@ import signal
 
 def _handle_sigterm(signum, frame):
     """Graceful shutdown: stop any running grading thread before exit."""
-    logger.info("SIGTERM received — requesting grading thread stop")
+    _logger.info("SIGTERM received — requesting grading thread stop")
     if grading_state.get("is_running"):
         grading_state["stop_requested"] = True
     # Let gunicorn handle the actual process exit

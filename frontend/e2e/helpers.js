@@ -86,7 +86,14 @@ async function answerTF(page, value) {
  * Click the Next button to advance to the next question.
  */
 async function clickNext(page) {
-  await page.locator('[data-testid="btn-next"]').click()
+  var btn = page.locator('[data-testid="btn-next"]')
+  await btn.waitFor({ state: 'visible', timeout: 5000 })
+  // Wait for button to become enabled (matching questions have async state updates)
+  await page.waitForFunction(function() {
+    var el = document.querySelector('[data-testid="btn-next"]')
+    return el && !el.disabled
+  }, { timeout: 5000 }).catch(function() {})
+  await btn.click()
   await page.waitForTimeout(500)
 }
 
