@@ -7,6 +7,7 @@ import * as api from "../services/api";
 import MatchingCards from "./MatchingCards";
 import FlashcardView from "./FlashcardView";
 import MindMapView from "./MindMapView";
+import QuestionPlayer from "./QuestionPlayer";
 
 // Simple icon component for student portal
 const Icon = ({ name, size = 20, style = {} }) => {
@@ -417,15 +418,6 @@ export default function StudentPortal({
 
   // ============ ASSESSMENT SCREEN ============
   if (stage === "assessment") {
-    const totalQuestions = assessment?.sections?.reduce((sum, s) => sum + (s.questions?.length || 0), 0) || 0;
-    const answeredCount = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== "").length;
-
-    // Delivery accommodation flags (derived, no state mutation)
-    var isLargeText = deliveryAccommodations.indexOf("large_text") !== -1;
-    var isReadAloud = deliveryAccommodations.indexOf("read_aloud") !== -1;
-    var isReducedDistractions = deliveryAccommodations.indexOf("reduced_distractions") !== -1;
-    var portalFontSize = isLargeText ? "1.2rem" : "1rem";
-
     // Compute effective time limit with extended time accommodation
     var effectiveTimeLimit = assessment?.settings?.time_limit_minutes || null;
     if (effectiveTimeLimit && deliveryAccommodations.length > 0) {
@@ -440,284 +432,21 @@ export default function StudentPortal({
 
     return (
       <div style={containerStyle}>
-        {/* Header */}
-        <div style={{ position: "sticky", top: 0, background: "rgba(15, 15, 35, 0.95)", borderBottom: "1px solid rgba(255,255,255,0.1)", padding: "15px 20px", zIndex: 100 }}>
-          <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <h1 style={{ fontSize: isLargeText ? "1.4rem" : "1.2rem", fontWeight: 700, marginBottom: "4px" }}>{assessment?.title}</h1>
-              <span style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)" }}>{studentName}</span>
-              {assessment?.settings?.due_date && (
-                <span style={{ fontSize: "0.8rem", color: "rgba(245,158,11,0.8)" }}>
-                  Due: {new Date(assessment.settings.due_date).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-              {!isReducedDistractions && (
-              <span style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)" }}>
-                {answeredCount}/{totalQuestions} answered
-              </span>
-              )}
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                style={{
-                  ...buttonStyle,
-                  width: "auto",
-                  padding: "10px 20px",
-                  fontSize: "1rem",
-                  background: answeredCount === totalQuestions ? "linear-gradient(135deg, #22c55e, #16a34a)" : "linear-gradient(135deg, #8b5cf6, #6366f1)",
-                }}
-              >
-                {loading ? "Submitting..." : "Submit"}
-                <Icon name="Send" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Questions */}
-        <div style={{ maxWidth: "800px", margin: "0 auto", padding: "30px 20px" }}>
-          {/* Accommodations Notice */}
-          {studentAccommodation && (
-            <div style={{ background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.4)", borderRadius: "10px", padding: "15px 20px", marginBottom: "25px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "1.2rem" }}>📋</span>
-                <strong style={{ color: "#60a5fa" }}>Your Accommodations</strong>
-              </div>
-              {studentAccommodation.presets && studentAccommodation.presets.length > 0 && (
-                <ul style={{ margin: "0 0 10px 20px", padding: 0, color: "rgba(255,255,255,0.8)", fontSize: "0.95rem" }}>
-                  {studentAccommodation.presets.map(function(preset, idx) {
-                    var names = {
-                      simplified_language: "Simplified Language",
-                      effort_focused: "Effort-Focused Feedback",
-                      extra_encouragement: "Extra Encouragement",
-                      chunked_feedback: "Chunked Feedback",
-                      modified_expectations: "Modified Expectations",
-                      visual_structure: "Visual Structure",
-                      read_aloud_friendly: "Read-Aloud Friendly",
-                      growth_mindset: "Growth Mindset",
-                      ell_support: "ELL Support",
-                      extended_time_1_5x: "Extended Time (1.5x)",
-                      extended_time_2x: "Extended Time (2x)",
-                      extended_time_unlimited: "Extended Time (Unlimited)",
-                      large_text: "Large Text",
-                      read_aloud: "Read Aloud",
-                      reduced_distractions: "Reduced Distractions",
-                    };
-                    return <li key={idx} style={{ marginBottom: "5px" }}>{names[preset] || preset.replace(/_/g, " ")}</li>;
-                  })}
-                </ul>
-              )}
-              {studentAccommodation.custom_notes && (
-                <p style={{ margin: 0, color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", fontStyle: "italic" }}>
-                  {studentAccommodation.custom_notes}
-                </p>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <div style={{ background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "#fca5a5" }}>
-              {error}
-            </div>
-          )}
-
-          {assessment?.sections?.map((section, sIdx) => (
-            <div key={sIdx} style={{ marginBottom: "40px" }}>
-              <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: "10px", color: "#8b5cf6" }}>
-                {section.name}
-              </h2>
-              {section.instructions && (
-                <p style={{ color: "rgba(255,255,255,0.6)", marginBottom: "20px", fontStyle: "italic" }}>
-                  {section.instructions}
-                </p>
-              )}
-
-              {section.questions?.map((q, qIdx) => {
-                const answerKey = `${sIdx}-${qIdx}`;
-                const currentAnswer = answers[answerKey];
-
-                return (
-                  <div
-                    key={qIdx}
-                    style={{
-                      ...cardStyle,
-                      marginBottom: "20px",
-                      borderLeft: currentAnswer ? "4px solid #22c55e" : "4px solid rgba(255,255,255,0.2)",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
-                      <span style={{ fontWeight: 700, fontSize: isLargeText ? "1.3rem" : "1.1rem" }}>
-                        {q.number}. {q.question}
-                        {isReadAloud && (
-                          <button
-                            onClick={function(e) {
-                              e.stopPropagation();
-                              var utterance = new SpeechSynthesisUtterance(q.question);
-                              utterance.rate = 0.9;
-                              window.speechSynthesis.cancel();
-                              window.speechSynthesis.speak(utterance);
-                            }}
-                            style={{
-                              background: "none", border: "none", cursor: "pointer",
-                              color: "rgba(99,102,241,0.8)", padding: "4px", marginLeft: "8px",
-                              verticalAlign: "middle",
-                            }}
-                            title="Read aloud"
-                          >
-                            <Icon name="Volume2" size={18} />
-                          </button>
-                        )}
-                      </span>
-                      <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.9rem" }}>
-                        {q.points} pt{q.points > 1 ? "s" : ""}
-                      </span>
-                    </div>
-
-                    {/* Multiple Choice */}
-                    {q.options && q.options.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {q.options.map((opt, oIdx) => {
-                          const isSelected = currentAnswer === oIdx;
-                          return (
-                            <label
-                              key={oIdx}
-                              onClick={() => setAnswer(answerKey, oIdx)}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "12px",
-                                padding: "12px 15px",
-                                borderRadius: "8px",
-                                cursor: "pointer",
-                                background: isSelected ? "rgba(139, 92, 246, 0.3)" : "rgba(255,255,255,0.05)",
-                                border: isSelected ? "2px solid #8b5cf6" : "2px solid transparent",
-                                transition: "all 0.15s ease",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  width: "22px",
-                                  height: "22px",
-                                  borderRadius: "50%",
-                                  border: isSelected ? "6px solid #8b5cf6" : "2px solid rgba(255,255,255,0.4)",
-                                  background: isSelected ? "white" : "transparent",
-                                  flexShrink: 0,
-                                }}
-                              />
-                              <span>{opt}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* True/False */}
-                    {q.type === "true_false" && (
-                      <div style={{ display: "flex", gap: "15px" }}>
-                        {["True", "False"].map((tf) => {
-                          const isSelected = currentAnswer === tf;
-                          return (
-                            <label
-                              key={tf}
-                              onClick={() => setAnswer(answerKey, tf)}
-                              style={{
-                                flex: 1,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "10px",
-                                padding: "15px",
-                                borderRadius: "8px",
-                                cursor: "pointer",
-                                background: isSelected
-                                  ? tf === "True"
-                                    ? "rgba(34, 197, 94, 0.3)"
-                                    : "rgba(239, 68, 68, 0.3)"
-                                  : "rgba(255,255,255,0.05)",
-                                border: isSelected
-                                  ? `2px solid ${tf === "True" ? "#22c55e" : "#ef4444"}`
-                                  : "2px solid transparent",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {tf}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Matching - interactive card game */}
-                    {(q.type === "matching" || (q.terms && q.terms.length > 0 && q.definitions && q.definitions.length > 0)) && (
-                      <MatchingCards
-                        terms={q.terms}
-                        definitions={q.definitions}
-                        correctAnswer={q.answer}
-                        onMatch={function(matches, shuffledDefs) {
-                          // Store matches as letter answers for grading compatibility
-                          // matches is { termIdx: shuffledDefIdx }
-                          // Convert shuffled index back to original definition index for grading
-                          Object.entries(matches).forEach(function(entry) {
-                            var tIdx = entry[0];
-                            var sdIdx = entry[1];
-                            var originalIdx = shuffledDefs && shuffledDefs[sdIdx] ? shuffledDefs[sdIdx].originalIdx : sdIdx;
-                            var matchKey = sIdx + "-" + qIdx + "-match-" + tIdx;
-                            setAnswer(matchKey, String.fromCharCode(65 + originalIdx));
-                          });
-                        }}
-                      />
-                    )}
-
-                    {/* Short Answer / Extended Response / Text Input Fallback */}
-                    {(q.type === "short_answer" || q.type === "extended_response" ||
-                      (!q.options && q.type !== "true_false" && q.type !== "matching" &&
-                       !(q.terms && q.terms.length > 0 && q.definitions && q.definitions.length > 0))) && (
-                      <textarea
-                        value={currentAnswer || ""}
-                        onChange={(e) => setAnswer(answerKey, e.target.value)}
-                        placeholder={q.type === "extended_response"
-                          ? "Write your extended response here. Include evidence and analysis to support your answer..."
-                          : "Type your answer here..."}
-                        rows={q.type === "extended_response" || (q.points && q.points >= 4) ? 6 : 3}
-                        style={{
-                          width: "100%",
-                          padding: "15px",
-                          borderRadius: "8px",
-                          border: "1px solid rgba(255,255,255,0.2)",
-                          background: "rgba(0,0,0,0.2)",
-                          color: "white",
-                          fontSize: "1rem",
-                          resize: "vertical",
-                          lineHeight: 1.6,
-                          fontFamily: "inherit",
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-
-          {/* Submit Button at Bottom */}
-          <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              style={{
-                ...buttonStyle,
-                maxWidth: "300px",
-                margin: "0 auto",
-                background: "linear-gradient(135deg, #22c55e, #16a34a)",
-              }}
-            >
-              {loading ? "Submitting..." : (assessment?.sections ? "Submit Assignment" : "Submit Assessment")}
-              <Icon name="Send" />
-            </button>
-          </div>
-        </div>
+        <QuestionPlayer
+          sections={assessment?.sections}
+          contentType={assessment?.settings?.content_type || "assessment"}
+          settings={assessment?.settings || {}}
+          accommodations={deliveryAccommodations}
+          effectiveTimeLimit={effectiveTimeLimit}
+          studentName={studentName}
+          title={assessment?.title}
+          answers={answers}
+          onAnswer={setAnswer}
+          onSubmit={handleSubmit}
+          loading={loading}
+          assessment={assessment}
+          studentAccommodation={studentAccommodation}
+        />
       </div>
     );
   }
