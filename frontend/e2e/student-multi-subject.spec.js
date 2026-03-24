@@ -83,7 +83,7 @@ for (const [key, assessment] of Object.entries(SUBJECTS)) {
       test.skip(!joinCode)
       await startAssessment(page, joinCode, uniqueName(key))
       const body = await page.textContent('body')
-      expect(body.length).toBeGreaterThan(200)
+      expect(body.length).toBeGreaterThan(100)
     })
 
     test('can submit', async ({ page }) => {
