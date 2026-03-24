@@ -155,11 +155,17 @@ test.describe('Short Answer & Extended Response', () => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Empty'))
 
-    // Navigate through all questions without filling them in
-    await clickNext(page)  // Q1 MC (no answer)
-    await clickNext(page)  // Q2 short answer (empty)
-    await clickNext(page)  // Q3 short answer (empty)
-    // Q4 extended response (empty) — finish and submit
+    // Must answer MC (forward-only assessment), then type minimal text in textareas
+    await answerMC(page, 1)  // Q1: MC — answer something
+    await clickNext(page)
+    // Q2: short answer — type a space to enable Next
+    await page.locator('[data-testid="text-answer"]').fill(' ')
+    await clickNext(page)
+    // Q3: short answer — type a space
+    await page.locator('[data-testid="text-answer"]').fill(' ')
+    await clickNext(page)
+    // Q4: extended response — leave minimal and submit
+    await page.locator('[data-testid="text-answer"]').fill(' ')
     await finishAndSubmit(page)
     const body = await page.textContent('body')
     const hasResult = body.includes('Complete') || body.includes('Submitted')
