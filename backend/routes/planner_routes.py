@@ -272,8 +272,24 @@ def _validate_question_quality(assignment, subject=None, grade=None, valid_stand
 
     Returns a list of warning dicts: [{section_idx, question_idx, issue, severity}]
     Attaches 'warning' and 'warning_severity' fields to flagged questions.
+    Also removes duplicate questions (identical question text).
     """
     warnings = []
+
+    # ── Deduplication: remove questions with identical text ──
+    seen_texts = set()
+    for section in assignment.get('sections', []):
+        unique_questions = []
+        for q in section.get('questions', []):
+            text = (q.get('question', '') or '').strip().lower()
+            if text and text in seen_texts:
+                # Skip duplicate — don't even include it
+                continue
+            if text:
+                seen_texts.add(text)
+            unique_questions.append(q)
+        section['questions'] = unique_questions
+
     for sIdx, section in enumerate(assignment.get('sections', [])):
         for qIdx, q in enumerate(section.get('questions', [])):
             issues = _check_question_quality(q, subject=subject, grade=grade,
@@ -1811,7 +1827,7 @@ def _enforce_question_count(assignment, target, client=None, config=None):
     """Programmatically enforce exact question count. No AI calls.
 
     - Over target: trims questions from the largest sections.
-    - Under target: duplicates existing questions with adjusted numbering.
+    - Under target: accepts what the AI generated (fewer questions is better than duplicates).
     Returns (assignment, None) — no extra usage since this is pure logic.
     """
     sections = assignment.get('sections', [])
@@ -1819,42 +1835,18 @@ def _enforce_question_count(assignment, target, client=None, config=None):
         return assignment, None
 
     current = _count_questions(assignment)
-    if current == target:
-        return assignment, None
-
-    # ── Over target: trim from largest sections first ──
-    while current > target:
-        largest = max(sections, key=lambda s: len(s.get('questions', [])))
-        qs = largest.get('questions', [])
-        if not qs:
-            break
-        qs.pop()  # remove last question
-        current -= 1
-
-    # ── Under target: duplicate existing questions into smallest sections ──
-    # Build a pool of all existing questions to cycle through
-    pool = []
-    for s in sections:
-        for q in s.get('questions', []):
-            pool.append(q)
-    if not pool:
-        return assignment, None
-
-    pool_idx = 0
-    while current < target:
-        # Pick the source question to duplicate (cycle through pool)
-        source = pool[pool_idx % len(pool)]
-        pool_idx += 1
-
-        # Create a copy with updated number
-        import copy
-        new_q = copy.deepcopy(source)
-        new_q['number'] = current + 1
-
-        # Add to the smallest section to keep distribution even
-        smallest = min(sections, key=lambda s: len(s.get('questions', [])))
-        smallest.setdefault('questions', []).append(new_q)
-        current += 1
+    if current <= target:
+        # Accept what we have — never pad with duplicates
+        pass
+    else:
+        # ── Over target: trim from largest sections first ──
+        while current > target:
+            largest = max(sections, key=lambda s: len(s.get('questions', [])))
+            qs = largest.get('questions', [])
+            if not qs:
+                break
+            qs.pop()  # remove last question
+            current -= 1
 
     # Renumber all questions sequentially and update section point totals
     num = 1
