@@ -8,7 +8,7 @@
  * - Content type settings propagation
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, ASSESSMENTS } from './helpers.js'
+import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, dismissFeedback, ASSESSMENTS } from './helpers.js'
 
 test.describe('Assessment Content Type — Scores Hidden', () => {
   let joinCode
@@ -24,14 +24,12 @@ test.describe('Assessment Content Type — Scores Hidden', () => {
   test('submitting assessment shows pending review', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=B) 4').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=B) Jupiter').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 1)  // Q1: B) 4
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris
+    await clickNext(page)
+    await answerMC(page, 1)  // Q3: B) Jupiter
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     // Should show pending review, NOT the score
     expect(body.includes('Submitted') || body.includes('review') || body.includes('teacher') || body.includes('recorded')).toBeTruthy()
@@ -41,14 +39,12 @@ test.describe('Assessment Content Type — Scores Hidden', () => {
   test('hidden scores do not show correct answers', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=A) 3').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('text=A) London').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 0)  // Q1: wrong (A)
+    await clickNext(page)
+    await answerMC(page, 0)  // Q2: wrong (A)
+    await clickNext(page)
+    await answerMC(page, 0)  // Q3: wrong (A)
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     // Should NOT show which answers were correct
     expect(body).not.toContain('0%')
@@ -69,14 +65,12 @@ test.describe('Assessment — Scores Shown (Default)', () => {
   test('submitting shows immediate score', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=B) 4').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=B) Jupiter').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 1)  // Q1: B) 4 — correct
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris — correct
+    await clickNext(page)
+    await answerMC(page, 1)  // Q3: B) Jupiter — correct
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('100%')
   })
@@ -84,14 +78,12 @@ test.describe('Assessment — Scores Shown (Default)', () => {
   test('wrong answers show 0% immediately', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=A) 3').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=A) London').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 0)  // Q1: wrong
+    await clickNext(page)
+    await answerMC(page, 0)  // Q2: wrong
+    await clickNext(page)
+    await answerMC(page, 0)  // Q3: wrong
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('0%')
   })
@@ -99,14 +91,12 @@ test.describe('Assessment — Scores Shown (Default)', () => {
   test('partial answers show percentage immediately', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=B) 4').first().click()  // correct
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()  // correct
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 1)  // Q1: B) 4 — correct
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris — correct
+    await clickNext(page)
+    await answerMC(page, 0)  // Q3: wrong
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('67%')
   })
@@ -153,14 +143,12 @@ test.describe('Assessment — Score Shown Immediately', () => {
   test('shows score but not correct answers', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=A) 3').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()  // correct
-    await page.waitForTimeout(300)
-    await page.locator('text=A) Mars').first().click()  // wrong
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 0)  // Q1: wrong (A) 3
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris — correct
+    await clickNext(page)
+    await answerMC(page, 0)  // Q3: wrong (A) Mars
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     // Should show some score info
     expect(body.includes('33%') || body.includes('points') || body.includes('Score') || body.includes('Complete')).toBeTruthy()
@@ -181,41 +169,49 @@ test.describe('Mixed Assessment — Written Pending', () => {
   test('mixed content shows results after submission', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    // Answer MC
-    await page.locator('text=B) Shakespeare').first().click()
+    // Q1: MC — B) Shakespeare (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q2: TF — True (Shakespeare born in Stratford)
+    await answerTF(page, 'true')
+    await clickNext(page)
+    // Q3: Matching — click through pairs
+    await page.locator('text=Hamlet').first().click()
+    await page.waitForTimeout(200)
+    await page.locator('text=Tragedy').first().click()
     await page.waitForTimeout(300)
-    // Answer TF
-    await page.locator('label:text("True")').first().click()
-    await page.waitForTimeout(300)
-    // Type short answer
-    const textarea = page.locator('textarea').first()
+    await clickNext(page)
+    // Q4: Short answer
+    const textarea = page.locator('[data-testid="text-answer"]')
     if (await textarea.isVisible()) {
       await textarea.fill('Love conquers hate but at a tragic cost.')
     }
     await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(5000)
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     // Should show partial or complete results (or submission feedback)
     expect(body.includes('Submitted') || body.includes('Complete') || body.includes('pending') || body.includes('review') || body.includes('points') || body.includes('Failed')).toBeTruthy()
   })
 
-  test('mixed content renders all question types', async ({ page }) => {
+  test('mixed content Q1 renders MC question', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
+    // Only Q1 (MC) is visible on load
     const body = await page.textContent('body')
-    // MC question
     expect(body).toContain('Romeo and Juliet')
-    // TF question
-    expect(body).toContain('Stratford')
-    // Matching
-    expect(body).toContain('Hamlet')
   })
 
   test('short answer field accepts long text', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    const textarea = page.locator('textarea').first()
+    // Navigate to Q4 (short answer) in the mixed assessment
+    await answerMC(page, 1)  // Q1: MC
+    await clickNext(page)
+    await answerTF(page, 'true')  // Q2: TF
+    await clickNext(page)
+    await clickNext(page)  // Q3: Matching (skip — just advance)
+    // Now on Q4 (short answer)
+    const textarea = page.locator('[data-testid="text-answer"]')
     if (await textarea.isVisible()) {
       const longText = 'The theme of Romeo and Juliet explores the destructive nature of feuds between families. Shakespeare shows how the hatred between the Montagues and Capulets ultimately leads to the tragic deaths of their children. The play suggests that love is powerful but cannot always overcome deep-rooted hatred and prejudice.'
       await textarea.fill(longText)
@@ -239,15 +235,15 @@ test.describe('TF-Only Assessment with Hidden Scores', () => {
   test('TF assessment with hidden scores shows submitted', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    const trueLabels = page.locator('label:text("True")')
-    await trueLabels.nth(0).click()
-    await page.waitForTimeout(300)
-    await trueLabels.nth(1).click()
-    await page.waitForTimeout(300)
-    await trueLabels.nth(2).click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // Q1: True
+    await answerTF(page, 'true')
+    await clickNext(page)
+    // Q2: True
+    await answerTF(page, 'true')
+    await clickNext(page)
+    // Q3: True (last question)
+    await answerTF(page, 'true')
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body.includes('Submitted') || body.includes('review') || body.includes('recorded')).toBeTruthy()
   })
@@ -263,14 +259,12 @@ test.describe('Default Settings Behavior', () => {
   test('default settings show score after submission', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    await page.locator('text=B) 4').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=C) Paris').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('text=B) Jupiter').first().click()
-    await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    await answerMC(page, 1)  // Q1: B) 4 — correct
+    await clickNext(page)
+    await answerMC(page, 2)  // Q2: C) Paris — correct
+    await clickNext(page)
+    await answerMC(page, 1)  // Q3: B) Jupiter — correct
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body).toContain('100%')
   })
