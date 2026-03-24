@@ -5,7 +5,7 @@
  * question types (short_answer, extended_response) alongside MC.
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, AUTH_HEADERS } from './helpers.js'
+import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, clickNext, finishAndSubmit, AUTH_HEADERS } from './helpers.js'
 
 const WRITTEN_ASSESSMENT = {
   title: 'Written Response Test',
@@ -46,32 +46,45 @@ test.describe('Short Answer & Extended Response', () => {
     await deleteAssessment(request, joinCode)
   })
 
-  test('textarea appears for short answer questions', async ({ page }) => {
+  test('textarea appears for short answer question (Q2)', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Textarea'))
-    const textareas = page.locator('textarea')
-    const count = await textareas.count()
-    expect(count).toBeGreaterThanOrEqual(2)
+    // Navigate past Q1 (MC) to reach Q2 (short answer)
+    await answerMC(page, 1)  // Q1: B) Blue (correct)
+    await clickNext(page)
+    // Now on Q2 (short answer) — textarea should be visible
+    const textarea = page.locator('[data-testid="text-answer"]')
+    expect(await textarea.isVisible()).toBeTruthy()
   })
 
   test('can type in short answer textarea', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Type'))
-    const textarea = page.locator('textarea').first()
+    // Navigate to Q2 (first short answer)
+    await answerMC(page, 1)
+    await clickNext(page)
+    const textarea = page.locator('[data-testid="text-answer"]')
     await textarea.fill('The water cycle involves evaporation and precipitation.')
     const value = await textarea.inputValue()
     expect(value).toContain('water cycle')
   })
 
-  test('can type in extended response textarea', async ({ page }) => {
+  test('can type in extended response textarea (Q4)', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Extended'))
-    const textareas = page.locator('textarea')
-    const count = await textareas.count()
-    // The last textarea should be for the extended response
-    const lastTextarea = textareas.nth(count - 1)
-    await lastTextarea.fill('Photosynthesis is the process by which plants convert sunlight into energy.')
-    const value = await lastTextarea.inputValue()
+    // Navigate to Q4 (extended response)
+    await answerMC(page, 1)  // Q1
+    await clickNext(page)
+    const q2 = page.locator('[data-testid="text-answer"]')
+    await q2.fill('Water cycle answer.')
+    await clickNext(page)
+    const q3 = page.locator('[data-testid="text-answer"]')
+    await q3.fill('Seasons answer.')
+    await clickNext(page)
+    // Now on Q4 (extended response)
+    const textarea = page.locator('[data-testid="text-answer"]')
+    await textarea.fill('Photosynthesis is the process by which plants convert sunlight into energy.')
+    const value = await textarea.inputValue()
     expect(value).toContain('Photosynthesis')
   })
 
@@ -79,111 +92,127 @@ test.describe('Short Answer & Extended Response', () => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Submit'))
 
-    // Answer MC
-    const optB = page.locator('text=B) Blue').first()
-    if (await optB.isVisible()) await optB.click()
-    await page.waitForTimeout(300)
+    // Q1: MC — B) Blue (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
 
-    // Fill short answers
-    const textareas = page.locator('textarea')
-    const count = await textareas.count()
-    for (let i = 0; i < count; i++) {
-      await textareas.nth(i).fill('Test answer for question ' + (i + 1))
-    }
-    await page.waitForTimeout(300)
+    // Q2: short answer
+    const q2 = page.locator('[data-testid="text-answer"]')
+    if (await q2.isVisible()) await q2.fill('Test answer for question 2')
+    await clickNext(page)
 
-    // Submit
-    const submitBtn = page.locator('button:has-text("Submit")').first()
-    if (await submitBtn.isVisible()) {
-      await submitBtn.click()
-      await page.waitForTimeout(5000)
-      const body = await page.textContent('body')
-      const hasResult = body.includes('Complete') || body.includes('Submitted')
-        || body.includes('score') || body.includes('pending')
-        || body.includes('already submitted') || body.includes('points')
-        || body.includes('Something went wrong') || body.includes('Failed')
-      expect(hasResult).toBeTruthy()
-    }
+    // Q3: short answer
+    const q3 = page.locator('[data-testid="text-answer"]')
+    if (await q3.isVisible()) await q3.fill('Test answer for question 3')
+    await clickNext(page)
+
+    // Q4: extended response
+    const q4 = page.locator('[data-testid="text-answer"]')
+    if (await q4.isVisible()) await q4.fill('Test answer for question 4')
+
+    await finishAndSubmit(page)
+    const body = await page.textContent('body')
+    const hasResult = body.includes('Complete') || body.includes('Submitted')
+      || body.includes('score') || body.includes('pending')
+      || body.includes('already submitted') || body.includes('points')
+      || body.includes('Something went wrong') || body.includes('Failed')
+    expect(hasResult).toBeTruthy()
   })
 
   test('MC is scored but written is pending after submission', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Pending'))
 
-    // Answer MC correctly
-    const optB = page.locator('text=B) Blue').first()
-    if (await optB.isVisible()) await optB.click()
-    await page.waitForTimeout(300)
+    // Q1: MC — B) Blue (correct, index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
 
-    // Fill written answers
-    const textareas = page.locator('textarea')
-    const count = await textareas.count()
-    for (let i = 0; i < count; i++) {
-      await textareas.nth(i).fill('Student response text here.')
-    }
+    // Q2: short answer
+    const q2 = page.locator('[data-testid="text-answer"]')
+    if (await q2.isVisible()) await q2.fill('Student response text here.')
+    await clickNext(page)
 
-    const submitBtn = page.locator('button:has-text("Submit")').first()
-    if (await submitBtn.isVisible()) {
-      await submitBtn.click()
-      await page.waitForTimeout(5000)
-      const body = await page.textContent('body')
-      // Should show either a partial score or pending indicator
-      const hasScoreInfo = body.includes('score') || body.includes('pending')
-        || body.includes('Complete') || body.includes('Submitted')
-        || body.includes('points') || body.includes('Something went wrong')
-        || body.includes('Failed')
-      expect(hasScoreInfo).toBeTruthy()
-    }
+    // Q3: short answer
+    const q3 = page.locator('[data-testid="text-answer"]')
+    if (await q3.isVisible()) await q3.fill('Student response text here.')
+    await clickNext(page)
+
+    // Q4: extended response
+    const q4 = page.locator('[data-testid="text-answer"]')
+    if (await q4.isVisible()) await q4.fill('Student response text here.')
+
+    await finishAndSubmit(page)
+    const body = await page.textContent('body')
+    // Should show either a partial score or pending indicator
+    const hasScoreInfo = body.includes('score') || body.includes('pending')
+      || body.includes('Complete') || body.includes('Submitted')
+      || body.includes('points') || body.includes('Something went wrong')
+      || body.includes('Failed')
+    expect(hasScoreInfo).toBeTruthy()
   })
 
   test('empty short answer still submits', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Empty'))
 
-    // Leave textareas empty, just submit
-    const submitBtn = page.locator('button:has-text("Submit")').first()
-    if (await submitBtn.isVisible()) {
-      await submitBtn.click()
-      await page.waitForTimeout(5000)
-      const body = await page.textContent('body')
-      const hasResult = body.includes('Complete') || body.includes('Submitted')
-        || body.includes('score') || body.includes('pending')
-        || body.includes('already submitted') || body.includes('points')
-        || body.includes('Something went wrong') || body.includes('Failed')
-      expect(hasResult).toBeTruthy()
-    }
+    // Navigate through all questions without filling them in
+    await clickNext(page)  // Q1 MC (no answer)
+    await clickNext(page)  // Q2 short answer (empty)
+    await clickNext(page)  // Q3 short answer (empty)
+    // Q4 extended response (empty) — finish and submit
+    await finishAndSubmit(page)
+    const body = await page.textContent('body')
+    const hasResult = body.includes('Complete') || body.includes('Submitted')
+      || body.includes('score') || body.includes('pending')
+      || body.includes('already submitted') || body.includes('points')
+      || body.includes('Something went wrong') || body.includes('Failed')
+    expect(hasResult).toBeTruthy()
   })
 
   test('long text in textarea works', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Long'))
-    const textarea = page.locator('textarea').first()
+    // Navigate to Q2 (first short answer)
+    await answerMC(page, 1)
+    await clickNext(page)
+    const textarea = page.locator('[data-testid="text-answer"]')
     const longText = 'This is a detailed response. '.repeat(50)
     await textarea.fill(longText)
     const value = await textarea.inputValue()
     expect(value.length).toBeGreaterThan(500)
   })
 
-  test('multiple textareas for multiple written questions', async ({ page }) => {
+  test('short answer textarea exists for Q2', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Multi'))
-    const textareas = page.locator('textarea')
-    const count = await textareas.count()
-    // We have 2 short answer + 1 extended response = at least 3
-    expect(count).toBeGreaterThanOrEqual(3)
+    // Navigate to Q2 (short answer)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q2 textarea should be present
+    const textarea = page.locator('[data-testid="text-answer"]')
+    expect(await textarea.isVisible()).toBeTruthy()
   })
 
-  test('short answer question text is visible', async ({ page }) => {
+  test('short answer question text is visible on Q2', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-Text'))
+    // Navigate to Q2 to see its question text
+    await answerMC(page, 1)
+    await clickNext(page)
     const body = await page.textContent('body')
     expect(body).toContain('Describe the water cycle')
-    expect(body).toContain('What causes seasons')
   })
 
-  test('extended response question text is visible', async ({ page }) => {
+  test('extended response question text is visible on Q4', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     await startAssessment(page, joinCode, uniqueName('SA-ExtText'))
+    // Navigate to Q4 (extended response)
+    await answerMC(page, 1)
+    await clickNext(page)
+    await page.locator('[data-testid="text-answer"]').fill('q2 answer')
+    await clickNext(page)
+    await page.locator('[data-testid="text-answer"]').fill('q3 answer')
+    await clickNext(page)
     const body = await page.textContent('body')
     expect(body).toContain('photosynthesis')
   })
