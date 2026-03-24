@@ -11,7 +11,7 @@ import React, { useEffect } from "react";
  *   streak: number — consecutive correct answers
  *   onNext: () => void — callback to advance
  */
-export default function QuestionFeedback({ isCorrect, points, maxPoints, streak, onNext }) {
+export default function QuestionFeedback({ isCorrect, points, maxPoints, streak, onNext, hideStreak }) {
   useEffect(function() {
     var timer = setTimeout(onNext, 1500);
     return function() { clearTimeout(timer); };
@@ -59,7 +59,7 @@ export default function QuestionFeedback({ isCorrect, points, maxPoints, streak,
       </div>
 
       {/* Streak indicator */}
-      {isCorrect && streak > 1 && (
+      {isCorrect && streak > 1 && !hideStreak && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <div style={{ display: "flex", gap: "6px" }}>
             {Array.from({ length: Math.min(streak, 10) }).map(function(_, i) {

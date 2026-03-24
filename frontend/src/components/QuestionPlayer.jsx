@@ -56,6 +56,7 @@ export default function QuestionPlayer({
   var totalQuestions = flatQuestions.length;
   var [currentIndex, setCurrentIndex] = useState(0);
   var [showFeedback, setShowFeedback] = useState(false);
+  var [feedbackResult, setFeedbackResult] = useState(null); // { isCorrect, points, maxPoints }
   var [streak, setStreak] = useState(0);
   var [showConfirmModal, setShowConfirmModal] = useState(false);
   var [timeRemaining, setTimeRemaining] = useState(
@@ -132,6 +133,7 @@ export default function QuestionPlayer({
         } else {
           setStreak(0);
         }
+        setFeedbackResult({ isCorrect: correct, points: correct ? (q.points || 1) : 0, maxPoints: q.points || 1 });
         // Small delay so the UI shows the selection before overlay
         setTimeout(function() { setShowFeedback(true); }, 300);
       }
@@ -140,6 +142,7 @@ export default function QuestionPlayer({
 
   function goToNext() {
     setShowFeedback(false);
+    setFeedbackResult(null);
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex(currentIndex + 1);
     }
@@ -175,7 +178,7 @@ export default function QuestionPlayer({
       });
     }, 1000);
     return function() { clearInterval(timerRef.current); };
-  }, [timeRemaining !== null]);
+  }, []);
 
   function formatTime(seconds) {
     var m = Math.floor(seconds / 60);
@@ -585,18 +588,16 @@ export default function QuestionPlayer({
       </div>
 
       {/* ── Feedback Overlay (assignments, MC/TF only) ── */}
-      {showFeedback && (function() {
-        var correct = checkCorrectness(q, currentAnswer);
-        return (
-          <QuestionFeedback
-            isCorrect={correct}
-            points={correct ? (q.points || 1) : 0}
-            maxPoints={q.points || 1}
-            streak={streak}
-            onNext={goToNext}
-          />
-        );
-      })()}
+      {showFeedback && feedbackResult && (
+        <QuestionFeedback
+          isCorrect={feedbackResult.isCorrect}
+          points={feedbackResult.points}
+          maxPoints={feedbackResult.maxPoints}
+          streak={streak}
+          onNext={goToNext}
+          hideStreak={isReducedDistractions}
+        />
+      )}
 
       {/* ── Confirmation Modal ── */}
       {showConfirmModal && (
