@@ -445,11 +445,13 @@ def clever_callback():
                         clever_user["clever_id"], clever_user.get("email", ""))
             return redirect("/?clever_error=student_not_enrolled")
 
-    # Reject unknown roles
-    if clever_user["type"] not in ("teacher", "district_admin", "school_admin", "staff"):
-        logger.warning("AUDIT: Clever login rejected unsupported role: type=%s email=%s clever_id=%s",
-                        clever_user["type"], clever_user.get("email", ""), clever_user.get("clever_id", ""))
-        return redirect("/?clever_error=unsupported_role")
+    # Any non-student Clever user can access the teacher dashboard
+    # (teacher, district_admin, school_admin, staff, contact, etc.)
+    if clever_user["type"] == "student":
+        # Already handled above — this is a safety net
+        return redirect("/?clever_error=students_use_portal")
+    logger.info("AUDIT: Clever login accepted: type=%s email=%s clever_id=%s",
+                clever_user["type"], clever_user.get("email", ""), clever_user.get("clever_id", ""))
 
     # Clear any existing session (shared device support — Clever requirement)
     session.clear()
