@@ -447,6 +447,8 @@ def clever_callback():
 
     # Reject unknown roles
     if clever_user["type"] not in ("teacher", "district_admin", "school_admin", "staff"):
+        logger.warning("AUDIT: Clever login rejected unsupported role: type=%s email=%s clever_id=%s",
+                        clever_user["type"], clever_user.get("email", ""), clever_user.get("clever_id", ""))
         return redirect("/?clever_error=unsupported_role")
 
     # Clear any existing session (shared device support — Clever requirement)
