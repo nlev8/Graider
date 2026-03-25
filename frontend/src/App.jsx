@@ -1979,6 +1979,7 @@ function App() {
     timeLimit: null,
     applyAccommodations: true,
     contentType: 'assessment',
+    assessmentCategory: 'formative',
     showScoreImmediately: false,
     showCorrectAnswers: false,
     allowMultipleAttempts: false,
@@ -4543,6 +4544,7 @@ ${signature}`;
       setPublishSettings(prev => ({
         ...prev,
         contentType: 'assignment',
+        assessmentCategory: null,
         showScoreImmediately: true,
         showCorrectAnswers: true,
         allowMultipleAttempts: true,
@@ -4588,6 +4590,7 @@ ${signature}`;
           show_correct_answers: publishSettings.showCorrectAnswers,
           show_score_immediately: publishSettings.showScoreImmediately,
           content_type: publishSettings.contentType,
+          assessment_category: publishSettings.assessmentCategory,
           allow_multiple_attempts: publishSettings.allowMultipleAttempts,
           period: publishSettings.period,
           restricted_students: restrictedStudents,
@@ -4605,6 +4608,7 @@ ${signature}`;
           show_correct_answers: publishSettings.showCorrectAnswers,
           show_score_immediately: publishSettings.showScoreImmediately,
           content_type: publishSettings.contentType,
+          assessment_category: publishSettings.assessmentCategory,
           allow_multiple_attempts: publishSettings.allowMultipleAttempts,
           period: publishSettings.period,
           restricted_students: restrictedStudents,
@@ -16062,6 +16066,46 @@ ${signature}`;
                 <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>Due date, retakes allowed, instant MC scores</div>
               </button>
             </div>
+
+            {/* Assessment Category Toggle — assessments only */}
+            {publishSettings.contentType === 'assessment' && (
+            <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+              <button
+                onClick={() => setPublishSettings({...publishSettings, assessmentCategory: 'formative'})}
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid var(--glass-border)",
+                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.15)" : "var(--glass-bg)",
+                  color: publishSettings.assessmentCategory === 'formative' ? "#86efac" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>Formative</div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.8 }}>Quizzes, checks for understanding</div>
+              </button>
+              <button
+                onClick={() => setPublishSettings({...publishSettings, assessmentCategory: 'summative'})}
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid var(--glass-border)",
+                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.15)" : "var(--glass-bg)",
+                  color: publishSettings.assessmentCategory === 'summative' ? "#fca5a5" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>Summative</div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.8 }}>Unit tests, midterms, finals</div>
+              </button>
+            </div>
+            )}
 
             {/* Class Selection */}
             <div style={{ marginBottom: "15px" }}>

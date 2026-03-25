@@ -69,6 +69,11 @@ def publish_assessment():
         if content_type not in ('assessment', 'assignment'):
             content_type = 'assessment'
 
+        # Validate assessment_category
+        assessment_category = settings.get('assessment_category', 'formative')
+        if assessment_category not in ('formative', 'summative'):
+            assessment_category = 'formative'
+
         # Prepare settings
         db_settings = {
             "time_limit_minutes": settings.get('time_limit_minutes'),
@@ -77,6 +82,7 @@ def publish_assessment():
             "show_score_immediately": settings.get('show_score_immediately', True),
             "require_name": settings.get('require_name', True),
             "content_type": content_type,
+            "assessment_category": assessment_category,
             "period": period,
             "restricted_students": restricted_students,
             "student_accommodations": student_accommodations,

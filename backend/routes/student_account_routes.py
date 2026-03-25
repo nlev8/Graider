@@ -336,6 +336,14 @@ def publish_to_class():
 
         join_code = _generate_class_code()
 
+        # Validate assessment_category for assessments
+        if content_type == 'assessment':
+            cat = settings.get('assessment_category', 'formative')
+            if cat not in ('formative', 'summative'):
+                settings['assessment_category'] = 'formative'
+            else:
+                settings['assessment_category'] = cat
+
         result = db.table('published_content').insert({
             'teacher_id': teacher_id,
             'class_id': class_id,
