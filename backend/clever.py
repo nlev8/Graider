@@ -88,7 +88,7 @@ async def exchange_code_for_token(code):
                 },
             )
             if resp.status_code != 200:
-                logger.error("Clever token exchange failed: %s %s", resp.status_code, resp.text)
+                logger.error("Clever token exchange failed: %s %s (redirect_uri=%s)", resp.status_code, resp.text, config["redirect_uri"])
                 return None
             return resp.json()
         except httpx.HTTPError as e:
