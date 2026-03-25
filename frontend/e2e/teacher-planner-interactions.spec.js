@@ -120,34 +120,31 @@ test.describe('Multi-Student Same Assessment', () => {
 
   test('student 1 all correct → 100%', async ({ page }) => {
     test.skip(!joinCode)
-    const { startAssessment, uniqueName } = await import('./helpers.js')
+    const { startAssessment, uniqueName, answerMC, clickNext, finishAndSubmit } = await import('./helpers.js')
     await startAssessment(page, joinCode, uniqueName('S1'))
-    await page.locator('text=B) 4').first().click(); await page.waitForTimeout(200)
-    await page.locator('text=C) Paris').first().click(); await page.waitForTimeout(200)
-    await page.locator('text=B) Jupiter').first().click(); await page.waitForTimeout(200)
-    await page.locator('button:has-text("Submit")').first().click(); await page.waitForTimeout(3000)
+    await answerMC(page, 1); await clickNext(page)  // B) 4
+    await answerMC(page, 2); await clickNext(page)  // C) Paris
+    await answerMC(page, 1); await finishAndSubmit(page)  // B) Jupiter
     expect(await page.textContent('body')).toContain('100%')
   })
 
   test('student 2 all wrong → 0%', async ({ page }) => {
     test.skip(!joinCode)
-    const { startAssessment, uniqueName } = await import('./helpers.js')
+    const { startAssessment, uniqueName, answerMC, clickNext, finishAndSubmit } = await import('./helpers.js')
     await startAssessment(page, joinCode, uniqueName('S2'))
-    await page.locator('text=A) 3').first().click(); await page.waitForTimeout(200)
-    await page.locator('text=A) London').first().click(); await page.waitForTimeout(200)
-    await page.locator('text=A) Mars').first().click(); await page.waitForTimeout(200)
-    await page.locator('button:has-text("Submit")').first().click(); await page.waitForTimeout(3000)
+    await answerMC(page, 0); await clickNext(page)  // A) 3
+    await answerMC(page, 0); await clickNext(page)  // A) London
+    await answerMC(page, 0); await finishAndSubmit(page)  // A) Mars
     expect(await page.textContent('body')).toContain('0%')
   })
 
   test('student 3 partial → 67%', async ({ page }) => {
     test.skip(!joinCode)
-    const { startAssessment, uniqueName } = await import('./helpers.js')
+    const { startAssessment, uniqueName, answerMC, clickNext, finishAndSubmit } = await import('./helpers.js')
     await startAssessment(page, joinCode, uniqueName('S3'))
-    await page.locator('text=B) 4').first().click(); await page.waitForTimeout(200)
-    await page.locator('text=A) London').first().click(); await page.waitForTimeout(200)
-    await page.locator('text=B) Jupiter').first().click(); await page.waitForTimeout(200)
-    await page.locator('button:has-text("Submit")').first().click(); await page.waitForTimeout(3000)
+    await answerMC(page, 1); await clickNext(page)  // B) 4
+    await answerMC(page, 0); await clickNext(page)  // A) London (wrong)
+    await answerMC(page, 1); await finishAndSubmit(page)  // B) Jupiter
     expect(await page.textContent('body')).toContain('67%')
   })
 })

@@ -10,6 +10,7 @@
  * - Results display
  */
 import { test, expect } from '@playwright/test'
+import { answerMC, answerTF, clickNext, finishAndSubmit } from './helpers.js'
 
 test.describe('Student Portal — Join Code Flow', () => {
 
@@ -156,7 +157,7 @@ test.describe('Student Portal — Assessment Taking', () => {
     await startBtn.click()
     await page.waitForTimeout(1000)
 
-    // Should now show questions
+    // Should now show Q1
     const body = await page.textContent('body')
     expect(body).toContain('What is 2 + 2?')
   })
@@ -172,10 +173,10 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
-    // Click an MC option (B) 4)
-    const optionB = page.locator('text=B) 4').first()
-    if (await optionB.isVisible()) {
-      await optionB.click()
+    // Q1 is MC — click option B (index 1 = B) 4)
+    const optB = page.locator('[data-testid="mc-option-1"]')
+    if (await optB.isVisible()) {
+      await optB.click()
       await page.waitForTimeout(500)
       // The option should be highlighted (selected state)
     }
@@ -191,8 +192,12 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
-    // Click True
-    const trueBtn = page.locator('text=True').first()
+    // Q1 is MC — advance to Q2 (TF)
+    await answerMC(page, 1)
+    await clickNext(page)
+
+    // Now on Q2 (TF: "The sky is blue")
+    const trueBtn = page.locator('[data-testid="tf-option-true"]')
     if (await trueBtn.isVisible()) {
       await trueBtn.click()
       await page.waitForTimeout(500)
@@ -209,6 +214,13 @@ test.describe('Student Portal — Assessment Taking', () => {
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
+    // Navigate past Q1 (MC) and Q2 (TF) to reach Q3 (matching)
+    await answerMC(page, 1)  // Q1
+    await clickNext(page)
+    await answerTF(page, 'true')  // Q2
+    await clickNext(page)
+
+    // Now on Q3 (matching)
     const body = await page.textContent('body')
     expect(body).toContain('Cat')
     expect(body).toContain('Dog')
@@ -219,39 +231,33 @@ test.describe('Student Portal — Assessment Taking', () => {
   test('full submission flow — answer and submit', async ({ page }) => {
     test.skip(!joinCode, 'No join code — API not available')
     // Use unique name to avoid duplicate submission rejection
-    const uniqueName = 'E2E Student ' + Date.now()
+    const uniqueStudentName = 'E2E Student ' + Date.now()
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
 
     // Enter name and start
-    await page.locator('input[placeholder*="full name" i]').first().fill(uniqueName)
+    await page.locator('input[placeholder*="full name" i]').first().fill(uniqueStudentName)
     await page.locator('button:has-text("Start")').first().click()
     await page.waitForTimeout(1000)
 
-    // Answer MC: click "B) 4"
-    const optionB = page.locator('text=B) 4').first()
-    if (await optionB.isVisible()) await optionB.click()
-    await page.waitForTimeout(300)
+    // Q1: MC — B) 4 (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
 
-    // Answer TF: click "True"
-    const trueBtn = page.locator('text=True').first()
-    if (await trueBtn.isVisible()) await trueBtn.click()
-    await page.waitForTimeout(300)
+    // Q2: TF — True ("The sky is blue")
+    await answerTF(page, 'true')
+    await clickNext(page)
 
-    // Submit
-    const submitBtn = page.locator('button:has-text("Submit")').first()
-    if (await submitBtn.isVisible()) {
-      await submitBtn.click()
-      await page.waitForTimeout(5000)
+    // Q3: Matching — last question, use finishAndSubmit
+    await finishAndSubmit(page)
 
-      // Should show results or the error boundary (if a React error occurred)
-      const body = await page.textContent('body')
-      const hasResults = body.includes('Complete') || body.includes('Submitted')
-        || body.includes('score') || body.includes('pending')
-        || body.includes('already submitted') || body.includes('points')
-        || body.includes('Something went wrong')  // ErrorBoundary caught a crash — still a valid test output
-      expect(hasResults).toBeTruthy()
-    }
+    // Should show results or the error boundary (if a React error occurred)
+    const body = await page.textContent('body')
+    const hasResults = body.includes('Complete') || body.includes('Submitted')
+      || body.includes('score') || body.includes('pending')
+      || body.includes('already submitted') || body.includes('points')
+      || body.includes('Something went wrong')  // ErrorBoundary caught a crash — still a valid test output
+    expect(hasResults).toBeTruthy()
   })
 })

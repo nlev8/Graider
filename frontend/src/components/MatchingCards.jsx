@@ -160,7 +160,6 @@ export default function MatchingCards({
   function tryMatch(tIdx, sdIdx) {
     var defOriginalIdx = shuffledDefs[sdIdx].originalIdx;
     var expectedDefIdx = correctDefForTerm[tIdx];
-
     if (defOriginalIdx === expectedDefIdx) {
       // Correct match!
       setJustMatched({ term: tIdx, def: sdIdx });

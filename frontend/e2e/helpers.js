@@ -64,6 +64,62 @@ function uniqueName(prefix = 'Student') {
   return `${prefix} ${Date.now()}`
 }
 
+/**
+ * Answer an MC question in the one-at-a-time QuestionPlayer.
+ * Clicks the Kahoot-style button by option index (0-3).
+ */
+async function answerMC(page, optionIndex) {
+  await page.locator('[data-testid="mc-option-' + optionIndex + '"]').click()
+  await page.waitForTimeout(400)
+}
+
+/**
+ * Answer a TF question in the one-at-a-time QuestionPlayer.
+ * value: "true" or "false"
+ */
+async function answerTF(page, value) {
+  await page.locator('[data-testid="tf-option-' + value.toLowerCase() + '"]').click()
+  await page.waitForTimeout(400)
+}
+
+/**
+ * Click the Next button to advance to the next question.
+ */
+async function clickNext(page) {
+  var btn = page.locator('[data-testid="btn-next"]')
+  await btn.waitFor({ state: 'visible', timeout: 5000 })
+  // Wait for button to become enabled (matching questions have async state updates)
+  await page.waitForFunction(function() {
+    var el = document.querySelector('[data-testid="btn-next"]')
+    return el && !el.disabled
+  }, { timeout: 5000 }).catch(function() {})
+  await btn.click()
+  await page.waitForTimeout(500)
+}
+
+/**
+ * Click Finish, then confirm submission in the modal.
+ */
+async function finishAndSubmit(page) {
+  await page.locator('[data-testid="btn-finish"]').click()
+  await page.waitForTimeout(500)
+  await page.locator('[data-testid="btn-confirm-submit"]').click()
+  await page.waitForTimeout(3000)
+}
+
+/**
+ * Dismiss the feedback overlay (assignments only) by clicking it.
+ * Waits briefly for the overlay to appear, then clicks. No-ops if no overlay.
+ */
+async function dismissFeedback(page) {
+  try {
+    var overlay = page.locator('text=Tap anywhere to continue')
+    await overlay.waitFor({ state: 'visible', timeout: 800 })
+    await overlay.click()
+    await page.waitForTimeout(300)
+  } catch (e) {}
+}
+
 // ══════════════════════════════════════════
 // TEST ASSESSMENT TEMPLATES
 // ══════════════════════════════════════════
@@ -224,5 +280,10 @@ export {
   deleteAssessment,
   startAssessment,
   uniqueName,
+  answerMC,
+  answerTF,
+  clickNext,
+  finishAndSubmit,
+  dismissFeedback,
   ASSESSMENTS,
 }

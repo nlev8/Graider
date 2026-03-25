@@ -8,7 +8,7 @@
  * - Matching in mixed assessments
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, ASSESSMENTS } from './helpers.js'
+import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
 
 test.describe('Matching Questions — Rendering', () => {
   let joinCode
@@ -102,9 +102,8 @@ test.describe('Matching Questions — Interactions', () => {
   test('submit with no matching answers still works', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
-    // Submit without making any matches
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // matchingOnly has one question — it is the last, so use finishAndSubmit
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body.includes('Complete') || body.includes('Submitted') || body.includes('points') || body.includes('0%')).toBeTruthy()
   })
@@ -125,8 +124,8 @@ test.describe('Matching Questions — Interactions', () => {
     await page.waitForTimeout(200)
     await page.locator('text=Movement of water').first().click()
     await page.waitForTimeout(300)
-    await page.locator('button:has-text("Submit")').first().click()
-    await page.waitForTimeout(3000)
+    // matchingOnly has one question — use finishAndSubmit
+    await finishAndSubmit(page)
     const body = await page.textContent('body')
     expect(body.includes('Complete') || body.includes('Submitted') || body.includes('points') || body.includes('%')).toBeTruthy()
   })
@@ -137,13 +136,17 @@ test.describe('Matching — In Mixed Assessment', () => {
   test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mixed) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
-  test('matching renders alongside MC and TF', async ({ page }) => {
+  test('matching renders after navigating past MC and TF', async ({ page }) => {
     test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MixedMatch'))
+    // Q1: MC — B) Shakespeare (index 1)
+    await answerMC(page, 1)
+    await clickNext(page)
+    // Q2: TF — True (Shakespeare born in Stratford)
+    await answerTF(page, 'true')
+    await clickNext(page)
+    // Q3: Matching — should now see matching terms
     const body = await page.textContent('body')
-    // MC option
-    expect(body).toContain('Shakespeare')
-    // Matching terms
     expect(body).toContain('Hamlet')
   })
 
@@ -153,6 +156,12 @@ test.describe('Matching — In Mixed Assessment', () => {
     const sciCode = await publishAssessment(page.request, ASSESSMENTS.science6)
     test.skip(!sciCode)
     await startAssessment(page, sciCode, uniqueName('SciMatch'))
+    // Q1: MC — navigate to Q3 (matching) by going through Q1 and Q2
+    await answerMC(page, 2)  // Q1: C) Crust (correct)
+    await clickNext(page)
+    await answerTF(page, 'false')  // Q2: False (correct — Earth core not solid iron)
+    await clickNext(page)
+    // Q3: Matching — Earth layers
     const body = await page.textContent('body')
     expect(body).toContain('Crust')
     expect(body).toContain('Mantle')
@@ -165,6 +174,10 @@ test.describe('Matching — In Mixed Assessment', () => {
     const civCode = await publishAssessment(page.request, ASSESSMENTS.civics)
     test.skip(!civCode)
     await startAssessment(page, civCode, uniqueName('CivMatch'))
+    // Q1: MC — navigate to Q2 (matching)
+    await answerMC(page, 1)  // Q1: B) 3 branches (correct)
+    await clickNext(page)
+    // Q2: Matching — government branches
     const body = await page.textContent('body')
     expect(body).toContain('Legislative')
     expect(body).toContain('Executive')
