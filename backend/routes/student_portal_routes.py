@@ -590,7 +590,8 @@ def submit_assessment(code):
             submission_row["score"] = None
             submission_row["total_points"] = results.get('total_points')
             submission_row["percentage"] = None
-            submission_row["grading_status"] = "partial"
+            # Note: submissions table has no grading_status column
+            # Status is tracked in the results JSON instead
         else:
             submission_row["score"] = results.get('score')
             submission_row["total_points"] = results.get('total_points')

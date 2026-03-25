@@ -394,13 +394,23 @@ def clever_callback():
         return redirect("/?clever_error=missing_code")
 
     # Validate state parameter (CSRF protection)
-    # Clever Portal/Instant Login may not include state, but if we set one
-    # in the session, it MUST match. Missing expected_state = session lost = reject.
+    # Clever Portal/Instant Login sends users directly to callback without state.
+    # Three cases:
+    #   1. We set state AND Clever returned it → must match (normal OAuth flow)
+    #   2. Neither side has state → Instant Login, allow (no CSRF risk, code is single-use)
+    #   3. One side has state but not the other → session lost or spoofed, reject
     expected_state = session.pop("clever_oauth_state", None)
-    if not expected_state or state != expected_state:
+    if expected_state and state:
+        # Normal flow — both sides have state, must match
+        if state != expected_state:
+            logger.warning("Clever OAuth state mismatch")
+            return redirect("/?clever_error=state_mismatch")
+    elif expected_state or state:
+        # One side has state, other doesn't — session lost or spoofed
         logger.warning("Clever OAuth state mismatch (expected=%s, got=%s)",
                        bool(expected_state), bool(state))
         return redirect("/?clever_error=state_mismatch")
+    # else: neither has state — Instant Login flow, proceed
 
     # Exchange code for token
     token_data = _run_async(exchange_code_for_token(code))
