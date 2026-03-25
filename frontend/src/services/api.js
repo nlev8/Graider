@@ -258,9 +258,13 @@ export async function getAggregatedAssessmentResults(category) {
 
 // ============ Analytics ============
 
-export async function getAnalytics(period = 'all') {
-  const url = period === 'all' ? '/api/analytics' : `/api/analytics?period=${encodeURIComponent(period)}`
-  return fetchApi(url)
+export async function getAnalytics(period, source) {
+  var params = [];
+  if (period && period !== 'all') params.push('period=' + encodeURIComponent(period));
+  if (source && source !== 'all') params.push('source=' + encodeURIComponent(source));
+  var url = '/api/analytics';
+  if (params.length > 0) url += '?' + params.join('&');
+  return fetchApi(url);
 }
 
 export async function exportDistrictReport() {

@@ -2365,6 +2365,7 @@ export default React.memo(function AnalyticsTab({
   savedAssignments,
   savedAssignmentData,
   addToast,
+  assessmentResults,
 }) {
   // --- Analytics-specific state ---
   const [analytics, setAnalytics] = useState(null);
@@ -2375,6 +2376,8 @@ export default React.memo(function AnalyticsTab({
   const [analyticsClassPeriod, setAnalyticsClassPeriod] = useState("");
   const [analyticsClassStudents, setAnalyticsClassStudents] = useState([]);
   const [periodStudentMap, setPeriodStudentMap] = useState({});
+  const [analyticsSource, setAnalyticsSource] = useState('all');
+  const [selectedItemAnalysis, setSelectedItemAnalysis] = useState(null);
 
 
   // --- Effects ---
@@ -2385,7 +2388,7 @@ export default React.memo(function AnalyticsTab({
     setChartsOverlay(false);
     setChartsReady(false);
     api
-      .getAnalytics(analyticsPeriod)
+      .getAnalytics(analyticsPeriod, analyticsSource)
       .then((data) => {
         setAnalytics(data);
         // Phase 1: show overlay spinner (no charts yet)
@@ -2396,7 +2399,7 @@ export default React.memo(function AnalyticsTab({
         console.error(err);
         setAnalyticsLoading(false);
       });
-  }, [analyticsPeriod, status.results.length]);
+  }, [analyticsPeriod, analyticsSource, status.results.length]);
 
   // Phase 2: after overlay paints, mount charts underneath
   useEffect(() => {
@@ -2698,6 +2701,120 @@ export default React.memo(function AnalyticsTab({
                           </button>
                         </div>
                       </div>
+
+                      {/* Source Filter */}
+                      <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+                        {[{key: 'all', label: 'All'}, {key: 'assignments', label: 'Assignments'}, {key: 'assessments', label: 'Assessments'}].map(function(opt) {
+                          var isActive = analyticsSource === opt.key;
+                          return React.createElement('button', {
+                            key: opt.key,
+                            onClick: function() { setAnalyticsSource(opt.key); },
+                            style: {
+                              padding: "6px 14px", borderRadius: "8px", border: "none",
+                              fontSize: "0.8rem", fontWeight: isActive ? 600 : 400, cursor: "pointer",
+                              background: isActive ? "#7c3aed" : "rgba(255,255,255,0.06)",
+                              color: isActive ? "white" : "var(--text-secondary)",
+                              transition: "all 0.2s",
+                            },
+                          }, opt.label);
+                        })}
+                      </div>
+
+                      {/* Formative vs Summative Summary */}
+                      {analytics && analytics.assessment_category_summary && (analytics.assessment_category_summary.formative_count > 0 || analytics.assessment_category_summary.summative_count > 0) && (
+                        <div style={{
+                          padding: "16px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+                          borderRadius: "12px", marginBottom: "16px",
+                        }}>
+                          <div style={{ fontWeight: 700, fontSize: "0.9rem", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <Icon name="BarChart3" size={16} />
+                            Assessment Category Comparison
+                          </div>
+                          <div style={{ display: "flex", gap: "20px" }}>
+                            <div style={{ flex: 1, textAlign: "center", padding: "12px", background: "rgba(34,197,94,0.08)", borderRadius: "8px", border: "1px solid rgba(34,197,94,0.2)" }}>
+                              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#22c55e" }}>
+                                {analytics.assessment_category_summary.formative_average != null ? analytics.assessment_category_summary.formative_average + '%' : '\u2014'}
+                              </div>
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                {'Formative Avg (' + analytics.assessment_category_summary.formative_count + ' scores)'}
+                              </div>
+                            </div>
+                            <div style={{ flex: 1, textAlign: "center", padding: "12px", background: "rgba(239,68,68,0.08)", borderRadius: "8px", border: "1px solid rgba(239,68,68,0.2)" }}>
+                              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#ef4444" }}>
+                                {analytics.assessment_category_summary.summative_average != null ? analytics.assessment_category_summary.summative_average + '%' : '\u2014'}
+                              </div>
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                {'Summative Avg (' + analytics.assessment_category_summary.summative_count + ' scores)'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Item Analysis Panel */}
+                      {assessmentResults && assessmentResults.length > 0 && (
+                        <div style={{
+                          padding: "16px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+                          borderRadius: "12px", marginBottom: "16px",
+                        }}>
+                          <div style={{ fontWeight: 700, fontSize: "0.9rem", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <Icon name="ClipboardList" size={16} />
+                            Item Analysis
+                          </div>
+                          <select
+                            value={selectedItemAnalysis || ''}
+                            onChange={function(e) { setSelectedItemAnalysis(e.target.value); }}
+                            style={{
+                              width: "100%", padding: "8px 12px", borderRadius: "8px",
+                              border: "1px solid var(--glass-border)", background: "var(--surface)",
+                              color: "var(--text-primary)", fontSize: "0.85rem", marginBottom: "12px",
+                            }}
+                          >
+                            {assessmentResults.map(function(a) {
+                              return React.createElement('option', {key: a.id, value: a.id}, a.title + ' (' + (a.assessment_category || 'formative') + ')');
+                            })}
+                          </select>
+                          {(function() {
+                            var selected = assessmentResults.find(function(a) { return a.id === (selectedItemAnalysis || (assessmentResults[0] && assessmentResults[0].id)); });
+                            if (!selected || !selected.question_analysis) return null;
+                            return selected.question_analysis.map(function(qa, qi) {
+                              var pct = qa.percent_correct;
+                              var barColor = pct == null ? '#6b7280' : pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                              return React.createElement('div', {
+                                key: qi,
+                                style: { marginBottom: "8px" },
+                              }, [
+                                React.createElement('div', {key: 'label', style: {display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "3px"}}, [
+                                  React.createElement('span', {key: 'q'}, 'Q' + qa.number + ' (' + qa.type + ')'),
+                                  React.createElement('span', {key: 'p', style: {fontWeight: 600, color: barColor}},
+                                    pct != null ? pct + '%' : (qa.graded_count != null ? qa.graded_count + ' graded' : 'N/A')),
+                                ]),
+                                pct != null && React.createElement('div', {key: 'bar', style: {
+                                  width: "100%", height: "16px", background: "rgba(255,255,255,0.06)", borderRadius: "4px", overflow: "hidden",
+                                }}, React.createElement('div', {style: {
+                                  width: pct + '%', height: "100%", background: barColor, borderRadius: "4px",
+                                  transition: "width 0.3s ease",
+                                }})),
+                                qa.response_distribution && React.createElement('div', {key: 'dist', style: {marginTop: "4px", paddingLeft: "8px"}},
+                                  Object.keys(qa.response_distribution).map(function(opt) {
+                                    var d = qa.response_distribution[opt];
+                                    return React.createElement('div', {key: opt, style: {
+                                      display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", marginBottom: "2px",
+                                    }}, [
+                                      React.createElement('span', {key: 'l', style: {width: "24px", fontWeight: d.is_correct ? 700 : 400}}, opt),
+                                      React.createElement('span', {key: 'c'}, d.count + ' (' + d.percent + '%)'),
+                                      d.is_correct && React.createElement(Icon, {key: 'chk', name: "Check", size: 10, color: "#22c55e"}),
+                                    ]);
+                                  })
+                                ),
+                                qa.graded_count != null && !qa.response_distribution && React.createElement('div', {
+                                  key: 'sa', style: {fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px"},
+                                }, 'Graded: ' + qa.graded_count + ' | Pending: ' + (qa.pending_count || 0) + (qa.average_score != null ? ' | Avg: ' + qa.average_score + '/' + qa.max_points : '')),
+                              ]);
+                            });
+                          })()}
+                        </div>
+                      )}
 
                       {chartsReady && (
                         <>
