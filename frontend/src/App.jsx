@@ -1374,6 +1374,7 @@ function App() {
   }
 
   const [portalSubmissions, setPortalSubmissions] = useState([]);
+  const [assessmentResults, setAssessmentResults] = useState([]);
   const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
   const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
   const [resultsAssignmentFilter, setResultsAssignmentFilter] = useState(""); // Filter results by assignment
@@ -1402,6 +1403,20 @@ function App() {
     loadPortalSubmissions();
     const interval = setInterval(loadPortalSubmissions, 30000);
     return () => clearInterval(interval);
+  }, [user, showTutorial, userApproved]);
+
+  // Fetch assessment results for Results tab
+  useEffect(function() {
+    if (!user || showTutorial || userApproved !== true) return;
+    var loadAssessmentResults = async function() {
+      try {
+        var data = await api.getAggregatedAssessmentResults();
+        if (data.assessments) setAssessmentResults(data.assessments);
+      } catch (e) {}
+    };
+    loadAssessmentResults();
+    var interval = setInterval(loadAssessmentResults, 30000);
+    return function() { clearInterval(interval); };
   }, [user, showTutorial, userApproved]);
 
   // Toast notifications
@@ -9139,6 +9154,7 @@ ${signature}`;
                   studentAccommodations={studentAccommodations}
                   sortedPeriods={sortedPeriods}
                   portalSubmissions={portalSubmissions}
+                  assessmentResults={assessmentResults}
                   vportalConfigured={vportalConfigured}
                   batchExportLoading={batchExportLoading}
                   outlookExportLoading={outlookExportLoading}
@@ -9579,6 +9595,7 @@ ${signature}`;
                     savedAssignments={savedAssignments}
                     savedAssignmentData={savedAssignmentData}
                     addToast={addToast}
+                    assessmentResults={assessmentResults}
                   />
                 </Suspense>
               )}

@@ -248,6 +248,14 @@ export async function parseDocument(file) {
   return response.json()
 }
 
+// ============ Assessment Results ============
+
+export async function getAggregatedAssessmentResults(category) {
+  var url = '/api/assessment-results'
+  if (category) url += '?category=' + encodeURIComponent(category)
+  return fetchApi(url)
+}
+
 // ============ Analytics ============
 
 export async function getAnalytics(period = 'all') {
@@ -1459,6 +1467,8 @@ export default {
   listResources,
   loadResource,
   deleteResource,
+  // Assessment Results (aggregated)
+  getAggregatedAssessmentResults,
   // Clever SSO & Sync
   getCleverLoginUrl,
   getCleverSession,
