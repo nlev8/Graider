@@ -303,21 +303,7 @@ def _add_graider_table(doc, header_text, graider_tag, points, style, height_twip
     )
     trPr.append(trHeight)
 
-    # Bold label to clearly mark the response area
-    rp = response_cell.paragraphs[0]
-    label_run = rp.add_run("Your Answer:")
-    label_run.bold = True
-    label_run.font.name = body_font
-    label_run.font.size = Pt(body_size)
-    label_run.font.color.rgb = RGBColor(80, 80, 80)
-
-    # Placeholder on next line
-    placeholder_para = response_cell.add_paragraph()
-    placeholder_run = placeholder_para.add_run("Type your answer here...")
-    placeholder_run.font.name = body_font
-    placeholder_run.font.size = Pt(body_size)
-    placeholder_run.font.color.rgb = RGBColor(180, 180, 180)
-    placeholder_run.font.italic = True
+    # Leave response cell empty — clean space for student to write
 
     # Add spacing after table
     spacer = doc.add_paragraph()
