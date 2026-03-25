@@ -4425,22 +4425,18 @@ def export_generated_assignment():
                         _random.seed(q_number)  # Deterministic shuffle per question
                         _random.shuffle(shuffled_defs)
                     # Build two-column table: numbered terms | lettered definitions
+                    # Use Paragraph objects for definitions so they word-wrap
+                    def_style = ParagraphStyle('MatchDef', parent=normal_style, fontSize=10)
+                    term_style = ParagraphStyle('MatchTerm', parent=normal_style, fontSize=10)
                     max_rows = max(len(q_terms), len(shuffled_defs))
                     match_data = [['', 'Terms', '', 'Definitions']]
                     for ri in range(max_rows):
                         term_num = str(ri + 1) + '.' if ri < len(q_terms) else ''
-                        term_text = q_terms[ri] if ri < len(q_terms) else ''
+                        term_text = Paragraph(q_terms[ri], term_style) if ri < len(q_terms) else ''
                         def_letter = chr(65 + ri) + '.' if ri < len(shuffled_defs) else ''
-                        def_text = shuffled_defs[ri] if ri < len(shuffled_defs) else ''
+                        def_text = Paragraph(shuffled_defs[ri], def_style) if ri < len(shuffled_defs) else ''
                         match_data.append([term_num, term_text, def_letter, def_text])
-                    # Add answer blank column for student version
-                    if not include_answers:
-                        match_data[0].append('Match')
-                        for ri in range(1, len(match_data)):
-                            match_data[ri].append('_____')
-                    col_widths = [0.3*inch, 2.2*inch, 0.3*inch, 2.8*inch]
-                    if not include_answers:
-                        col_widths.append(0.7*inch)
+                    col_widths = [0.3*inch, 2.2*inch, 0.3*inch, 3.5*inch]
                     match_tbl = Table(match_data, colWidths=col_widths)
                     match_tbl.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
