@@ -8,25 +8,7 @@ import MatchingCards from "./MatchingCards";
 import FlashcardView from "./FlashcardView";
 import MindMapView from "./MindMapView";
 import QuestionPlayer from "./QuestionPlayer";
-
-// Simple icon component for student portal
-const Icon = ({ name, size = 20, style = {} }) => {
-  const icons = {
-    ArrowRight: "→",
-    Check: "✓",
-    X: "✕",
-    Clock: "⏱",
-    Award: "🏆",
-    AlertCircle: "⚠",
-    Loader: "◌",
-    BookOpen: "📖",
-    User: "👤",
-    Send: "📤",
-  };
-  return (
-    <span style={{ fontSize: size, ...style }}>{icons[name] || "•"}</span>
-  );
-};
+import Icon from "./Icon";
 
 export default function StudentPortal({
   preloadedAssessment = null,
@@ -59,6 +41,7 @@ export default function StudentPortal({
   const [results, setResults] = useState(null);
   const [studentAccommodation, setStudentAccommodation] = useState(null);
   const [deliveryAccommodations, setDeliveryAccommodations] = useState([]);
+  const [lightMode, setLightMode] = useState(false);
 
   // Delivery accommodation preset IDs for conditional checks
   var DELIVERY_PRESET_IDS = ["extended_time_1_5x", "extended_time_2x", "extended_time_unlimited",
@@ -243,15 +226,29 @@ export default function StudentPortal({
     setAnswers((prev) => ({ ...prev, [key]: value }));
   };
 
-  // Styles
-  const containerStyle = {
+  // Styles — light/dark mode
+  const containerStyle = lightMode ? {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)",
+    color: "#1e293b",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+  } : {
     minHeight: "100vh",
     background: "linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%)",
     color: "white",
     fontFamily: "system-ui, -apple-system, sans-serif",
   };
 
-  const cardStyle = {
+  const cardStyle = lightMode ? {
+    background: "white",
+    border: "1px solid #e2e8f0",
+    borderRadius: "16px",
+    padding: "30px",
+    maxWidth: "600px",
+    width: "100%",
+    margin: "0 auto",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  } : {
     background: "rgba(255, 255, 255, 0.05)",
     backdropFilter: "blur(10px)",
     border: "1px solid rgba(255, 255, 255, 0.1)",
@@ -262,14 +259,22 @@ export default function StudentPortal({
     margin: "0 auto",
   };
 
+  var subtextColor = lightMode ? "#64748b" : "rgba(255,255,255,0.7)";
+  var borderColor = lightMode ? "#e2e8f0" : "rgba(255,255,255,0.2)";
+  var errorBg = lightMode ? "rgba(239, 68, 68, 0.1)" : "rgba(239, 68, 68, 0.2)";
+  var errorBorder = lightMode ? "#fca5a5" : "#ef4444";
+  var errorText = lightMode ? "#dc2626" : "#fca5a5";
+  var inputBg = lightMode ? "white" : "rgba(0, 0, 0, 0.3)";
+  var inputColor = lightMode ? "#1e293b" : "white";
+
   const inputStyle = {
     width: "100%",
     padding: "15px 20px",
     fontSize: "1.2rem",
-    border: "2px solid rgba(255, 255, 255, 0.2)",
+    border: "2px solid " + borderColor,
     borderRadius: "10px",
-    background: "rgba(0, 0, 0, 0.3)",
-    color: "white",
+    background: inputBg,
+    color: inputColor,
     textAlign: "center",
     letterSpacing: "0.1em",
     textTransform: "uppercase",
@@ -292,16 +297,33 @@ export default function StudentPortal({
     color: "white",
   };
 
+  // Theme toggle button
+  var themeToggle = (
+    <button
+      onClick={function() { setLightMode(!lightMode); }}
+      style={{
+        position: "fixed", top: "12px", right: "12px", zIndex: 200,
+        background: lightMode ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.1)",
+        border: "none", borderRadius: "8px", padding: "8px",
+        cursor: "pointer", color: lightMode ? "#64748b" : "rgba(255,255,255,0.6)",
+      }}
+      title={lightMode ? "Switch to dark mode" : "Switch to light mode"}
+    >
+      <Icon name={lightMode ? "Moon" : "Sun"} size={18} />
+    </button>
+  );
+
   // ============ JOIN SCREEN ============
   if (stage === "join" || stage === "loading") {
     return (
       <div style={containerStyle}>
+        {themeToggle}
         <div style={{ padding: "40px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
           <div style={{ textAlign: "center", marginBottom: "40px" }}>
-            <h1 style={{ fontSize: "2.5rem", fontWeight: 800, marginBottom: "10px" }}>
-              📝 Graider
+            <h1 style={{ fontSize: "2.5rem", fontWeight: 800, marginBottom: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "12px" }}>
+              <Icon name="FileText" size={36} /> Graider
             </h1>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "1.1rem" }}>
+            <p style={{ color: subtextColor, fontSize: "1.1rem" }}>
               Enter your join code to get started
             </p>
           </div>
@@ -351,6 +373,7 @@ export default function StudentPortal({
   if (stage === "name") {
     return (
       <div style={containerStyle}>
+        {themeToggle}
         <div style={{ padding: "40px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
           <div style={cardStyle}>
             <div style={{ textAlign: "center", marginBottom: "30px" }}>
@@ -432,6 +455,7 @@ export default function StudentPortal({
 
     return (
       <div style={containerStyle}>
+        {themeToggle}
         <QuestionPlayer
           sections={assessment?.sections}
           contentType={assessment?.settings?.content_type || "assessment"}
@@ -446,6 +470,7 @@ export default function StudentPortal({
           loading={loading}
           assessment={assessment}
           studentAccommodation={studentAccommodation}
+          lightMode={lightMode}
         />
       </div>
     );
@@ -460,6 +485,7 @@ export default function StudentPortal({
 
     return (
       <div style={containerStyle}>
+        {themeToggle}
         <div style={{ padding: "40px 20px", maxWidth: "700px", margin: "0 auto" }}>
           {/* Late submission badge */}
           {results?.is_late && (

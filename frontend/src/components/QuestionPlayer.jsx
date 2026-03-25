@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import MatchingCards from "./MatchingCards";
 import QuestionFeedback from "./QuestionFeedback";
+import Icon from "./Icon";
 
 /**
  * QuestionPlayer — One-at-a-time question engine.
@@ -34,6 +35,7 @@ export default function QuestionPlayer({
   loading,
   assessment,
   studentAccommodation,
+  lightMode,
 }) {
   // Flatten sections into ordered question array
   var flatQuestions = useMemo(function() {
@@ -205,19 +207,30 @@ export default function QuestionPlayer({
 
   // ── Kahoot button colors ──
   var KAHOOT_COLORS = ["#e21b3c", "#1368ce", "#d89e00", "#26890c"];
-  var KAHOOT_SHAPES = [
-    String.fromCharCode(9650),  // triangle
-    String.fromCharCode(9670),  // diamond
-    String.fromCharCode(9679),  // circle
-    String.fromCharCode(9632),  // square
-  ];
+  var KAHOOT_SHAPES = ["Triangle", "Diamond", "Circle", "Square"];
 
   // ── Styles ──
+  // Light/dark theme colors
+  var lm = lightMode || false;
+  var subtextColor = lm ? "#64748b" : "rgba(255,255,255,0.6)";
+  var borderClr = lm ? "#e2e8f0" : "rgba(255,255,255,0.1)";
+  var textInputBg = lm ? "white" : "rgba(0,0,0,0.3)";
+  var textInputBorder = lm ? "#cbd5e1" : "rgba(255,255,255,0.2)";
+  var textInputColor = lm ? "#1e293b" : "white";
+  var sectionColor = lm ? "#7c3aed" : "#8b5cf6";
+  var progressTrack = lm ? "#e2e8f0" : "rgba(255,255,255,0.1)";
+  var navBtnBorder = lm ? "#cbd5e1" : "rgba(255,255,255,0.3)";
+  var navBtnColor = lm ? "#1e293b" : "white";
+  var disabledBg = lm ? "#f1f5f9" : "rgba(255,255,255,0.1)";
+  var disabledColor = lm ? "#94a3b8" : "rgba(255,255,255,0.4)";
+  var accomBg = lm ? "rgba(59,130,246,0.08)" : "rgba(59,130,246,0.15)";
+  var accomBorder = lm ? "rgba(59,130,246,0.3)" : "rgba(59,130,246,0.4)";
+
   var headerStyle = {
     position: "sticky",
     top: 0,
-    background: "rgba(15, 15, 35, 0.95)",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
+    background: lm ? "rgba(248,250,252,0.95)" : "rgba(15, 15, 35, 0.95)",
+    borderBottom: "1px solid " + borderClr,
     padding: "12px 20px",
     zIndex: 100,
   };
@@ -251,7 +264,7 @@ export default function QuestionPlayer({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div>
               <h1 style={{ fontSize: isLargeText ? "1.3rem" : "1.1rem", fontWeight: 700, margin: 0 }}>{title}</h1>
-              <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)" }}>{studentName}</span>
+              <span style={{ fontSize: "0.85rem", color: subtextColor }}>{studentName}</span>
               {settings.due_date && (
                 <span style={{ fontSize: "0.8rem", color: "rgba(245,158,11,0.8)", marginLeft: "12px" }}>
                   {"Due: " + new Date(settings.due_date).toLocaleDateString()}
@@ -272,7 +285,7 @@ export default function QuestionPlayer({
               )}
               {/* Question counter */}
               {!isReducedDistractions && (
-                <span style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)" }}>
+                <span style={{ fontSize: "0.9rem", color: subtextColor }}>
                   {"Question " + (currentIndex + 1) + " of " + totalQuestions}
                 </span>
               )}
@@ -280,7 +293,7 @@ export default function QuestionPlayer({
           </div>
           {/* Progress bar */}
           {!isReducedDistractions && (
-            <div style={{ height: "4px", background: "rgba(255,255,255,0.1)", borderRadius: "2px" }}>
+            <div style={{ height: "4px", background: progressTrack, borderRadius: "2px" }}>
               <div style={{
                 height: "100%",
                 width: (((currentIndex + (isAnswered ? 1 : 0)) / totalQuestions) * 100) + "%",
@@ -297,15 +310,13 @@ export default function QuestionPlayer({
       {studentAccommodation && !isReducedDistractions && currentIndex === 0 && (
         <div style={{ maxWidth: "700px", margin: "20px auto 0", padding: "0 20px" }}>
           <div style={{
-            background: "rgba(59, 130, 246, 0.15)",
-            border: "1px solid rgba(59, 130, 246, 0.4)",
+            background: accomBg,
+            border: "1px solid " + accomBorder,
             borderRadius: "10px",
             padding: "15px 20px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "1.2rem" }}>
-                {String.fromCharCode(128203)}
-              </span>
+              <Icon name="ClipboardList" size={20} />
               <strong style={{ color: "#60a5fa" }}>Your Accommodations</strong>
             </div>
             {studentAccommodation.presets && studentAccommodation.presets.length > 0 && (
@@ -333,7 +344,7 @@ export default function QuestionPlayer({
               </ul>
             )}
             {studentAccommodation.custom_notes && (
-              <p style={{ margin: 0, color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", fontStyle: "italic" }}>
+              <p style={{ margin: 0, color: subtextColor, fontSize: "0.9rem", fontStyle: "italic" }}>
                 {studentAccommodation.custom_notes}
               </p>
             )}
@@ -346,11 +357,11 @@ export default function QuestionPlayer({
         {/* Section header */}
         {showSectionHeader && (
           <div style={{ textAlign: "center", marginBottom: "20px", width: "100%" }}>
-            <h2 style={{ fontSize: isLargeText ? "1.4rem" : "1.2rem", fontWeight: 700, color: "#8b5cf6", margin: "0 0 5px" }}>
+            <h2 style={{ fontSize: isLargeText ? "1.4rem" : "1.2rem", fontWeight: 700, color: sectionColor, margin: "0 0 5px" }}>
               {current.sectionName}
             </h2>
             {current.sectionInstructions && (
-              <p style={{ color: "rgba(255,255,255,0.6)", fontStyle: "italic", margin: 0, fontSize: "0.95rem" }}>
+              <p style={{ color: subtextColor, fontStyle: "italic", margin: 0, fontSize: "0.95rem" }}>
                 {current.sectionInstructions}
               </p>
             )}
@@ -364,7 +375,7 @@ export default function QuestionPlayer({
           width: "100%",
           padding: "20px",
         }}>
-          <div style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>
+          <div style={{ fontSize: "0.9rem", color: subtextColor, marginBottom: "8px" }}>
             {q.points + " point" + (q.points > 1 ? "s" : "")}
           </div>
           <h3 style={{
@@ -385,7 +396,7 @@ export default function QuestionPlayer({
               }}
               title="Read aloud"
             >
-              {String.fromCharCode(128264)}
+              <Icon name="Volume2" size={20} />
             </button>
           )}
         </div>
@@ -427,7 +438,7 @@ export default function QuestionPlayer({
                     boxShadow: isSelected ? "0 0 20px rgba(255,255,255,0.3)" : "none",
                   }}
                 >
-                  <span style={{ fontSize: "1.3rem", flexShrink: 0 }}>{shape}</span>
+                  <Icon name={shape} size={20} style={{ flexShrink: 0 }} />
                   <span>{opt}</span>
                 </button>
               );
@@ -505,9 +516,9 @@ export default function QuestionPlayer({
               maxWidth: "600px",
               padding: "15px",
               borderRadius: "10px",
-              border: "2px solid rgba(255,255,255,0.2)",
-              background: "rgba(0,0,0,0.3)",
-              color: "white",
+              border: "2px solid " + textInputBorder,
+              background: textInputBg,
+              color: textInputColor,
               fontSize: isLargeText ? "1.15rem" : "1rem",
               resize: "vertical",
               lineHeight: 1.6,
@@ -534,14 +545,14 @@ export default function QuestionPlayer({
                 padding: "14px 28px",
                 fontSize: "1.05rem",
                 fontWeight: 600,
-                border: "2px solid rgba(255,255,255,0.3)",
+                border: "2px solid " + navBtnBorder,
                 borderRadius: "10px",
                 cursor: "pointer",
                 background: "transparent",
-                color: "white",
+                color: navBtnColor,
               }}
             >
-              {String.fromCharCode(8592) + " Back"}
+              <Icon name="ArrowLeft" size={18} /> Back
             </button>
           )}
           {currentIndex < totalQuestions - 1 ? (
@@ -557,12 +568,12 @@ export default function QuestionPlayer({
                 border: "none",
                 borderRadius: "10px",
                 cursor: isAnswered || canGoBack ? "pointer" : "not-allowed",
-                background: isAnswered ? "linear-gradient(135deg, #8b5cf6, #6366f1)" : "rgba(255,255,255,0.1)",
-                color: isAnswered ? "white" : "rgba(255,255,255,0.4)",
+                background: isAnswered ? "linear-gradient(135deg, #8b5cf6, #6366f1)" : disabledBg,
+                color: isAnswered ? "white" : disabledColor,
                 transition: "all 0.2s ease",
               }}
             >
-              {"Next " + String.fromCharCode(8594)}
+              Next <Icon name="ArrowRight" size={18} />
             </button>
           ) : (
             <button
@@ -611,8 +622,8 @@ export default function QuestionPlayer({
           zIndex: 1000,
         }}>
           <div style={{
-            background: "rgba(30, 30, 60, 0.95)",
-            border: "1px solid rgba(255,255,255,0.2)",
+            background: lm ? "white" : "rgba(30, 30, 60, 0.95)",
+            border: "1px solid " + borderClr,
             borderRadius: "16px",
             padding: "30px",
             maxWidth: "400px",
@@ -622,7 +633,7 @@ export default function QuestionPlayer({
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "15px" }}>
               {timedOut ? "Time's Up!" : "Submit?"}
             </h2>
-            <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "8px" }}>
+            <p style={{ color: subtextColor, marginBottom: "8px" }}>
               {"You answered " + answeredCount + " of " + totalQuestions + " questions."}
             </p>
             {answeredCount < totalQuestions && (
@@ -639,7 +650,7 @@ export default function QuestionPlayer({
                     padding: "12px 24px",
                     fontSize: "1rem",
                     fontWeight: 600,
-                    border: "2px solid rgba(255,255,255,0.3)",
+                    border: "2px solid " + navBtnBorder,
                     borderRadius: "10px",
                     cursor: "pointer",
                     background: "transparent",

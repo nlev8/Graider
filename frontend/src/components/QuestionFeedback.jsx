@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import Icon from "./Icon";
 
 /**
  * QuestionFeedback — Overlay shown after answering MC/TF on assignments.
@@ -34,11 +35,10 @@ export default function QuestionFeedback({ isCorrect, points, maxPoints, streak,
     >
       {/* Checkmark or X */}
       <div style={{
-        fontSize: "5rem",
         marginBottom: "10px",
         color: isCorrect ? "#22c55e" : "#ef4444",
       }}>
-        {isCorrect ? String.fromCharCode(10003) : String.fromCharCode(10007)}
+        <Icon name={isCorrect ? "CheckCircle" : "XCircle"} size={80} />
       </div>
 
       {/* Correct/Incorrect + Points */}
