@@ -362,6 +362,8 @@ def get_analytics():
     approval_filter = request.args.get('approval', 'all')  # 'all', 'approved', 'pending', 'rejected'
     include_unmatched = request.args.get('include_unmatched', 'false').lower() == 'true'
     source = request.args.get('source', 'all')  # all | assignments | assessments
+    if source not in ('all', 'assignments', 'assessments'):
+        source = 'all'
 
     # Prefer in-memory results (Supabase) over CSV — they're always up to date
     from flask import g as _g

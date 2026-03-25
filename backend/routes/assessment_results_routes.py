@@ -167,8 +167,8 @@ def get_assessment_results():
     try:
         from backend.utils.audit import audit_log
         audit_log("VIEW_ASSESSMENT_RESULTS", "Teacher viewed assessment results", user="teacher", teacher_id=teacher_id)
-    except Exception:
-        pass
+    except Exception as audit_err:
+        _logger.warning("Audit log failed for VIEW_ASSESSMENT_RESULTS: %s", str(audit_err))
 
     assessments = []
 

@@ -346,6 +346,7 @@ export default React.memo(function ResultsTab({
   var setExpandedAssessmentId = _expandedAssessmentId[1];
   var _assessmentStudentSort = useState({field: 'student_name', dir: 'asc'});
   var assessmentStudentSort = _assessmentStudentSort[0];
+  var setAssessmentStudentSort = _assessmentStudentSort[1];
   var _questionBreakdownOpen = useState(false);
   var questionBreakdownOpen = _questionBreakdownOpen[0];
   var setQuestionBreakdownOpen = _questionBreakdownOpen[1];
@@ -526,13 +527,25 @@ export default React.memo(function ResultsTab({
                                     padding: "8px 12px", fontSize: "0.7rem", color: "var(--text-secondary)",
                                     fontWeight: 600, textTransform: "uppercase", borderBottom: "1px solid var(--glass-border)",
                                   }}, [
-                                    React.createElement('span', {key: 'n'}, 'Student'),
-                                    React.createElement('span', {key: 's'}, 'Score'),
-                                    React.createElement('span', {key: 'p'}, 'Percentage'),
-                                    React.createElement('span', {key: 'g'}, 'Grade'),
-                                    React.createElement('span', {key: 't'}, 'Time'),
-                                    React.createElement('span', {key: 'st'}, 'Status'),
-                                  ]),
+                                    {key: 'n', field: 'student_name', label: 'Student'},
+                                    {key: 's', field: 'score', label: 'Score'},
+                                    {key: 'p', field: 'percentage', label: 'Percentage'},
+                                    {key: 'g', field: 'letter_grade', label: 'Grade'},
+                                    {key: 't', field: 'time_taken_seconds', label: 'Time'},
+                                    {key: 'st', field: 'status', label: 'Status'},
+                                  ].map(function(col) {
+                                    var isActive = assessmentStudentSort.field === col.field;
+                                    return React.createElement('span', {
+                                      key: col.key,
+                                      onClick: function() {
+                                        setAssessmentStudentSort({
+                                          field: col.field,
+                                          dir: isActive && assessmentStudentSort.dir === 'asc' ? 'desc' : 'asc',
+                                        });
+                                      },
+                                      style: {cursor: "pointer", color: isActive ? "#8b5cf6" : "var(--text-secondary)"},
+                                    }, col.label + (isActive ? (assessmentStudentSort.dir === 'asc' ? ' \u25B2' : ' \u25BC') : ''));
+                                  })),
                                   ...(assessment.submissions || [])
                                     .sort(function(a, b) {
                                       var field = assessmentStudentSort.field;
