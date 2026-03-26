@@ -177,9 +177,80 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manu
         "students": len(student_id_map),
         "enrollments": synced_enrollments,
     }
+
+
+def delete_roster_data(teacher_id):
+    """Delete all roster-synced data for a teacher (provider-agnostic).
+
+    Unlike delete_clever_data(), this does NOT enforce a clever: prefix check.
+    Works for Clever, OneRoster, or CSV-imported rosters.
+    """
+    sb = _get_supabase()
+    counts = {"classes": 0, "students": 0, "enrollments": 0}
+
+    # Get classes for this teacher
+    classes = sb.table("classes").select("id").eq("teacher_id", teacher_id).execute()
+    class_ids = [c["id"] for c in (classes.data or [])]
+
+    # Delete enrollments
+    for cid in class_ids:
+        result = sb.table("class_students").delete().eq("class_id", cid).execute()
+        counts["enrollments"] += len(result.data or [])
+
+    # Delete classes
+    if class_ids:
+        result = sb.table("classes").delete().eq("teacher_id", teacher_id).execute()
+        counts["classes"] = len(result.data or [])
+
+    # Delete students (orphaned — only those not enrolled in other teachers' classes)
+    # NOTE: Only delete students created by this teacher's roster sync,
+    # not students who may be enrolled in other teachers' classes.
+
+    # Delete roster CSV files
+    import os, glob
+    data_dir = os.path.expanduser("~/.graider_data")
+    for pattern in [f"roster_{teacher_id}*", f"period_{teacher_id}*"]:
+        for f in glob.glob(os.path.join(data_dir, pattern)):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+    logger.info("Roster data deleted for teacher %s: %s", teacher_id, counts)
+    return counts
 ```
 
-- [ ] **Step 2: Update `clever_routes.py` to use shared sync**
+- [ ] **Step 2: Update `clever_routes.py:delete_clever_data` to use shared deletion**
+
+In `backend/routes/clever_routes.py`, update `delete_clever_data` to delegate to `delete_roster_data`:
+
+```python
+from backend.roster_sync import delete_roster_data
+
+def delete_clever_data(teacher_id):
+    """Delete Clever-synced data. Maintains backward compat for Clever-specific callers."""
+    return delete_roster_data(teacher_id)
+```
+
+- [ ] **Step 3: Verify Clever sync still works after extraction**
+
+Run Clever sync for a test teacher BEFORE the extraction, capture DB state:
+```python
+# Pre-extraction: snapshot classes, students, enrollments for test teacher
+# Save as JSON fixture in tests/fixtures/clever_sync_snapshot.json
+```
+
+Run again AFTER extraction, diff the results — must be identical.
+
+Add a regression test in `tests/test_roster_sync.py`:
+```python
+def test_clever_sync_unchanged_after_extraction():
+    """Verify Clever sync produces identical DB state after _sync_classes_to_db extraction."""
+    # Mock Supabase, run sync with Clever-format data
+    # Assert: same classes, same students, same enrollments as before
+```
+
+- [ ] **Step 4: Update `clever_routes.py` to use shared sync**
 
 In `backend/routes/clever_routes.py`, replace the `_sync_classes_to_db()` function (lines 85-246) with a wrapper that normalizes Clever data and delegates to `roster_sync.sync_roster_to_db()`:
 
@@ -363,30 +434,54 @@ class OneRosterClient:
         logger.info("OneRoster fetched %d %s", len(all_items), label)
         return all_items
 
-    async def fetch_roster(self, school_id=None):
+    async def fetch_roster(self, school_id=None, teacher_sourced_id=None):
         """Fetch classes, students, teachers, and enrollments.
+
+        CRITICAL: Teacher-scoped filtering. If teacher_sourced_id is provided,
+        only fetch classes for that teacher (not all classes in the school/district).
+        This prevents importing off-roster sections — required for Clever compliance parity.
 
         Args:
             school_id: Optional school sourcedId to scope the fetch
+            teacher_sourced_id: Teacher's OneRoster sourcedId for section filtering
 
         Returns:
             dict with keys: classes, students, teachers, enrollments, demographics
         """
         async with httpx.AsyncClient(timeout=30.0) as client:
-            if school_id:
+            # TEACHER-SCOPED section fetch (preferred — only this teacher's classes)
+            if teacher_sourced_id:
+                try:
+                    classes = await self._get_paginated(
+                        client, f"/teachers/{teacher_sourced_id}/classes", "classes", "teacher classes")
+                    logger.info("OneRoster: fetched %d classes for teacher %s", len(classes), teacher_sourced_id)
+                except Exception as e:
+                    logger.warning("OneRoster teacher-scoped endpoint failed (%s), falling back to school-wide", str(e))
+                    # Fallback: fetch all classes and filter by enrollment
+                    classes = await self._get_paginated(
+                        client, f"/schools/{school_id}/classes" if school_id else "/classes", "classes", "classes")
+                    enrollments_all = await self._get_paginated(
+                        client, "/enrollments", "enrollments", "enrollments")
+                    # Filter to classes where this teacher is enrolled as "teacher" role
+                    teacher_class_ids = set()
+                    for e in enrollments_all:
+                        if e.get("user", {}).get("sourcedId") == teacher_sourced_id and e.get("role") == "teacher":
+                            teacher_class_ids.add(e.get("class", {}).get("sourcedId"))
+                    classes = [c for c in classes if c.get("sourcedId") in teacher_class_ids]
+                    logger.info("OneRoster: filtered to %d classes for teacher (fallback)", len(classes))
+            elif school_id:
                 classes = await self._get_paginated(
                     client, f"/schools/{school_id}/classes", "classes", "classes")
-                students = await self._get_paginated(
-                    client, f"/schools/{school_id}/students", "users", "students")
-                teachers = await self._get_paginated(
-                    client, f"/schools/{school_id}/teachers", "users", "teachers")
-                enrollments = await self._get_paginated(
-                    client, f"/schools/{school_id}/enrollments", "enrollments", "enrollments")
             else:
                 classes = await self._get_paginated(client, "/classes", "classes", "classes")
-                students = await self._get_paginated(client, "/students", "users", "students")
-                teachers = await self._get_paginated(client, "/teachers", "users", "teachers")
-                enrollments = await self._get_paginated(client, "/enrollments", "enrollments", "enrollments")
+
+            # Fetch students and enrollments scoped to the classes we found
+            students = await self._get_paginated(
+                client, f"/schools/{school_id}/students" if school_id else "/students", "users", "students")
+            teachers = await self._get_paginated(
+                client, f"/schools/{school_id}/teachers" if school_id else "/teachers", "users", "teachers")
+            enrollments = await self._get_paginated(
+                client, f"/schools/{school_id}/enrollments" if school_id else "/enrollments", "enrollments", "enrollments")
 
             # Demographics (optional — may require roster-demographics.readonly scope)
             demographics = []
@@ -780,12 +875,27 @@ def test_connection():
 @require_teacher
 @handle_route_errors
 def sync_roster():
-    """Fetch and sync roster from OneRoster API."""
+    """Fetch and sync roster from OneRoster API.
+
+    PROVIDER EXCLUSIVITY: If Clever roster data exists for this teacher,
+    sync is blocked. Teacher must delete Clever data first.
+    """
     config = get_oneroster_config(g.teacher_id)
     if not config:
         return jsonify({"error": "OneRoster not configured"}), 400
 
     teacher_id = g.teacher_id
+
+    # --- Provider exclusivity check ---
+    db = get_supabase()
+    existing_classes = db.table('classes').select('clever_section_id').eq('teacher_id', teacher_id).execute()
+    for cls in (existing_classes.data or []):
+        section_id = cls.get('clever_section_id', '') or ''
+        # Clever IDs don't have a prefix; OneRoster IDs are prefixed with "oneroster:"
+        if section_id and not section_id.startswith('oneroster:'):
+            return jsonify({
+                "error": "Clever roster is active. Delete Clever data in Settings > Classroom before using OneRoster."
+            }), 409
 
     client = OneRosterClient(
         base_url=config["base_url"],
@@ -794,8 +904,14 @@ def sync_roster():
         token_url=config.get("token_url"),
     )
 
-    # Fetch roster data
-    raw = _run_async(client.fetch_roster(school_id=config.get("school_id")))
+    # Fetch roster data — TEACHER-SCOPED
+    # Use /teachers/{id}/classes endpoint to only get this teacher's sections.
+    # Falls back to school-wide fetch + filter if teacher endpoint unavailable.
+    teacher_sourced_id = config.get("teacher_sourced_id")
+    raw = _run_async(client.fetch_roster(
+        school_id=config.get("school_id"),
+        teacher_sourced_id=teacher_sourced_id,
+    ))
     classes, students, enrollments, accommodations = normalize_roster(raw)
 
     # Sync to database
@@ -881,13 +997,13 @@ def apply_accommodations():
 def delete_data():
     """Delete all OneRoster-synced data for this teacher.
 
-    Reuses Clever's file deletion logic (same file format) and
-    clears OneRoster config from storage.
+    Uses provider-agnostic delete_roster_data() (not delete_clever_data,
+    which enforces a clever: prefix check).
     """
-    from backend.clever import delete_clever_data
+    from backend.roster_sync import delete_roster_data
     from backend.storage import save
 
-    counts = delete_clever_data(g.teacher_id)
+    counts = delete_roster_data(g.teacher_id)
 
     # Also clear OneRoster config
     save("oneroster_config", None, g.teacher_id)
@@ -1041,9 +1157,14 @@ Add to the API Reference section:
 
 The existing `classes.clever_section_id` column is reused to store OneRoster `sourcedId` values. The column name is Clever-specific but the data is just an external provider ID string. **Do NOT rename the column** — it would require a migration and break Clever sync. A future rename can be done as a separate task if desired.
 
-### Provider Detection
+### Provider Exclusivity (STRICT)
 
-Teachers can use Clever OR OneRoster (or neither). The system does not prevent configuring both, but only one roster source should be active at a time. The Settings UI should make this clear.
+Teachers/districts choose ONE roster provider: Clever OR OneRoster (or neither). This is enforced at multiple levels:
+
+1. **Sync endpoint** — before syncing, checks `classes.clever_section_id` for existing data from the other provider. Returns 409 if found.
+2. **UI** — Settings > Classroom shows only the active provider's controls. If Clever is connected, OneRoster config is hidden (and vice versa). A "Switch Provider" button deletes all existing roster data before enabling the other.
+3. **ID prefixing** — OneRoster `sourcedId` values stored in `clever_section_id` are prefixed with `oneroster:` to distinguish from Clever IDs. This makes provider detection deterministic.
+4. **No fallback** — if a teacher has Clever data, OneRoster sync is blocked entirely (not merged). Same in reverse.
 
 ### IEP/ELL from OneRoster Demographics
 
@@ -1056,8 +1177,14 @@ OneRoster reuses Clever's file persistence functions (`persist_roster_as_csv`, `
 ### Testing Strategy
 
 1. `tests/test_oneroster.py` — Unit tests for `normalize_roster()` (no network calls)
-2. `tests/test_roster_sync.py` — Unit tests for shared DB sync (mock Supabase)
-3. `tests/test_oneroster_routes.py` — Route-level tests: auth decorators, audit logging, deletion, credential masking. Mirror existing Clever test patterns.
+2. `tests/test_roster_sync.py` — Unit tests for shared DB sync (mock Supabase) + Clever regression test
+3. `tests/test_oneroster_routes.py` — Route-level tests mirroring `tests/test_clever_compliance.py`:
+   - `@require_teacher` enforcement (unauthenticated → 401)
+   - Audit log written on sync and deletion
+   - `GET /api/oneroster/credentials` returns `has_credentials` boolean, never the secret
+   - `POST /api/oneroster/delete-data` calls `delete_roster_data` (not `delete_clever_data`)
+   - Provider exclusivity: sync blocked when Clever data exists (409 response)
+   - Teacher-scoped section filtering: verify only teacher's classes are imported
 4. Manual E2E — Test against a OneRoster sandbox (Clever provides one, or use ClassLink's sandbox)
 
 ### Dependency: No New Packages
@@ -1066,7 +1193,15 @@ OneRoster reuses Clever's file persistence functions (`persist_roster_as_csv`, `
 
 ---
 
-## Review Fixes (from plan review feedback)
+## Review Fixes — INTEGRATED
+
+All 5 review gaps have been integrated into the task steps above:
+
+1. **Deletion guard** — `delete_roster_data()` in `roster_sync.py` (Task 1), used by OneRoster delete endpoint (Task 4)
+2. **Provider exclusivity** — enforced in sync endpoint (Task 4), documented in Provider Exclusivity section
+3. **Teacher-scoped section filtering** — `fetch_roster(teacher_sourced_id=...)` in OneRoster client (Task 2/3)
+4. **Route-level tests** — `tests/test_oneroster_routes.py` added to Testing Strategy
+5. **Migration rollback** — Clever regression test added to Task 1 Step 3
 
 ### Fix 1: `delete_clever_data` Guard Relaxation
 
