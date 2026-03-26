@@ -820,7 +820,10 @@ def get_config():
         "configured": True,
         "base_url": config.get("base_url", ""),
         "school_id": config.get("school_id", ""),
+        "teacher_sourced_id": config.get("teacher_sourced_id", ""),
+        "token_url": config.get("token_url", ""),
         "has_credentials": bool(config.get("client_id")),
+        # NOTE: client_id and client_secret are NEVER returned
     })
 
 
@@ -1127,21 +1130,54 @@ export async function deleteOneRosterData() {
 
 Find the Clever integration section in `SettingsTab.jsx` (inside the `settingsTab === "classroom"` block). Add a parallel OneRoster section. **PROVIDER EXCLUSIVITY**: Only ONE roster section is visible at a time.
 
-**Provider exclusivity UI logic:**
-```javascript
-// Determine active provider
-var activeProvider = null; // 'clever' | 'oneroster' | null
-if (isCleverUser) activeProvider = 'clever';
-else if (oneRosterStatus === 'connected') activeProvider = 'oneroster';
+**Provider detection — how to determine the active provider:**
 
-// Show Clever section ONLY if no OneRoster data active
-// Show OneRoster section ONLY if no Clever data active
-// If neither active, show both with a note: "Choose one roster provider"
-// If one active, show the other with a "Switch Provider" button that:
-//   1. Confirms: "This will delete all [current provider] roster data. Continue?"
-//   2. Calls the delete endpoint for the active provider
-//   3. Then shows the config form for the new provider
+```javascript
+// isCleverUser is ALREADY defined in SettingsTab.jsx (line ~134):
+//   const isCleverUser = !!(window.__graiderUser && window.__graiderUser.id
+//     && window.__graiderUser.id.startsWith('clever:'));
+//
+// oneRosterStatus comes from the GET /api/oneroster/config response:
+//   null = never configured, 'connected' = config exists, 'error' = config invalid
+//
+// Detection logic:
+var activeProvider = null;
+if (isCleverUser) {
+    activeProvider = 'clever';
+} else if (oneRosterStatus === 'connected') {
+    activeProvider = 'oneroster';
+}
+// activeProvider is null when neither is configured
 ```
+
+**Rendering rules (concrete JSX conditionals):**
+
+```javascript
+// 1. If neither active: show BOTH sections with a note
+{!activeProvider && (
+    <div>Choose a roster provider: Clever SSO or OneRoster</div>
+)}
+
+// 2. Clever section: show if Clever active OR neither active
+{(activeProvider === 'clever' || !activeProvider) && (
+    /* existing Clever section JSX */
+)}
+
+// 3. OneRoster section: show if OneRoster active OR neither active
+{(activeProvider === 'oneroster' || !activeProvider) && (
+    /* OneRoster config form */
+)}
+
+// 4. Switch button: show when one IS active, linking to the other
+{activeProvider === 'clever' && (
+    <button onClick={handleSwitchToOneRoster}>Switch to OneRoster</button>
+)}
+{activeProvider === 'oneroster' && (
+    <button onClick={handleSwitchToClever}>Switch to Clever</button>
+)}
+```
+
+This prevents both panels from rendering simultaneously. The switch handlers follow the 5-step flow below.
 
 **OneRoster config section fields:**
 1. **Base URL** — text input, required
