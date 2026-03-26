@@ -1349,6 +1349,37 @@ export async function deleteOneRosterData() {
   return fetchApi('/api/oneroster/delete-data', { method: 'POST' })
 }
 
+// ============ LTI 1.3 Integration ============
+
+export async function getLTIConfig() {
+  return fetchApi('/api/lti/config')
+}
+
+export async function registerLTIPlatform(config) {
+  return fetchApi('/api/lti/config', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+}
+
+export async function deleteLTIPlatform(issuer) {
+  return fetchApi('/api/lti/config', {
+    method: 'DELETE',
+    body: JSON.stringify({ issuer: issuer }),
+  })
+}
+
+export async function syncLTIGrades(payload) {
+  return fetchApi('/api/lti/sync-grades', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getLTIContexts() {
+  return fetchApi('/api/lti/contexts')
+}
+
 export default {
   getStatus,
   stopGrading,
@@ -1531,4 +1562,10 @@ export default {
   syncOneRosterRoster,
   applyOneRosterAccommodations,
   deleteOneRosterData,
+  // LTI 1.3 Integration
+  getLTIConfig,
+  registerLTIPlatform,
+  deleteLTIPlatform,
+  syncLTIGrades,
+  getLTIContexts,
 }
