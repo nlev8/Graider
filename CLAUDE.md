@@ -392,6 +392,14 @@ python graider_app.py
 - `POST /api/clever/student-token` — Exchange auth code for student session token
 - `GET /api/clever/health` — Health check (config + connectivity status)
 
+### OneRoster Integration (1EdTech)
+- `GET /api/oneroster/config` — Check OneRoster configuration status
+- `POST /api/oneroster/config` — Save OneRoster connection settings
+- `POST /api/oneroster/test` — Test API connectivity
+- `POST /api/oneroster/sync-roster` — Fetch and sync roster from OneRoster API
+- `POST /api/oneroster/apply-accommodations` — Apply IEP/ELL presets from demographics
+- `POST /api/oneroster/delete-data` — Delete all OneRoster-synced data
+
 ### Student Portal
 - `POST /api/student/login` — Student login (email + class code)
 - `GET /api/student/session` — Validate student session
@@ -461,6 +469,13 @@ python graider_app.py
 - `CLEVER_REDIRECT_URI` — OAuth callback URL
 - `CLEVER_DISTRICT_TOKEN` — District app token (for Secure Sync)
 - `CLEVER_API_VERSION` — API version (default: v3.0)
+
+### OneRoster Integration (1EdTech)
+- `ONEROSTER_BASE_URL` — OneRoster API root (e.g., `https://sis.district.org/ims/oneroster/v1p1`)
+- `ONEROSTER_CLIENT_ID` — OAuth 2.0 client ID
+- `ONEROSTER_CLIENT_SECRET` — OAuth 2.0 client secret
+- `ONEROSTER_TOKEN_URL` — OAuth token endpoint (optional, defaults to `{base_url}/token`)
+- `ONEROSTER_SCHOOL_ID` — School sourcedId to scope roster fetch (optional)
 
 ### Optional
 - `OPENAI_API_KEY` — Default OpenAI key (fallback)
