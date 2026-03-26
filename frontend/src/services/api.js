@@ -1317,6 +1317,38 @@ export async function cleverLogout() {
   return fetchApi('/api/clever/logout', { method: 'POST' })
 }
 
+// ============ OneRoster Integration ============
+
+export async function getOneRosterConfig() {
+  return fetchApi('/api/oneroster/config')
+}
+
+export async function saveOneRosterConfig(config) {
+  return fetchApi('/api/oneroster/config', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+}
+
+export async function testOneRosterConnection() {
+  return fetchApi('/api/oneroster/test', { method: 'POST' })
+}
+
+export async function syncOneRosterRoster() {
+  return fetchApi('/api/oneroster/sync-roster', { method: 'POST' })
+}
+
+export async function applyOneRosterAccommodations(accommodations) {
+  return fetchApi('/api/oneroster/apply-accommodations', {
+    method: 'POST',
+    body: JSON.stringify({ accommodations }),
+  })
+}
+
+export async function deleteOneRosterData() {
+  return fetchApi('/api/oneroster/delete-data', { method: 'POST' })
+}
+
 export default {
   getStatus,
   stopGrading,
@@ -1492,4 +1524,11 @@ export default {
   syncCleverRoster,
   applyCleverAccommodations,
   cleverLogout,
+  // OneRoster Integration
+  getOneRosterConfig,
+  saveOneRosterConfig,
+  testOneRosterConnection,
+  syncOneRosterRoster,
+  applyOneRosterAccommodations,
+  deleteOneRosterData,
 }

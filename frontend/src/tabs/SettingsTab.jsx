@@ -140,10 +140,55 @@ export default React.memo(function SettingsTab({
   const [showManualSetup, setShowManualSetup] = useState(false);
   const [availableStates, setAvailableStates] = useState([]);
 
+  // OneRoster integration state
+  var [oneRosterConfig, setOneRosterConfig] = useState({
+    base_url: '', client_id: '', client_secret: '', token_url: '',
+    school_id: '', teacher_sourced_id: '',
+  });
+  var [oneRosterStatus, setOneRosterStatus] = useState(null);
+  var [oneRosterSyncing, setOneRosterSyncing] = useState(false);
+  var [oneRosterAccommodations, setOneRosterAccommodations] = useState(null);
+  var [oneRosterTestResult, setOneRosterTestResult] = useState(null);
+  var [oneRosterSaving, setOneRosterSaving] = useState(false);
+  var [oneRosterApplying, setOneRosterApplying] = useState(false);
+  var [oneRosterSyncResult, setOneRosterSyncResult] = useState(null);
+  var [showOneRosterSecret, setShowOneRosterSecret] = useState(false);
+  var [oneRosterHasCredentials, setOneRosterHasCredentials] = useState(false);
+  var [showSwitchProviderConfirm, setShowSwitchProviderConfirm] = useState(null);
+
+  // Provider detection
+  var activeProvider = null;
+  if (isCleverUser) {
+    activeProvider = 'clever';
+  } else if (oneRosterStatus === 'connected') {
+    activeProvider = 'oneroster';
+  }
+
   useEffect(() => {
     api.getAvailableStates().then((data) => {
       if (data.states) setAvailableStates(data.states);
     }).catch(() => {});
+    // Load OneRoster config on mount
+    api.getOneRosterConfig().then(function(data) {
+      if (data.config) {
+        setOneRosterConfig(function(prev) {
+          return Object.assign({}, prev, {
+            base_url: data.config.base_url || '',
+            client_id: data.config.client_id || '',
+            client_secret: '',
+            token_url: data.config.token_url || '',
+            school_id: data.config.school_id || '',
+            teacher_sourced_id: data.config.teacher_sourced_id || '',
+          });
+        });
+        if (data.config.has_credentials) {
+          setOneRosterHasCredentials(true);
+        }
+      }
+      if (data.status === 'connected') {
+        setOneRosterStatus('connected');
+      }
+    }).catch(function() {});
   }, []);
 
   return (
@@ -1756,6 +1801,445 @@ export default React.memo(function SettingsTab({
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* OneRoster Integration Section */}
+            {activeProvider !== 'clever' && (
+              <div
+                style={{
+                  borderTop: "1px solid var(--glass-border)",
+                  paddingTop: "25px",
+                  marginTop: "25px",
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: "1.1rem",
+                    fontWeight: 700,
+                    marginBottom: "15px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                  }}
+                >
+                  <Icon name="Globe" size={20} style={{ color: "#6366f1" }} />
+                  OneRoster Integration (1EdTech)
+                  {oneRosterStatus === 'connected' && (
+                    <span style={{
+                      padding: "2px 8px", borderRadius: 6, fontSize: "0.7rem", fontWeight: 600,
+                      background: "rgba(34,197,94,0.15)", color: "#22c55e", marginLeft: "auto",
+                    }}>
+                      Connected
+                    </span>
+                  )}
+                </h3>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
+                  Connect to any OneRoster-compatible SIS (PowerSchool, Infinite Campus, Skyward, etc.) to sync your roster automatically.
+                </p>
+
+                {/* Switch provider button if OneRoster is active and user wants Clever */}
+                {activeProvider === 'oneroster' && (
+                  <div style={{ marginBottom: "15px" }}>
+                    <button
+                      onClick={function() { setShowSwitchProviderConfirm('clever'); }}
+                      style={{
+                        background: "none", border: "1px solid var(--glass-border)", borderRadius: "8px",
+                        padding: "6px 14px", cursor: "pointer", fontSize: "0.82rem",
+                        color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px",
+                      }}
+                    >
+                      <Icon name="ArrowRightLeft" size={14} />
+                      Switch to Clever
+                    </button>
+                  </div>
+                )}
+
+                {/* Config fields */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "500px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Base URL *</label>
+                    <input
+                      type="text"
+                      value={oneRosterConfig.base_url}
+                      onChange={function(e) { setOneRosterConfig(function(prev) { return Object.assign({}, prev, { base_url: e.target.value }); }); }}
+                      placeholder="https://yoursis.example.com/ims/oneroster/v1p1"
+                      style={{ width: "100%", padding: "10px 14px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Client ID *</label>
+                    <input
+                      type="text"
+                      value={oneRosterConfig.client_id}
+                      onChange={function(e) { setOneRosterConfig(function(prev) { return Object.assign({}, prev, { client_id: e.target.value }); }); }}
+                      placeholder="OAuth 2.0 Client ID"
+                      style={{ width: "100%", padding: "10px 14px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                      Client Secret *
+                      {oneRosterHasCredentials && !oneRosterConfig.client_secret && (
+                        <span style={{ marginLeft: "8px", padding: "2px 8px", borderRadius: 6, fontSize: "0.7rem", fontWeight: 600, background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>
+                          Credentials saved
+                        </span>
+                      )}
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type={showOneRosterSecret ? "text" : "password"}
+                        value={oneRosterConfig.client_secret}
+                        onChange={function(e) { setOneRosterConfig(function(prev) { return Object.assign({}, prev, { client_secret: e.target.value }); }); }}
+                        placeholder={oneRosterHasCredentials ? "Leave blank to keep existing" : "OAuth 2.0 Client Secret"}
+                        style={{ width: "100%", padding: "10px 14px", paddingRight: "44px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none" }}
+                      />
+                      <button type="button" onClick={function() { setShowOneRosterSecret(function(p) { return !p; }); }} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: "4px", color: "var(--text-secondary)", display: "flex", alignItems: "center" }} title={showOneRosterSecret ? "Hide secret" : "Show secret"}>
+                        <Icon name={showOneRosterSecret ? "EyeOff" : "Eye"} size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Token URL (optional)</label>
+                    <input
+                      type="text"
+                      value={oneRosterConfig.token_url}
+                      onChange={function(e) { setOneRosterConfig(function(prev) { return Object.assign({}, prev, { token_url: e.target.value }); }); }}
+                      placeholder="Defaults to base_url/token"
+                      style={{ width: "100%", padding: "10px 14px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>School ID (optional)</label>
+                    <input
+                      type="text"
+                      value={oneRosterConfig.school_id}
+                      onChange={function(e) { setOneRosterConfig(function(prev) { return Object.assign({}, prev, { school_id: e.target.value }); }); }}
+                      placeholder="Filter roster to a specific school"
+                      style={{ width: "100%", padding: "10px 14px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Teacher Sourced ID *</label>
+                    <input
+                      type="text"
+                      value={oneRosterConfig.teacher_sourced_id}
+                      onChange={function(e) { setOneRosterConfig(function(prev) { return Object.assign({}, prev, { teacher_sourced_id: e.target.value }); }); }}
+                      placeholder="Your OneRoster teacher sourcedId"
+                      style={{ width: "100%", padding: "10px 14px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: "flex", gap: "10px", marginTop: "15px", flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    onClick={async function() {
+                      if (!oneRosterConfig.base_url || !oneRosterConfig.client_id || !oneRosterConfig.teacher_sourced_id) {
+                        addToast("Base URL, Client ID, and Teacher Sourced ID are required", "error");
+                        return;
+                      }
+                      if (!oneRosterConfig.client_secret && !oneRosterHasCredentials) {
+                        addToast("Client Secret is required", "error");
+                        return;
+                      }
+                      setOneRosterSaving(true);
+                      try {
+                        var saveData = Object.assign({}, oneRosterConfig);
+                        if (!saveData.client_secret && oneRosterHasCredentials) {
+                          delete saveData.client_secret;
+                        }
+                        var result = await api.saveOneRosterConfig(saveData);
+                        if (result.error) {
+                          addToast("Save failed: " + result.error, "error");
+                        } else {
+                          setOneRosterHasCredentials(true);
+                          setOneRosterConfig(function(prev) { return Object.assign({}, prev, { client_secret: '' }); });
+                          addToast("OneRoster configuration saved", "success");
+                        }
+                      } catch (err) {
+                        addToast("Save failed: " + err.message, "error");
+                      }
+                      setOneRosterSaving(false);
+                    }}
+                    className="btn btn-primary"
+                    disabled={oneRosterSaving}
+                    style={{ opacity: oneRosterSaving ? 0.6 : 1 }}
+                  >
+                    <Icon name="Save" size={18} />
+                    {oneRosterSaving ? "Saving..." : "Save Config"}
+                  </button>
+
+                  <button
+                    onClick={async function() {
+                      setOneRosterTestResult(null);
+                      try {
+                        var result = await api.testOneRosterConnection();
+                        setOneRosterTestResult(result);
+                        if (result.success) {
+                          setOneRosterStatus('connected');
+                          addToast("Connection successful! " + (result.school_name || ""), "success");
+                        } else {
+                          setOneRosterStatus('error');
+                          addToast("Connection failed: " + (result.error || "Unknown error"), "error");
+                        }
+                      } catch (err) {
+                        setOneRosterTestResult({ success: false, error: err.message });
+                        setOneRosterStatus('error');
+                        addToast("Connection test failed: " + err.message, "error");
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    disabled={!oneRosterHasCredentials && !oneRosterConfig.client_secret}
+                  >
+                    <Icon name="Plug" size={18} />
+                    Test Connection
+                  </button>
+
+                  <button
+                    onClick={async function() {
+                      setOneRosterSyncing(true);
+                      setOneRosterSyncResult(null);
+                      setOneRosterAccommodations(null);
+                      try {
+                        var result = await api.syncOneRosterRoster();
+                        if (result.error) {
+                          addToast("Sync failed: " + result.error, "error");
+                        } else {
+                          setOneRosterSyncResult(result);
+                          setOneRosterStatus('connected');
+                          if (result.accommodation_suggestions && Object.keys(result.accommodation_suggestions).length > 0) {
+                            setOneRosterAccommodations(result.accommodation_suggestions);
+                          }
+                          addToast("Synced " + (result.counts ? result.counts.students + " students, " + result.counts.sections + " sections" : "roster"), "success");
+                          // Refresh periods list
+                          var periodsData = await api.listPeriods();
+                          setPeriods(periodsData.periods || []);
+                        }
+                      } catch (err) {
+                        addToast("Sync failed: " + err.message, "error");
+                      }
+                      setOneRosterSyncing(false);
+                    }}
+                    className="btn btn-secondary"
+                    disabled={oneRosterSyncing || (!oneRosterHasCredentials && !oneRosterConfig.client_secret)}
+                    style={{ opacity: oneRosterSyncing ? 0.6 : 1 }}
+                  >
+                    <Icon name="RefreshCw" size={18} style={oneRosterSyncing ? { animation: "spin 1s linear infinite" } : {}} />
+                    {oneRosterSyncing ? "Syncing..." : "Sync Roster"}
+                  </button>
+                </div>
+
+                {/* Test result */}
+                {oneRosterTestResult && (
+                  <div style={{
+                    marginTop: "10px", padding: "10px 14px", borderRadius: "8px", fontSize: "0.85rem",
+                    background: oneRosterTestResult.success ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+                    border: "1px solid " + (oneRosterTestResult.success ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"),
+                    color: oneRosterTestResult.success ? "#22c55e" : "#ef4444",
+                  }}>
+                    <Icon name={oneRosterTestResult.success ? "CheckCircle2" : "XCircle"} size={16} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                    {oneRosterTestResult.success ? "Connected successfully" + (oneRosterTestResult.school_name ? " - " + oneRosterTestResult.school_name : "") : "Failed: " + (oneRosterTestResult.error || "Unknown error")}
+                  </div>
+                )}
+
+                {/* Sync result */}
+                {oneRosterSyncResult && oneRosterSyncResult.counts && (
+                  <div style={{ marginTop: "10px", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                    Synced {oneRosterSyncResult.counts.students} students, {oneRosterSyncResult.counts.sections} sections
+                    {oneRosterSyncResult.counts.students_with_accommodations > 0 && (
+                      <span style={{ color: "#f59e0b" }}> ({oneRosterSyncResult.counts.students_with_accommodations} with IEP/ELL)</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Accommodation suggestions */}
+                {oneRosterAccommodations && Object.keys(oneRosterAccommodations).length > 0 && (
+                  <div style={{
+                    background: "rgba(245,158,11,0.08)", borderRadius: "8px", padding: "12px 15px",
+                    marginTop: "15px", border: "1px solid rgba(245,158,11,0.3)",
+                  }}>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Icon name="Shield" size={16} style={{ color: "#f59e0b" }} />
+                      IEP/ELL Accommodation Suggestions
+                      <span style={{
+                        padding: "2px 8px", borderRadius: 6, fontSize: "0.7rem", fontWeight: 600,
+                        background: "rgba(245,158,11,0.2)", color: "#f59e0b",
+                      }}>
+                        {Object.keys(oneRosterAccommodations).length} students
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginBottom: "10px" }}>
+                      OneRoster detected these students have IEP or ELL flags. Review and apply accommodation presets:
+                    </p>
+                    <div style={{ maxHeight: "200px", overflowY: "auto", marginBottom: "10px" }}>
+                      {Object.entries(oneRosterAccommodations).map(function(entry) {
+                        var studentId = entry[0];
+                        var info = entry[1];
+                        return (
+                          <div key={studentId} style={{
+                            display: "flex", alignItems: "center", gap: "10px",
+                            padding: "6px 0", borderBottom: "1px solid var(--glass-border)",
+                            fontSize: "0.85rem",
+                          }}>
+                            <span style={{ fontWeight: 500, minWidth: "120px" }}>{info.name}</span>
+                            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                              {info.iep_status && (
+                                <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: "0.72rem", background: "rgba(244,114,182,0.2)", color: "#f472b6" }}>IEP</span>
+                              )}
+                              {info.ell_status && (
+                                <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: "0.72rem", background: "rgba(96,165,250,0.2)", color: "#60a5fa" }}>ELL</span>
+                              )}
+                              {info.home_language && info.home_language !== "English" && (
+                                <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: "0.72rem", background: "var(--input-bg)", color: "var(--text-muted)" }}>{info.home_language}</span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginLeft: "auto" }}>
+                              {(info.suggested_presets || []).join(", ")}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={async function() {
+                        setOneRosterApplying(true);
+                        try {
+                          var result = await api.applyOneRosterAccommodations(oneRosterAccommodations);
+                          if (result.errors && result.errors.length > 0) {
+                            addToast("Applied " + result.applied + "/" + result.total + " (some errors)", "warning");
+                          } else {
+                            addToast("Applied accommodations for " + result.applied + " students", "success");
+                          }
+                          setOneRosterAccommodations(null);
+                          // Refresh accommodations
+                          var accommData = await api.getStudentAccommodations();
+                          setStudentAccommodations(accommData.accommodations || {});
+                        } catch (err) {
+                          addToast("Failed to apply accommodations: " + err.message, "error");
+                        }
+                        setOneRosterApplying(false);
+                      }}
+                      className="btn btn-primary"
+                      disabled={oneRosterApplying}
+                      style={{ opacity: oneRosterApplying ? 0.6 : 1 }}
+                    >
+                      <Icon name="Check" size={18} />
+                      {oneRosterApplying ? "Applying..." : "Apply All Accommodations"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Delete OneRoster Data */}
+                {oneRosterStatus === 'connected' && (
+                  <div style={{ marginTop: "20px", paddingTop: "15px", borderTop: "1px solid var(--glass-border)" }}>
+                    <button
+                      onClick={function() {
+                        if (window.confirm("Delete all OneRoster-synced roster data? This cannot be undone.")) {
+                          api.deleteOneRosterData().then(function(result) {
+                            if (result.error) {
+                              addToast("Delete failed: " + result.error, "error");
+                            } else {
+                              setOneRosterStatus(null);
+                              setOneRosterSyncResult(null);
+                              setOneRosterAccommodations(null);
+                              setOneRosterTestResult(null);
+                              addToast("OneRoster data deleted", "success");
+                              api.listPeriods().then(function(d) { setPeriods(d.periods || []); }).catch(function() {});
+                            }
+                          }).catch(function(err) {
+                            addToast("Delete failed: " + err.message, "error");
+                          });
+                        }
+                      }}
+                      style={{
+                        background: "none", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px",
+                        padding: "6px 14px", cursor: "pointer", fontSize: "0.82rem",
+                        color: "#ef4444", display: "flex", alignItems: "center", gap: "6px",
+                      }}
+                    >
+                      <Icon name="Trash2" size={14} />
+                      Delete OneRoster Data
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Switch to OneRoster button for Clever users */}
+            {activeProvider === 'clever' && (
+              <div style={{ marginTop: "15px" }}>
+                <button
+                  onClick={function() { setShowSwitchProviderConfirm('oneroster'); }}
+                  style={{
+                    background: "none", border: "1px solid var(--glass-border)", borderRadius: "8px",
+                    padding: "6px 14px", cursor: "pointer", fontSize: "0.82rem",
+                    color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px",
+                  }}
+                >
+                  <Icon name="ArrowRightLeft" size={14} />
+                  Switch to OneRoster
+                </button>
+              </div>
+            )}
+
+            {/* Switch provider confirmation dialog */}
+            {showSwitchProviderConfirm && (
+              <div style={{
+                position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+                background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center",
+                justifyContent: "center", zIndex: 9999,
+              }}>
+                <div style={{
+                  background: "var(--card-bg)", borderRadius: "12px", padding: "24px",
+                  maxWidth: "420px", width: "90%", boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+                }}>
+                  <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "12px" }}>Switch SIS Provider?</h3>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                    {"Currently using " + (showSwitchProviderConfirm === 'oneroster' ? "Clever" : "OneRoster") + ". To switch, all roster data from the current provider will be deleted. This cannot be undone."}
+                  </p>
+                  <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={function() { setShowSwitchProviderConfirm(null); }}
+                      className="btn btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async function() {
+                        try {
+                          if (showSwitchProviderConfirm === 'oneroster') {
+                            // Delete Clever data, switch to OneRoster
+                            var authHdrs = await getAuthHeaders();
+                            await fetch("/api/clever/delete-data", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", ...authHdrs },
+                            });
+                            addToast("Clever data deleted. You can now configure OneRoster.", "success");
+                          } else {
+                            // Delete OneRoster data, switch to Clever
+                            await api.deleteOneRosterData();
+                            setOneRosterStatus(null);
+                            setOneRosterSyncResult(null);
+                            setOneRosterAccommodations(null);
+                            setOneRosterTestResult(null);
+                            addToast("OneRoster data deleted. You can now use Clever.", "success");
+                          }
+                          api.listPeriods().then(function(d) { setPeriods(d.periods || []); }).catch(function() {});
+                        } catch (err) {
+                          addToast("Switch failed: " + err.message, "error");
+                        }
+                        setShowSwitchProviderConfirm(null);
+                      }}
+                      style={{
+                        background: "#ef4444", color: "white", border: "none", borderRadius: "8px",
+                        padding: "8px 16px", cursor: "pointer", fontWeight: 600,
+                      }}
+                    >
+                      Delete Data & Switch
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
