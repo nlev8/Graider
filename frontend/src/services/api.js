@@ -440,6 +440,12 @@ export async function getAssessmentTemplates() {
   return fetchApi('/api/assessment-templates')
 }
 
+export async function deleteAssessment(joinCode) {
+  return fetchApi('/api/teacher/assessment/' + joinCode, {
+    method: 'DELETE',
+  })
+}
+
 export async function deleteAssessmentTemplate(templateId) {
   return fetchApi(`/api/assessment-template/${templateId}`, {
     method: 'DELETE',

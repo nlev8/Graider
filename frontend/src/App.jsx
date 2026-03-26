@@ -9156,6 +9156,7 @@ ${signature}`;
                   sortedPeriods={sortedPeriods}
                   portalSubmissions={portalSubmissions}
                   assessmentResults={assessmentResults}
+                  setAssessmentResults={setAssessmentResults}
                   vportalConfigured={vportalConfigured}
                   batchExportLoading={batchExportLoading}
                   outlookExportLoading={outlookExportLoading}

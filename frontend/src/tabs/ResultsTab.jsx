@@ -280,6 +280,7 @@ export default React.memo(function ResultsTab({
   sortedPeriods,
   portalSubmissions,
   assessmentResults,
+  setAssessmentResults,
   vportalConfigured,
   batchExportLoading,
   outlookExportLoading,
@@ -485,11 +486,23 @@ export default React.memo(function ResultsTab({
                                     color: stats.pending_count > 0 ? "#f59e0b" : "#22c55e",
                                   }
                                 }, stats.pending_count > 0 ? stats.pending_count + ' pending' : 'Complete'),
-                                React.createElement('span', {
-                                  key: 'details',
-                                  onClick: function() { setExpandedAssessmentId(isExpanded ? null : assessment.id); },
-                                  style: {color: "#8b5cf6", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500},
-                                }, isExpanded ? 'Hide' : 'View Details'),
+                                React.createElement('div', {key: 'actions', style: {display: "flex", gap: "10px", alignItems: "center"}}, [
+                                  React.createElement('span', {
+                                    key: 'details',
+                                    onClick: function() { setExpandedAssessmentId(isExpanded ? null : assessment.id); },
+                                    style: {color: "#8b5cf6", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500},
+                                  }, isExpanded ? 'Hide' : 'View Details'),
+                                  React.createElement('span', {
+                                    key: 'delete',
+                                    onClick: function() {
+                                      if (!confirm('Delete "' + assessment.title + '" and all its submissions?')) return;
+                                      api.deleteAssessment(assessment.join_code).then(function() {
+                                        setAssessmentResults(function(prev) { return prev.filter(function(a) { return a.id !== assessment.id; }); });
+                                      }).catch(function() {});
+                                    },
+                                    style: {color: "#ef4444", cursor: "pointer", fontSize: "0.8rem", opacity: 0.6},
+                                  }, React.createElement(Icon, {name: "Trash2", size: 14})),
+                                ]),
                               ]),
 
                               isExpanded && React.createElement('div', {
