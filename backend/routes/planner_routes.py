@@ -2195,85 +2195,103 @@ def _grade_matches(code_grade, requested_grade):
     return False
 
 
-def load_standards(state, subject, grade=None):
-    """Load standards from JSON file, optionally filtered by grade."""
-    # Clean subject name for filename (replace spaces with underscores, slashes with hyphens)
-    subject_clean = subject.lower().replace(' ', '_').replace('/', '-')
-    filename = f"standards_{state.lower()}_{subject_clean}.json"
-    filepath = DATA_DIR / filename
+def _get_standards_map():
+    """Load and cache standards_map.json."""
+    global _standards_map_cache
+    if _standards_map_cache is None:
+        map_path = DATA_DIR / 'standards' / 'standards_map.json'
+        if map_path.exists():
+            with open(map_path, 'r') as f:
+                _standards_map_cache = json.load(f)
+        else:
+            _standards_map_cache = {}
+    return _standards_map_cache
 
-    if filepath.exists():
-        with open(filepath, 'r') as f:
+
+def _load_standards_file(filepath):
+    """Load standards from a JSON file. Returns list or empty list."""
+    if not filepath.exists():
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # Handle both formats: wrapped dict {"standards": [...]} or flat array [...]
-            if isinstance(data, list):
-                standards = data
-                file_grade = ''
-            else:
-                standards = data.get('standards', [])
-                file_grade = data.get('grade', '')  # e.g., "7", "8", "9-10", "6-8"
+        if isinstance(data, list):
+            return data
+        return data.get('standards', [])
+    except Exception:
+        return []
 
-            # Filter by grade if provided
-            if grade and standards:
-                # Check if file covers a single grade that matches exactly
-                if file_grade and str(file_grade) == str(grade) and '-' not in str(file_grade):
-                    # Exact single-grade match - return all standards
-                    return standards
 
-                # Check if the requested grade is within the file's range
-                grade_in_range = False
-                if file_grade and '-' in str(file_grade):
-                    parts = str(file_grade).split('-')
-                    try:
-                        min_grade = int(parts[0])
-                        max_grade = int(parts[1])
-                        requested = int(grade) if grade.isdigit() else 0
-                        grade_in_range = min_grade <= requested <= max_grade
-                    except (ValueError, IndexError):
-                        pass
+def load_standards(state, subject, grade=None):
+    """Load standards with mapping-based resolution and fallback.
 
-                # Map grades to high school courses (subject-specific)
-                GRADE_TO_COURSE = {
-                    'math': {'9': 'Algebra 1', '10': 'Geometry', '11': 'Algebra 2', '12': 'Pre-Calculus'},
-                    'science': {'9': 'Biology', '10': 'Chemistry', '11': 'Physics', '12': 'Earth/Space Science'},
-                    'us_history': {'9': 'American History', '10': 'American History', '11': 'American History', '12': 'American History'},
-                    'world_history': {'9': 'World History', '10': 'World History', '11': 'World History', '12': 'World History'},
-                }
-                subject_courses = GRADE_TO_COURSE.get(subject_clean, {})
+    Returns dict: {standards, fallback_used, fallback_framework, no_framework, state_note}
+    """
+    result = {
+        'standards': [],
+        'fallback_used': False,
+        'fallback_framework': None,
+        'no_framework': False,
+        'state_note': None,
+    }
 
-                # Filter by code pattern (for multi-grade files or fallback)
-                filtered = []
-                for s in standards:
-                    code = s.get('code', '')
-                    # Extract grade from code patterns like MA.6.xxx, SC.7.xxx, SS.8.xxx
-                    code_parts = code.split('.')
-                    if len(code_parts) >= 2:
-                        code_grade = code_parts[1]
-                        # K12 codes (e.g., WL.K12.NH.1.1) apply to all grades
-                        if code_grade == 'K12':
-                            filtered.append(s)
-                        # Match grade (handle K, 1-12)
-                        elif code_grade == grade or code_grade == f"0{grade}":
-                            filtered.append(s)
-                        # For kindergarten
-                        elif grade == 'K' and code_grade in ['K', '0', '00']:
-                            filtered.append(s)
-                        # For high school codes like "912" - filter by course field
-                        elif code_grade == '912' and grade in subject_courses:
-                            expected_course = subject_courses[grade]
-                            if s.get('course') == expected_course:
-                                filtered.append(s)
+    smap = _get_standards_map()
+    states = smap.get('states', {})
+    subject_fallbacks = smap.get('subject_fallbacks', {})
+    subject_to_filename = smap.get('subject_to_filename', {})
 
-                # If we found grade-specific standards, return them
-                if filtered:
-                    return filtered
-                # If grade is in the file's range but no code-based matches,
-                # return all (file may not use grade-based code patterns)
-                if grade_in_range:
-                    return standards
-                return []  # No matches for this grade
-            return standards
-    return []
+    # Look up state config
+    state_config = states.get(state.upper(), {}) if state else {}
+    framework = state_config.get('framework', 'ccss')
+    result['state_note'] = state_config.get('note')
+
+    # Map subject to filename
+    filename = subject_to_filename.get(subject)
+    if not filename:
+        filename = subject.lower().replace(' ', '_').replace('/', '-')
+
+    # Try primary path: standards/{framework}/{filename}.json
+    primary_path = DATA_DIR / 'standards' / framework / (filename + '.json')
+    standards = _load_standards_file(primary_path)
+
+    if not standards and framework not in ('ccss', 'ngss'):
+        # State-specific file not found — try fallback
+        fallback_fw = subject_fallbacks.get(subject)
+        if fallback_fw is None:
+            result['no_framework'] = True
+        elif fallback_fw:
+            fallback_path = DATA_DIR / 'standards' / fallback_fw / (filename + '.json')
+            standards = _load_standards_file(fallback_path)
+            if standards:
+                result['fallback_used'] = True
+                result['fallback_framework'] = fallback_fw
+
+    if not standards:
+        # Legacy fallback: standards_{state}_{subject}.json
+        subject_clean = subject.lower().replace(' ', '_').replace('/', '-')
+        legacy_path = DATA_DIR / ('standards_' + state.lower() + '_' + subject_clean + '.json')
+        standards = _load_standards_file(legacy_path)
+
+    # Filter by grade
+    if grade and standards:
+        filtered = [s for s in standards if _grade_matches(_extract_grade_from_code(s.get('code', '')), str(grade))]
+        if filtered:
+            standards = filtered
+        elif not filtered:
+            # Preserve existing high school course mapping for FL
+            GRADE_TO_COURSE = {
+                'math': {'9': 'Algebra 1', '10': 'Geometry', '11': 'Algebra 2', '12': 'Pre-Calculus'},
+                'science': {'9': 'Biology', '10': 'Chemistry', '11': 'Physics', '12': 'Earth/Space Science'},
+            }
+            subject_clean = subject.lower().replace(' ', '_').replace('/', '-')
+            courses = GRADE_TO_COURSE.get(subject_clean, {})
+            if str(grade) in courses:
+                course_filtered = [s for s in standards if s.get('course') == courses[str(grade)]]
+                if course_filtered:
+                    standards = course_filtered
+
+    result['standards'] = standards
+    return result
 
 
 @planner_bp.route('/api/get-standards', methods=['POST'])
@@ -2287,13 +2305,30 @@ def get_standards():
     subject = data.get('subject', 'Civics')
 
     # Try to load from JSON files first, filtered by grade
-    standards = load_standards(state, subject, grade)
+    result = load_standards(state, subject, grade)
+    standards = result['standards']
 
     if standards:
-        return jsonify({"standards": standards, "grade": grade, "subject": subject})
+        return jsonify({
+            "standards": standards,
+            "grade": grade,
+            "subject": subject,
+            "fallback_used": result.get("fallback_used", False),
+            "fallback_framework": result.get("fallback_framework"),
+            "no_framework": result.get("no_framework", False),
+            "state_note": result.get("state_note"),
+        })
 
     # Fallback to empty if no data file exists
-    return jsonify({"standards": [], "grade": grade, "subject": subject})
+    return jsonify({
+        "standards": [],
+        "grade": grade,
+        "subject": subject,
+        "fallback_used": result.get("fallback_used", False),
+        "fallback_framework": result.get("fallback_framework"),
+        "no_framework": result.get("no_framework", False),
+        "state_note": result.get("state_note"),
+    })
 
 
 @planner_bp.route('/api/align-document-to-standards', methods=['POST'])
@@ -2312,7 +2347,8 @@ def align_document_to_standards():
     if not subject:
         return jsonify({"error": "Subject is required. Set it in Settings."})
 
-    standards = load_standards(state, subject, grade)
+    result = load_standards(state, subject, grade)
+    standards = result['standards']
     if not standards:
         return jsonify({"error": f"No standards found for {state} {subject} grade {grade}. Check that a standards file exists in backend/data/."})
 
@@ -2404,7 +2440,8 @@ def rewrite_for_alignment():
     if not questions:
         return jsonify({"error": "No questions provided for rewriting"})
 
-    standards = load_standards(state, subject, grade)
+    result = load_standards(state, subject, grade)
+    standards = result['standards']
     standards_by_code = {s.get("code"): s for s in standards} if standards else {}
 
     # Enrich questions with full standard details

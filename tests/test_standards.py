@@ -125,3 +125,38 @@ class TestGradeMatches:
     def test_none_grade(self):
         from backend.routes.planner_routes import _grade_matches
         assert _grade_matches(None, '6') is False
+
+
+class TestLoadStandards:
+    def test_fl_math_returns_dict(self):
+        from backend.routes.planner_routes import load_standards
+        result = load_standards('FL', 'Math', '6')
+        assert isinstance(result, dict)
+        assert 'standards' in result
+        assert 'fallback_used' in result
+        assert result['fallback_used'] is False
+
+    def test_fl_math_has_standards(self):
+        from backend.routes.planner_routes import load_standards
+        result = load_standards('FL', 'Math', '6')
+        assert len(result['standards']) > 0
+
+    def test_unknown_state_returns_empty(self):
+        from backend.routes.planner_routes import load_standards
+        result = load_standards('ZZ', 'Math', '6')
+        assert isinstance(result, dict)
+        assert len(result['standards']) == 0
+
+    def test_no_framework_for_french(self):
+        from backend.routes.planner_routes import load_standards
+        # FL uses 'fl' framework; French has null fallback in subject_fallbacks
+        # and no fl/french.json exists, so no_framework should be True
+        result = load_standards('FL', 'French')
+        assert result.get('no_framework') is True
+
+    def test_fl_legacy_still_works(self):
+        from backend.routes.planner_routes import load_standards
+        result = load_standards('FL', 'Civics', '7')
+        assert isinstance(result, dict)
+        # Should find via standards/fl/civics.json
+        assert len(result['standards']) > 0
