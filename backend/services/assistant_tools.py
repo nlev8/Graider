@@ -469,10 +469,19 @@ def _load_standards():
     """Load curriculum standards based on teacher's configured subject/state."""
     settings = _load_settings()
     config = settings.get('config', {})
-    state = config.get('state', 'FL').lower()
-    subject = config.get('subject', '').lower().replace(' ', '_')
+    state = config.get('state', 'FL')
+    subject = config.get('subject', '')
+    grade = config.get('grade_level', '')
 
-    # Map subject names to filenames
+    # Use the planner's load_standards which handles mapping + fallback
+    try:
+        from backend.routes.planner_routes import load_standards as _planner_load
+        result = _planner_load(state, subject, grade)
+        return result.get('standards', [])
+    except Exception:
+        pass
+
+    # Fallback: try legacy file path directly
     subject_map = {
         'us_history': 'us_history',
         'u.s._history': 'us_history',
@@ -486,15 +495,14 @@ def _load_standards():
         'science': 'science',
         'social_studies': 'social_studies',
     }
-    subject_key = subject_map.get(subject, subject)
-    filename = f"standards_fl_{subject_key}.json"
+    subject_key = subject_map.get(subject.lower().replace(' ', '_'), subject.lower().replace(' ', '_'))
+    filename = 'standards_' + state.lower() + '_' + subject_key + '.json'
     filepath = os.path.join(STANDARDS_DIR, filename)
 
     if os.path.exists(filepath):
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            # Handle both formats: wrapped dict {"standards": [...]} or flat array [...]
             if isinstance(data, list):
                 return data
             return data.get('standards', [])
