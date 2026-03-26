@@ -36,6 +36,7 @@ import LoginScreen from "./components/LoginScreen";
 import AssistantChat from "./components/AssistantChat";
 import AutomationBuilder from "./components/AutomationBuilder";
 import BehaviorPanel from "./components/BehaviorPanel";
+import DistrictSetup from "./components/DistrictSetup";
 import MatchingCards from "./components/MatchingCards";
 import MindMapView from "./components/MindMapView";
 import FlashcardView from "./components/FlashcardView";
@@ -746,6 +747,10 @@ function PasswordResetScreen({ onDone }) {
 }
 
 function App() {
+  // Check if this is the district admin route
+  if (window.location.pathname.startsWith("/district")) {
+    return React.createElement(DistrictSetup, null);
+  }
   // Check if this is the student portal route
   if (window.location.pathname.startsWith("/student")) {
     return <StudentApp />;

@@ -1380,6 +1380,45 @@ export async function getLTIContexts() {
   return fetchApi('/api/lti/contexts')
 }
 
+// ============ District Admin Setup ============
+
+export async function districtAuth(password, setup) {
+  return fetchApi('/api/district/auth', {
+    method: 'POST',
+    body: JSON.stringify({ password: password, setup: setup || false }),
+  })
+}
+
+export async function districtLogout() {
+  return fetchApi('/api/district/auth', { method: 'DELETE' })
+}
+
+export async function getDistrictConfig() {
+  return fetchApi('/api/district/config')
+}
+
+export async function saveDistrictConfig(config) {
+  return fetchApi('/api/district/config', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+}
+
+export async function testDistrictConnection() {
+  return fetchApi('/api/district/test-connection', { method: 'POST' })
+}
+
+export async function getDistrictConfigStatus() {
+  return fetchApi('/api/district/config-status')
+}
+
+export async function changeDistrictPassword(currentPassword, newPassword) {
+  return fetchApi('/api/district/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  })
+}
+
 export default {
   getStatus,
   stopGrading,
@@ -1568,4 +1607,12 @@ export default {
   deleteLTIPlatform,
   syncLTIGrades,
   getLTIContexts,
+  // District Admin Setup
+  districtAuth,
+  districtLogout,
+  getDistrictConfig,
+  saveDistrictConfig,
+  testDistrictConnection,
+  getDistrictConfigStatus,
+  changeDistrictPassword,
 }
