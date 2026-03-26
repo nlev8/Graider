@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add LTI 1.3 Tool Provider support so Graider can be launched from any LMS (Canvas, Schoology, Google Classroom) with SSO, and grades pass back automatically to the LMS gradebook via Assignment & Grade Services (AGS).
+**Goal:** Add LTI 1.3 Tool Provider support so Graider can be launched from any LMS (Canvas, Schoology, Google Classroom) with SSO, and teachers can manually sync grades to the LMS gradebook via Assignment & Grade Services (AGS).
 
-**Architecture:** New `backend/lti.py` module for LTI 1.3 OIDC login + JWT validation + AGS client. New `backend/routes/lti_routes.py` for OIDC initiation, launch callback, JWKS endpoint, and AGS grade sync. LTI platform registration stored in Supabase via `backend/storage.py`. Settings > Classroom gets an LTI configuration panel. Grade passback triggered automatically after grading completes.
+**Architecture:** New `backend/lti.py` module for LTI 1.3 OIDC login + JWT validation + AGS client. New `backend/routes/lti_routes.py` for OIDC initiation, launch callback, JWKS endpoint, and AGS grade sync. LTI platform registration and per-context AGS endpoints stored in Supabase via `backend/storage.py`. Student LTI launches persist the LTI `sub` → student name mapping so grade passback can match Graider submissions to LMS users. Settings > Classroom gets an LTI configuration panel. Automatic grade passback (hooking into the grading pipeline) is deferred to Phase 2.
 
 **Tech Stack:** Flask/Python backend, PyJWT + cryptography (already installed) for RS256 JWT signing/verification, RSA key pair generation for tool JWKS, Supabase for platform registration persistence, React frontend (inline styles).
 
@@ -16,8 +16,8 @@
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `backend/lti.py` | CREATE | LTI 1.3 core: RSA key management, OIDC login initiation, JWT launch validation, AGS grade passback client |
-| `backend/routes/lti_routes.py` | CREATE | `/api/lti/*` endpoints: OIDC login, launch callback, JWKS, platform registration, grade sync |
+| `backend/lti.py` | CREATE | LTI 1.3 core: RSA key management, OIDC login initiation, JWT launch validation, AGS grade passback client, LTI context/user mapping persistence |
+| `backend/routes/lti_routes.py` | CREATE | `/api/lti/*` endpoints: OIDC login, launch callback (persists AGS endpoint + user mapping), JWKS, platform registration, grade sync (auto-resolves LTI users from stored mappings) |
 | `backend/routes/__init__.py` | MODIFY | Register `lti_bp` blueprint |
 | `backend/auth.py` | MODIFY | Add LTI launch endpoints to `PUBLIC_PREFIXES` |
 | `frontend/src/services/api.js` | MODIFY | Add LTI API functions |
@@ -507,6 +507,147 @@ def delete_platform_config(platform_issuer, teacher_id=None):
     from backend.storage import save
     target = teacher_id or "system"
     save(f"lti_platform:{platform_issuer}", None, target)
+
+
+# ── AGS context persistence ─────────────────────────────────────────────
+# The AGS lineitems URL comes from launch claims (per course/link), NOT from
+# platform registration. We persist it so the grade sync endpoint has a target.
+
+def save_ags_context(teacher_id, platform_issuer, context_id, ags_data):
+    """Persist AGS endpoint data from a launch for later grade sync.
+
+    Args:
+        teacher_id: Graider teacher ID
+        platform_issuer: Platform issuer URL
+        context_id: LTI context (course) ID
+        ags_data: dict with lineitems URL, lineitem URL, scopes, resource_link_id
+    """
+    from backend.storage import save
+    key = f"lti_ags:{platform_issuer}:{context_id}"
+    save(key, ags_data, teacher_id)
+
+
+def get_ags_context(teacher_id, platform_issuer, context_id):
+    """Load persisted AGS endpoint data for a course context.
+
+    Returns:
+        dict with ags_endpoint, ags_lineitem_url, ags_scopes, resource_link_id
+        or None
+    """
+    try:
+        from backend.storage import load
+        return load(f"lti_ags:{platform_issuer}:{context_id}", teacher_id)
+    except Exception:
+        return None
+
+
+def list_ags_contexts(teacher_id):
+    """List all AGS contexts for a teacher (for the grade sync UI).
+
+    Returns:
+        list of dicts with platform_issuer, context_id, context_title, ags_endpoint
+    """
+    try:
+        from backend.storage import list_keys, load
+        keys = list_keys("lti_ags:", teacher_id)
+        contexts = []
+        for key in keys:
+            data = load(key, teacher_id)
+            if data and isinstance(data, dict):
+                contexts.append(data)
+        return contexts
+    except Exception:
+        return []
+
+
+# ── LTI user ↔ Graider student mapping ──────────────────────────────────
+# When a student launches via LTI, we store their LTI sub alongside their
+# student name. When the teacher syncs grades, we match Graider submission
+# student_name to the LTI user_id for the AGS score post.
+
+def save_lti_user_mapping(teacher_id, platform_issuer, context_id, lti_sub, student_name, email=None):
+    """Persist LTI user_id (sub) → student identity for grade passback.
+
+    Called during student LTI launches. Keyed by (teacher, platform, context, sub)
+    so each student in each course has exactly one mapping.
+
+    Args:
+        teacher_id: Teacher who owns the LTI context
+        platform_issuer: Platform issuer URL
+        context_id: LTI context (course) ID
+        lti_sub: The LTI user's 'sub' claim (stable per platform)
+        student_name: Display name from the launch claims
+        email: Student email (optional)
+    """
+    from backend.storage import save
+    key = f"lti_user:{platform_issuer}:{context_id}:{lti_sub}"
+    save(key, {
+        "lti_sub": lti_sub,
+        "student_name": student_name,
+        "email": email or "",
+        "platform_issuer": platform_issuer,
+        "context_id": context_id,
+    }, teacher_id)
+
+
+def get_lti_user_mappings(teacher_id, platform_issuer, context_id):
+    """Get all LTI user mappings for a course context.
+
+    Returns:
+        list of dicts with lti_sub, student_name, email
+    """
+    try:
+        from backend.storage import list_keys, load
+        prefix = f"lti_user:{platform_issuer}:{context_id}:"
+        keys = list_keys(prefix, teacher_id)
+        users = []
+        for key in keys:
+            data = load(key, teacher_id)
+            if data and isinstance(data, dict):
+                users.append(data)
+        return users
+    except Exception:
+        return []
+
+
+def match_scores_to_lti_users(scores, user_mappings):
+    """Match Graider grading results to LTI user IDs for AGS passback.
+
+    Matches by student_name (case-insensitive). Returns only scores
+    that have a matching LTI user.
+
+    Args:
+        scores: list of dicts with student_name, score, max_score, comment
+        user_mappings: list from get_lti_user_mappings()
+
+    Returns:
+        list of dicts with user_id (LTI sub), score, max_score, comment
+        list of unmatched student names
+    """
+    # Build name → lti_sub lookup (case-insensitive)
+    name_map = {}
+    for u in user_mappings:
+        name_map[u["student_name"].strip().lower()] = u["lti_sub"]
+        # Also try email match
+        if u.get("email"):
+            name_map[u["email"].strip().lower()] = u["lti_sub"]
+
+    matched = []
+    unmatched = []
+    for s in scores:
+        name_key = s["student_name"].strip().lower()
+        lti_sub = name_map.get(name_key)
+        if lti_sub:
+            matched.append({
+                "user_id": lti_sub,
+                "score": s["score"],
+                "max_score": s.get("max_score", 100),
+                "comment": s.get("comment", ""),
+            })
+        else:
+            unmatched.append(s["student_name"])
+
+    return matched, unmatched
 ```
 
 - [ ] **Step 5: Create `tests/test_lti.py`**
@@ -725,6 +866,12 @@ from backend.lti import (
     save_platform_config,
     list_platform_configs,
     delete_platform_config,
+    save_ags_context,
+    get_ags_context,
+    list_ags_contexts,
+    save_lti_user_mapping,
+    get_lti_user_mappings,
+    match_scores_to_lti_users,
     AGSClient,
 )
 from backend.utils.auth_decorators import require_teacher
@@ -828,7 +975,7 @@ def launch_callback():
     # Extract launch data
     launch_data = extract_launch_data(claims)
 
-    # Store launch context in session for grade passback later
+    # Store launch context in session
     session["lti_launch"] = {
         "user_id": launch_data["user_id"],
         "name": launch_data["name"],
@@ -843,6 +990,38 @@ def launch_callback():
         "platform_issuer": launch_data["platform_issuer"],
         "deployment_id": launch_data["deployment_id"],
     }
+
+    # ── Persist AGS context + user mapping for grade passback ──
+    # AGS endpoint comes from launch claims (per course), not from
+    # platform registration. We must save it so sync-grades works later.
+    if launch_data["is_instructor"] and launch_data["ags_endpoint"]:
+        from backend.lti import save_ags_context
+        save_ags_context(launch_data["user_id"], issuer, launch_data["context_id"], {
+            "ags_endpoint": launch_data["ags_endpoint"],
+            "ags_lineitem_url": launch_data["ags_lineitem_url"],
+            "ags_scopes": launch_data["ags_scopes"],
+            "resource_link_id": launch_data["resource_link_id"],
+            "context_id": launch_data["context_id"],
+            "context_title": launch_data["context_title"],
+            "platform_issuer": issuer,
+        })
+
+    # For student launches: persist LTI sub → student name mapping.
+    # The teacher who registered this platform "owns" the mapping.
+    # We look up the teacher by checking who registered this platform.
+    if not launch_data["is_instructor"]:
+        from backend.lti import save_lti_user_mapping, get_platform_config
+        # Find the teacher who registered this platform
+        # (platform_config was already loaded above)
+        owner_teacher_id = platform_config.get("_registered_by") or "system"
+        save_lti_user_mapping(
+            teacher_id=owner_teacher_id,
+            platform_issuer=issuer,
+            context_id=launch_data["context_id"],
+            lti_sub=launch_data["user_id"],
+            student_name=launch_data["name"],
+            email=launch_data.get("email"),
+        )
 
     from backend.utils.audit import audit_log
     audit_log("LTI_LAUNCH", f"LTI launch: {launch_data['name']} from {issuer}",
@@ -913,6 +1092,7 @@ def register_platform():
         "jwks_url": jwks_url,
         "deployment_id": deployment_id,
         "name": name or issuer,
+        "_registered_by": g.teacher_id,  # Track owner for student launch mapping
     }
     save_platform_config(issuer, config, g.teacher_id)
 
@@ -921,6 +1101,33 @@ def register_platform():
               teacher_id=g.teacher_id)
 
     return jsonify({"status": "registered"})
+
+
+@lti_bp.route("/api/lti/contexts", methods=["GET"])
+@require_teacher
+@handle_route_errors
+def get_ags_contexts():
+    """List LTI course contexts with AGS endpoints (for grade sync UI).
+
+    Returns courses the teacher has launched from, with their AGS endpoints
+    and the student mappings available for grade passback.
+    """
+    contexts = list_ags_contexts(g.teacher_id)
+    result = []
+    for ctx in contexts:
+        users = get_lti_user_mappings(
+            g.teacher_id,
+            ctx.get("platform_issuer", ""),
+            ctx.get("context_id", ""),
+        )
+        result.append({
+            "platform_issuer": ctx.get("platform_issuer", ""),
+            "context_id": ctx.get("context_id", ""),
+            "context_title": ctx.get("context_title", ""),
+            "ags_endpoint": ctx.get("ags_endpoint", ""),
+            "student_count": len(users),
+        })
+    return jsonify({"contexts": result})
 
 
 @lti_bp.route("/api/lti/config", methods=["DELETE"])
@@ -948,37 +1155,75 @@ def unregister_platform():
 def sync_grades():
     """Manually sync grades to the LMS via AGS.
 
-    Body: {
-        "platform_issuer": "https://canvas.example.com",
-        "lineitem_url": "https://...",  (optional — creates new if omitted)
-        "label": "US History Ch5 Quiz",
-        "max_score": 100,
-        "scores": [
-            {"user_id": "lti-sub-1", "score": 85, "comment": "Good work!"},
-            {"user_id": "lti-sub-2", "score": 92, "comment": "Excellent!"}
-        ]
-    }
+    Two modes:
+    1. Auto-match: send student_name scores, backend matches to LTI users
+       Body: {
+           "platform_issuer": "https://canvas.example.com",
+           "context_id": "course-789",
+           "label": "US History Ch5 Quiz",
+           "max_score": 100,
+           "scores": [
+               {"student_name": "Jane Doe", "score": 85, "comment": "Good work!"},
+               {"student_name": "Bob Smith", "score": 92}
+           ]
+       }
+
+    2. Direct: send pre-resolved LTI user_ids (for advanced integrations)
+       Body: {
+           "platform_issuer": "...",
+           "context_id": "...",
+           "label": "...",
+           "max_score": 100,
+           "resolved_scores": [
+               {"user_id": "lti-sub-1", "score": 85, "comment": "Good work!"}
+           ]
+       }
     """
     data = request.json or {}
     platform_issuer = data.get("platform_issuer", "")
+    context_id = data.get("context_id", "")
     lineitem_url = data.get("lineitem_url")
     label = data.get("label", "Graider Assessment")
     max_score = data.get("max_score", 100)
-    scores = data.get("scores", [])
+    raw_scores = data.get("scores", [])
+    resolved_scores = data.get("resolved_scores", [])
 
-    if not platform_issuer or not scores:
-        return jsonify({"error": "platform_issuer and scores are required"}), 400
+    if not platform_issuer or not context_id:
+        return jsonify({"error": "platform_issuer and context_id are required"}), 400
+    if not raw_scores and not resolved_scores:
+        return jsonify({"error": "scores or resolved_scores required"}), 400
 
     platform_config = get_platform_config(platform_issuer, g.teacher_id)
     if not platform_config:
         return jsonify({"error": "Platform not registered"}), 404
 
-    ags = AGSClient(platform_config, platform_config.get("ags_endpoint", ""))
+    # Load persisted AGS context for this course
+    from backend.lti import get_ags_context, get_lti_user_mappings, match_scores_to_lti_users
+    ags_ctx = get_ags_context(g.teacher_id, platform_issuer, context_id)
+    if not ags_ctx:
+        return jsonify({"error": "No AGS context for this course. Launch Graider from the LMS first."}), 404
+
+    ags_endpoint = ags_ctx.get("ags_endpoint", "")
+    if not ags_endpoint:
+        return jsonify({"error": "AGS endpoint not available for this course"}), 404
+
+    ags = AGSClient(platform_config, ags_endpoint)
+
+    # Auto-match student names to LTI user IDs if using raw scores
+    unmatched = []
+    if raw_scores and not resolved_scores:
+        user_mappings = get_lti_user_mappings(g.teacher_id, platform_issuer, context_id)
+        if not user_mappings:
+            return jsonify({
+                "error": "No LTI student mappings found. Students must launch Graider from the LMS at least once before grade sync."
+            }), 404
+        resolved_scores, unmatched = match_scores_to_lti_users(raw_scores, user_mappings)
 
     # Create lineitem if not provided
     if not lineitem_url:
         try:
-            lineitem = ags.create_lineitem(label, max_score)
+            resource_link_id = ags_ctx.get("resource_link_id")
+            lineitem = ags.create_lineitem(label, max_score, resource_link_id=resource_link_id)
             lineitem_url = lineitem.get("id", "")
         except Exception as e:
             return jsonify({"error": f"Failed to create lineitem: {e}"}), 502
@@ -986,7 +1231,7 @@ def sync_grades():
     # Post each score
     posted = 0
     errors = []
-    for s in scores:
+    for s in resolved_scores:
         try:
             ok = ags.post_score(lineitem_url, s["user_id"], s["score"], max_score, s.get("comment"))
             if ok:
@@ -997,10 +1242,15 @@ def sync_grades():
             errors.append(f"{s['user_id']}: {str(e)}")
 
     from backend.utils.audit import audit_log
-    audit_log("LTI_GRADE_SYNC", f"Synced {posted}/{len(scores)} grades to {platform_issuer}",
+    audit_log("LTI_GRADE_SYNC", f"Synced {posted}/{len(resolved_scores)} grades to {platform_issuer}",
               teacher_id=g.teacher_id)
 
-    return jsonify({"posted": posted, "total": len(scores), "errors": errors})
+    return jsonify({
+        "posted": posted,
+        "total": len(resolved_scores),
+        "unmatched_students": unmatched,
+        "errors": errors,
+    })
 ```
 
 - [ ] **Step 2: Register blueprint in `backend/routes/__init__.py`**
@@ -1250,7 +1500,8 @@ Find the "API Reference" section. After the "OneRoster Integration" subsection, 
 - `GET /api/lti/config` — List registered LTI platforms
 - `POST /api/lti/config` — Register an LTI platform
 - `DELETE /api/lti/config` — Delete a platform registration
-- `POST /api/lti/sync-grades` — Sync grades to LMS via AGS
+- `GET /api/lti/contexts` — List LTI course contexts with AGS endpoints and student counts
+- `POST /api/lti/sync-grades` — Sync grades to LMS via AGS (auto-matches students by name)
 ```
 
 - [ ] **Step 3: Commit**
@@ -1294,7 +1545,26 @@ Expected: All existing tests pass (no regressions)
 
 2. **Launch flow**: Student/teacher clicks an LTI link in their LMS → Platform sends OIDC login initiation to `/api/lti/login` → Graider redirects to platform auth → Platform posts signed JWT to `/api/lti/launch` → Graider validates JWT, stores launch context in session, redirects to app.
 
-3. **Grade passback**: After grading completes, teacher can sync grades to LMS via `/api/lti/sync-grades`. The AGS client authenticates using a tool-signed JWT assertion (RFC 7523) and posts scores to the platform's lineitem endpoint.
+3. **AGS context persistence**: On instructor launch, the AGS lineitems URL (from launch claims) is saved to storage keyed by `(teacher_id, platform_issuer, context_id)`. This is required because AGS endpoints are per-course, not per-platform — they only appear in launch claims, not in the static registration.
+
+4. **Student mapping**: On student launch, the LTI `sub` (user ID) is saved alongside the student's display name, keyed by `(teacher_id, platform_issuer, context_id, sub)`. This mapping enables the grade sync endpoint to match Graider submission results (keyed by student name) to LTI user IDs for AGS score posts.
+
+5. **Grade passback (manual)**: Teacher triggers grade sync from the UI. The backend loads the persisted AGS endpoint, auto-matches Graider scores to LTI users by name, creates a lineitem in the LMS gradebook, and posts each score via AGS. Unmatched students are reported to the teacher.
+
+### Coexistence with Clever and OneRoster
+
+LTI is **NOT a roster provider** — it does not conflict with Clever or OneRoster. They serve different purposes:
+
+| Concern | Clever/OneRoster | LTI 1.3 |
+|---------|-----------------|---------|
+| Roster sync (classes, students, enrollments) | ✓ | ✗ (Phase 2 NRPS) |
+| SSO launch from LMS | ✗ | ✓ |
+| Grade passback to LMS | ✗ | ✓ (AGS) |
+| IEP/ELL accommodations | ✓ | ✗ |
+
+A teacher can use Clever for roster + LTI for LMS launch/grade passback simultaneously. No provider exclusivity enforcement is needed for LTI — it uses separate storage keys (`lti_platform:`, `lti_ags:`, `lti_user:`) that don't overlap with Clever (`clever_link:`) or OneRoster (`oneroster_config`).
+
+The LTI section in Settings > Classroom is always visible regardless of which roster provider is active.
 
 ### Security
 
@@ -1303,10 +1573,12 @@ Expected: All existing tests pass (no regressions)
 - Tool JWKS served at `/api/lti/jwks` for platforms to verify tool-signed JWTs
 - OIDC state+nonce validated to prevent CSRF and replay attacks
 - Platform secrets never returned in GET config response
+- Student LTI user mappings scoped to teacher — no cross-teacher visibility
 
 ### No Database Schema Changes
 
 - Platform registrations stored in existing `teacher_data` table via `backend/storage.py`
+- AGS context and user mappings stored in `teacher_data` (keyed by `lti_ags:` and `lti_user:` prefixes)
 - LTI launch context stored in Flask session (cookie-based, encrypted by FLASK_SECRET_KEY)
 - No new Supabase tables or columns needed
 
@@ -1320,5 +1592,5 @@ Expected: All existing tests pass (no regressions)
 
 - **Deep Linking 2.0** — Content selection from within LMS
 - **NRPS** — Roster sync via LTI (alternative to Clever/OneRoster)
-- **Automatic grade passback** — Hook into grading thread completion to auto-sync scores
+- **Automatic grade passback** — Hook into grading pipeline to auto-sync scores on completion (requires mapping grading results to LTI contexts)
 - **QTI Import/Export** — Assessment portability (separate spec, separate project)
