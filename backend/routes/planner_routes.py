@@ -2130,6 +2130,71 @@ def load_support_documents_for_planning() -> str:
     return "\n\nREFERENCE DOCUMENTS:\n" + "\n\n".join(docs_content)
 
 
+# Module-level cache for standards map
+_standards_map_cache = None
+
+
+def _extract_grade_from_code(code):
+    """Extract grade level from a standards code across all frameworks."""
+    if not code:
+        return None
+    parts = code.split('.')
+
+    # NGSS: prefix-based (MS-PS1-1, HS-LS1-1)
+    if code.startswith('MS-'):
+        return 'MS'
+    if code.startswith('HS-'):
+        return 'HS'
+
+    # CCSS Math: CCSS.MATH.CONTENT.{G}.{DOMAIN}...
+    if code.startswith('CCSS.MATH') and len(parts) >= 4:
+        return parts[3]
+
+    # CCSS ELA: CCSS.ELA-LITERACY.{STRAND}.{G}...
+    if code.startswith('CCSS.ELA') and len(parts) >= 4:
+        return parts[3]
+
+    # C3 Social Studies: D2.His.1.6-8
+    if code.startswith('D') and len(code) > 1 and code[1:2].isdigit() and len(parts) >= 4:
+        return parts[3]
+
+    # FL B.E.S.T., TX TEKS, VA SOL: {SUBJ}.{G}.{DOMAIN}...
+    if len(parts) >= 2:
+        candidate = parts[1]
+        if candidate == 'K12':
+            return 'K12'
+        if candidate.isdigit() or candidate == 'K':
+            return candidate
+        if '-' in candidate:
+            return candidate
+
+    return None
+
+
+def _grade_matches(code_grade, requested_grade):
+    """Check if extracted grade matches the requested grade."""
+    if code_grade is None:
+        return False
+    if code_grade == 'K12':
+        return True
+    if code_grade == requested_grade:
+        return True
+    if code_grade == 'MS' and requested_grade in ('6', '7', '8'):
+        return True
+    if code_grade == 'HS' and requested_grade in ('9', '10', '11', '12'):
+        return True
+    if '-' in str(code_grade):
+        try:
+            lo, hi = code_grade.split('-')
+            req = int(requested_grade) if requested_grade.isdigit() else 0
+            return int(lo) <= req <= int(hi)
+        except (ValueError, IndexError):
+            pass
+    if code_grade == '912' and requested_grade in ('9', '10', '11', '12'):
+        return True
+    return False
+
+
 def load_standards(state, subject, grade=None):
     """Load standards from JSON file, optionally filtered by grade."""
     # Clean subject name for filename (replace spaces with underscores, slashes with hyphens)
