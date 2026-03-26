@@ -313,7 +313,6 @@ export default React.memo(function SettingsTab({
                   </select>
                 </div>
               </div>
-              {config.sis_type === 'focus' && (
               <div style={{ marginTop: "20px", padding: "16px", background: "var(--input-bg)", borderRadius: "12px", border: "1px solid var(--input-border)" }}>
                 <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "8px" }}>District Portal</div>
                 <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "12px" }}>
@@ -369,7 +368,6 @@ export default React.memo(function SettingsTab({
                   </div>
                 </div>
               </div>
-              )}
             </div>
 
             {/* Notifications */}
