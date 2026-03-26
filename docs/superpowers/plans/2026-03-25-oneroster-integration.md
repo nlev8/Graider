@@ -184,29 +184,47 @@ def delete_roster_data(teacher_id):
 
     Unlike delete_clever_data(), this does NOT enforce a clever: prefix check.
     Works for Clever, OneRoster, or CSV-imported rosters.
+
+    Deletion order matters — collect student IDs BEFORE deleting enrollments:
+    1. Collect student IDs from this teacher's enrollments
+    2. Delete enrollments (class_students rows)
+    3. Delete classes
+    4. For each student, check if still enrolled elsewhere — only delete orphans
+    5. Delete roster CSV files
     """
     sb = _get_supabase()
     counts = {"classes": 0, "students": 0, "enrollments": 0}
 
-    # Get classes for this teacher
+    # 1. Get classes for this teacher
     classes = sb.table("classes").select("id").eq("teacher_id", teacher_id).execute()
     class_ids = [c["id"] for c in (classes.data or [])]
+    if not class_ids:
+        return counts
 
-    # Delete enrollments
+    # 2. Collect student IDs BEFORE deleting enrollments
+    student_ids_to_check = set()
+    for cid in class_ids:
+        rows = sb.table("class_students").select("student_id").eq("class_id", cid).execute()
+        for r in (rows.data or []):
+            student_ids_to_check.add(r["student_id"])
+
+    # 3. Delete enrollments
     for cid in class_ids:
         result = sb.table("class_students").delete().eq("class_id", cid).execute()
         counts["enrollments"] += len(result.data or [])
 
-    # Delete classes
-    if class_ids:
-        result = sb.table("classes").delete().eq("teacher_id", teacher_id).execute()
-        counts["classes"] = len(result.data or [])
+    # 4. Delete classes
+    result = sb.table("classes").delete().eq("teacher_id", teacher_id).execute()
+    counts["classes"] = len(result.data or [])
 
-    # Delete students (orphaned — only those not enrolled in other teachers' classes)
-    # NOTE: Only delete students created by this teacher's roster sync,
-    # not students who may be enrolled in other teachers' classes.
+    # 5. Delete orphaned students (not enrolled in any other teacher's classes)
+    for sid in student_ids_to_check:
+        remaining = sb.table("class_students").select("id", count="exact").eq("student_id", sid).execute()
+        if remaining.count == 0:
+            sb.table("students").delete().eq("id", sid).execute()
+            counts["students"] += 1
 
-    # Delete roster CSV files
+    # 6. Delete roster CSV files
     import os, glob
     data_dir = os.path.expanduser("~/.graider_data")
     for pattern in [f"roster_{teacher_id}*", f"period_{teacher_id}*"]:
@@ -518,8 +536,11 @@ def normalize_roster(raw):
     for cls in raw.get("classes", []):
         if cls.get("status") == "tobedeleted":
             continue
+        # PREFIX with "oneroster:" so provider exclusivity detection works.
+        # Clever IDs have no prefix; this makes detection deterministic.
+        prefixed_id = "oneroster:" + cls["sourcedId"]
         classes.append({
-            "external_id": cls["sourcedId"],
+            "external_id": prefixed_id,
             "name": cls.get("title", ""),
             "subject": (cls.get("subjects") or [""])[0],
             "grade_level": (cls.get("grades") or [""])[0],
@@ -533,7 +554,7 @@ def normalize_roster(raw):
             continue
         if user.get("role") not in ("student", None):
             continue
-        sid = user["sourcedId"]
+        sid = "oneroster:" + user["sourcedId"]
         if sid in student_ids:
             continue
         student_ids.add(sid)
@@ -558,8 +579,11 @@ def normalize_roster(raw):
             class_id = class_id.get("sourcedId", "")
         if isinstance(user_id, dict):
             user_id = user_id.get("sourcedId", "")
-        if class_id and user_id and user_id in student_ids:
-            enrollments.append((class_id, user_id))
+        # Apply oneroster: prefix to match the prefixed IDs in classes/students
+        prefixed_class = "oneroster:" + class_id if class_id else ""
+        prefixed_user = "oneroster:" + user_id if user_id else ""
+        if prefixed_class and prefixed_user and prefixed_user in student_ids:
+            enrollments.append((prefixed_class, prefixed_user))
 
     # Extract accommodations from demographics
     accommodations = {}
@@ -811,9 +835,13 @@ def save_config():
     client_secret = data.get("client_secret", "").strip()
     token_url = data.get("token_url", "").strip() or None
     school_id = data.get("school_id", "").strip() or None
+    teacher_sourced_id = data.get("teacher_sourced_id", "").strip() or None
 
     if not base_url or not client_id or not client_secret:
         return jsonify({"error": "base_url, client_id, and client_secret are required"}), 400
+
+    if not teacher_sourced_id:
+        return jsonify({"error": "teacher_sourced_id is required for teacher-scoped section filtering"}), 400
 
     from backend.storage import save
     config = {
@@ -822,6 +850,7 @@ def save_config():
         "client_secret": client_secret,
         "token_url": token_url,
         "school_id": school_id,
+        "teacher_sourced_id": teacher_sourced_id,
     }
     save("oneroster_config", config, g.teacher_id)
 
