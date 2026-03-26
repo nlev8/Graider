@@ -400,6 +400,16 @@ python graider_app.py
 - `POST /api/oneroster/apply-accommodations` — Apply IEP/ELL presets from demographics
 - `POST /api/oneroster/delete-data` — Delete all OneRoster-synced data
 
+### LTI 1.3 Integration (1EdTech)
+- `GET /api/lti/jwks` — Tool's public JWKS (for platform verification)
+- `GET,POST /api/lti/login` — OIDC third-party login initiation
+- `POST /api/lti/launch` — Launch callback (platform posts id_token)
+- `GET /api/lti/config` — List registered LTI platforms
+- `POST /api/lti/config` — Register an LTI platform
+- `DELETE /api/lti/config` — Delete a platform registration
+- `GET /api/lti/contexts` — List LTI course contexts with AGS endpoints and student counts
+- `POST /api/lti/sync-grades` — Sync grades to LMS via AGS (auto-matches students by name)
+
 ### Student Portal
 - `POST /api/student/login` — Student login (email + class code)
 - `GET /api/student/session` — Validate student session
@@ -476,6 +486,9 @@ python graider_app.py
 - `ONEROSTER_CLIENT_SECRET` — OAuth 2.0 client secret
 - `ONEROSTER_TOKEN_URL` — OAuth token endpoint (optional, defaults to `{base_url}/token`)
 - `ONEROSTER_SCHOOL_ID` — School sourcedId to scope roster fetch (optional)
+
+### LTI 1.3 Integration
+- `LTI_TOOL_URL` — Tool base URL for OIDC/launch callbacks (defaults to request host, set in production to `https://app.graider.live`)
 
 ### Optional
 - `OPENAI_API_KEY` — Default OpenAI key (fallback)
