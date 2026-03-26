@@ -44,7 +44,89 @@ def _find_master_grades():
     return None
 
 
-def _analytics_from_results(period_filter='all', approval_filter='all', include_unmatched=False):
+def _fetch_assessment_analytics(source):
+    """Fetch assessment stats and category summary from Supabase. Returns (assessment_stats, assessment_category_summary)."""
+    assessment_stats = []
+    assessment_category_summary = {
+        'formative_average': None, 'formative_count': 0,
+        'summative_average': None, 'summative_count': 0,
+    }
+    if source not in ('all', 'assessments'):
+        return assessment_stats, assessment_category_summary
+    try:
+        from flask import g as _ga
+        try:
+            from backend.supabase_client import get_supabase_or_raise as _get_sb
+        except ImportError:
+            from supabase_client import get_supabase_or_raise as _get_sb
+        _db = _get_sb()
+        _tid = getattr(_ga, 'teacher_id', getattr(_ga, 'user_id', 'local-dev'))
+
+        _formative_scores = []
+        _summative_scores = []
+
+        # Join-code assessments
+        _pa = _db.table('published_assessments').select('*').eq('teacher_id', _tid).execute()
+        for pa in (_pa.data or []):
+            _settings = pa.get('settings', {}) or {}
+            if _settings.get('content_type', 'assessment') != 'assessment':
+                continue
+            _jc = pa.get('join_code', '')
+            _subs = _db.table('submissions').select('percentage').eq('join_code', _jc).execute()
+            _scores = [s.get('percentage') for s in (_subs.data or []) if s.get('percentage') is not None]
+            if not _scores:
+                continue
+            _cat = _settings.get('assessment_category', 'formative')
+            _avg = round(sum(_scores) / len(_scores), 1)
+            assessment_stats.append({
+                'name': pa.get('title', 'Untitled'),
+                'category': _cat,
+                'average': _avg,
+                'count': len(_scores),
+                'highest': max(_scores),
+                'lowest': min(_scores),
+            })
+            if _cat == 'formative':
+                _formative_scores.extend(_scores)
+            else:
+                _summative_scores.extend(_scores)
+
+        # Class-based assessments
+        _pc = _db.table('published_content').select('*').eq('teacher_id', _tid).eq('content_type', 'assessment').execute()
+        for pc in (_pc.data or []):
+            _cid = pc.get('id')
+            _settings = pc.get('settings', {}) or {}
+            _subs = _db.table('student_submissions').select('percentage').eq('content_id', _cid).execute()
+            _scores = [s.get('percentage') for s in (_subs.data or []) if s.get('percentage') is not None]
+            if not _scores:
+                continue
+            _cat = _settings.get('assessment_category', 'formative')
+            _avg = round(sum(_scores) / len(_scores), 1)
+            assessment_stats.append({
+                'name': pc.get('title', 'Untitled'),
+                'category': _cat,
+                'average': _avg,
+                'count': len(_scores),
+                'highest': max(_scores),
+                'lowest': min(_scores),
+            })
+            if _cat == 'formative':
+                _formative_scores.extend(_scores)
+            else:
+                _summative_scores.extend(_scores)
+
+        assessment_category_summary = {
+            'formative_average': round(sum(_formative_scores) / len(_formative_scores), 1) if _formative_scores else None,
+            'formative_count': len(_formative_scores),
+            'summative_average': round(sum(_summative_scores) / len(_summative_scores), 1) if _summative_scores else None,
+            'summative_count': len(_summative_scores),
+        }
+    except Exception as _e:
+        _logger.warning("Error fetching assessment analytics: %s", str(_e))
+    return assessment_stats, assessment_category_summary
+
+
+def _analytics_from_results(period_filter='all', approval_filter='all', include_unmatched=False, source='all'):
     """Build analytics response from in-memory grading results (Supabase/storage).
     Returns the same structure as the CSV-based path so the frontend works identically."""
     from flask import g
@@ -204,6 +286,7 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
         "by_model": [], "by_assignment": [],
     }
 
+    assessment_stats, assessment_category_summary = _fetch_assessment_analytics(source)
     return jsonify({
         "class_stats": class_stats,
         "student_progress": sorted(student_progress, key=lambda x: x["name"]),
@@ -214,6 +297,8 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
         "all_grades": all_grades,
         "available_periods": sorted(list(available_periods)),
         "cost_summary": cost_summary,
+        "assessment_stats": assessment_stats,
+        "assessment_category_summary": assessment_category_summary,
         "filters": {
             "period": period_filter,
             "approval": approval_filter,
@@ -221,6 +306,7 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
             "skipped_unmatched": skipped_unmatched,
             "skipped_approval": skipped_approval,
             "valid_configs_count": len(valid_names),
+            "source": source,
         }
     })
 
@@ -275,6 +361,9 @@ def get_analytics():
     period_filter = request.args.get('period', 'all')
     approval_filter = request.args.get('approval', 'all')  # 'all', 'approved', 'pending', 'rejected'
     include_unmatched = request.args.get('include_unmatched', 'false').lower() == 'true'
+    source = request.args.get('source', 'all')  # all | assignments | assessments
+    if source not in ('all', 'assignments', 'assessments'):
+        source = 'all'
 
     # Prefer in-memory results (Supabase) over CSV — they're always up to date
     from flask import g as _g
@@ -288,7 +377,7 @@ def get_analytics():
             _storage_load = None
     _results = _storage_load('results', teacher_id) if _storage_load else None
     if _results and isinstance(_results, list) and len(_results) > 0:
-        return _analytics_from_results(period_filter, approval_filter, include_unmatched)
+        return _analytics_from_results(period_filter, approval_filter, include_unmatched, source)
 
     # Fall back to master_grades.csv
     master_file = _find_master_grades()
@@ -528,6 +617,7 @@ def get_analytics():
         "by_assignment": [{"assignment": a, **v} for a, v in sorted(cost_by_assignment.items(), key=lambda x: x[1]["cost"], reverse=True)],
     }
 
+    assessment_stats, assessment_category_summary = _fetch_assessment_analytics(source)
     return jsonify({
         "class_stats": class_stats,
         "student_progress": sorted(student_progress, key=lambda x: x["name"]),
@@ -538,13 +628,16 @@ def get_analytics():
         "all_grades": all_grades,
         "available_periods": sorted(list(available_periods)),
         "cost_summary": cost_summary,
+        "assessment_stats": assessment_stats,
+        "assessment_category_summary": assessment_category_summary,
         "filters": {
             "period": period_filter,
             "approval": approval_filter,
             "include_unmatched": include_unmatched,
             "skipped_unmatched": skipped_unmatched,
             "skipped_approval": skipped_approval,
-            "valid_configs_count": len(valid_names)
+            "valid_configs_count": len(valid_names),
+            "source": source,
         }
     })
 
