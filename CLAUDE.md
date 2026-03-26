@@ -410,6 +410,16 @@ python graider_app.py
 - `GET /api/lti/contexts` — List LTI course contexts with AGS endpoints and student counts
 - `POST /api/lti/sync-grades` — Sync grades to LMS via AGS (auto-matches students by name)
 
+### District Admin Setup
+- `POST /api/district/auth` — Authenticate as district admin (password)
+- `DELETE /api/district/auth` — Clear district admin session
+- `POST /api/district/change-password` — Change district admin password
+- `GET /api/district/config-status` — Public: check if SIS/AI keys configured
+- `GET /api/district/config` — Load full district config (admin auth required)
+- `POST /api/district/config` — Save SIS + AI key config (admin auth required)
+- `POST /api/district/test-connection` — Test SIS connectivity (admin auth required)
+- `POST /api/oneroster/teacher-id` — Save teacher's OneRoster sourcedId (teacher auth)
+
 ### Student Portal
 - `POST /api/student/login` — Student login (email + class code)
 - `GET /api/student/session` — Validate student session
@@ -489,6 +499,9 @@ python graider_app.py
 
 ### LTI 1.3 Integration
 - `LTI_TOOL_URL` — Tool base URL for OIDC/launch callbacks (defaults to request host, set in production to `https://app.graider.live`)
+
+### District Admin
+- `DISTRICT_ADMIN_PASSWORD` — Initial district admin password (optional, can be set via /district first-time setup instead)
 
 ### Optional
 - `OPENAI_API_KEY` — Default OpenAI key (fallback)
