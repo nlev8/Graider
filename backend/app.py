@@ -3415,6 +3415,13 @@ def serve_student_app(subpath=None):
     return send_from_directory(app.static_folder, 'index.html')
 
 
+@app.route('/district')
+@app.route('/district/')
+def serve_district_setup():
+    """Serve React app for district admin setup."""
+    return send_from_directory(app.static_folder, 'index.html')
+
+
 @app.route('/<path:path>')
 def serve_static(path):
     """Serve static files or fall back to index.html for SPA routing."""

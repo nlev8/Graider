@@ -67,6 +67,7 @@ PUBLIC_PREFIXES = [
     '/api/student/submit/',    # Anonymous submission (join-code path, POST)
     '/api/clever/',            # Clever OAuth flow (callback must be unauthenticated)
     '/api/lti/',               # LTI OIDC login, launch callback, JWKS (platform-initiated)
+    '/api/district/',           # District admin setup (session-based auth, not JWT)
 ]
 
 PUBLIC_EXACT = [
