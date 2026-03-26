@@ -330,9 +330,13 @@ Graider includes ready-to-use accommodation profiles that adjust AI grading and 
 
 ---
 
-# FERPA Compliance
+# Compliance & Certifications
 
 ## Built for Education from Day One
+
+**Clever Certified** | **FERPA Compliant** | **No AI Training on Student Data**
+
+> Graider is officially **Clever Certified** — verified by Clever's Partner Engineering team for SSO integration, data security, and student privacy compliance.
 
 | Protection | Implementation |
 |------------|----------------|
@@ -872,7 +876,7 @@ Teachers spend **hours per week** on repetitive portal tasks — logging in, nav
 |---------|-------------|
 | **District Admin Panel** | Manage schools, principals, teachers from one dashboard |
 | **Cross-School Analytics** | Compare performance across schools, identify gaps |
-| **SSO Integration** | Clever, ClassLink, Google Workspace |
+| **SSO Integration** | **Clever Certified**, ClassLink, Google Workspace |
 | **Role-Based Access** | District Admin → Principal → Teacher hierarchy |
 | **Audit Logging** | Full FERPA compliance trail |
 
