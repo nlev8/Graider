@@ -79,18 +79,31 @@ def _require_district_admin(f):
 
 
 def _get_district_password_hash():
-    """Load the stored district admin password hash, or None if not set."""
+    """Load the stored district admin password hash, or None if not set.
+
+    If DISTRICT_ADMIN_PASSWORD env var is set but no hash is stored yet,
+    persist the hash from the env var so the admin can later change/rotate
+    the password via the UI without keeping the env var.
+    """
     try:
-        from backend.storage import load
+        from backend.storage import load, save
         data = load("district_password", SYSTEM_TEACHER_ID)
-        if data and isinstance(data, dict):
-            return data.get("hash")
+        if data and isinstance(data, dict) and data.get("hash"):
+            return data["hash"]
     except Exception:
         pass
-    # Fall back to env var
+
+    # Bootstrap from env var — persist hash so UI can rotate it later
     env_pw = os.getenv("DISTRICT_ADMIN_PASSWORD")
     if env_pw:
-        return generate_password_hash(env_pw)
+        hashed = generate_password_hash(env_pw)
+        try:
+            from backend.storage import save
+            save("district_password", {"hash": hashed}, SYSTEM_TEACHER_ID)
+            logger.info("Persisted district admin password from env var")
+        except Exception:
+            pass
+        return hashed
     return None
 
 
@@ -143,6 +156,36 @@ def district_logout():
     """Clear district admin session."""
     session.pop("district_admin", None)
     return jsonify({"status": "logged_out"})
+
+
+@district_bp.route("/api/district/change-password", methods=["POST"])
+@_require_district_admin
+@handle_route_errors
+def change_password():
+    """Change the district admin password.
+
+    Body: {"current_password": "...", "new_password": "..."}
+    """
+    data = request.json or {}
+    current = data.get("current_password", "")
+    new_pw = data.get("new_password", "")
+
+    if not current or not new_pw:
+        return jsonify({"error": "current_password and new_password required"}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    stored_hash = _get_district_password_hash()
+    if not stored_hash or not check_password_hash(stored_hash, current):
+        return jsonify({"error": "Current password is incorrect"}), 403
+
+    from backend.storage import save
+    save("district_password", {"hash": generate_password_hash(new_pw)}, SYSTEM_TEACHER_ID)
+
+    from backend.utils.audit import audit_log
+    audit_log("DISTRICT_PASSWORD_CHANGED", "District admin password changed")
+
+    return jsonify({"status": "changed"})
 
 
 # ── Public status (no auth) ─────────────────────────────────────────────
@@ -246,39 +289,57 @@ def save_district_config():
         existing = load("district_sis_config", SYSTEM_TEACHER_ID) or {}
         config = {"sis_type": sis_type}
 
+        # Secret merge rules:
+        # - Non-empty string: overwrite with new value
+        # - Empty string "": keep existing value (no change)
+        # - Explicit null: clear the field (set to "")
+        def _merge_secret(new_val, existing_val):
+            if new_val is None:
+                return ""  # Explicit null = clear
+            val = new_val.strip() if isinstance(new_val, str) else ""
+            return val if val else existing_val
+
         if sis_type == "oneroster":
             config["base_url"] = sis_data.get("base_url", "").strip()
             config["client_id"] = sis_data.get("client_id", "").strip()
-            config["client_secret"] = sis_data.get("client_secret", "").strip() or existing.get("client_secret", "")
+            config["client_secret"] = _merge_secret(sis_data.get("client_secret"), existing.get("client_secret", ""))
             config["token_url"] = sis_data.get("token_url", "").strip()
             config["school_id"] = sis_data.get("school_id", "").strip()
 
             if not config["base_url"] or not config["client_id"]:
                 return jsonify({"error": "base_url and client_id are required"}), 400
             if not config["client_secret"]:
-                return jsonify({"error": "client_secret is required"}), 400
+                return jsonify({"error": "client_secret is required (send null to clear)"}), 400
 
         elif sis_type == "clever":
             config["client_id"] = sis_data.get("client_id", "").strip()
-            config["client_secret"] = sis_data.get("client_secret", "").strip() or existing.get("client_secret", "")
+            config["client_secret"] = _merge_secret(sis_data.get("client_secret"), existing.get("client_secret", ""))
             config["redirect_uri"] = sis_data.get("redirect_uri", "").strip()
-            config["district_token"] = sis_data.get("district_token", "").strip() or existing.get("district_token", "")
+            config["district_token"] = _merge_secret(sis_data.get("district_token"), existing.get("district_token", ""))
 
             if not config["client_id"]:
                 return jsonify({"error": "client_id is required"}), 400
             if not config["client_secret"]:
-                return jsonify({"error": "client_secret is required"}), 400
+                return jsonify({"error": "client_secret is required (send null to clear)"}), 400
 
         save("district_sis_config", config, SYSTEM_TEACHER_ID)
 
-    # Save AI keys (merge — don't overwrite existing with blanks)
+    # Save AI keys (merge — blank strings are ignored, explicit null deletes)
+    # To clear a key: send {"ai_keys": {"openai": null}}
+    # To leave unchanged: omit the key or send empty string
     ai_data = data.get("ai_keys")
     if ai_data:
         existing_ai = load("district_ai_keys", SYSTEM_TEACHER_ID) or {}
         for provider in ("openai", "anthropic", "gemini"):
-            val = ai_data.get(provider, "").strip()
-            if val:
-                existing_ai[provider] = val
+            if provider not in ai_data:
+                continue
+            val = ai_data[provider]
+            if val is None:
+                # Explicit null = delete this key
+                existing_ai.pop(provider, None)
+            elif isinstance(val, str) and val.strip():
+                existing_ai[provider] = val.strip()
+            # Empty string = no change (keep existing)
         save("district_ai_keys", existing_ai, SYSTEM_TEACHER_ID)
 
     from backend.utils.audit import audit_log
