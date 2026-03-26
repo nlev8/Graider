@@ -1125,25 +1125,67 @@ export async function deleteOneRosterData() {
 
 - [ ] **Step 2: Add OneRoster config panel to `SettingsTab.jsx`**
 
-Find the Clever integration section in `SettingsTab.jsx` and add a parallel OneRoster section below it. The section should include:
+Find the Clever integration section in `SettingsTab.jsx` (inside the `settingsTab === "classroom"` block). Add a parallel OneRoster section. **PROVIDER EXCLUSIVITY**: Only ONE roster section is visible at a time.
 
-1. **Connection fields:** Base URL, Client ID, Client Secret, Token URL (optional), School ID (optional)
-2. **Test Connection button** — calls `testOneRosterConnection()`
-3. **Sync Roster button** — calls `syncOneRosterRoster()`, shows counts on success
-4. **Accommodation suggestions** — if sync returns accommodations, show a "Review & Apply" panel (same UI pattern as Clever accommodations)
-5. **Delete Data button** — calls `deleteOneRosterData()` with confirmation dialog
+**Provider exclusivity UI logic:**
+```javascript
+// Determine active provider
+var activeProvider = null; // 'clever' | 'oneroster' | null
+if (isCleverUser) activeProvider = 'clever';
+else if (oneRosterStatus === 'connected') activeProvider = 'oneroster';
 
-**UI Pattern:** Follow the existing Clever section's layout — collapsible card with a header icon, input fields with labels, action buttons with loading states. Use the same inline style patterns already in the file. Use `Icon` component for icons (same as rest of the app).
+// Show Clever section ONLY if no OneRoster data active
+// Show OneRoster section ONLY if no Clever data active
+// If neither active, show both with a note: "Choose one roster provider"
+// If one active, show the other with a "Switch Provider" button that:
+//   1. Confirms: "This will delete all [current provider] roster data. Continue?"
+//   2. Calls the delete endpoint for the active provider
+//   3. Then shows the config form for the new provider
+```
+
+**OneRoster config section fields:**
+1. **Base URL** — text input, required
+2. **Client ID** — text input, required
+3. **Client Secret** — password input, required
+4. **Token URL** — text input, optional (placeholder: "defaults to {base_url}/token")
+5. **School ID** — text input, optional
+6. **Teacher Sourced ID** — text input, **REQUIRED** (placeholder: "Your OneRoster teacher sourcedId — ask your SIS admin"). This is needed for teacher-scoped section filtering. Without it the backend rejects the config save (400).
+7. **Test Connection button** — calls `testOneRosterConnection()`
+8. **Sync Roster button** — calls `syncOneRosterRoster()`, shows counts on success
+9. **Accommodation suggestions** — if sync returns accommodations, show "Review & Apply" panel (same pattern as Clever)
+10. **Delete Data button** — calls `deleteOneRosterData()` with confirmation dialog
 
 **State variables to add:**
 ```javascript
-const [oneRosterConfig, setOneRosterConfig] = useState({ base_url: '', client_id: '', client_secret: '', token_url: '', school_id: '' });
+const [oneRosterConfig, setOneRosterConfig] = useState({
+  base_url: '', client_id: '', client_secret: '', token_url: '',
+  school_id: '', teacher_sourced_id: '',
+});
 const [oneRosterStatus, setOneRosterStatus] = useState(null); // null | 'connected' | 'error'
 const [oneRosterSyncing, setOneRosterSyncing] = useState(false);
 const [oneRosterAccommodations, setOneRosterAccommodations] = useState(null);
 ```
 
 **On mount:** Call `getOneRosterConfig()` to populate existing config and show connection status.
+
+**POST payload must include `teacher_sourced_id`:**
+```javascript
+api.saveOneRosterConfig({
+  base_url: oneRosterConfig.base_url,
+  client_id: oneRosterConfig.client_id,
+  client_secret: oneRosterConfig.client_secret,
+  token_url: oneRosterConfig.token_url,
+  school_id: oneRosterConfig.school_id,
+  teacher_sourced_id: oneRosterConfig.teacher_sourced_id,
+})
+```
+
+**Provider switch flow (concrete steps):**
+1. Teacher sees warning: "[Clever/OneRoster] is currently active. To switch, all existing roster data will be deleted."
+2. Teacher clicks "Switch to [other provider]"
+3. Confirm dialog: "Delete all [current] roster data and switch to [other]?"
+4. On confirm: call delete endpoint → clear local state → show new provider's config form
+5. On cancel: do nothing
 
 > **Important:** Do NOT expose `client_secret` in the config GET response. The GET endpoint returns `has_credentials: true/false` — show "Credentials saved" badge instead of the actual secret. Only send the secret on POST (save).
 
