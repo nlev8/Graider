@@ -2122,7 +2122,7 @@ function App() {
       api
         .loadRubric()
         .then((data) => {
-          if (data.rubric) setRubric(data.rubric);
+          if (data.rubric) setRubric(function(prev) { return Object.assign({}, prev, data.rubric); });
         })
         .catch(console.error),
     ]).then(() => {
