@@ -992,11 +992,18 @@ def launch_callback():
     }
 
     # ── Persist AGS context + user mapping for grade passback ──
+    # CRITICAL: All storage is keyed by the GRAIDER teacher ID (_registered_by),
+    # NOT the LTI sub. The LTI sub is a platform-specific opaque ID that won't
+    # match g.teacher_id in authenticated Graider routes. The _registered_by
+    # field (set during platform registration) is the Graider teacher who owns
+    # this platform config and will call sync-grades later.
+    owner_teacher_id = platform_config.get("_registered_by") or "system"
+
     # AGS endpoint comes from launch claims (per course), not from
     # platform registration. We must save it so sync-grades works later.
     if launch_data["is_instructor"] and launch_data["ags_endpoint"]:
         from backend.lti import save_ags_context
-        save_ags_context(launch_data["user_id"], issuer, launch_data["context_id"], {
+        save_ags_context(owner_teacher_id, issuer, launch_data["context_id"], {
             "ags_endpoint": launch_data["ags_endpoint"],
             "ags_lineitem_url": launch_data["ags_lineitem_url"],
             "ags_scopes": launch_data["ags_scopes"],
@@ -1007,13 +1014,8 @@ def launch_callback():
         })
 
     # For student launches: persist LTI sub → student name mapping.
-    # The teacher who registered this platform "owns" the mapping.
-    # We look up the teacher by checking who registered this platform.
     if not launch_data["is_instructor"]:
-        from backend.lti import save_lti_user_mapping, get_platform_config
-        # Find the teacher who registered this platform
-        # (platform_config was already loaded above)
-        owner_teacher_id = platform_config.get("_registered_by") or "system"
+        from backend.lti import save_lti_user_mapping
         save_lti_user_mapping(
             teacher_id=owner_teacher_id,
             platform_issuer=issuer,
@@ -1025,7 +1027,7 @@ def launch_callback():
 
     from backend.utils.audit import audit_log
     audit_log("LTI_LAUNCH", f"LTI launch: {launch_data['name']} from {issuer}",
-              teacher_id=launch_data["user_id"] if launch_data["is_instructor"] else None)
+              teacher_id=owner_teacher_id if launch_data["is_instructor"] else None)
 
     # Redirect to Graider app
     if launch_data["is_instructor"]:
@@ -1400,6 +1402,10 @@ export async function syncLTIGrades(payload) {
     body: JSON.stringify(payload),
   })
 }
+
+export async function getLTIContexts() {
+  return fetchApi('/api/lti/contexts')
+}
 ```
 
 Add to the default export object:
@@ -1409,6 +1415,7 @@ getLTIConfig,
 registerLTIPlatform,
 deleteLTIPlatform,
 syncLTIGrades,
+getLTIContexts,
 ```
 
 - [ ] **Step 2: Add LTI config panel to `SettingsTab.jsx`**
@@ -1426,6 +1433,14 @@ var [ltiNewPlatform, setLtiNewPlatform] = useState({
 });
 var [ltiSaving, setLtiSaving] = useState(false);
 var [ltiShowForm, setLtiShowForm] = useState(false);
+// Grade sync state
+var [ltiContexts, setLtiContexts] = useState([]);
+var [ltiSelectedContext, setLtiSelectedContext] = useState(null);
+var [ltiSyncLabel, setLtiSyncLabel] = useState('');
+var [ltiSyncMaxScore, setLtiSyncMaxScore] = useState(100);
+var [ltiSyncScores, setLtiSyncScores] = useState([]);
+var [ltiSyncing, setLtiSyncing] = useState(false);
+var [ltiSyncResult, setLtiSyncResult] = useState(null);
 ```
 
 **On mount** (in the existing classroom useEffect):
@@ -1434,6 +1449,9 @@ var [ltiShowForm, setLtiShowForm] = useState(false);
 api.getLTIConfig().then(function(data) {
   setLtiPlatforms(data.platforms || []);
   setLtiToolConfig(data.tool_config || null);
+}).catch(function() {});
+api.getLTIContexts().then(function(data) {
+  setLtiContexts(data.contexts || []);
 }).catch(function() {});
 ```
 
@@ -1454,6 +1472,17 @@ The section should contain:
 5. **LMS preset buttons** — "Canvas", "Schoology", "Google Classroom" that pre-fill the auth/token/JWKS URLs with known defaults:
    - Canvas: auth=`{issuer}/api/lti/authorize_redirect`, token=`{issuer}/login/oauth2/token`, jwks=`{issuer}/api/lti/security/jwks`
    - Schoology: auth=`https://lti.schoology.com/lti/authorize`, token=`https://lti.schoology.com/lti/token`, jwks=`https://lti.schoology.com/lti/.well-known/jwks`
+
+**Grade Sync section** — below the platform registration, inside the same LTI 1.3 block:
+
+6. **Header**: "Grade Sync to LMS" with an upload icon
+7. **Context selector dropdown** — populated from `ltiContexts` state (fetched via `GET /api/lti/contexts`). Each option shows: context_title + " (" + student_count + " students mapped)". Disabled if no contexts exist; show helper text: "Launch Graider from your LMS to enable grade sync."
+8. **Assessment/assignment picker** — once a context is selected, show a dropdown listing recent grading results (from `status.results` already available in App.jsx). Each option shows the assignment/assessment title.
+9. **Score preview table** — when both context and assessment are selected, show a read-only table of student names + scores from the selected grading results. These are the scores that will be sent to the LMS. The backend handles name→LTI user matching automatically.
+10. **Label input** — text field for the gradebook column name (pre-filled from the selected assessment title)
+11. **Max Score input** — number field (pre-filled from the assessment's total points)
+12. **"Sync Grades" button** — calls `api.syncLTIGrades({ platform_issuer, context_id, label, max_score, scores })` where scores is `[{student_name, score}]` from the selected results. On success, shows "X/Y scores synced" + any unmatched students. On error, shows the error message.
+13. **Unmatched students warning** — if `ltiSyncResult.unmatched_students` is non-empty, show a yellow banner: "X students could not be matched to LMS accounts: [names]. They need to launch Graider from the LMS at least once."
 
 **CRITICAL CODE STYLE RULES:**
 - NO template literals (backticks) — use string concatenation
