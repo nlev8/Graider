@@ -985,6 +985,7 @@ function App() {
     teacher_email: "",
     email_signature: "",
     school_name: "",
+    sis_type: "csv",  // "focus", "powerschool", "canvas", "csv"
     showToastNotifications: true,
     ai_model: "gpt-4o-mini",
     ensemble_enabled: false,

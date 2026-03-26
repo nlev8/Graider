@@ -208,9 +208,11 @@ function ExportGradesDropdown({
           borderRadius: "8px", minWidth: "200px", zIndex: 1000,
           boxShadow: "0 8px 24px rgba(0,0,0,0.3)", overflow: "hidden",
         }}>
+          {config.sis_type === 'focus' && (<>
           <DropdownItem onClick={handleFocusSIS} icon="Upload" label="Focus SIS" />
           <DropdownItem onClick={handleFocusBatch} icon="FolderDown" label="Focus Batch" />
           <div style={{ height: "1px", background: "var(--glass-border)", margin: "2px 0" }} />
+          </>)}
           <DropdownItem onClick={() => handleLmsExport('canvas')} icon="GraduationCap" label="Canvas LMS" />
           <DropdownItem onClick={() => handleLmsExport('powerschool')} icon="School" label="PowerSchool" />
         </div>
@@ -1063,7 +1065,8 @@ export default React.memo(function ResultsTab({
                               : "Upload Comments"}
                           </button>
                           </div>
-                          {/* Email Actions Group */}
+                          {/* Email Actions Group — Focus SIS only */}
+                          {config.sis_type === 'focus' && (
                           <div data-tutorial="results-email" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(234,179,8,0.06)" }}>
                           <button
                             onClick={async () => {
@@ -1191,6 +1194,7 @@ export default React.memo(function ResultsTab({
                               : "Send via Outlook"}
                           </button>
                           </div>
+                          )}
                           {/* Confirmation Emails Group */}
                           {config.assignments_folder && (
                             <div data-tutorial="results-confirmations" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid rgba(59,130,246,0.2)", background: "rgba(59,130,246,0.06)" }}>
