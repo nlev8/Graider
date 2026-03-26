@@ -2331,6 +2331,16 @@ def get_standards():
     })
 
 
+@planner_bp.route('/api/available-states', methods=['GET'])
+def get_available_states():
+    """Return list of all supported states with names. No auth required."""
+    smap = _get_standards_map()
+    states = []
+    for code, info in sorted(smap.get('states', {}).items(), key=lambda x: x[1].get('name', '')):
+        states.append({'code': code, 'name': info.get('name', code)})
+    return jsonify({'states': states})
+
+
 @planner_bp.route('/api/align-document-to-standards', methods=['POST'])
 @require_teacher
 @handle_route_errors

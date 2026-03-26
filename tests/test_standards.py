@@ -160,3 +160,26 @@ class TestLoadStandards:
         assert isinstance(result, dict)
         # Should find via standards/fl/civics.json
         assert len(result['standards']) > 0
+
+
+class TestAvailableStates:
+    def test_standards_map_has_51_entries(self):
+        """50 states + DC = 51 entries."""
+        from backend.routes.planner_routes import _get_standards_map
+        smap = _get_standards_map()
+        assert len(smap.get('states', {})) == 51
+
+    def test_fl_is_state_specific(self):
+        from backend.routes.planner_routes import _get_standards_map
+        smap = _get_standards_map()
+        assert smap['states']['FL']['framework'] == 'fl'
+
+    def test_ca_uses_ccss(self):
+        from backend.routes.planner_routes import _get_standards_map
+        smap = _get_standards_map()
+        assert smap['states']['CA']['framework'] == 'ccss'
+
+    def test_tx_is_state_specific(self):
+        from backend.routes.planner_routes import _get_standards_map
+        smap = _get_standards_map()
+        assert smap['states']['TX']['framework'] == 'tx'
