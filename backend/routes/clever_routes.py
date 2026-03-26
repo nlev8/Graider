@@ -26,6 +26,7 @@ from backend.clever import (
 )
 from backend.accommodations import set_student_accommodation
 from backend.auth import load_clever_links, save_clever_link, resolve_clever_user_id
+from backend.roster_sync import sync_roster_to_db as _shared_sync_roster_to_db
 from backend.supabase_client import get_supabase as _get_supabase_safe
 from backend.utils.errors import handle_route_errors
 from backend.utils.auth_decorators import require_clever_session
@@ -83,27 +84,17 @@ def _run_async(coro):
 
 
 def _sync_classes_to_db(sections, students, teacher_id):
-    """Upsert Clever sections and students into Supabase classes/students/class_students tables.
+    """Normalise Clever data and delegate to shared roster sync.
 
-    Called after file-based persist so the class-based student portal can see Clever-rostered data.
-    Silently skips if Supabase is not configured.
-
-    Uses batched upserts to minimise Supabase HTTP round-trips:
-      - ONE call to upsert all classes
-      - ONE call to upsert all unique students
-      - ONE call to upsert all (class, student) enrollment pairs
+    Converts Clever's ``{data: {...}}`` wrapper format into the provider-agnostic
+    shape expected by ``sync_roster_to_db`` and calls it.
 
     Args:
         sections: List of Clever section dicts (with 'data' wrapper).
         students: List of Clever student dicts (with 'data' wrapper).
         teacher_id: Graider teacher ID (may be 'clever:xxx' format).
     """
-    sb = _get_supabase_safe()
-    if sb is None:
-        logger.debug("Supabase not configured — skipping class DB sync")
-        return
-
-    # Build a lookup from clever student id -> student record for fast access
+    # Build a lookup from clever student id -> unwrapped student record
     student_map = {}
     for s in students:
         sd = s.get("data", s)
@@ -111,139 +102,43 @@ def _sync_classes_to_db(sections, students, teacher_id):
         if sid:
             student_map[sid] = sd
 
-    # --- Phase 1: Collect and batch-upsert all class records ---
-    # Preserve insertion order so callers can predict class_id_map contents
-    section_data_map = {}  # clever_section_id -> section dict
-    class_payloads = []
+    # Normalise classes
+    norm_classes = []
+    section_data_map = {}
     for section in sections:
         sec = section.get("data", section)
         clever_section_id = sec.get("id")
         if not clever_section_id:
             continue
         section_data_map[clever_section_id] = sec
-        class_payloads.append({
-            "teacher_id": teacher_id,
+        norm_classes.append({
+            "external_id": clever_section_id,
             "name": sec.get("name", ""),
             "subject": sec.get("subject", ""),
             "grade_level": sec.get("grade", ""),
-            "clever_section_id": clever_section_id,
-            "is_active": True,
         })
 
-    if not class_payloads:
-        logger.info("DB class sync complete: 0 classes, 0 students, 0 enrollments")
-        return
-
-    try:
-        class_result = (
-            sb.table("classes")
-            .upsert(class_payloads, on_conflict="teacher_id,clever_section_id")
-            .execute()
-        )
-    except Exception as e:
-        logger.warning("Failed to batch-upsert classes: %s", str(e))
-        return
-
-    class_rows = class_result.data if class_result and class_result.data else []
-    if not class_rows:
-        logger.warning("No class rows returned from batch upsert")
-        return
-
-    # Build clever_section_id -> DB class UUID map from returned rows
-    class_id_map = {}
-    for row in class_rows:
-        csid = row.get("clever_section_id", "")
-        if csid and row.get("id"):
-            class_id_map[csid] = row["id"]
-
-    synced_classes = len(class_id_map)
-
-    # --- Phase 2: Collect and batch-upsert all unique students ---
-    # Also build the list of (section_id, student_clever_id) pairs for enrollment
-    enrollment_pairs = []   # list of (clever_section_id, clever_student_id)
-    unique_students = {}    # clever_student_id -> student upsert payload
-
+    # Normalise students and build enrollment pairs
+    norm_students = []
+    seen_students = set()
+    enrollment_pairs = []
     for clever_section_id, sec in section_data_map.items():
-        if clever_section_id not in class_id_map:
-            # No DB class was returned for this section — skip its students
-            continue
         for clever_student_id in sec.get("students", []):
             sd = student_map.get(clever_student_id)
             if not sd:
                 continue
             enrollment_pairs.append((clever_section_id, clever_student_id))
-            if clever_student_id not in unique_students:
+            if clever_student_id not in seen_students:
+                seen_students.add(clever_student_id)
                 name = sd.get("name", {})
-                unique_students[clever_student_id] = {
-                    "teacher_id": teacher_id,
-                    "student_id_number": clever_student_id,
+                norm_students.append({
+                    "external_id": clever_student_id,
                     "first_name": name.get("first", ""),
                     "last_name": name.get("last", ""),
                     "email": sd.get("email", ""),
-                    "is_active": True,
-                }
+                })
 
-    if not unique_students:
-        logger.info(
-            "DB class sync complete: %d classes, 0 students, 0 enrollments",
-            synced_classes,
-        )
-        return
-
-    try:
-        stu_result = (
-            sb.table("students")
-            .upsert(list(unique_students.values()), on_conflict="teacher_id,student_id_number")
-            .execute()
-        )
-    except Exception as e:
-        logger.warning("Failed to batch-upsert students: %s", str(e))
-        logger.info(
-            "DB class sync complete: %d classes, 0 students, 0 enrollments",
-            synced_classes,
-        )
-        return
-
-    stu_rows = stu_result.data if stu_result and stu_result.data else []
-    if not stu_rows:
-        logger.warning("No student rows returned from batch upsert")
-        logger.info(
-            "DB class sync complete: %d classes, 0 students, 0 enrollments",
-            synced_classes,
-        )
-        return
-
-    # Build clever_student_id -> DB student UUID map from returned rows
-    student_id_map = {}
-    for row in stu_rows:
-        sid_num = row.get("student_id_number", "")
-        if sid_num and row.get("id"):
-            student_id_map[sid_num] = row["id"]
-
-    synced_students = len(student_id_map)
-
-    # --- Phase 3: Batch-upsert all (class, student) enrollment pairs ---
-    enrollment_payloads = []
-    for clever_section_id, clever_student_id in enrollment_pairs:
-        class_db_id = class_id_map.get(clever_section_id)
-        student_db_id = student_id_map.get(clever_student_id)
-        if class_db_id and student_db_id:
-            enrollment_payloads.append({"class_id": class_db_id, "student_id": student_db_id})
-
-    synced_enrollments = 0
-    if enrollment_payloads:
-        try:
-            sb.table("class_students").upsert(
-                enrollment_payloads, on_conflict="class_id,student_id"
-            ).execute()
-            synced_enrollments = len(enrollment_payloads)
-        except Exception as e:
-            logger.warning("Failed to batch-upsert enrollments: %s", str(e))
-
-    logger.info(
-        "DB class sync complete: %d classes, %d students, %d enrollments",
-        synced_classes, synced_students, synced_enrollments,
-    )
+    _shared_sync_roster_to_db(norm_classes, norm_students, enrollment_pairs, teacher_id, provider="clever")
 
 
 def _create_clever_student_session(clever_id, email):
