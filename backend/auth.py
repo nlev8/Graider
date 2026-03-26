@@ -66,6 +66,7 @@ PUBLIC_PREFIXES = [
     '/api/student/join/',      # Anonymous join-code portal (GET assessment by code)
     '/api/student/submit/',    # Anonymous submission (join-code path, POST)
     '/api/clever/',            # Clever OAuth flow (callback must be unauthenticated)
+    '/api/lti/',               # LTI OIDC login, launch callback, JWKS (platform-initiated)
 ]
 
 PUBLIC_EXACT = [
