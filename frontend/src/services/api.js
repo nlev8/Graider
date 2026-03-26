@@ -256,6 +256,12 @@ export async function getAggregatedAssessmentResults(category) {
   return fetchApi(url)
 }
 
+// ============ Standards ============
+
+export async function getAvailableStates() {
+  return fetchApi('/api/available-states')
+}
+
 // ============ Analytics ============
 
 export async function getAnalytics(period, source) {
@@ -1323,6 +1329,7 @@ export default {
   exportAssignment,
   parseDocument,
   getAnalytics,
+  getAvailableStates,
   exportDistrictReport,
   retranslateFeedback,
   getStandards,

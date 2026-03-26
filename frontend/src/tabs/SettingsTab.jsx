@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
 import { getAuthHeaders } from "../services/api";
@@ -138,6 +138,13 @@ export default React.memo(function SettingsTab({
   const [cleverAccommSuggestions, setCleverAccommSuggestions] = useState(null);
   const [cleverApplying, setCleverApplying] = useState(false);
   const [showManualSetup, setShowManualSetup] = useState(false);
+  const [availableStates, setAvailableStates] = useState([]);
+
+  useEffect(() => {
+    api.getAvailableStates().then((data) => {
+      if (data.states) setAvailableStates(data.states);
+    }).catch(() => {});
+  }, []);
 
   return (
     <>
@@ -386,16 +393,11 @@ export default React.memo(function SettingsTab({
                     }))
                   }
                 >
-                  <option value="FL">Florida</option>
-                  <option value="TX">Texas</option>
-                  <option value="CA">California</option>
-                  <option value="NY">New York</option>
-                  <option value="GA">Georgia</option>
-                  <option value="NC">North Carolina</option>
-                  <option value="VA">Virginia</option>
-                  <option value="OH">Ohio</option>
-                  <option value="PA">Pennsylvania</option>
-                  <option value="IL">Illinois</option>
+                  {availableStates.length > 0 ? availableStates.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name}</option>
+                  )) : (
+                    <option value={config.state}>{config.state}</option>
+                  )}
                 </select>
               </div>
 

@@ -449,6 +449,8 @@ export default React.memo(function PlannerTab({
   const [brainstormIdeas, setBrainstormIdeas] = useState([]);
   const [selectedIdea, setSelectedIdea] = useState(null);
   const [plannerLoading, setPlannerLoading] = useState(false);
+  var [standardsFallbackNotice, setStandardsFallbackNotice] = useState(null);
+  var [stateNames, setStateNames] = useState({});
   const [brainstormLoading, setBrainstormLoading] = useState(false);
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
@@ -906,6 +908,16 @@ export default React.memo(function PlannerTab({
         .then((data) => {
           console.log("Standards loaded:", data);
           setStandards(data.standards || []);
+          var sName = stateNames[config.state] || config.state;
+          if (data.no_framework) {
+            setStandardsFallbackNotice('No national standards framework available for ' + config.subject + '. Standards vary by state and district.');
+          } else if (data.state_note) {
+            setStandardsFallbackNotice(sName + ' has its own standards framework. Using Common Core standards as an approximation.');
+          } else if (data.fallback_used) {
+            setStandardsFallbackNotice('State-specific standards not yet available for ' + sName + ' ' + config.subject + '. Using Common Core standards.');
+          } else {
+            setStandardsFallbackNotice(null);
+          }
         })
         .catch((e) => {
           console.error("Error loading standards:", e);
@@ -916,6 +928,17 @@ export default React.memo(function PlannerTab({
         });
     }
   }, [config.state, config.grade_level, config.subject]);
+
+  // Fetch available states for state name lookup
+  useEffect(function() {
+    api.getAvailableStates().then(function(data) {
+      if (data.states) {
+        var map = {};
+        data.states.forEach(function(s) { map[s.code] = s.name; });
+        setStateNames(map);
+      }
+    }).catch(function() {});
+  }, []);
 
   // Check NotebookLM auth status on mount
   useEffect(function() {
@@ -2574,7 +2597,7 @@ export default React.memo(function PlannerTab({
                                     { key: "vocabulary", label: "Vocabulary", icon: "BookOpen", group: "optional" },
                                     { key: "true_false", label: "True / False", icon: "ToggleLeft", group: "optional" },
                                     { key: "florida_fast", label: "FL FAST Items", icon: "ListChecks", group: "optional" },
-                                  ].map((cat, idx, arr) => {
+                                  ].filter(function(cat) { return cat.key !== 'florida_fast' || config.state === 'FL'; }).map((cat, idx, arr) => {
                                     const prevGroup = idx > 0 ? arr[idx - 1].group : null;
                                     const showDivider = cat.group !== prevGroup;
                                     const groupLabels = { core: "Core", stem: "STEM", optional: "Optional" };
@@ -4197,18 +4220,7 @@ export default React.memo(function PlannerTab({
                                   verticalAlign: "middle",
                                 }}
                               />
-                              {{
-                                FL: "Florida",
-                                TX: "Texas",
-                                CA: "California",
-                                NY: "New York",
-                                GA: "Georgia",
-                                NC: "North Carolina",
-                                VA: "Virginia",
-                                OH: "Ohio",
-                                PA: "Pennsylvania",
-                                IL: "Illinois",
-                              }[config.state] || config.state}
+                              {stateNames[config.state] || config.state}
                             </span>
                             <span
                               style={{
@@ -4271,6 +4283,18 @@ export default React.memo(function PlannerTab({
                                   </button>
                                 );
                               })}
+                            </div>
+                          )}
+
+                          {standardsFallbackNotice && (
+                            <div style={{
+                              padding: "10px 14px", marginBottom: "12px",
+                              background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.25)",
+                              borderRadius: "8px", fontSize: "0.85rem", color: "#93c5fd",
+                              display: "flex", alignItems: "center", gap: "8px",
+                            }}>
+                              <Icon name="Info" size={16} />
+                              {standardsFallbackNotice}
                             </div>
                           )}
 
@@ -4597,10 +4621,10 @@ export default React.memo(function PlannerTab({
                                 { key: "vocabulary", label: "Vocabulary / Matching", desc: "Term-definition matching", icon: "BookOpen", group: "optional" },
                                 { key: "true_false", label: "True / False", desc: "Statement evaluation", icon: "ToggleLeft", group: "optional" },
                                 { key: "florida_fast", label: "FL FAST Item Types", desc: "Multiselect, multi-part, grid match, inline dropdown", icon: "ListChecks", group: "optional" },
-                              ].map((cat, idx, arr) => {
+                              ].filter(function(cat) { return cat.key !== 'florida_fast' || config.state === 'FL'; }).map((cat, idx, arr) => {
                                 const prevGroup = idx > 0 ? arr[idx - 1].group : null;
                                 const showDivider = cat.group !== prevGroup;
-                                const groupLabels = { core: "FL FAST Core", stem: "STEM Visuals", optional: "Optional" };
+                                const groupLabels = { core: "Core", stem: "STEM Visuals", optional: "Optional" };
                                 return (
                                   <div key={cat.key}>
                                     {showDivider && (
