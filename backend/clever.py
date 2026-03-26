@@ -31,7 +31,22 @@ PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 
 
 def get_clever_config():
-    """Return Clever credentials from environment."""
+    """Return Clever credentials from district config or environment."""
+    # Check district-level config first
+    try:
+        from backend.storage import load
+        district_cfg = load("district_sis_config", "system")
+        if district_cfg and district_cfg.get("sis_type") == "clever":
+            redirect_uri = district_cfg.get("redirect_uri") or os.getenv("CLEVER_REDIRECT_URI")
+            return {
+                "client_id": district_cfg.get("client_id"),
+                "client_secret": district_cfg.get("client_secret"),
+                "redirect_uri": redirect_uri,
+            }
+    except Exception:
+        pass
+
+    # Fall back to environment variables
     client_id = os.getenv("CLEVER_CLIENT_ID")
     client_secret = os.getenv("CLEVER_CLIENT_SECRET")
     redirect_uri = os.getenv("CLEVER_REDIRECT_URI")

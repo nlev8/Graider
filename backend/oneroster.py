@@ -302,6 +302,29 @@ def get_oneroster_config(teacher_id=None):
         except Exception as e:
             logger.debug("Could not load per-teacher OneRoster config: %s", e)
 
+    # Try district-level config from storage
+    try:
+        from backend.storage import load
+        district_cfg = load("district_sis_config", "system")
+        if district_cfg and district_cfg.get("sis_type") == "oneroster":
+            teacher_sourced_id = None
+            if teacher_id:
+                try:
+                    teacher_sourced_id = load("oneroster_teacher_id", teacher_id)
+                except Exception:
+                    pass
+            return {
+                "base_url": district_cfg.get("base_url"),
+                "client_id": district_cfg.get("client_id"),
+                "client_secret": district_cfg.get("client_secret"),
+                "token_url": district_cfg.get("token_url"),
+                "school_id": district_cfg.get("school_id"),
+                "teacher_sourced_id": teacher_sourced_id,
+                "_source": "district",
+            }
+    except Exception as e:
+        logger.debug("Could not load district OneRoster config: %s", e)
+
     # Fall back to environment variables
     base_url = os.getenv("ONEROSTER_BASE_URL")
     client_id = os.getenv("ONEROSTER_CLIENT_ID")

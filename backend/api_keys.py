@@ -80,6 +80,17 @@ def get_api_key(provider: str, teacher_id: str | None = None) -> str:
         if val:
             return val
 
+    # 3b. Check district admin setup keys
+    try:
+        from backend.storage import load as _storage_load
+        district_ai = _storage_load("district_ai_keys", "system")
+        if district_ai:
+            val = district_ai.get(provider, '')
+            if val:
+                return val
+    except Exception:
+        pass
+
     # 4. Fall back to env var
     return os.getenv(env_var, '')
 
@@ -107,11 +118,17 @@ def resolve_keys_for_teacher(teacher_id: str) -> dict:
     user_keys = _load_user_keys(teacher_id) if teacher_id and teacher_id != 'local-dev' else {}
     district_id = _get_district_id()
     district_keys = _load_district_keys(district_id) if district_id else {}
+    try:
+        from backend.storage import load as _storage_load
+        district_admin_keys = _storage_load("district_ai_keys", "system") or {}
+    except Exception:
+        district_admin_keys = {}
     resolved = {}
     for provider, env_var in _ENV_MAP.items():
         resolved[provider] = (
             user_keys.get(provider, '')
             or district_keys.get(provider, '')
+            or district_admin_keys.get(provider, '')
             or os.getenv(env_var, '')
         )
     return resolved
