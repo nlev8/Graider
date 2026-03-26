@@ -277,6 +277,23 @@ def apply_accommodations():
     return jsonify({"status": "applied", "count": applied})
 
 
+# ── POST /api/oneroster/teacher-id ────────────────────────────────────────
+
+@oneroster_bp.route("/api/oneroster/teacher-id", methods=["POST"])
+@require_teacher
+@handle_route_errors
+def save_teacher_id():
+    """Save just the teacher's OneRoster sourcedId (used with district-level config)."""
+    data = request.json or {}
+    teacher_sourced_id = data.get("teacher_sourced_id", "").strip()
+    if not teacher_sourced_id:
+        return jsonify({"error": "teacher_sourced_id is required"}), 400
+
+    from backend.storage import save
+    save("oneroster_teacher_id", {"teacher_sourced_id": teacher_sourced_id}, g.teacher_id)
+    return jsonify({"status": "saved"})
+
+
 # ── POST /api/oneroster/delete-data ───────────────────────────────────────
 
 @oneroster_bp.route("/api/oneroster/delete-data", methods=["POST"])

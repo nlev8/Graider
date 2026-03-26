@@ -1349,6 +1349,13 @@ export async function deleteOneRosterData() {
   return fetchApi('/api/oneroster/delete-data', { method: 'POST' })
 }
 
+export async function saveOneRosterTeacherId(teacherSourcedId) {
+  return fetchApi('/api/oneroster/teacher-id', {
+    method: 'POST',
+    body: JSON.stringify({ teacher_sourced_id: teacherSourcedId }),
+  })
+}
+
 // ============ LTI 1.3 Integration ============
 
 export async function getLTIConfig() {
@@ -1601,6 +1608,7 @@ export default {
   syncOneRosterRoster,
   applyOneRosterAccommodations,
   deleteOneRosterData,
+  saveOneRosterTeacherId,
   // LTI 1.3 Integration
   getLTIConfig,
   registerLTIPlatform,

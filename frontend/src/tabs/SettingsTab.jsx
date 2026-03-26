@@ -155,6 +155,8 @@ export default React.memo(function SettingsTab({
   var [showOneRosterSecret, setShowOneRosterSecret] = useState(false);
   var [oneRosterHasCredentials, setOneRosterHasCredentials] = useState(false);
   var [showSwitchProviderConfirm, setShowSwitchProviderConfirm] = useState(null);
+  var [districtSisProvider, setDistrictSisProvider] = useState(null);
+  var [teacherSisId, setTeacherSisId] = useState('');
 
   // LTI 1.3 integration state
   var [ltiPlatforms, setLtiPlatforms] = useState([]);
@@ -205,6 +207,10 @@ export default React.memo(function SettingsTab({
       if (data.status === 'connected') {
         setOneRosterStatus('connected');
       }
+    }).catch(function() {});
+    // Check district SIS provider
+    api.getDistrictConfigStatus().then(function(data) {
+      setDistrictSisProvider(data.sis_provider || null);
     }).catch(function() {});
     // Load LTI config on mount
     api.getLTIConfig().then(function(data) {
@@ -1863,6 +1869,65 @@ export default React.memo(function SettingsTab({
                   Connect to any OneRoster-compatible SIS (PowerSchool, Infinite Campus, Skyward, etc.) to sync your roster automatically.
                 </p>
 
+                {districtSisProvider === 'oneroster' ? (
+                  /* SIMPLIFIED VIEW - district has configured OneRoster credentials */
+                  <div style={{ padding: "18px", background: "var(--card-bg)", borderRadius: "12px", border: "1px solid var(--glass-border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                      <Icon name="RefreshCw" size={20} />
+                      <span style={{ fontWeight: 700, fontSize: "1rem" }}>Roster Sync</span>
+                      <span style={{ background: "#059669", color: "white", padding: "2px 8px", borderRadius: "6px", fontSize: "0.7rem", fontWeight: 600 }}>District configured</span>
+                    </div>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "16px" }}>
+                      Your district has set up OneRoster. Enter your SIS Teacher ID to sync your class roster.
+                    </p>
+                    <div style={{ marginBottom: "12px" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>SIS Teacher ID</label>
+                      <input
+                        type="text"
+                        value={teacherSisId}
+                        onChange={function(e) { setTeacherSisId(e.target.value); }}
+                        placeholder="Ask your school admin for your OneRoster teacher sourcedId"
+                        style={{ width: "100%", padding: "10px 14px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "10px", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none", maxWidth: "500px" }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        onClick={async function() {
+                          if (!teacherSisId.trim()) { addToast("Please enter your SIS Teacher ID", "error"); return; }
+                          setOneRosterSyncing(true);
+                          try {
+                            await api.saveOneRosterTeacherId(teacherSisId.trim());
+                            var result = await api.syncOneRosterRoster();
+                            if (result.counts) {
+                              setOneRosterSyncResult(result);
+                              addToast("Roster synced: " + result.counts.classes + " classes, " + result.counts.students + " students", "success");
+                            } else if (result.error) {
+                              addToast(result.error, "error");
+                            }
+                          } catch (err) {
+                            addToast("Sync failed: " + err.message, "error");
+                          }
+                          setOneRosterSyncing(false);
+                        }}
+                        disabled={oneRosterSyncing || !teacherSisId.trim()}
+                        className="btn btn-primary"
+                        style={{ opacity: (oneRosterSyncing || !teacherSisId.trim()) ? 0.6 : 1 }}
+                      >
+                        <Icon name="RefreshCw" size={18} style={oneRosterSyncing ? { animation: "spin 1s linear infinite" } : {}} />
+                        {oneRosterSyncing ? "Syncing..." : "Sync Roster"}
+                      </button>
+                    </div>
+                    {oneRosterSyncResult && oneRosterSyncResult.counts && (
+                      <div style={{ marginTop: "12px", padding: "12px", background: "rgba(5,150,105,0.1)", borderRadius: "8px", fontSize: "0.85rem" }}>
+                        <span style={{ fontWeight: 600 }}>Synced: </span>
+                        {oneRosterSyncResult.counts.classes + " classes, " + oneRosterSyncResult.counts.students + " students, " + oneRosterSyncResult.counts.enrollments + " enrollments"}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* FULL FORM - no district config, teacher manages everything */
+                  <>
+
                 {/* Switch provider button if OneRoster is active and user wants Clever */}
                 {activeProvider === 'oneroster' && (
                   <div style={{ marginBottom: "15px" }}>
@@ -2187,6 +2252,8 @@ export default React.memo(function SettingsTab({
                       Delete OneRoster Data
                     </button>
                   </div>
+                )}
+                  </>
                 )}
               </div>
             )}
