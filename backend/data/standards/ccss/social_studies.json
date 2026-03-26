@@ -1,0 +1,1600 @@
+[
+  {
+    "code": "D1.1.6-8",
+    "benchmark": "Explain how a question reflects an enduring issue in the field.",
+    "topics": ["Inquiry", "Essential Questions", "Civic Issues"],
+    "dok": 2,
+    "item_specs": "Students identify how a constructed question connects to a recurring or enduring issue within social studies disciplines.",
+    "essential_questions": [
+      "What makes a question worth investigating?",
+      "How do enduring issues shape the questions we ask about society?"
+    ],
+    "learning_targets": [
+      "I can explain how a question connects to an ongoing or enduring issue.",
+      "I can identify the disciplinary focus of an inquiry question."
+    ],
+    "vocabulary": ["enduring issue", "inquiry", "compelling question", "supporting question", "civic issue"],
+    "sample_assessment": "Read three sample inquiry questions. For each, explain which enduring social studies issue it reflects and why that issue continues to matter today."
+  },
+  {
+    "code": "D1.2.6-8",
+    "benchmark": "Explain points of agreement and disagreement experts have about interpretations and applications of disciplinary concepts.",
+    "topics": ["Inquiry", "Disciplinary Concepts", "Multiple Perspectives"],
+    "dok": 3,
+    "item_specs": "Students compare expert interpretations of disciplinary concepts and explain where and why disagreements arise.",
+    "essential_questions": [
+      "Why do experts sometimes disagree about how to interpret historical or social events?",
+      "How does understanding disagreement among experts improve our own thinking?"
+    ],
+    "learning_targets": [
+      "I can identify where experts agree and disagree on a disciplinary concept.",
+      "I can explain why experts may interpret the same evidence differently."
+    ],
+    "vocabulary": ["interpretation", "disciplinary concept", "perspective", "expert analysis", "evidence-based claim"],
+    "sample_assessment": "Read two expert analyses of a historical event. Identify two points of agreement and two points of disagreement, then explain what accounts for the differences in interpretation."
+  },
+  {
+    "code": "D1.3.6-8",
+    "benchmark": "Explain points of agreement and disagreement experts have about interpretations and applications of disciplinary concepts in civics, economics, geography, and history.",
+    "topics": ["Inquiry", "Interdisciplinary Thinking", "Conceptual Understanding"],
+    "dok": 3,
+    "item_specs": "Students apply interdisciplinary thinking to compare how different social studies disciplines approach shared topics.",
+    "essential_questions": [
+      "How do different social studies disciplines help us understand the same issue from multiple angles?",
+      "Why is it valuable to combine perspectives from civics, economics, geography, and history?"
+    ],
+    "learning_targets": [
+      "I can explain how multiple social studies disciplines approach the same topic differently.",
+      "I can use disciplinary concepts from more than one field to develop an inquiry question."
+    ],
+    "vocabulary": ["interdisciplinary", "civic lens", "economic lens", "geographic lens", "historical lens"],
+    "sample_assessment": "Choose one current event and write three supporting questions about it — one from a civics perspective, one economic, and one geographic. Explain what each question would help you learn."
+  },
+  {
+    "code": "D1.4.6-8",
+    "benchmark": "Explain how the relationship between supporting questions and a compelling question is mutually reinforcing.",
+    "topics": ["Inquiry Design", "Compelling Questions", "Supporting Questions"],
+    "dok": 2,
+    "item_specs": "Students construct supporting questions that directly feed into a compelling question, demonstrating how evidence from supporting questions builds toward an answer.",
+    "essential_questions": [
+      "How do smaller questions build toward answering a bigger question?",
+      "What makes supporting questions effective for guiding research?"
+    ],
+    "learning_targets": [
+      "I can construct supporting questions that help answer a compelling question.",
+      "I can explain how answering supporting questions builds toward a final conclusion."
+    ],
+    "vocabulary": ["compelling question", "supporting question", "inquiry arc", "evidence", "conclusion"],
+    "sample_assessment": "Given the compelling question 'How does access to clean water affect communities?', write three supporting questions and explain how each one contributes to answering the larger question."
+  },
+  {
+    "code": "D1.1.9-12",
+    "benchmark": "Explain how a question reflects an enduring issue in the field.",
+    "topics": ["Inquiry", "Enduring Issues", "Disciplinary Thinking"],
+    "dok": 3,
+    "item_specs": "Students analyze how inquiry questions connect to complex, enduring issues that span across time and disciplines in social studies.",
+    "essential_questions": [
+      "What enduring issues are embedded in our most important social questions?",
+      "How does framing a question well determine the quality of the inquiry?"
+    ],
+    "learning_targets": [
+      "I can analyze how an inquiry question reflects a recurring issue in social studies.",
+      "I can refine a question to better capture the enduring nature of a social issue."
+    ],
+    "vocabulary": ["enduring issue", "framing", "normative question", "analytical question", "civic agency"],
+    "sample_assessment": "Select a current policy debate and write a compelling inquiry question about it. Then explain in two paragraphs how your question connects to at least one enduring issue in the social studies disciplines."
+  },
+  {
+    "code": "D1.2.9-12",
+    "benchmark": "Explain points of agreement and disagreement experts have about interpretations and applications of disciplinary concepts.",
+    "topics": ["Expert Disagreement", "Disciplinary Concepts", "Critical Analysis"],
+    "dok": 4,
+    "item_specs": "Students critically evaluate expert interpretations, identifying the assumptions, evidence, and reasoning behind points of agreement and disagreement.",
+    "essential_questions": [
+      "How do underlying assumptions shape expert interpretations?",
+      "Why is scholarly disagreement a sign of intellectual vitality rather than failure?"
+    ],
+    "learning_targets": [
+      "I can evaluate the assumptions and evidence behind competing expert interpretations.",
+      "I can explain how disciplinary context shapes what experts consider valid evidence."
+    ],
+    "vocabulary": ["assumption", "interpretation", "scholarly debate", "disciplinary lens", "epistemology"],
+    "sample_assessment": "Read two scholarly articles that reach different conclusions about the causes of a major historical event. Write an analytical essay identifying their points of agreement and disagreement, and evaluate which interpretation is better supported by evidence."
+  },
+  {
+    "code": "D2.Civ.1.6-8",
+    "benchmark": "Distinguish the powers and responsibilities of local, state, tribal, national, and international civic and political institutions.",
+    "topics": ["Civic Institutions", "Levels of Government", "Political Systems"],
+    "dok": 2,
+    "item_specs": "Students identify and differentiate the powers, responsibilities, and jurisdictions of various governmental levels and institutions.",
+    "essential_questions": [
+      "Why is power divided among different levels of government?",
+      "How do local, state, and national governments work together and sometimes conflict?"
+    ],
+    "learning_targets": [
+      "I can distinguish between the powers of local, state, and national governments.",
+      "I can explain why tribal governments and international institutions have unique roles."
+    ],
+    "vocabulary": ["federalism", "jurisdiction", "sovereignty", "separation of powers", "local government", "tribal sovereignty"],
+    "sample_assessment": "Create a three-column chart listing three powers or responsibilities unique to local government, state government, and the national government. Then write a paragraph explaining why this division of power matters."
+  },
+  {
+    "code": "D2.Civ.2.6-8",
+    "benchmark": "Explain specific roles played by citizens (such as voters, jurors, taxpayers, members of the armed services, petitioners, protesters, and office holders).",
+    "topics": ["Civic Participation", "Citizenship Roles", "Democratic Process"],
+    "dok": 2,
+    "item_specs": "Students describe specific roles citizens play in democratic society and explain how each contributes to civic life.",
+    "essential_questions": [
+      "What responsibilities come with citizenship in a democracy?",
+      "How do different forms of civic participation strengthen democratic society?"
+    ],
+    "learning_targets": [
+      "I can explain the roles citizens play in supporting democratic government.",
+      "I can describe how different forms of civic participation contribute to democracy."
+    ],
+    "vocabulary": ["civic duty", "suffrage", "jury duty", "petition", "civil disobedience", "civic engagement"],
+    "sample_assessment": "Choose three different citizenship roles (e.g., voter, juror, protester) and write a paragraph for each explaining how that role contributes to democratic governance and why it matters."
+  },
+  {
+    "code": "D2.Civ.3.6-8",
+    "benchmark": "Examine the origins, purposes, and impact of constitutions, laws, treaties, and international agreements.",
+    "topics": ["Constitutional Principles", "Rule of Law", "International Agreements"],
+    "dok": 3,
+    "item_specs": "Students analyze how key documents like constitutions, laws, and treaties are created, what purposes they serve, and how they have shaped societies.",
+    "essential_questions": [
+      "Why do societies need written laws and constitutions?",
+      "How do treaties and international agreements affect people's lives?"
+    ],
+    "learning_targets": [
+      "I can explain the origins and purposes of a major constitutional document.",
+      "I can analyze how a specific law or treaty has impacted people and governments."
+    ],
+    "vocabulary": ["constitution", "treaty", "rule of law", "ratification", "amendment", "international law"],
+    "sample_assessment": "Select one historical treaty or constitutional amendment and write an analysis explaining its origins, its stated purpose, and its actual impact on people at the time and since."
+  },
+  {
+    "code": "D2.Civ.4.6-8",
+    "benchmark": "Explain the powers and limits of the three branches of government, public officials, and bureaucracies at different levels in the United States and in other countries.",
+    "topics": ["Branches of Government", "Checks and Balances", "Separation of Powers"],
+    "dok": 2,
+    "item_specs": "Students identify the powers and limits of legislative, executive, and judicial branches and explain how checks and balances function.",
+    "essential_questions": [
+      "Why is it important to limit governmental power?",
+      "How do checks and balances prevent any one branch from becoming too powerful?"
+    ],
+    "learning_targets": [
+      "I can explain the powers and limits of each branch of the U.S. government.",
+      "I can describe how checks and balances prevent abuses of power."
+    ],
+    "vocabulary": ["legislative", "executive", "judicial", "checks and balances", "veto", "judicial review", "bureaucracy"],
+    "sample_assessment": "Draw a diagram showing the three branches of government and at least two examples of how each branch checks the power of the others. Write a brief explanation of why this system was designed this way."
+  },
+  {
+    "code": "D2.Civ.5.6-8",
+    "benchmark": "Explain the origins and purposes of rules, laws, and key U.S. constitutional provisions.",
+    "topics": ["Rule of Law", "Constitutional Provisions", "Legal Origins"],
+    "dok": 2,
+    "item_specs": "Students trace the historical origins of key legal provisions and explain how they address fundamental civic problems.",
+    "essential_questions": [
+      "How did the problems of the past shape the laws we have today?",
+      "Why do constitutional provisions need to be interpreted and reinterpreted over time?"
+    ],
+    "learning_targets": [
+      "I can explain the historical origins of a key constitutional provision.",
+      "I can describe how rules and laws are created to address civic problems."
+    ],
+    "vocabulary": ["constitutional provision", "Bill of Rights", "civil liberties", "due process", "equal protection"],
+    "sample_assessment": "Select one amendment from the Bill of Rights. Research its historical origins and write a short essay explaining what problem it was designed to address and how it has been applied over time."
+  },
+  {
+    "code": "D2.Civ.6.6-8",
+    "benchmark": "Describe the roles of political, civil, and economic organizations in shaping people's lives.",
+    "topics": ["Political Organizations", "Civil Society", "Economic Institutions"],
+    "dok": 2,
+    "item_specs": "Students identify various types of organizations and analyze how they influence individuals and communities.",
+    "essential_questions": [
+      "How do organizations shape what is possible in a society?",
+      "Why do people form political, civic, and economic organizations?"
+    ],
+    "learning_targets": [
+      "I can describe the role of at least one political, civil, and economic organization.",
+      "I can explain how organizations shape people's lives and opportunities."
+    ],
+    "vocabulary": ["political party", "interest group", "civil society", "nonprofit", "labor union", "lobbying"],
+    "sample_assessment": "Choose three organizations — one political, one civil, and one economic. For each, explain its purpose, how it operates, and one specific way it has shaped people's lives or public policy."
+  },
+  {
+    "code": "D2.Civ.7.6-8",
+    "benchmark": "Apply civic virtues and democratic principles in school and community settings.",
+    "topics": ["Civic Virtues", "Democratic Principles", "Civic Action"],
+    "dok": 3,
+    "item_specs": "Students demonstrate understanding of civic virtues like respect, responsibility, and fairness and apply them to real situations.",
+    "essential_questions": [
+      "What civic virtues are necessary for democracy to work?",
+      "How can young people practice democratic principles in everyday life?"
+    ],
+    "learning_targets": [
+      "I can identify civic virtues and explain why they matter in a democracy.",
+      "I can apply democratic principles to resolve a community or school issue."
+    ],
+    "vocabulary": ["civic virtue", "compromise", "deliberation", "consensus", "common good", "civil discourse"],
+    "sample_assessment": "Describe a real or hypothetical community problem. Then explain how applying at least two civic virtues (such as compromise or respect for diversity) could help resolve it, giving specific examples."
+  },
+  {
+    "code": "D2.Civ.8.6-8",
+    "benchmark": "Analyze ideas and principles contained in the founding documents of the United States, and explain how they influence the social and political system.",
+    "topics": ["Founding Documents", "Democratic Ideals", "Constitutional Principles"],
+    "dok": 3,
+    "item_specs": "Students analyze key ideas in documents such as the Declaration of Independence, Constitution, and Federalist Papers and trace their ongoing influence.",
+    "essential_questions": [
+      "What ideas from the founding era still shape American government today?",
+      "How have founding principles been interpreted differently over time?"
+    ],
+    "learning_targets": [
+      "I can identify key ideas in founding documents and explain their importance.",
+      "I can analyze how founding principles have influenced American government and society."
+    ],
+    "vocabulary": ["natural rights", "social contract", "popular sovereignty", "self-governance", "republicanism"],
+    "sample_assessment": "Select one idea from the Declaration of Independence or Constitution (such as natural rights or separation of powers). Write an essay analyzing how this idea was originally intended and how it continues to shape American political life today."
+  },
+  {
+    "code": "D2.Civ.9.6-8",
+    "benchmark": "Compare approaches to civic and political participation that people use to address social, political, and economic problems.",
+    "topics": ["Civic Participation", "Political Action", "Social Change"],
+    "dok": 3,
+    "item_specs": "Students evaluate different strategies citizens use to address problems and consider their effectiveness in different contexts.",
+    "essential_questions": [
+      "What are the most effective ways citizens can create change in a democracy?",
+      "When is voting enough, and when are other forms of participation needed?"
+    ],
+    "learning_targets": [
+      "I can compare different approaches to civic and political participation.",
+      "I can evaluate which strategies are most effective for addressing specific problems."
+    ],
+    "vocabulary": ["civic action", "advocacy", "activism", "electoral participation", "community organizing", "civil disobedience"],
+    "sample_assessment": "Identify a current social or political problem. Compare three different approaches citizens might use to address it (such as voting, protesting, and lobbying). Evaluate the strengths and limitations of each approach."
+  },
+  {
+    "code": "D2.Civ.1.9-12",
+    "benchmark": "Distinguish the powers and responsibilities of local, state, tribal, national, and international civic and political institutions.",
+    "topics": ["Civic Institutions", "Governmental Powers", "Political Systems"],
+    "dok": 3,
+    "item_specs": "Students analyze how power is distributed across governmental levels, including the constitutional basis for that distribution.",
+    "essential_questions": [
+      "How does the distribution of power in a federal system reflect core democratic values?",
+      "What tensions arise from overlapping governmental jurisdictions?"
+    ],
+    "learning_targets": [
+      "I can analyze the constitutional basis for the division of powers among governmental levels.",
+      "I can evaluate how overlapping jurisdictions create both cooperation and conflict."
+    ],
+    "vocabulary": ["federalism", "devolution", "concurrent powers", "enumerated powers", "reserved powers", "preemption"],
+    "sample_assessment": "Analyze a real policy issue (such as immigration or environmental regulation) where federal, state, and local governments have overlapping jurisdiction. Explain what authority each level has, where tensions arise, and which level you believe should have primary authority. Support your position with evidence."
+  },
+  {
+    "code": "D2.Civ.2.9-12",
+    "benchmark": "Analyze the role of citizens in the U.S. political system, with attention to various theories of democracy, changes in Americans' participation over time, and alternative models from other countries or systems.",
+    "topics": ["Democratic Theory", "Civic Participation", "Comparative Government"],
+    "dok": 4,
+    "item_specs": "Students evaluate competing theories of democracy and analyze trends in citizen participation, comparing the U.S. model with other democratic systems.",
+    "essential_questions": [
+      "What does it mean to be an effective citizen in a democracy?",
+      "How do different models of democracy envision the role of citizens differently?"
+    ],
+    "learning_targets": [
+      "I can compare different theories of democracy and their expectations for citizen participation.",
+      "I can analyze trends in civic participation and evaluate their implications for democratic health."
+    ],
+    "vocabulary": ["participatory democracy", "representative democracy", "deliberative democracy", "civic engagement", "political efficacy", "voter turnout"],
+    "sample_assessment": "Compare the U.S. model of representative democracy with one alternative model (such as participatory or deliberative democracy). Analyze the role of citizens in each model and evaluate which you believe better promotes the common good. Use evidence from civic life to support your argument."
+  },
+  {
+    "code": "D2.Civ.3.9-12",
+    "benchmark": "Analyze the impact of constitutions, laws, treaties, and international agreements on the maintenance of national and international order.",
+    "topics": ["Constitutional Law", "International Order", "Treaties"],
+    "dok": 4,
+    "item_specs": "Students analyze how legal documents at various scales contribute to or undermine stability and order in national and international contexts.",
+    "essential_questions": [
+      "How do constitutions and treaties maintain order across nations?",
+      "What happens when laws and international agreements conflict?"
+    ],
+    "learning_targets": [
+      "I can analyze how a constitution, law, or treaty contributes to maintaining order.",
+      "I can evaluate the effectiveness of international agreements in resolving conflicts."
+    ],
+    "vocabulary": ["international law", "treaty obligation", "sovereignty", "multilateralism", "ratification", "enforcement mechanism"],
+    "sample_assessment": "Select an international treaty or agreement (such as the United Nations Charter or the Paris Climate Agreement). Analyze its provisions, evaluate how well it has maintained order or achieved its goals, and explain what factors have supported or undermined its effectiveness."
+  },
+  {
+    "code": "D2.Civ.4.9-12",
+    "benchmark": "Explain how the U.S. Constitution establishes a system of government that has powers, responsibilities, and limits that have changed over time and that are still contested.",
+    "topics": ["Constitutional Change", "Contested Powers", "Government Evolution"],
+    "dok": 4,
+    "item_specs": "Students analyze how constitutional interpretation has evolved through amendments, court decisions, and political practice.",
+    "essential_questions": [
+      "How has the meaning of the Constitution changed over time without changing its words?",
+      "Why do constitutional questions remain contested even after court rulings?"
+    ],
+    "learning_targets": [
+      "I can explain how constitutional powers have expanded and contracted over American history.",
+      "I can analyze a contested constitutional question and evaluate competing interpretations."
+    ],
+    "vocabulary": ["constitutional interpretation", "judicial review", "precedent", "original intent", "living constitution", "amendment process"],
+    "sample_assessment": "Choose a constitutional power or right that has been contested over time (such as executive power or the scope of the Commerce Clause). Write an analytical essay tracing how its interpretation has changed through at least three historical periods, and evaluate which interpretation you find most defensible."
+  },
+  {
+    "code": "D2.Civ.5.9-12",
+    "benchmark": "Evaluate citizens' and institutions' effectiveness in addressing social and political problems at the local, state, tribal, national, and/or international level.",
+    "topics": ["Civic Effectiveness", "Problem Solving", "Political Action"],
+    "dok": 4,
+    "item_specs": "Students evaluate the effectiveness of civic actors and institutions in addressing real social and political problems at various scales.",
+    "essential_questions": [
+      "What makes civic action effective in creating lasting change?",
+      "How do institutions succeed or fail in responding to public needs?"
+    ],
+    "learning_targets": [
+      "I can evaluate the effectiveness of a civic action or institution in addressing a social problem.",
+      "I can propose improvements to how institutions respond to civic challenges."
+    ],
+    "vocabulary": ["civic effectiveness", "institutional capacity", "accountability", "transparency", "policy implementation", "civic empowerment"],
+    "sample_assessment": "Select a current social or political problem at any level (local to international). Evaluate the effectiveness of at least two civic actors or institutions that have tried to address it, using specific evidence. Then propose what additional actions or reforms might be more effective."
+  },
+  {
+    "code": "D2.Civ.6.9-12",
+    "benchmark": "Critique relationships among governments, civil societies, and economic markets.",
+    "topics": ["Government-Market Relations", "Civil Society", "Political Economy"],
+    "dok": 4,
+    "item_specs": "Students critically analyze the relationships among governmental institutions, civil society organizations, and economic markets.",
+    "essential_questions": [
+      "How should governments, markets, and civil society balance their roles and power?",
+      "What are the consequences when one sector dominates the others?"
+    ],
+    "learning_targets": [
+      "I can analyze the relationship between government, civil society, and economic markets.",
+      "I can evaluate the consequences of different balances of power among these three sectors."
+    ],
+    "vocabulary": ["civil society", "market economy", "regulation", "public sector", "private sector", "political economy", "pluralism"],
+    "sample_assessment": "Select a major policy area (such as healthcare, education, or environmental protection). Analyze the current relationship among government, civil society, and market actors in that area. Evaluate whether the current balance is appropriate and argue for adjustments with evidence."
+  },
+  {
+    "code": "D2.Eco.1.6-8",
+    "benchmark": "Explain how economic decisions affect the well-being of individuals, businesses, and society.",
+    "topics": ["Economic Decision Making", "Costs and Benefits", "Well-Being"],
+    "dok": 2,
+    "item_specs": "Students analyze how choices made by individuals, businesses, and governments have trade-offs and affect well-being at multiple levels.",
+    "essential_questions": [
+      "How do economic decisions create winners and losers?",
+      "What is the relationship between individual economic choices and social well-being?"
+    ],
+    "learning_targets": [
+      "I can explain how economic decisions affect individuals, businesses, and society.",
+      "I can identify trade-offs involved in economic decisions."
+    ],
+    "vocabulary": ["trade-off", "opportunity cost", "scarcity", "incentive", "economic well-being", "cost-benefit analysis"],
+    "sample_assessment": "Describe a real economic decision (such as a government choosing to build a highway or a business deciding to automate). Analyze how this decision affects at least three different groups — individuals, businesses, and communities — including both benefits and costs."
+  },
+  {
+    "code": "D2.Eco.2.6-8",
+    "benchmark": "Evaluate alternative approaches or solutions for meeting needs and wants.",
+    "topics": ["Economic Choice", "Resource Allocation", "Alternative Solutions"],
+    "dok": 3,
+    "item_specs": "Students compare and evaluate different economic strategies for meeting needs and wants, considering trade-offs and opportunity costs.",
+    "essential_questions": [
+      "How do individuals and societies decide how to use limited resources?",
+      "What factors should guide economic choices when resources are scarce?"
+    ],
+    "learning_targets": [
+      "I can identify and compare alternative approaches to meeting an economic need.",
+      "I can evaluate which approach best balances competing goals given limited resources."
+    ],
+    "vocabulary": ["scarcity", "resource allocation", "alternative", "trade-off", "marginal thinking", "economic efficiency"],
+    "sample_assessment": "A city has a limited budget and must choose between two projects: repairing roads or expanding a park. Evaluate both alternatives by identifying their costs, benefits, and trade-offs. Then recommend which the city should choose and defend your decision."
+  },
+  {
+    "code": "D2.Eco.3.6-8",
+    "benchmark": "Explain the roles of buyers and sellers in product, labor, and financial markets.",
+    "topics": ["Market Roles", "Supply and Demand", "Market Types"],
+    "dok": 2,
+    "item_specs": "Students describe how buyers and sellers interact in different types of markets and how prices are determined.",
+    "essential_questions": [
+      "How do markets coordinate the decisions of buyers and sellers?",
+      "What is the difference between product, labor, and financial markets?"
+    ],
+    "learning_targets": [
+      "I can explain the roles of buyers and sellers in different types of markets.",
+      "I can describe how prices are determined through market interactions."
+    ],
+    "vocabulary": ["buyer", "seller", "market", "labor market", "financial market", "price mechanism", "equilibrium"],
+    "sample_assessment": "Choose one type of market (product, labor, or financial) and explain the roles of buyers and sellers in it. Give a specific real-world example and describe how price is determined in that market."
+  },
+  {
+    "code": "D2.Eco.4.6-8",
+    "benchmark": "Describe the role of financial institutions in transforming savings into productive capital formation.",
+    "topics": ["Financial Institutions", "Capital Formation", "Banking System"],
+    "dok": 2,
+    "item_specs": "Students explain how banks and other financial institutions collect savings and make them available as capital for investment.",
+    "essential_questions": [
+      "What role do banks and financial institutions play in the economy?",
+      "How does saving money contribute to economic growth?"
+    ],
+    "learning_targets": [
+      "I can describe how financial institutions transform savings into capital.",
+      "I can explain the role of banks in connecting savers and borrowers."
+    ],
+    "vocabulary": ["financial institution", "savings", "capital", "investment", "interest rate", "loan", "credit"],
+    "sample_assessment": "Trace the path of $1,000 deposited in a bank. Explain how the bank uses that money, how it earns a return, and how the original depositor benefits. Include the role of interest rates in this process."
+  },
+  {
+    "code": "D2.Eco.5.6-8",
+    "benchmark": "Explain ways in which money facilitates exchange.",
+    "topics": ["Functions of Money", "Exchange", "Economic Systems"],
+    "dok": 2,
+    "item_specs": "Students explain the three functions of money (medium of exchange, unit of account, store of value) and how they facilitate economic activity.",
+    "essential_questions": [
+      "What makes money valuable and how does it simplify trade?",
+      "What would an economy without money look like?"
+    ],
+    "learning_targets": [
+      "I can explain the functions of money and why each matters.",
+      "I can describe how money makes economic exchange more efficient than barter."
+    ],
+    "vocabulary": ["medium of exchange", "unit of account", "store of value", "barter", "currency", "commodity money", "fiat money"],
+    "sample_assessment": "Compare a barter economy to a money economy. Explain how each of money's three functions (medium of exchange, unit of account, store of value) makes trade more efficient. Provide a specific example for each function."
+  },
+  {
+    "code": "D2.Eco.6.6-8",
+    "benchmark": "Explain how changes in supply and demand cause changes in prices and quantities, and in what ways they act as incentives for producers and consumers.",
+    "topics": ["Supply and Demand", "Price Changes", "Market Incentives"],
+    "dok": 3,
+    "item_specs": "Students analyze how supply and demand shifts affect prices and quantities, and explain how price signals guide behavior.",
+    "essential_questions": [
+      "How do prices communicate information in a market economy?",
+      "How do changes in supply and demand affect what gets produced and consumed?"
+    ],
+    "learning_targets": [
+      "I can explain what happens to price and quantity when supply or demand changes.",
+      "I can describe how prices act as incentives for producers and consumers."
+    ],
+    "vocabulary": ["supply", "demand", "price", "incentive", "market equilibrium", "shortage", "surplus", "price signal"],
+    "sample_assessment": "A drought reduces the supply of corn. Using supply and demand analysis, explain what happens to the price of corn, how this affects producers and consumers, and what incentives are created by the price change. Use a diagram if helpful."
+  },
+  {
+    "code": "D2.Eco.7.6-8",
+    "benchmark": "Describe the role of specialization in trade and economic interdependence.",
+    "topics": ["Specialization", "Trade", "Economic Interdependence"],
+    "dok": 2,
+    "item_specs": "Students explain how specialization increases productivity and creates the need for trade, leading to economic interdependence.",
+    "essential_questions": [
+      "Why do individuals, regions, and countries specialize in producing certain goods?",
+      "How does specialization create economic interdependence?"
+    ],
+    "learning_targets": [
+      "I can explain why specialization increases productivity.",
+      "I can describe how specialization creates the need for trade and economic interdependence."
+    ],
+    "vocabulary": ["specialization", "comparative advantage", "trade", "interdependence", "productivity", "division of labor"],
+    "sample_assessment": "Explain how specialization and trade work by using the example of two countries, each producing two goods. Show how each country can benefit from specializing and trading rather than producing everything independently."
+  },
+  {
+    "code": "D2.Eco.8.6-8",
+    "benchmark": "Explain why standards of living increase as productivity improves.",
+    "topics": ["Productivity", "Standard of Living", "Economic Growth"],
+    "dok": 2,
+    "item_specs": "Students explain the relationship between productivity, output, and standards of living.",
+    "essential_questions": [
+      "What causes some countries to have higher standards of living than others?",
+      "How does improving productivity lead to economic growth?"
+    ],
+    "learning_targets": [
+      "I can explain the relationship between productivity and standard of living.",
+      "I can identify factors that increase productivity and economic growth."
+    ],
+    "vocabulary": ["productivity", "standard of living", "GDP per capita", "human capital", "physical capital", "technology", "economic growth"],
+    "sample_assessment": "Compare the standard of living in two countries with different levels of economic productivity. Explain what factors account for the difference in productivity and how those differences affect people's daily lives."
+  },
+  {
+    "code": "D2.Eco.1.9-12",
+    "benchmark": "Analyze how incentives influence choices that may result in policies with a range of costs and benefits for different groups.",
+    "topics": ["Incentives", "Policy Analysis", "Costs and Benefits"],
+    "dok": 4,
+    "item_specs": "Students analyze how incentive structures shape individual and institutional choices and evaluate the distributional effects of resulting policies.",
+    "essential_questions": [
+      "How do incentives shape behavior at the individual and institutional level?",
+      "Who benefits and who bears the costs when economic policies are enacted?"
+    ],
+    "learning_targets": [
+      "I can analyze how incentives influence the choices of individuals, businesses, and governments.",
+      "I can evaluate the costs and benefits of economic policies for different groups."
+    ],
+    "vocabulary": ["incentive structure", "policy trade-off", "externality", "public goods", "distributional effects", "unintended consequences"],
+    "sample_assessment": "Select a recent economic policy (such as a minimum wage increase or a carbon tax). Analyze the incentives it creates for producers, consumers, and government. Then evaluate its costs and benefits for at least three different groups in society, using economic reasoning and evidence."
+  },
+  {
+    "code": "D2.Eco.2.9-12",
+    "benchmark": "Use marginal reasoning to explain why people make decisions that might otherwise seem inconsistent.",
+    "topics": ["Marginal Analysis", "Economic Decision Making", "Rational Choice"],
+    "dok": 3,
+    "item_specs": "Students apply marginal analysis to explain human decision-making, including decisions that appear inconsistent from a non-economic perspective.",
+    "essential_questions": [
+      "Why do people make decisions at the margin rather than in absolute terms?",
+      "How does marginal thinking explain behavior that otherwise seems irrational?"
+    ],
+    "learning_targets": [
+      "I can explain what marginal analysis means and why it matters for decision-making.",
+      "I can apply marginal reasoning to explain real-world decisions."
+    ],
+    "vocabulary": ["marginal cost", "marginal benefit", "diminishing returns", "rational choice", "sunk cost", "marginal thinking"],
+    "sample_assessment": "Use marginal analysis to explain at least two real-world decisions that might initially seem inconsistent or irrational. Show how thinking at the margin reveals a logical basis for each decision."
+  },
+  {
+    "code": "D2.Eco.3.9-12",
+    "benchmark": "Describe the effects of competition in markets from the perspectives of sellers and buyers.",
+    "topics": ["Market Competition", "Market Structure", "Consumer and Producer Welfare"],
+    "dok": 3,
+    "item_specs": "Students analyze how competition affects prices, quality, innovation, and the distribution of gains between buyers and sellers.",
+    "essential_questions": [
+      "How does competition benefit consumers and challenge producers?",
+      "What happens to an economy when competition is reduced or eliminated?"
+    ],
+    "learning_targets": [
+      "I can describe the effects of competition on prices, quality, and innovation.",
+      "I can analyze how competition affects the balance of power between buyers and sellers."
+    ],
+    "vocabulary": ["competition", "market power", "monopoly", "oligopoly", "consumer surplus", "producer surplus", "market concentration"],
+    "sample_assessment": "Compare a highly competitive market (such as a farmers' market) with a market with limited competition (such as a utility monopoly). Analyze the effects of competition on prices, quality, and access for both buyers and sellers in each case."
+  },
+  {
+    "code": "D2.Eco.4.9-12",
+    "benchmark": "Evaluate the extent to which competition among sellers and among buyers exists in specific markets.",
+    "topics": ["Market Structure Analysis", "Market Power", "Competition Policy"],
+    "dok": 4,
+    "item_specs": "Students evaluate the degree of competition in real markets using economic evidence and criteria.",
+    "essential_questions": [
+      "How can we measure how competitive a market really is?",
+      "What should governments do when markets lack sufficient competition?"
+    ],
+    "learning_targets": [
+      "I can evaluate the degree of competition in a specific market using evidence.",
+      "I can analyze policy options for addressing markets where competition is limited."
+    ],
+    "vocabulary": ["market concentration", "Herfindahl index", "antitrust", "barriers to entry", "price-making", "price-taking"],
+    "sample_assessment": "Choose a specific industry (such as airlines, pharmaceuticals, or social media) and evaluate the degree of competition within it. Use market data and economic reasoning to support your assessment, and evaluate whether government intervention is warranted."
+  },
+  {
+    "code": "D2.Eco.5.9-12",
+    "benchmark": "Describe the consequences of competition, cooperation, and coordination in specific markets.",
+    "topics": ["Market Dynamics", "Economic Coordination", "Market Outcomes"],
+    "dok": 3,
+    "item_specs": "Students analyze how competition, cooperation, and coordination among market participants produce different outcomes for efficiency and equity.",
+    "essential_questions": [
+      "When does cooperation among firms benefit society and when does it harm it?",
+      "How do coordination mechanisms shape market outcomes?"
+    ],
+    "learning_targets": [
+      "I can analyze how competition, cooperation, and coordination affect market outcomes.",
+      "I can evaluate when each type of market interaction is beneficial or harmful."
+    ],
+    "vocabulary": ["collusion", "cartel", "market coordination", "price fixing", "regulatory capture", "game theory", "Nash equilibrium"],
+    "sample_assessment": "Analyze the OPEC oil cartel as an example of cooperation among producers. Explain its effects on oil prices, consumer welfare, and global economic stability. Then evaluate the consequences for non-member countries and discuss what policy responses are available."
+  },
+  {
+    "code": "D2.Eco.6.9-12",
+    "benchmark": "Generate possible explanations for a government role in markets when market inefficiencies exist.",
+    "topics": ["Market Failure", "Government Intervention", "Public Policy"],
+    "dok": 4,
+    "item_specs": "Students identify types of market failure and generate explanations for why government intervention might improve outcomes.",
+    "essential_questions": [
+      "When and why do markets fail to produce socially optimal outcomes?",
+      "What are the strongest arguments for and against government intervention in markets?"
+    ],
+    "learning_targets": [
+      "I can identify examples of market failure and explain why they occur.",
+      "I can generate explanations for why government intervention might improve outcomes in cases of market failure."
+    ],
+    "vocabulary": ["market failure", "externality", "public good", "information asymmetry", "natural monopoly", "regulation", "government failure"],
+    "sample_assessment": "Identify two examples of market failure (such as pollution or underprovision of public goods). For each, explain why the market fails to produce an efficient outcome and generate at least two possible government interventions. Evaluate the trade-offs of each intervention."
+  },
+  {
+    "code": "D2.Geo.1.6-8",
+    "benchmark": "Construct maps to represent and explain the spatial patterns of cultural and environmental characteristics.",
+    "topics": ["Geographic Representations", "Spatial Thinking", "Mapping"],
+    "dok": 3,
+    "item_specs": "Students create and interpret maps to show the distribution of cultural and environmental features and explain the patterns they reveal.",
+    "essential_questions": [
+      "How do maps help us understand the world's cultural and environmental patterns?",
+      "What can we learn from spatial patterns that we cannot learn from words alone?"
+    ],
+    "learning_targets": [
+      "I can construct a map that represents cultural or environmental patterns.",
+      "I can explain the spatial patterns shown on a map and what they mean."
+    ],
+    "vocabulary": ["spatial pattern", "distribution", "cartography", "thematic map", "choropleth", "cultural characteristic", "environmental characteristic"],
+    "sample_assessment": "Using data provided, construct a thematic map showing the distribution of one cultural characteristic (such as language or religion) or one environmental characteristic (such as precipitation or vegetation) in a region. Write a paragraph explaining the pattern the map reveals and what factors might account for it."
+  },
+  {
+    "code": "D2.Geo.2.6-8",
+    "benchmark": "Use maps, satellite images, photographs, and other representations to explain relationships between the locations of places and regions and changes in their environmental characteristics.",
+    "topics": ["Geographic Representations", "Place", "Environmental Change"],
+    "dok": 3,
+    "item_specs": "Students use multiple geographic representations to analyze relationships between location and environmental characteristics.",
+    "essential_questions": [
+      "How does where a place is located affect its environmental characteristics?",
+      "How can geographic tools reveal changes in environments over time?"
+    ],
+    "learning_targets": [
+      "I can use multiple geographic representations to analyze a region's environmental characteristics.",
+      "I can explain how location influences environmental conditions and changes."
+    ],
+    "vocabulary": ["satellite imagery", "remote sensing", "geographic information system (GIS)", "spatial relationship", "environmental change", "physical geography"],
+    "sample_assessment": "Using a satellite image, a topographic map, and a climate graph for the same region, explain how the region's location influences its environmental characteristics. Identify one environmental change visible in the satellite imagery and explain its likely causes."
+  },
+  {
+    "code": "D2.Geo.3.6-8",
+    "benchmark": "Explain how cultural patterns and economic decisions influence environments and the daily lives of people in both nearby and distant places.",
+    "topics": ["Human-Environment Interaction", "Cultural Patterns", "Economic Geography"],
+    "dok": 3,
+    "item_specs": "Students explain how human decisions, including cultural and economic choices, modify environments at local and global scales.",
+    "essential_questions": [
+      "How do human decisions shape the environment?",
+      "How are people in distant places connected through environmental and economic relationships?"
+    ],
+    "learning_targets": [
+      "I can explain how cultural and economic decisions influence environments.",
+      "I can describe how human decisions in one place affect people in distant places."
+    ],
+    "vocabulary": ["human-environment interaction", "land use", "deforestation", "urbanization", "environmental impact", "globalization"],
+    "sample_assessment": "Select a specific human activity (such as agriculture, manufacturing, or urban development) and explain how it has changed the natural environment. Then describe how these environmental changes affect people's daily lives in both the local area and in distant places."
+  },
+  {
+    "code": "D2.Geo.4.6-8",
+    "benchmark": "Explain how the relationship between the environmental characteristics of places and production of goods influences the spatial patterns of world trade.",
+    "topics": ["Resource Geography", "World Trade", "Comparative Advantage"],
+    "dok": 3,
+    "item_specs": "Students analyze how environmental features shape what places produce and how this determines patterns of global trade.",
+    "essential_questions": [
+      "How do natural resources and environmental conditions shape what places produce and trade?",
+      "Why do different regions of the world specialize in producing different goods?"
+    ],
+    "learning_targets": [
+      "I can explain how environmental characteristics influence what a place produces.",
+      "I can analyze how production patterns shape global trade routes."
+    ],
+    "vocabulary": ["natural resource", "resource distribution", "comparative advantage", "trade route", "export", "import", "geographic determinism"],
+    "sample_assessment": "Select two regions with very different environmental characteristics. Explain how each region's environment influences what it produces. Then describe how this shapes their trade relationship and analyze the benefits and dependencies this creates."
+  },
+  {
+    "code": "D2.Geo.5.6-8",
+    "benchmark": "Analyze the combinations of cultural and environmental characteristics that make places both similar to and different from other places.",
+    "topics": ["Place Characteristics", "Cultural Geography", "Regional Comparison"],
+    "dok": 3,
+    "item_specs": "Students compare places by analyzing how combinations of physical and human characteristics create regional identity.",
+    "essential_questions": [
+      "What combination of characteristics makes a place unique?",
+      "How do cultural and environmental factors interact to create regional identity?"
+    ],
+    "learning_targets": [
+      "I can analyze the cultural and environmental characteristics that define a place.",
+      "I can compare places by identifying both similarities and differences in their characteristics."
+    ],
+    "vocabulary": ["place characteristics", "region", "cultural landscape", "physical landscape", "sense of place", "regional identity"],
+    "sample_assessment": "Compare two places (such as a coastal city and an inland agricultural region) by analyzing their cultural and environmental characteristics. Identify what makes each place unique and what they share. Explain how the combination of characteristics shapes daily life in each place."
+  },
+  {
+    "code": "D2.Geo.6.6-8",
+    "benchmark": "Explain how the physical and human characteristics of places and regions are connected to human identities and cultures.",
+    "topics": ["Place and Identity", "Cultural Geography", "Human-Environment Connection"],
+    "dok": 3,
+    "item_specs": "Students analyze how geographic characteristics of places shape cultural identity and human attachment to place.",
+    "essential_questions": [
+      "How does where we live shape who we are?",
+      "Why do people feel strong connections to particular places?"
+    ],
+    "learning_targets": [
+      "I can explain how physical and human characteristics of a place shape cultural identity.",
+      "I can describe examples of how people's identities are connected to places."
+    ],
+    "vocabulary": ["cultural identity", "sense of place", "attachment to place", "landscape", "heritage", "indigenous culture"],
+    "sample_assessment": "Select a specific community and explain how the physical and human characteristics of the place have shaped the cultural identity of its residents. Use at least two specific examples to show how geographic features are reflected in the community's cultural practices or values."
+  },
+  {
+    "code": "D2.Geo.7.6-8",
+    "benchmark": "Explain how changes in transportation and communication technology influence the spatial connections among human settlements and affect the diffusion of ideas and culture.",
+    "topics": ["Technology and Geography", "Spatial Connections", "Cultural Diffusion"],
+    "dok": 3,
+    "item_specs": "Students analyze how advances in transportation and communication alter spatial relationships and accelerate the spread of ideas.",
+    "essential_questions": [
+      "How has technology changed the geographic relationships among communities?",
+      "What does it mean for culture when distance matters less than it used to?"
+    ],
+    "learning_targets": [
+      "I can explain how transportation and communication technologies change spatial connections.",
+      "I can analyze how technology affects the diffusion of ideas and culture."
+    ],
+    "vocabulary": ["spatial connection", "cultural diffusion", "globalization", "shrinking world", "network", "connectivity", "infrastructure"],
+    "sample_assessment": "Compare how cultural ideas spread before and after the development of the internet. Analyze two specific examples of cultural diffusion and explain how communication technology changed the speed, scale, and nature of this diffusion."
+  },
+  {
+    "code": "D2.Geo.1.9-12",
+    "benchmark": "Use geospatial and related technologies to create maps to display and explain the spatial patterns of cultural and environmental characteristics.",
+    "topics": ["Geospatial Technology", "Mapping", "Spatial Analysis"],
+    "dok": 3,
+    "item_specs": "Students use GIS and related technologies to create and analyze maps that display cultural and environmental patterns.",
+    "essential_questions": [
+      "How do geospatial technologies extend our ability to analyze geographic patterns?",
+      "What new questions can we answer with GIS that we could not before?"
+    ],
+    "learning_targets": [
+      "I can use geospatial technology to create a map displaying cultural or environmental patterns.",
+      "I can analyze the spatial patterns shown in a GIS-based map and explain their significance."
+    ],
+    "vocabulary": ["GIS", "geospatial technology", "spatial data", "overlay analysis", "remote sensing", "data visualization", "spatial pattern"],
+    "sample_assessment": "Using available GIS tools, create a map that shows the spatial distribution of a cultural or environmental characteristic in your region. Write an analytical report explaining the patterns your map reveals, possible causes of those patterns, and what decisions or policies the map could inform."
+  },
+  {
+    "code": "D2.Geo.2.9-12",
+    "benchmark": "Evaluate the impact of human settlement activities on the environmental and cultural characteristics of specific places and regions.",
+    "topics": ["Settlement Patterns", "Environmental Impact", "Cultural Change"],
+    "dok": 4,
+    "item_specs": "Students evaluate how human settlement — including urbanization, agriculture, and resource extraction — transforms both environmental and cultural characteristics.",
+    "essential_questions": [
+      "How does settlement transform both the natural environment and human culture?",
+      "What is the long-term cost of environmental change caused by settlement?"
+    ],
+    "learning_targets": [
+      "I can evaluate the environmental impacts of human settlement patterns.",
+      "I can analyze how settlement activities change the cultural characteristics of a place."
+    ],
+    "vocabulary": ["urbanization", "sprawl", "land degradation", "cultural displacement", "gentrification", "environmental footprint", "sustainable development"],
+    "sample_assessment": "Select a specific place or region that has experienced significant human settlement (such as a rapidly urbanizing area or an agricultural frontier). Evaluate the environmental and cultural impacts of that settlement, using geographic evidence. Recommend policies that could make future settlement more sustainable."
+  },
+  {
+    "code": "D2.Geo.3.9-12",
+    "benchmark": "Analyze the reciprocal nature of how historical events and the spatial diffusion of ideas, technologies, and cultural practices have influenced migration patterns and the distribution of human population.",
+    "topics": ["Migration", "Population Distribution", "Cultural Diffusion"],
+    "dok": 4,
+    "item_specs": "Students analyze the complex relationships between historical events, innovation diffusion, and changing patterns of human migration and settlement.",
+    "essential_questions": [
+      "How have historical events shaped where people live today?",
+      "How does the spread of ideas and technologies influence migration?"
+    ],
+    "learning_targets": [
+      "I can analyze how historical events have influenced migration patterns.",
+      "I can explain how the diffusion of technologies and ideas has shaped population distribution."
+    ],
+    "vocabulary": ["migration", "push factor", "pull factor", "diaspora", "spatial diffusion", "demographic transition", "population distribution"],
+    "sample_assessment": "Analyze one major historical migration (such as the Great Migration, the post-WWII European migrations, or recent climate-related migration). Explain the historical events and geographic factors that drove it, and analyze how the spatial diffusion of ideas or technologies shaped both the migration itself and the settlement patterns it created."
+  },
+  {
+    "code": "D2.His.1.6-8",
+    "benchmark": "Analyze connections among events and developments in broader historical contexts.",
+    "topics": ["Historical Context", "Cause and Effect", "Historical Analysis"],
+    "dok": 3,
+    "item_specs": "Students analyze how events and developments are connected to broader historical themes and patterns across time periods.",
+    "essential_questions": [
+      "How do historical events connect to broader patterns and themes?",
+      "Why is it important to understand the context of historical events?"
+    ],
+    "learning_targets": [
+      "I can analyze how events are connected to broader historical contexts.",
+      "I can identify patterns and themes across different time periods."
+    ],
+    "vocabulary": ["context", "cause and effect", "continuity", "change", "perspective", "historical theme"],
+    "sample_assessment": "Choose a significant historical event and explain how it was influenced by at least two broader historical developments. Use specific evidence to support your analysis."
+  },
+  {
+    "code": "D2.His.2.6-8",
+    "benchmark": "Classify series of historical events and developments as examples of change and/or continuity.",
+    "topics": ["Change and Continuity", "Historical Patterns", "Chronological Thinking"],
+    "dok": 2,
+    "item_specs": "Students identify and categorize historical events and developments as examples of change or continuity over time.",
+    "essential_questions": [
+      "What changes over time and what stays the same?",
+      "Why do some aspects of society change rapidly while others persist for centuries?"
+    ],
+    "learning_targets": [
+      "I can classify historical events as examples of change or continuity.",
+      "I can explain why some changes occur quickly while others take place slowly."
+    ],
+    "vocabulary": ["change", "continuity", "chronological thinking", "periodization", "historical trend", "turning point"],
+    "sample_assessment": "Review a list of ten historical developments from a specific era. Classify each as an example of change or continuity in society. Then write a paragraph explaining what factors account for the pattern of change and continuity you identified."
+  },
+  {
+    "code": "D2.His.3.6-8",
+    "benchmark": "Use questions generated about individuals and groups to analyze why they, and the developments they shaped, are seen as historically significant.",
+    "topics": ["Historical Significance", "Historical Figures", "Inquiry"],
+    "dok": 3,
+    "item_specs": "Students generate and use questions to analyze why specific individuals, groups, and events are considered historically significant.",
+    "essential_questions": [
+      "Who decides what and who is historically significant, and why?",
+      "How do we determine which historical figures and events deserve attention?"
+    ],
+    "learning_targets": [
+      "I can generate questions to investigate why an individual or group is considered historically significant.",
+      "I can analyze the criteria used to determine historical significance."
+    ],
+    "vocabulary": ["historical significance", "legacy", "impact", "historical agency", "commemoration", "memory"],
+    "sample_assessment": "Select a historical figure who is not typically included in standard textbooks. Generate five inquiry questions about this person. Then write an analysis arguing whether this person should be considered historically significant, using your questions to guide your evidence."
+  },
+  {
+    "code": "D2.His.4.6-8",
+    "benchmark": "Explain multiple causes and effects of events and developments in the past.",
+    "topics": ["Causation", "Historical Analysis", "Multiple Perspectives"],
+    "dok": 3,
+    "item_specs": "Students analyze events with multiple causes and effects, including both intended and unintended consequences.",
+    "essential_questions": [
+      "Why do significant historical events usually have multiple causes?",
+      "How do historians identify causes and decide which are most important?"
+    ],
+    "learning_targets": [
+      "I can identify and explain multiple causes of a historical event.",
+      "I can analyze both the intended and unintended effects of historical decisions."
+    ],
+    "vocabulary": ["causation", "proximate cause", "underlying cause", "unintended consequence", "historical effect", "contingency"],
+    "sample_assessment": "Select a significant historical event and identify at least three different causes — including short-term and long-term causes. Explain at least two effects of the event, including one that was unexpected. Evaluate which cause you consider most important and why."
+  },
+  {
+    "code": "D2.His.5.6-8",
+    "benchmark": "Explain how and why perspectives of people have changed over time.",
+    "topics": ["Historical Perspective", "Change Over Time", "Social History"],
+    "dok": 3,
+    "item_specs": "Students analyze how and why people's perspectives, values, and attitudes have shifted over time in response to historical developments.",
+    "essential_questions": [
+      "Why do people's views about important issues change over time?",
+      "How does historical context shape the way people see the world?"
+    ],
+    "learning_targets": [
+      "I can explain how people's perspectives on an issue have changed over time.",
+      "I can analyze why historical developments cause changes in how people think."
+    ],
+    "vocabulary": ["historical perspective", "worldview", "social norms", "changing values", "social movement", "generational change"],
+    "sample_assessment": "Select a social or political issue (such as voting rights, environmental protection, or racial equality). Trace how perspectives on this issue have changed over at least two distinct time periods. Explain what historical developments drove those changes."
+  },
+  {
+    "code": "D2.His.6.6-8",
+    "benchmark": "Analyze how people's perspectives influenced what information is available in the historical record.",
+    "topics": ["Historical Sources", "Bias and Perspective", "Historical Evidence"],
+    "dok": 3,
+    "item_specs": "Students analyze how the identity and perspective of those who created historical records shapes what was recorded and what was left out.",
+    "essential_questions": [
+      "Whose voices are missing from the historical record and why?",
+      "How does bias in historical sources affect our understanding of the past?"
+    ],
+    "learning_targets": [
+      "I can explain how the creator's perspective shapes a historical source.",
+      "I can analyze whose perspectives are missing from the historical record and what that means."
+    ],
+    "vocabulary": ["historical record", "bias", "perspective", "primary source", "silenced voices", "historical agency", "archive"],
+    "sample_assessment": "Analyze two primary sources about the same historical event — one from a person in power and one from a marginalized group. Explain how each source reflects the creator's perspective and analyze what the differences reveal about whose experiences were recorded and whose were overlooked."
+  },
+  {
+    "code": "D2.His.7.6-8",
+    "benchmark": "Explain how and why historical sources from different time periods and places sometimes agree on and sometimes differ on historical facts.",
+    "topics": ["Corroboration", "Historical Sources", "Historical Evidence"],
+    "dok": 3,
+    "item_specs": "Students compare historical sources and explain why accounts of the same events may agree or differ based on time, place, and perspective.",
+    "essential_questions": [
+      "Why do historical sources about the same event sometimes disagree?",
+      "How do historians work with contradictory evidence to establish what happened?"
+    ],
+    "learning_targets": [
+      "I can compare historical sources and identify points of agreement and disagreement.",
+      "I can explain why sources from different times and places may present different accounts."
+    ],
+    "vocabulary": ["corroboration", "contradiction", "historical fact", "source analysis", "reliability", "proximity to events"],
+    "sample_assessment": "Compare three primary sources about the same historical event from different perspectives or time periods. Identify what they agree on and where they differ. Explain why the differences exist and what a historian should do when sources contradict each other."
+  },
+  {
+    "code": "D2.His.8.6-8",
+    "benchmark": "Analyze how the relationship between two or more historical developments is related to larger patterns of change.",
+    "topics": ["Historical Patterns", "Causation", "Historical Analysis"],
+    "dok": 4,
+    "item_specs": "Students analyze how relationships between historical developments reflect larger patterns of historical change over time.",
+    "essential_questions": [
+      "How do individual historical events fit into larger patterns of change?",
+      "What can patterns of the past teach us about the present and future?"
+    ],
+    "learning_targets": [
+      "I can analyze how two or more historical developments are related to each other.",
+      "I can identify larger patterns of change that connect multiple historical events."
+    ],
+    "vocabulary": ["historical pattern", "thematic analysis", "long-term trend", "historical relationship", "synthesis", "periodization"],
+    "sample_assessment": "Select two major historical developments from different time periods that are related to a larger theme (such as the expansion of democracy or the impact of technological change). Analyze how they are connected and explain what larger historical pattern they illustrate."
+  },
+  {
+    "code": "D2.His.1.9-12",
+    "benchmark": "Analyze the relationship between historical sources and the secondary interpretations made from them.",
+    "topics": ["Historical Interpretation", "Primary Sources", "Historiography"],
+    "dok": 4,
+    "item_specs": "Students critically analyze how historians use primary sources to construct secondary interpretations and evaluate the quality of those interpretations.",
+    "essential_questions": [
+      "How do historians build interpretations from primary sources?",
+      "What makes one historical interpretation more credible than another?"
+    ],
+    "learning_targets": [
+      "I can analyze how a historian uses primary sources to support a historical interpretation.",
+      "I can evaluate the quality of a secondary interpretation based on its use of evidence."
+    ],
+    "vocabulary": ["historiography", "primary source", "secondary source", "interpretation", "historical argument", "evidence", "citation"],
+    "sample_assessment": "Read a secondary historical interpretation (a passage from a history book or article) and identify at least three primary sources the historian appears to be using. Evaluate how well the interpretation is supported by those sources and identify any gaps or unsupported claims."
+  },
+  {
+    "code": "D2.His.2.9-12",
+    "benchmark": "Analyze change and continuity in historical eras.",
+    "topics": ["Change and Continuity", "Periodization", "Historical Analysis"],
+    "dok": 4,
+    "item_specs": "Students analyze what changed and what persisted across historical eras, evaluating the significance of turning points.",
+    "essential_questions": [
+      "What truly marks the beginning and end of a historical era?",
+      "How do historians decide when change is significant enough to mark a new era?"
+    ],
+    "learning_targets": [
+      "I can analyze patterns of change and continuity across a historical era.",
+      "I can evaluate whether a historical turning point represents a fundamental break or a continuation of existing trends."
+    ],
+    "vocabulary": ["periodization", "turning point", "historical era", "continuity", "rupture", "transition", "historical significance"],
+    "sample_assessment": "Examine a proposed historical turning point (such as 1492, 1776, 1865, or 1945). Write an essay analyzing what changed and what continued across this supposed break. Evaluate whether this date truly marks a new historical era or whether the change was more gradual and contested."
+  },
+  {
+    "code": "D2.His.3.9-12",
+    "benchmark": "Use questions generated about individuals and groups to assess how the significance of their actions changes over time and is shaped by the historical context.",
+    "topics": ["Historical Significance", "Contextual Analysis", "Historiography"],
+    "dok": 4,
+    "item_specs": "Students evaluate how assessments of historical significance shift over time and with changing contexts, using inquiry questions to guide analysis.",
+    "essential_questions": [
+      "Why does how we judge historical figures change from one generation to the next?",
+      "How does historical distance affect our assessment of significance?"
+    ],
+    "learning_targets": [
+      "I can analyze how the perceived significance of a historical figure or group has changed over time.",
+      "I can explain how historical context shapes our evaluation of past actions."
+    ],
+    "vocabulary": ["historical reassessment", "hindsight", "presentism", "historical empathy", "legacy", "commemoration", "moral judgment"],
+    "sample_assessment": "Select a historical figure whose reputation has changed significantly over time. Using inquiry questions, analyze how assessments of their significance and legacy have shifted. Explain what historical and cultural factors account for those changing assessments."
+  },
+  {
+    "code": "D2.His.4.9-12",
+    "benchmark": "Analyze complex and interacting factors that influenced the perspectives of people during different historical eras.",
+    "topics": ["Historical Perspective Taking", "Historical Context", "Social History"],
+    "dok": 4,
+    "item_specs": "Students analyze the complex web of social, cultural, political, and economic factors that shaped how people in the past understood their world.",
+    "essential_questions": [
+      "How do social and cultural factors limit what people can think and do in any given era?",
+      "What does it mean to take a historical perspective without judging the past by present standards?"
+    ],
+    "learning_targets": [
+      "I can analyze how multiple factors shaped people's perspectives in a given historical era.",
+      "I can distinguish between historical perspective-taking and presentism."
+    ],
+    "vocabulary": ["historical context", "presentism", "historical empathy", "social structure", "worldview", "ideology", "cultural norms"],
+    "sample_assessment": "Select a historical figure who made a decision that seems wrong or puzzling by today's standards. Analyze the complex factors — social, cultural, political, and economic — that shaped their perspective. Explain how understanding those factors changes your interpretation of their decision, without excusing it."
+  },
+  {
+    "code": "D2.His.5.9-12",
+    "benchmark": "Analyze how historical contexts shaped and continue to shape people's perspectives.",
+    "topics": ["Historical Context", "Perspective Formation", "Contemporary Relevance"],
+    "dok": 4,
+    "item_specs": "Students analyze how historical developments created lasting frameworks of thought and identity that continue to influence contemporary perspectives.",
+    "essential_questions": [
+      "How does history live on in the perspectives people hold today?",
+      "What historical contexts are most important for understanding contemporary conflicts?"
+    ],
+    "learning_targets": [
+      "I can analyze how a historical context shaped people's perspectives in the past.",
+      "I can explain how historical legacies continue to shape perspectives in the present."
+    ],
+    "vocabulary": ["historical legacy", "lived history", "collective memory", "intergenerational trauma", "historical consciousness", "social identity"],
+    "sample_assessment": "Select a current social or political conflict. Trace the historical contexts that shaped the perspectives of two groups involved in the conflict. Analyze how historical experiences — including injustices, victories, and losses — continue to shape how each group understands the conflict today."
+  },
+  {
+    "code": "D2.His.6.9-12",
+    "benchmark": "Analyze the ways in which the perspectives of those writing history shaped the history that they produced.",
+    "topics": ["Historiography", "Historical Bias", "Narrative Construction"],
+    "dok": 4,
+    "item_specs": "Students analyze how the identity, assumptions, and cultural context of historians shapes the histories they produce.",
+    "essential_questions": [
+      "Can history ever be objective, or is it always shaped by who writes it?",
+      "How has who writes history changed over time, and what difference has it made?"
+    ],
+    "learning_targets": [
+      "I can analyze how a historian's identity and perspective shaped the history they wrote.",
+      "I can evaluate how different historiographical traditions produce different historical narratives."
+    ],
+    "vocabulary": ["historiography", "historical narrative", "objectivity", "positionality", "revisionist history", "counter-narrative", "Eurocentric history"],
+    "sample_assessment": "Compare two historical accounts of the same event written by historians with different cultural backgrounds, national identities, or time periods. Analyze how each historian's perspective shaped the narrative. Evaluate which account you consider more complete and why."
+  },
+  {
+    "code": "D3.1.6-8",
+    "benchmark": "Gather relevant information from multiple sources while using the origin, authority, structure, context, and corroborative value of the sources to guide the selection.",
+    "topics": ["Source Evaluation", "Information Literacy", "Research Skills"],
+    "dok": 3,
+    "item_specs": "Students evaluate multiple sources by considering their origin, authority, context, and how they corroborate or contradict each other.",
+    "essential_questions": [
+      "How do we know which sources to trust when researching social studies topics?",
+      "Why is it important to use multiple sources rather than just one?"
+    ],
+    "learning_targets": [
+      "I can evaluate sources by analyzing their origin, authority, and context.",
+      "I can use multiple sources and explain how they support or contradict each other."
+    ],
+    "vocabulary": ["source evaluation", "authority", "credibility", "bias", "corroboration", "primary source", "secondary source", "origin"],
+    "sample_assessment": "Given four sources about a historical or current event — including a primary source, a news article, a scholarly article, and a website — evaluate each using SOAPSTONE or a similar framework. Explain which sources you would use for research and why, identifying the strengths and weaknesses of each."
+  },
+  {
+    "code": "D3.2.6-8",
+    "benchmark": "Evaluate the credibility of a source by determining its relevance and intended use.",
+    "topics": ["Source Credibility", "Research Skills", "Information Literacy"],
+    "dok": 2,
+    "item_specs": "Students evaluate whether sources are credible and relevant for a specific research purpose.",
+    "essential_questions": [
+      "What makes a source credible for academic research?",
+      "How does the intended purpose of a source affect how we should use it?"
+    ],
+    "learning_targets": [
+      "I can evaluate the credibility of a source by analyzing its intended use and relevance.",
+      "I can explain why some sources are more appropriate for certain purposes than others."
+    ],
+    "vocabulary": ["credibility", "relevance", "intended audience", "purpose", "peer review", "fact-checking", "propaganda"],
+    "sample_assessment": "Evaluate three sources about immigration policy — a government report, a political advocacy website, and a peer-reviewed journal article. Rate the credibility of each for academic research. Explain how the intended use of each source affects its reliability for your purposes."
+  },
+  {
+    "code": "D3.3.6-8",
+    "benchmark": "Identify evidence that draws information directly and substantively from multiple sources to detect inconsistencies in evidence in order to revise or strengthen claims.",
+    "topics": ["Evidence Analysis", "Claim Development", "Source Comparison"],
+    "dok": 3,
+    "item_specs": "Students compare evidence from multiple sources to identify inconsistencies and use those findings to revise or strengthen their claims.",
+    "essential_questions": [
+      "What do we do when our sources give us contradictory information?",
+      "How does finding inconsistent evidence help us build stronger arguments?"
+    ],
+    "learning_targets": [
+      "I can compare evidence from multiple sources and identify inconsistencies.",
+      "I can revise or strengthen a claim based on inconsistencies found in the evidence."
+    ],
+    "vocabulary": ["inconsistency", "claim", "evidence", "counter-evidence", "revision", "substantive evidence", "corroboration"],
+    "sample_assessment": "You are researching whether a historical policy was effective. Read three sources that present different evidence about the policy's impact. Identify at least two inconsistencies in the evidence. Then write a claim that accurately reflects what the evidence as a whole supports."
+  },
+  {
+    "code": "D3.4.6-8",
+    "benchmark": "Develop claims and counterclaims while pointing out the strengths and limitations of both.",
+    "topics": ["Argumentation", "Claim Development", "Counterargument"],
+    "dok": 3,
+    "item_specs": "Students construct evidence-based claims and identify counterclaims, honestly assessing the strengths and limitations of both positions.",
+    "essential_questions": [
+      "Why is it important to understand the strongest arguments against your own position?",
+      "How does considering counterclaims make your argument stronger?"
+    ],
+    "learning_targets": [
+      "I can develop a well-supported claim and articulate a strong counterclaim.",
+      "I can evaluate the strengths and limitations of both my claim and the counterclaim."
+    ],
+    "vocabulary": ["claim", "counterclaim", "evidence", "warrant", "rebuttal", "qualification", "concession"],
+    "sample_assessment": "Choose a controversial social studies question. Write your main claim with at least three pieces of supporting evidence. Then write a counterclaim with its own supporting evidence. Evaluate the strengths and limitations of each position and write a conclusion that acknowledges the complexity."
+  },
+  {
+    "code": "D3.1.9-12",
+    "benchmark": "Gather relevant information from multiple sources representing a wide range of views while using the origin, authority, structure, context, and corroborative value of the sources to guide the selection.",
+    "topics": ["Source Selection", "Research Design", "Multiple Perspectives"],
+    "dok": 4,
+    "item_specs": "Students strategically select sources representing diverse viewpoints and evaluate them using multiple criteria for reliability and relevance.",
+    "essential_questions": [
+      "How do we ensure our research represents a wide range of perspectives, not just confirming views?",
+      "What systematic criteria should guide source selection for serious research?"
+    ],
+    "learning_targets": [
+      "I can gather sources that represent a wide range of perspectives on a topic.",
+      "I can apply multiple criteria to evaluate the quality and relevance of sources."
+    ],
+    "vocabulary": ["confirmation bias", "epistemic diversity", "source triangulation", "critical evaluation", "scholarly database", "opinion vs. fact"],
+    "sample_assessment": "Design a research plan for investigating a current social studies question. Identify at least six sources representing at least three different perspectives. For each source, write a brief evaluation using criteria of authority, objectivity, accuracy, currency, and purpose. Explain how your source selection guards against confirmation bias."
+  },
+  {
+    "code": "D3.2.9-12",
+    "benchmark": "Evaluate the credibility of a source by examining how experts value the source.",
+    "topics": ["Source Evaluation", "Expert Consensus", "Academic Standards"],
+    "dok": 3,
+    "item_specs": "Students evaluate sources by understanding how scholarly communities assess credibility and reliability.",
+    "essential_questions": [
+      "How do scholarly communities establish standards for credible evidence?",
+      "Why do experts in different fields evaluate sources differently?"
+    ],
+    "learning_targets": [
+      "I can explain how experts in a discipline evaluate the credibility of sources.",
+      "I can apply disciplinary standards to evaluate sources in civics, economics, geography, and history."
+    ],
+    "vocabulary": ["peer review", "expert consensus", "citation practices", "disciplinary standards", "replication", "academic credibility", "fact-checking"],
+    "sample_assessment": "Select a controversial claim in social studies. Find three sources that address it: one peer-reviewed academic article, one quality news source, and one advocacy source. Evaluate how experts in the relevant discipline would assess the credibility of each, and explain which you would rely on most heavily in an academic paper."
+  },
+  {
+    "code": "D3.3.9-12",
+    "benchmark": "Use questions generated about individuals and groups to assess how the significance of their actions changes over time and is shaped by the historical context.",
+    "topics": ["Argumentation", "Evidence Synthesis", "Research Claims"],
+    "dok": 4,
+    "item_specs": "Students synthesize evidence from multiple sources to develop and defend complex claims about social studies questions.",
+    "essential_questions": [
+      "How do we build a persuasive academic argument from multiple sources?",
+      "What distinguishes a strong evidence-based claim from a weak one?"
+    ],
+    "learning_targets": [
+      "I can synthesize evidence from multiple sources to support a complex claim.",
+      "I can evaluate the quality of an argument based on how well it uses evidence."
+    ],
+    "vocabulary": ["synthesis", "evidence-based argument", "claim", "reasoning chain", "logical fallacy", "warrant", "thesis"],
+    "sample_assessment": "Write a position paper on a significant social studies question, using at least five sources representing multiple perspectives. Develop a clear thesis, support it with synthesized evidence, address the strongest counterarguments, and conclude with implications for policy or civic action."
+  },
+  {
+    "code": "D4.1.6-8",
+    "benchmark": "Construct arguments using claims and evidence from multiple sources, while acknowledging the strengths and limitations of the arguments.",
+    "topics": ["Argumentation", "Evidence-Based Writing", "Civic Reasoning"],
+    "dok": 3,
+    "item_specs": "Students construct written arguments that use evidence from multiple sources, explicitly acknowledging what their argument can and cannot prove.",
+    "essential_questions": [
+      "What makes a written argument persuasive in social studies?",
+      "Why is it important to acknowledge the limits of your own argument?"
+    ],
+    "learning_targets": [
+      "I can construct a written argument using evidence from multiple sources.",
+      "I can acknowledge both the strengths and limitations of my argument."
+    ],
+    "vocabulary": ["argument", "claim", "evidence", "reasoning", "limitation", "acknowledgment", "qualifiers"],
+    "sample_assessment": "Write a three-to-five paragraph argument about a social studies question of your choice. Use evidence from at least three sources. Include a paragraph that honestly assesses what your argument cannot fully explain or where your evidence is limited."
+  },
+  {
+    "code": "D4.2.6-8",
+    "benchmark": "Construct explanations using reasoning, correct sequence, examples, and details, with relevant information and data.",
+    "topics": ["Explanatory Writing", "Historical Analysis", "Evidence-Based Explanations"],
+    "dok": 3,
+    "item_specs": "Students write structured explanations that use logical sequencing, specific examples, and relevant data to explain social studies concepts.",
+    "essential_questions": [
+      "What is the difference between an explanation and an argument?",
+      "How does using sequence and specific examples make an explanation clearer?"
+    ],
+    "learning_targets": [
+      "I can write an explanation that uses logical sequence and specific examples.",
+      "I can include relevant data and details to support my explanation."
+    ],
+    "vocabulary": ["explanation", "sequence", "relevant evidence", "data", "detail", "logical order", "explanation vs. argument"],
+    "sample_assessment": "Write an explanatory essay about how a major historical development (such as industrialization or the Civil Rights Movement) unfolded. Use chronological or logical sequence, include at least three specific examples, and incorporate relevant data to support your explanation."
+  },
+  {
+    "code": "D4.3.6-8",
+    "benchmark": "Present adaptations of arguments and explanations that feature evocative ideas and perspectives on issues and topics to reach a range of audiences and venues.",
+    "topics": ["Communication", "Audience Awareness", "Civic Communication"],
+    "dok": 3,
+    "item_specs": "Students adapt arguments and explanations for different audiences and venues, choosing appropriate formats and language.",
+    "essential_questions": [
+      "How does your audience shape how you communicate an argument?",
+      "Why is civic communication more effective when it connects with the specific audience?"
+    ],
+    "learning_targets": [
+      "I can adapt an argument or explanation to reach different audiences.",
+      "I can choose the appropriate format and language for a specific civic communication context."
+    ],
+    "vocabulary": ["audience", "venue", "adaptation", "rhetoric", "persuasion", "civic communication", "medium"],
+    "sample_assessment": "Take an argument about a local community issue and present it in two different ways: one as a formal letter to a city council and one as a social media post for students your age. Explain what changes you made for each audience and why."
+  },
+  {
+    "code": "D4.4.6-8",
+    "benchmark": "Critique arguments for credibility.",
+    "topics": ["Critical Evaluation", "Argumentation", "Information Literacy"],
+    "dok": 3,
+    "item_specs": "Students evaluate the credibility of arguments by analyzing their claims, evidence, reasoning, and potential biases.",
+    "essential_questions": [
+      "What makes an argument credible versus one that merely sounds convincing?",
+      "How can you recognize a weak argument even when it supports your own view?"
+    ],
+    "learning_targets": [
+      "I can evaluate the credibility of an argument by examining its claims, evidence, and reasoning.",
+      "I can identify logical fallacies and unsupported claims in arguments."
+    ],
+    "vocabulary": ["credibility", "logical fallacy", "evidence quality", "reasoning", "bias", "appeal to authority", "ad hominem"],
+    "sample_assessment": "Read two opinion pieces on a social or political issue — one that you agree with and one that you disagree with. Critique the credibility of each argument by analyzing the quality of evidence, the validity of reasoning, and any logical fallacies. Explain whether credible arguments change your mind."
+  },
+  {
+    "code": "D4.5.6-8",
+    "benchmark": "Critique the use of data and evidence in public discourse on public issues, detecting bias, exaggeration, or distortion of evidence.",
+    "topics": ["Data Literacy", "Media Analysis", "Civic Reasoning"],
+    "dok": 3,
+    "item_specs": "Students analyze how data and evidence are used and misused in public discourse and detect bias, exaggeration, or distortion.",
+    "essential_questions": [
+      "How is data manipulated to support misleading claims?",
+      "Why is data literacy essential for democratic citizenship?"
+    ],
+    "learning_targets": [
+      "I can identify how data is used, misused, or distorted in public discourse.",
+      "I can detect bias and exaggeration in how evidence is presented in public arguments."
+    ],
+    "vocabulary": ["data literacy", "misleading statistics", "cherry-picking", "correlation vs. causation", "confirmation bias", "media literacy", "disinformation"],
+    "sample_assessment": "Analyze three news headlines or social media posts that use statistical data to make a claim. For each, evaluate whether the data is presented accurately or whether it is biased, exaggerated, or distorted. Explain how you would verify the accuracy of each claim."
+  },
+  {
+    "code": "D4.6.6-8",
+    "benchmark": "Draw on multiple disciplinary lenses to analyze how a specific problem can manifest itself at local, regional, and global levels over time, identifying its characteristics and causes, and the challenges and opportunities faced by those trying to address the problem.",
+    "topics": ["Interdisciplinary Problem Analysis", "Civic Problem Solving", "Multi-scale Analysis"],
+    "dok": 4,
+    "item_specs": "Students apply multiple social studies disciplinary lenses to analyze a problem at different scales and identify pathways for addressing it.",
+    "essential_questions": [
+      "How does a problem look different when viewed through different disciplinary lenses?",
+      "Why do problems that appear local often have regional and global dimensions?"
+    ],
+    "learning_targets": [
+      "I can analyze a problem using at least two social studies disciplinary lenses.",
+      "I can explain how a problem manifests differently at local, regional, and global scales."
+    ],
+    "vocabulary": ["interdisciplinary", "local", "regional", "global", "scale", "systemic problem", "root cause", "civic opportunity"],
+    "sample_assessment": "Choose a significant problem (such as food insecurity, environmental degradation, or inequality). Analyze it using at least three disciplinary lenses (civics, economics, geography, and/or history). Explain how the problem manifests at local, regional, and global scales. Identify one challenge and one opportunity for addressing it at each scale."
+  },
+  {
+    "code": "D4.7.6-8",
+    "benchmark": "Assess their individual and collective capacities to take action to address local, regional, and global problems, taking into account a range of possible levers of power, strategies, and potential outcomes.",
+    "topics": ["Civic Action", "Agency", "Problem Solving"],
+    "dok": 3,
+    "item_specs": "Students assess their own and their community's capacity to address problems through civic action, considering available strategies and realistic outcomes.",
+    "essential_questions": [
+      "What can individuals and groups actually do to address social problems?",
+      "How do we choose the most effective strategy for civic action?"
+    ],
+    "learning_targets": [
+      "I can assess my individual and collective capacity to address a civic problem.",
+      "I can evaluate different civic action strategies and predict their likely outcomes."
+    ],
+    "vocabulary": ["civic agency", "collective action", "levers of power", "civic capacity", "realistic outcomes", "civic strategy"],
+    "sample_assessment": "Identify a problem in your school or community that you care about. Assess your individual capacity to address it and the additional capacity you would have with collective action. Develop two different strategies for addressing the problem and evaluate the likely outcomes, challenges, and opportunities of each."
+  },
+  {
+    "code": "D4.8.6-8",
+    "benchmark": "Apply a range of deliberative and democratic strategies and procedures to make decisions and take action in their classrooms, schools, and out-of-school civic contexts.",
+    "topics": ["Deliberation", "Democratic Process", "Civic Action"],
+    "dok": 3,
+    "item_specs": "Students practice deliberative democratic procedures to make decisions and take civic action in real contexts.",
+    "essential_questions": [
+      "What does real democratic deliberation look like in practice?",
+      "How do deliberative processes help communities make better decisions?"
+    ],
+    "learning_targets": [
+      "I can apply deliberative strategies to make decisions in civic contexts.",
+      "I can participate constructively in democratic decision-making processes."
+    ],
+    "vocabulary": ["deliberation", "consensus-building", "democratic procedure", "civic discourse", "voting", "negotiation", "civic participation"],
+    "sample_assessment": "Plan and conduct a class deliberation on a school policy issue. Apply deliberative procedures (presenting multiple perspectives, seeking common ground, and making a collective decision). Write a reflection on how the deliberative process worked and what you would improve."
+  },
+  {
+    "code": "D4.1.9-12",
+    "benchmark": "Construct arguments using precise and knowledgeable claims, with evidence from multiple sources, while acknowledging counterclaims and evidentiary weaknesses.",
+    "topics": ["Advanced Argumentation", "Evidence-Based Reasoning", "Civic Writing"],
+    "dok": 4,
+    "item_specs": "Students construct sophisticated written arguments using precise claims, multiple sources, and explicit acknowledgment of counterclaims and evidential limits.",
+    "essential_questions": [
+      "What distinguishes a rigorous academic argument from a merely persuasive one?",
+      "How does acknowledging weaknesses in your argument actually make it stronger?"
+    ],
+    "learning_targets": [
+      "I can construct a precise, knowledge-based argument supported by multiple sources.",
+      "I can acknowledge and address counterclaims and limitations in my argument."
+    ],
+    "vocabulary": ["precise claim", "evidentiary reasoning", "counterclaim", "qualification", "scholarly argumentation", "refutation", "nuanced argument"],
+    "sample_assessment": "Write a research-based argument paper on a significant social studies question. Develop a precise thesis supported by evidence from at least six sources. Explicitly address the two strongest counterarguments and explain why your argument is stronger. Include a section honestly acknowledging the limitations of your evidence."
+  },
+  {
+    "code": "D4.2.9-12",
+    "benchmark": "Construct explanations using sound reasoning, correct sequence, examples, and details with significant and pertinent information and data, while acknowledging the strengths and weaknesses of the explanation.",
+    "topics": ["Complex Explanatory Writing", "Historical Reasoning", "Analytical Writing"],
+    "dok": 4,
+    "item_specs": "Students write sophisticated explanations using sound reasoning, specific examples, significant data, and honest assessment of explanatory strengths and weaknesses.",
+    "essential_questions": [
+      "What makes a historical or social explanation 'sound' as opposed to merely plausible?",
+      "How do we acknowledge what our explanation doesn't fully account for?"
+    ],
+    "learning_targets": [
+      "I can construct a complex explanation using sound reasoning, sequence, and significant data.",
+      "I can evaluate the strengths and weaknesses of my own explanatory account."
+    ],
+    "vocabulary": ["sound reasoning", "explanatory adequacy", "significant data", "analytic sequence", "explanatory limits", "causal chain"],
+    "sample_assessment": "Write an analytical explanation of a complex historical or social phenomenon (such as the rise of populism, the causes of a major war, or the persistence of inequality). Use logical sequence and specific evidence. Conclude with an honest assessment of what your explanation accounts for well and what remains inadequately explained."
+  },
+  {
+    "code": "D4.3.9-12",
+    "benchmark": "Present adaptations of arguments and explanations that feature evocative ideas and perspectives on issues and topics to reach a range of audiences and venues.",
+    "topics": ["Civic Communication", "Audience Adaptation", "Public Persuasion"],
+    "dok": 3,
+    "item_specs": "Students adapt complex arguments for diverse audiences and venues, using appropriate rhetorical strategies and formats.",
+    "essential_questions": [
+      "How do the best civic communicators reach audiences with very different values and backgrounds?",
+      "What rhetorical strategies are most effective for different civic contexts?"
+    ],
+    "learning_targets": [
+      "I can adapt a complex argument for different audiences using appropriate rhetorical strategies.",
+      "I can select formats and venues that maximize civic impact."
+    ],
+    "vocabulary": ["rhetoric", "ethos", "pathos", "logos", "civic discourse", "public communication", "media literacy", "persuasion strategy"],
+    "sample_assessment": "Take a well-developed argument about a significant civic issue and adapt it for three different audiences: a congressional hearing, a community town hall, and a social media campaign. Explain your rhetorical choices for each format and how you adjusted language, evidence, and appeals to reach each audience."
+  },
+  {
+    "code": "D4.4.9-12",
+    "benchmark": "Critique arguments for credibility and relevance.",
+    "topics": ["Critical Analysis", "Academic Argumentation", "Civic Reasoning"],
+    "dok": 4,
+    "item_specs": "Students rigorously evaluate arguments for both logical credibility and contextual relevance using advanced analytical criteria.",
+    "essential_questions": [
+      "What distinguishes a credible argument from a merely plausible one in academic discourse?",
+      "How do we evaluate whether an argument is relevant to the specific question being asked?"
+    ],
+    "learning_targets": [
+      "I can rigorously evaluate an argument for logical credibility and evidentiary support.",
+      "I can assess whether an argument is relevant to the specific question it claims to address."
+    ],
+    "vocabulary": ["credibility criteria", "relevance", "logical validity", "sound argument", "intellectual honesty", "straw man fallacy", "red herring"],
+    "sample_assessment": "Select a publicly available argument about a major social policy (such as a policy brief, op-ed, or speech). Write a rigorous critique evaluating its logical credibility (are the claims well-supported?) and relevance (does it actually address the policy question?). Support your critique with specific references to the text."
+  },
+  {
+    "code": "D4.5.9-12",
+    "benchmark": "Critique the use of data and evidence in public discourse on public issues, detecting bias, exaggeration, or distortion of evidence.",
+    "topics": ["Advanced Data Literacy", "Media Analysis", "Civic Epistemology"],
+    "dok": 4,
+    "item_specs": "Students apply advanced analytical skills to detect and explain how data and evidence are manipulated in public discourse.",
+    "essential_questions": [
+      "How is statistical evidence used to mislead the public in sophisticated ways?",
+      "What institutions and practices protect democratic society from systematic disinformation?"
+    ],
+    "learning_targets": [
+      "I can identify sophisticated techniques used to manipulate data and evidence in public discourse.",
+      "I can evaluate the systemic effects of disinformation on democratic decision-making."
+    ],
+    "vocabulary": ["disinformation", "statistical manipulation", "data visualization bias", "propaganda techniques", "epistemic injustice", "fact-checking ecosystem", "motivated reasoning"],
+    "sample_assessment": "Analyze a significant public controversy in which data and evidence have been used misleadingly (such as economic statistics, health data, or climate data). Identify at least three specific techniques of distortion or manipulation. Evaluate what safeguards exist to protect public discourse and whether they are sufficient."
+  },
+  {
+    "code": "D4.6.9-12",
+    "benchmark": "Use disciplinary and interdisciplinary lenses to understand the characteristics and causes of local, regional, and global problems; instances of such problems in multiple contexts; and challenges and opportunities faced by those trying to address these problems.",
+    "topics": ["Interdisciplinary Problem Analysis", "Global Issues", "Civic Problem Solving"],
+    "dok": 4,
+    "item_specs": "Students apply multiple disciplinary lenses to analyze complex problems across scales and contexts, identifying systemic causes and realistic opportunities for action.",
+    "essential_questions": [
+      "Why can't complex problems be fully understood through only one disciplinary lens?",
+      "How do we identify which interventions are most promising given the complexity of systemic problems?"
+    ],
+    "learning_targets": [
+      "I can apply multiple disciplinary lenses to understand the causes and characteristics of a complex problem.",
+      "I can analyze challenges and opportunities for addressing a problem at multiple scales."
+    ],
+    "vocabulary": ["systemic problem", "interdisciplinary analysis", "root cause analysis", "intervention point", "wicked problem", "policy window", "civic opportunity"],
+    "sample_assessment": "Select a complex global problem (such as climate migration, pandemic preparedness, or structural inequality). Apply at least four disciplinary lenses from social studies to analyze its causes, manifestations, and possible solutions. Identify the most promising opportunities for intervention and the most significant barriers to change."
+  },
+  {
+    "code": "D4.7.9-12",
+    "benchmark": "Assess options for individual and collective action to address local, regional, and global problems by engaging in self-reflection, strategy identification, and complex causal reasoning.",
+    "topics": ["Civic Agency", "Strategic Action", "Systems Thinking"],
+    "dok": 4,
+    "item_specs": "Students reflect on their own capacities and values, identify effective strategies, and use causal reasoning to evaluate civic action options.",
+    "essential_questions": [
+      "How do individual and collective actions interact with larger systems to produce change?",
+      "What makes some civic strategies more likely to succeed than others?"
+    ],
+    "learning_targets": [
+      "I can assess the potential of individual and collective action through self-reflection and causal reasoning.",
+      "I can evaluate civic action strategies by analyzing their causal pathways to change."
+    ],
+    "vocabulary": ["causal reasoning", "systems thinking", "theory of change", "leverage point", "civic capacity", "collective impact", "social movement strategy"],
+    "sample_assessment": "Develop a theory of change for addressing a local, regional, or global problem. Identify specific individual and collective actions, explain the causal pathways by which each could contribute to change, and honestly assess the limitations and trade-offs of each approach. Reflect on what personal capacity and values you would bring to this work."
+  },
+  {
+    "code": "D4.8.9-12",
+    "benchmark": "Apply a range of deliberative and democratic strategies and procedures to make decisions and take action in their classrooms, schools, and out-of-school civic contexts.",
+    "topics": ["Democratic Deliberation", "Civic Action", "Democratic Practice"],
+    "dok": 4,
+    "item_specs": "Students apply sophisticated deliberative and democratic procedures to make complex decisions and take sustained civic action.",
+    "essential_questions": [
+      "How can democratic deliberation be sustained even when participants deeply disagree?",
+      "What makes civic action effective and democratic at the same time?"
+    ],
+    "learning_targets": [
+      "I can design and facilitate a deliberative process for addressing a complex civic question.",
+      "I can evaluate the democratic quality of a civic action and propose improvements."
+    ],
+    "vocabulary": ["deliberative democracy", "facilitation", "civic design", "democratic accountability", "public judgment", "civic action research", "participatory action"],
+    "sample_assessment": "Design a community deliberation process for addressing a real civic challenge in your school or community. Specify the deliberative procedures you would use, how you would ensure all voices are heard, and how participants would move from deliberation to action. After conducting the deliberation, write a reflective evaluation of how well the process worked democratically."
+  },
+  {
+    "code": "D2.Civ.10.6-8",
+    "benchmark": "Explain the relevance of personal interests and perspectives, civic virtues, and democratic principles when people address issues and problems in government and civil society.",
+    "topics": ["Civic Virtues", "Personal Interests", "Democratic Values"],
+    "dok": 3,
+    "item_specs": "Students analyze how personal interests, civic virtues, and democratic principles interact when individuals address civic problems.",
+    "essential_questions": [
+      "How do personal interests and civic virtue sometimes conflict and sometimes align?",
+      "What role do democratic principles play when individuals make civic choices?"
+    ],
+    "learning_targets": [
+      "I can explain how personal interests and civic virtues affect how people address civic problems.",
+      "I can analyze how democratic principles guide civic decision-making."
+    ],
+    "vocabulary": ["civic virtue", "self-interest", "common good", "democratic principle", "civic responsibility", "civic engagement", "public interest"],
+    "sample_assessment": "Describe a real or hypothetical civic situation where a person's personal interests might conflict with civic virtues or democratic principles. Analyze how the person might navigate this conflict and explain which factors should take priority in a democratic society."
+  },
+  {
+    "code": "D2.Civ.11.6-8",
+    "benchmark": "Differentiate among procedures for making decisions in the classroom, school, civil society, and local, state, and national government settings.",
+    "topics": ["Decision-Making Procedures", "Democratic Processes", "Governance"],
+    "dok": 2,
+    "item_specs": "Students identify and compare different decision-making procedures used in various civic and governmental settings.",
+    "essential_questions": [
+      "Why do different settings require different decision-making processes?",
+      "What are the advantages and disadvantages of different democratic procedures?"
+    ],
+    "learning_targets": [
+      "I can describe different decision-making procedures used in school, community, and government settings.",
+      "I can explain why different situations call for different decision-making processes."
+    ],
+    "vocabulary": ["majority rule", "consensus", "representative decision-making", "direct democracy", "parliamentary procedure", "deliberation", "voting"],
+    "sample_assessment": "Compare decision-making procedures used in three settings: your school, a local town council, and the U.S. Congress. For each, describe the process used and explain why that particular procedure is suited to that setting. Identify one advantage and one limitation of each process."
+  },
+  {
+    "code": "D2.Eco.9.6-8",
+    "benchmark": "Describe the roles of institutions such as corporations, nonprofits, and government agencies in a market economy.",
+    "topics": ["Economic Institutions", "Market Economy", "Organizational Roles"],
+    "dok": 2,
+    "item_specs": "Students identify the roles and functions of different types of institutions in a market economy and explain how they interact.",
+    "essential_questions": [
+      "What different types of institutions make up an economy and what does each do?",
+      "How do corporations, nonprofits, and government agencies interact in a market economy?"
+    ],
+    "learning_targets": [
+      "I can describe the roles of corporations, nonprofits, and government agencies in the economy.",
+      "I can explain how these institutions interact within a market economy."
+    ],
+    "vocabulary": ["corporation", "nonprofit", "government agency", "public good", "private sector", "public sector", "mixed economy"],
+    "sample_assessment": "Choose one major economic issue (such as healthcare, education, or environmental protection) and analyze the role of at least one corporation, one nonprofit, and one government agency in addressing it. Explain how these three types of institutions interact and what each contributes."
+  },
+  {
+    "code": "D2.Eco.10.6-8",
+    "benchmark": "Explain the influence of long-run growth on standard of living and the relationship between productivity and wages.",
+    "topics": ["Economic Growth", "Wages", "Standard of Living"],
+    "dok": 2,
+    "item_specs": "Students explain how long-run economic growth affects standards of living and analyze the relationship between productivity and wages.",
+    "essential_questions": [
+      "Why do wages vary so much across different jobs and countries?",
+      "How does economic growth translate into improvements in everyday life?"
+    ],
+    "learning_targets": [
+      "I can explain how long-run economic growth affects standard of living.",
+      "I can describe the relationship between worker productivity and wages."
+    ],
+    "vocabulary": ["long-run growth", "standard of living", "wage", "productivity", "human capital", "physical capital", "technology"],
+    "sample_assessment": "Compare two countries with different levels of economic growth over the past 30 years. Explain how differences in productivity have contributed to differences in wages and standard of living. Use data to support your explanation."
+  },
+  {
+    "code": "D2.Eco.11.6-8",
+    "benchmark": "Use economic indicators to analyze the current and future state of the economy.",
+    "topics": ["Economic Indicators", "Economic Analysis", "Data Literacy"],
+    "dok": 3,
+    "item_specs": "Students use economic indicators such as GDP, unemployment, and inflation to analyze economic conditions and make informed predictions.",
+    "essential_questions": [
+      "How do economists measure whether an economy is doing well?",
+      "What can economic indicators tell us about the future?"
+    ],
+    "learning_targets": [
+      "I can identify major economic indicators and explain what each measures.",
+      "I can use economic indicators to analyze the current state of the economy."
+    ],
+    "vocabulary": ["GDP", "unemployment rate", "inflation", "economic indicator", "business cycle", "recession", "economic forecast"],
+    "sample_assessment": "Analyze a current economic news article that uses at least two economic indicators. Explain what each indicator measures, what the current data shows, and what it suggests about the health of the economy. Make one prediction about future economic conditions based on the indicators."
+  },
+  {
+    "code": "D2.Geo.8.6-8",
+    "benchmark": "Analyze how relationships between humans and environments extend or contract the spatial reach of civilizations, empires, or nations over time.",
+    "topics": ["Human-Environment Interaction", "Geopolitics", "Historical Geography"],
+    "dok": 3,
+    "item_specs": "Students analyze how human adaptation to and modification of environments has influenced the expansion or contraction of political entities over time.",
+    "essential_questions": [
+      "How have environmental factors shaped the rise and fall of civilizations?",
+      "Why do some empires and nations expand while others contract?"
+    ],
+    "learning_targets": [
+      "I can analyze how human-environment relationships have influenced the rise and fall of civilizations.",
+      "I can explain how geographic factors affected the spatial reach of historical empires or nations."
+    ],
+    "vocabulary": ["empire", "territorial expansion", "geographic determinism", "adaptation", "resource availability", "strategic geography", "collapse"],
+    "sample_assessment": "Analyze how human-environment relationships contributed to both the expansion and eventual decline of one historical empire (such as the Roman Empire, the Mongol Empire, or the Ming Dynasty). Use specific geographic and environmental evidence to support your analysis."
+  },
+  {
+    "code": "D2.Geo.9.9-12",
+    "benchmark": "Evaluate the influence of long-term climate variability on human migration and settlement patterns, resource use, and land use at local-to-global scales.",
+    "topics": ["Climate and Human Geography", "Migration", "Land Use"],
+    "dok": 4,
+    "item_specs": "Students evaluate how long-term climate patterns and variability have shaped human settlement, resource use, and land use decisions across scales.",
+    "essential_questions": [
+      "How has climate shaped where and how humans have settled throughout history?",
+      "What does the past relationship between climate and migration tell us about our future?"
+    ],
+    "learning_targets": [
+      "I can analyze how long-term climate variability has influenced human migration and settlement.",
+      "I can evaluate how changing climate conditions affect resource and land use at different scales."
+    ],
+    "vocabulary": ["climate variability", "climate migration", "drought", "desertification", "sea level rise", "climate refugee", "adaptive capacity"],
+    "sample_assessment": "Analyze the relationship between long-term climate variability and human migration patterns in at least two historical periods. Then evaluate how projected future climate changes may affect migration, resource use, and settlement patterns at local, regional, and global scales. Draw conclusions about what adaptations will be necessary."
+  },
+  {
+    "code": "D2.Geo.10.9-12",
+    "benchmark": "Evaluate how the interdependence of human-defined regions, human settlement patterns, and the development of cities has been influenced by changes in transportation and communication technology.",
+    "topics": ["Urban Geography", "Transportation Technology", "Regional Interdependence"],
+    "dok": 4,
+    "item_specs": "Students evaluate how advances in transportation and communication have reshaped urban development, regional connections, and patterns of human settlement.",
+    "essential_questions": [
+      "How have transportation and communication technologies fundamentally changed where and how people live?",
+      "What new geographic patterns are emerging in an era of high-speed communication and transportation?"
+    ],
+    "learning_targets": [
+      "I can evaluate how transportation technologies have changed human settlement patterns and urban development.",
+      "I can analyze how communication technologies have altered regional interdependence."
+    ],
+    "vocabulary": ["urban sprawl", "transit-oriented development", "megalopolis", "digital economy", "telecommuting", "infrastructure", "regional planning"],
+    "sample_assessment": "Evaluate how the development of one major transportation or communication technology (such as the railroad, automobile, or internet) fundamentally changed human settlement patterns and regional interdependence. Analyze specific examples at local, regional, and global scales."
+  },
+  {
+    "code": "D2.His.9.6-8",
+    "benchmark": "Analyze the relationship between historical sources and the secondary interpretations made from them.",
+    "topics": ["Historical Sources", "Interpretation", "Evidence Analysis"],
+    "dok": 3,
+    "item_specs": "Students analyze how historians use primary source evidence to build secondary interpretations and evaluate the reasoning behind those interpretations.",
+    "essential_questions": [
+      "How do historians decide which sources to use and which to ignore?",
+      "What is the difference between a historical fact and a historical interpretation?"
+    ],
+    "learning_targets": [
+      "I can explain how a historian uses primary sources to build an interpretation.",
+      "I can distinguish between historical facts and historical interpretations."
+    ],
+    "vocabulary": ["historical source", "primary source", "secondary interpretation", "evidence selection", "historical argument", "bias", "corroboration"],
+    "sample_assessment": "Read a passage from a history textbook about a historical event. Identify at least two claims that represent historical interpretations rather than established facts. Then explain what types of primary sources a historian would need to support each interpretation."
+  },
+  {
+    "code": "D2.His.10.9-12",
+    "benchmark": "Detect possible limitations in the historical record based on the types of historical sources available.",
+    "topics": ["Historical Record Limitations", "Source Analysis", "Historiography"],
+    "dok": 4,
+    "item_specs": "Students critically analyze gaps and limitations in the historical record, explaining how the available types of sources constrain what historians can know.",
+    "essential_questions": [
+      "What can we never know about the past because the evidence no longer exists?",
+      "How does the absence of evidence affect historical interpretation?"
+    ],
+    "learning_targets": [
+      "I can identify limitations in the historical record for a given topic or period.",
+      "I can explain how the types of available sources constrain historical interpretation."
+    ],
+    "vocabulary": ["archival gap", "survivor bias", "oral history", "material culture", "destruction of records", "absence of evidence", "archaeology"],
+    "sample_assessment": "Select a historical topic where the record is known to be limited (such as the lives of enslaved people, pre-literate societies, or women in ancient civilizations). Analyze what types of evidence exist and what is missing. Explain how these limitations affect what historians can and cannot conclude about this topic."
+  },
+  {
+    "code": "D2.Civ.12.9-12",
+    "benchmark": "Analyze how civic ideals and civic reality sometimes conflict in the American political system.",
+    "topics": ["Civic Ideals", "Democratic Reality", "Political Analysis"],
+    "dok": 4,
+    "item_specs": "Students analyze the gap between American democratic ideals and political realities, evaluating the significance and causes of that gap.",
+    "essential_questions": [
+      "Why is there often a gap between America's democratic ideals and its political realities?",
+      "What does the persistence of that gap tell us about how democracy actually works?"
+    ],
+    "learning_targets": [
+      "I can identify and explain a specific gap between civic ideals and civic reality in the U.S.",
+      "I can analyze the causes of the gap and evaluate its significance for democracy."
+    ],
+    "vocabulary": ["civic ideal", "political reality", "democratic deficit", "structural inequality", "voter suppression", "civil rights", "equal justice"],
+    "sample_assessment": "Identify one significant example where American civic ideals (such as equality, justice, or democratic participation) have conflicted with political reality. Analyze the historical causes of this gap, evaluate its consequences, and assess what changes — structural, legal, or cultural — would be needed to close it."
+  },
+  {
+    "code": "D2.Eco.12.9-12",
+    "benchmark": "Analyze the impact of the distribution of economic benefits and burdens on different groups in society.",
+    "topics": ["Economic Inequality", "Distributive Justice", "Economic Analysis"],
+    "dok": 4,
+    "item_specs": "Students analyze how economic policies and market outcomes distribute benefits and burdens unequally across social groups.",
+    "essential_questions": [
+      "How does the distribution of economic benefits and burdens affect social equity?",
+      "What responsibility do democratic governments have to address economic inequality?"
+    ],
+    "learning_targets": [
+      "I can analyze how economic benefits and burdens are distributed across different groups.",
+      "I can evaluate whether a particular distribution is equitable and what policies might improve it."
+    ],
+    "vocabulary": ["economic inequality", "distributive justice", "Gini coefficient", "wealth gap", "regressive tax", "progressive tax", "economic mobility"],
+    "sample_assessment": "Analyze how the benefits and burdens of a specific economic policy (such as a tax policy, minimum wage law, or trade agreement) are distributed across at least three different groups in society. Use economic data to support your analysis. Evaluate whether the distribution is equitable and propose a policy adjustment that would improve equity."
+  }
+]
