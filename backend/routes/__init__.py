@@ -32,6 +32,7 @@ from .oneroster_routes import oneroster_bp
 from .lti_routes import lti_bp
 from .assessment_results_routes import assessment_results_bp
 from .district_routes import district_bp
+from .admin_routes import admin_bp
 
 
 def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, get_lock_fn=None):
@@ -66,6 +67,7 @@ def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, 
     app.register_blueprint(lti_bp)
     app.register_blueprint(assessment_results_bp)
     app.register_blueprint(district_bp)
+    app.register_blueprint(admin_bp)
 
 
 __all__ = [
@@ -93,4 +95,5 @@ __all__ = [
     'lti_bp',
     'assessment_results_bp',
     'district_bp',
+    'admin_bp',
 ]
