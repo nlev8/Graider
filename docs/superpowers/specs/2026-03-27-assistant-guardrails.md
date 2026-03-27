@@ -139,11 +139,80 @@ previously. Call lookup_student_info with this exact name.
 
 ---
 
+---
+
+### Fix 4: Fuzzy Match Transparency + Disambiguation
+
+**File:** `backend/services/assistant_tools_reports.py` (~line 1517, return block of `lookup_student_info`)
+
+**Problem:** `lookup_student_info` silently returns fuzzy matches without telling the model which record was chosen. If "Sam" matches "Samuel Smith" and "Samantha Jones", the model picks one arbitrarily.
+
+**What it does now:**
+
+1. **Multiple matches → disambiguation required:** If a name search matches multiple students, the response includes `disambiguation_required: true` and a message listing all matches with their periods. The model must ask the teacher to clarify.
+
+2. **Fuzzy match warning:** If the matched name differs from the searched name (e.g., searched "Sam", matched "Samuel Smith"), the response includes `fuzzy_matched: true` with both names visible.
+
+3. **Exact match → no warning:** If the name matches exactly, no extra fields are added.
+
+**Code added** (replacing the simple return):
+
+```python
+result = {
+    "students": students,
+    "total_found": len(students),
+}
+
+if student_name:
+    result["searched_name"] = student_name
+    result["matched_names"] = [s["name"] for s in students]
+
+    if len(students) > 1:
+        result["disambiguation_required"] = True
+        result["message"] = (
+            f"Multiple students match '{student_name}': "
+            + ", ".join(f"{s['name']} ({s['period']})" for s in students)
+            + ". Specify which student you mean before proceeding."
+        )
+    elif len(students) == 1 and student_name.lower().strip() != students[0]["name"].lower().strip():
+        result["fuzzy_matched"] = True
+        result["message"] = (
+            f"Searched for '{student_name}', matched to '{students[0]['name']}' "
+            f"in {students[0]['period']}. Verify this is the correct student."
+        )
+
+return result
+```
+
+**Effect:** Model sees "Multiple students match 'Sam': Samuel Smith (Period 1), Samantha Jones (Period 3). Specify which student you mean." — must disambiguate before proceeding.
+
+---
+
+### Fix 5: Cross-Tool State — Initialization Clarification
+
+**File:** `backend/routes/assistant_routes.py` (~line 1550)
+
+`_resolved_students` is initialized as `[]` **before** the `for tb in tool_use_blocks` loop, at the start of each tool batch. This means:
+- Fresh per conversation round (no stale state from prior teacher messages)
+- Populated when `lookup_student_info` runs
+- Checked when send tools run in the same batch
+- Reset automatically on the next user message (new tool batch)
+
+```python
+tool_results = []
+_resolved_students = []  # Reset per tool batch — no state leakage
+for tb in tool_use_blocks:
+    ...
+```
+
+Also fixed: the result key path was `result.get("data", {}).get("students", [])` but `lookup_student_info` returns `result.get("students", [])` directly (no `data` wrapper). Corrected to match actual return format.
+
+---
+
 ## Phase 2 Guardrails (Future)
 
 | Guardrail | Description | Complexity |
 |-----------|-------------|------------|
-| Ambiguous name rejection | If `lookup_student_info` fuzzy-matches multiple students, return error asking model to disambiguate | Medium |
 | User message entity extraction | Parse student names from teacher's message before model processes it, inject as constraint | Medium |
 | Tool call dry-run simulation | Validate all tool calls in a batch before executing any | High |
 | Fuzzy match strictness mode | Add exact-first matching to `_fuzzy_name_match` | Low |

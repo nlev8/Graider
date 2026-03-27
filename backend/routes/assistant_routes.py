@@ -1575,8 +1575,8 @@ def assistant_chat():
 
                     # Cross-tool guardrail: track students from lookup calls
                     if tb["name"] == "lookup_student_info" and isinstance(result, dict):
-                        students = result.get("data", {}).get("students", [])
-                        if isinstance(students, list):
+                        students = result.get("students", [])
+                        if isinstance(students, list) and students:
                             _resolved_students = [{"name": s.get("name", ""), "student_id": s.get("student_id", "")} for s in students]
 
                     # Cross-tool guardrail: warn if send tools reference students

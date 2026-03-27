@@ -1514,10 +1514,35 @@ def lookup_student_info(student_name=None, student_id=None, student_ids=None, pe
         }
         students.append(entry)
 
-    return {
+    # Fuzzy match transparency: if the search name differs from matched name(s),
+    # include both so the model/teacher can verify the right student was found.
+    result = {
         "students": students,
         "total_found": len(students),
     }
+
+    if student_name:
+        result["searched_name"] = student_name
+        matched_names = [s["name"] for s in students]
+        result["matched_names"] = matched_names
+
+        # Disambiguation warning: multiple students matched a single name search
+        if len(students) > 1:
+            result["disambiguation_required"] = True
+            result["message"] = (
+                f"Multiple students match '{student_name}': "
+                + ", ".join(f"{s['name']} ({s['period']})" for s in students)
+                + ". Specify which student you mean before proceeding."
+            )
+        # Fuzzy match warning: matched name differs significantly from search
+        elif len(students) == 1 and student_name.lower().strip() != students[0]["name"].lower().strip():
+            result["fuzzy_matched"] = True
+            result["message"] = (
+                f"Searched for '{student_name}', matched to '{students[0]['name']}' "
+                f"in {students[0]['period']}. Verify this is the correct student."
+            )
+
+    return result
 
 
 def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=None,
