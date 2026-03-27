@@ -31,3 +31,25 @@ def require_clever_session(f):
         g.teacher_id = getattr(g, 'user_id', clever_user.get('clever_id', ''))
         return f(*args, **kwargs)
     return wrapper
+
+
+def require_admin(f):
+    """Decorator that enforces school admin authentication.
+    Checks admin_role:{user_id} exists in system storage.
+    Sets g.admin_role for use in the wrapped route handler."""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        user_id = getattr(g, 'user_id', None)
+        if not user_id:
+            return jsonify({"error": "Authentication required"}), 401
+        try:
+            from backend.storage import load
+            admin_role = load(f"admin_role:{user_id}", "system")
+        except Exception:
+            admin_role = None
+        if not admin_role:
+            return jsonify({"error": "Admin access required"}), 403
+        g.teacher_id = user_id
+        g.admin_role = admin_role
+        return f(*args, **kwargs)
+    return wrapper

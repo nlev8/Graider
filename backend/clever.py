@@ -35,7 +35,7 @@ def get_clever_config():
     # Check district-level config first
     try:
         from backend.storage import load
-        district_cfg = load("district_sis_config", "system")
+        district_cfg = load("district:sis_config", "system")
         if district_cfg and district_cfg.get("sis_type") == "clever":
             redirect_uri = district_cfg.get("redirect_uri") or os.getenv("CLEVER_REDIRECT_URI")
             return {

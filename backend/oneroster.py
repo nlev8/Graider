@@ -305,7 +305,7 @@ def get_oneroster_config(teacher_id=None):
     # Try district-level config from storage
     try:
         from backend.storage import load
-        district_cfg = load("district_sis_config", "system")
+        district_cfg = load("district:sis_config", "system")
         if district_cfg and district_cfg.get("sis_type") == "oneroster":
             teacher_sourced_id = None
             if teacher_id:

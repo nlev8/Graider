@@ -83,7 +83,7 @@ def get_api_key(provider: str, teacher_id: str | None = None) -> str:
     # 3b. Check district admin setup keys
     try:
         from backend.storage import load as _storage_load
-        district_ai = _storage_load("district_ai_keys", "system")
+        district_ai = _storage_load("district:ai_keys", "system")
         if district_ai:
             val = district_ai.get(provider, '')
             if val:
@@ -120,7 +120,7 @@ def resolve_keys_for_teacher(teacher_id: str) -> dict:
     district_keys = _load_district_keys(district_id) if district_id else {}
     try:
         from backend.storage import load as _storage_load
-        district_admin_keys = _storage_load("district_ai_keys", "system") or {}
+        district_admin_keys = _storage_load("district:ai_keys", "system") or {}
     except Exception:
         district_admin_keys = {}
     resolved = {}
