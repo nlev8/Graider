@@ -1426,6 +1426,57 @@ export async function changeDistrictPassword(currentPassword, newPassword) {
   })
 }
 
+// ============ School Admin ============
+
+export async function getAdminStatus() {
+  return fetchApi('/api/admin/status')
+}
+
+export async function claimAdmin(code) {
+  return fetchApi('/api/admin/claim', {
+    method: 'POST',
+    body: JSON.stringify({ code: code }),
+  })
+}
+
+export async function getAdminTeachers() {
+  return fetchApi('/api/admin/teachers')
+}
+
+export async function getAdminOverview() {
+  return fetchApi('/api/admin/overview')
+}
+
+export async function getAdminTeacherSummary(teacherId) {
+  return fetchApi('/api/admin/teacher/' + teacherId + '/summary')
+}
+
+export async function getAdminActivity() {
+  return fetchApi('/api/admin/activity')
+}
+
+export async function createAdminInvite(school, manualTeachers) {
+  return fetchApi('/api/district/admin-invite', {
+    method: 'POST',
+    body: JSON.stringify({ school: school, manual_teachers: manualTeachers || [] }),
+  })
+}
+
+export async function listAdmins() {
+  return fetchApi('/api/district/admins')
+}
+
+export async function revokeAdmin(userId) {
+  return fetchApi('/api/district/admins', {
+    method: 'DELETE',
+    body: JSON.stringify({ user_id: userId }),
+  })
+}
+
+export async function searchTeachers(query) {
+  return fetchApi('/api/district/teacher-search?q=' + encodeURIComponent(query))
+}
+
 export default {
   getStatus,
   stopGrading,
@@ -1623,4 +1674,15 @@ export default {
   testDistrictConnection,
   getDistrictConfigStatus,
   changeDistrictPassword,
+  // School Admin
+  getAdminStatus,
+  claimAdmin,
+  getAdminTeachers,
+  getAdminOverview,
+  getAdminTeacherSummary,
+  getAdminActivity,
+  createAdminInvite,
+  listAdmins,
+  revokeAdmin,
+  searchTeachers,
 }
