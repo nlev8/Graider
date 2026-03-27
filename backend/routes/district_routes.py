@@ -7,11 +7,13 @@ All config stored with teacher_id="system" via backend.storage.
 import logging
 import os
 import functools
+import secrets
+from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from backend.storage import save as storage_save, load as storage_load
+from backend.storage import save as storage_save, load as storage_load, list_keys
 from backend.utils.audit import audit_log
 from backend.utils.errors import handle_route_errors
 
@@ -303,3 +305,118 @@ def district_test_connection():
             return jsonify({"error": f"Connection failed: {str(e)}"}), 502
 
     return jsonify({"error": f"Unknown SIS type: {sis_type}"}), 400
+
+
+# ── POST /api/district/admin-invite ──────────────────────────────────────────
+
+@district_bp.route("/api/district/admin-invite", methods=["POST"])
+@_require_district_admin
+@handle_route_errors
+def district_create_admin_invite():
+    """Generate a 6-char invite code for granting district admin role."""
+    data = request.get_json(silent=True) or {}
+    school = data.get("school", "")
+    manual_teachers = data.get("manual_teachers", [])
+
+    code = secrets.token_hex(3).upper()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+
+    invite_data = {
+        "school": school,
+        "manual_teachers": manual_teachers,
+        "expires_at": expires_at,
+    }
+    storage_save(f"admin_invite:{code}", invite_data, "system")
+    audit_log(
+        "district_admin_invite_created",
+        f"Invite code created for school: {school}",
+        user="district_admin",
+        teacher_id="system",
+    )
+    return jsonify({"code": code, "expires_at": expires_at, "school": school})
+
+
+# ── GET /api/district/admins ──────────────────────────────────────────────────
+
+@district_bp.route("/api/district/admins", methods=["GET"])
+@_require_district_admin
+@handle_route_errors
+def district_list_admins():
+    """List all users with district admin role."""
+    keys = list_keys("admin_role:", "system") or []
+    admins = []
+    for key in keys:
+        record = storage_load(key, "system")
+        if record and isinstance(record, dict):
+            user_id = key[len("admin_role:"):]
+            admins.append({
+                "user_id": user_id,
+                "school": record.get("school", ""),
+                "granted_at": record.get("granted_at", ""),
+            })
+    return jsonify({"admins": admins})
+
+
+# ── DELETE /api/district/admins ───────────────────────────────────────────────
+
+@district_bp.route("/api/district/admins", methods=["DELETE"])
+@_require_district_admin
+@handle_route_errors
+def district_revoke_admin():
+    """Revoke district admin role from a user."""
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id", "").strip()
+
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+
+    from backend.storage import delete as storage_delete
+    storage_delete(f"admin_role:{user_id}", "system")
+    audit_log(
+        "district_admin_revoked",
+        f"Admin role revoked for user_id: {user_id}",
+        user="district_admin",
+        teacher_id="system",
+    )
+    return jsonify({"status": "revoked"})
+
+
+# ── GET /api/district/teacher-search ─────────────────────────────────────────
+
+@district_bp.route("/api/district/teacher-search", methods=["GET"])
+@_require_district_admin
+@handle_route_errors
+def district_teacher_search():
+    """Search teachers by name or email (case-insensitive)."""
+    query = request.args.get("q", "").strip().lower()
+    if not query:
+        return jsonify({"teachers": []})
+
+    from backend.supabase_client import get_supabase as _get_supabase
+    sb = _get_supabase()
+    if not sb:
+        return jsonify({"error": "Supabase not configured"}), 503
+
+    result = sb.table("teacher_data") \
+        .select("teacher_id, data") \
+        .eq("data_key", "settings") \
+        .execute()
+
+    teachers = []
+    if result.data:
+        for row in result.data:
+            data = row.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            name = data.get("teacher_name", "") or ""
+            email = data.get("teacher_email", "") or ""
+            if query in name.lower() or query in email.lower():
+                teachers.append({
+                    "user_id": row.get("teacher_id", ""),
+                    "name": name,
+                    "email": email,
+                })
+            if len(teachers) >= 20:
+                break
+
+    return jsonify({"teachers": teachers})
