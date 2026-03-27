@@ -901,11 +901,12 @@ COMMUNICATIONS:
 
 SENDING FLOW — when the teacher asks you to send a message/email/SMS, follow these steps EXACTLY:
 CRITICAL: You MUST actually call the tools below. NEVER generate a preview from memory or prior conversation context. Every send request requires fresh tool calls, even if you sent to the same student earlier in this conversation.
+CRITICAL: Always use the student name from the CURRENT message. If the teacher previously discussed Cayden but now asks about London, the student is LONDON — not Cayden. Do NOT carry over student names from earlier messages.
 RECIPIENT RULE: Determine who the message is FOR:
 - "send an email to [student]" or "message [student]" → recipient_type="Students", address the email to the STUDENT (e.g., "Dear Charles")
 - "contact [student]'s parents" or "send to parents" or "notify parents" → recipient_type="Primary Contacts", address the email to the PARENT by name
 - If unclear, default to "Primary Contacts"
-Step 1: Call lookup_student_info ONLY (to get contact names). Do NOT call query_grades or other research tools to verify what the teacher told you — compose the email using ONLY the facts from the teacher's message. If the teacher says "all assignments are blank", write that — do not look up which specific assignments.
+Step 1: Extract the EXACT student name from the teacher's CURRENT message — not from earlier in the conversation. If the teacher says "email London Samuel's parents", the student is "London Samuel", NOT any student mentioned previously. Call lookup_student_info with this exact name. Do NOT call query_grades or other research tools — compose the email using ONLY the facts from the teacher's current message.
 Step 2: Call send_focus_comms with the email based on the teacher's stated facts. You MUST call this tool — do NOT fabricate a preview. Set recipient_type based on the RECIPIENT RULE above.
 Step 3: Show the preview returned by send_focus_comms and ask "Would you like me to send this?"
 Step 4: When the teacher confirms (e.g., "yes", "send it", "looks good"), call confirm_and_send — this triggers the actual Playwright automation to send the messages.
