@@ -101,6 +101,7 @@ import BuilderTab from "./tabs/BuilderTab";
 import ResultsTab from "./tabs/ResultsTab";
 import SettingsTab from "./tabs/SettingsTab";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
+var AdminTab = React.lazy(function() { return import("./tabs/AdminTab"); });
 
 // Tab configuration
 const TABS = [
@@ -1323,6 +1324,8 @@ function App() {
     _setActiveTab(tab);
     if (!isLocalhost) phTrack('tab_switched', { tab });
   }, []);
+  var [isAdmin, setIsAdmin] = useState(false);
+  var [adminSchool, setAdminSchool] = useState('');
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
@@ -1393,6 +1396,15 @@ function App() {
   const [excludeApprovedStudents, setExcludeApprovedStudents] = useState(false); // Exclude students already approved
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [globalAINotes, setGlobalAINotes] = useState("");
+
+  // Check admin status
+  useEffect(function() {
+    if (!userApproved) return;
+    api.getAdminStatus().then(function(data) {
+      setIsAdmin(data.is_admin || false);
+      setAdminSchool(data.school || '');
+    }).catch(function() {});
+  }, [userApproved]);
 
   // Fetch portal submissions for Results tab
   useEffect(() => {
@@ -7342,6 +7354,46 @@ ${signature}`;
                 {!sidebarCollapsed && tab.label}
               </button>
             ))}
+            {isAdmin && (
+              <button
+                key="admin"
+                onClick={() => setActiveTab("admin")}
+                title={sidebarCollapsed ? "Admin" : ""}
+                style={{
+                  width: "100%",
+                  padding: sidebarCollapsed ? "14px 0" : "14px 16px",
+                  marginBottom: "6px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background:
+                    activeTab === "admin"
+                      ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))"
+                      : "transparent",
+                  color:
+                    activeTab === "admin" ? "#fff" : "var(--text-secondary)",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: sidebarCollapsed ? "center" : "flex-start",
+                  gap: "12px",
+                  transition: "all 0.2s",
+                  textAlign: "left",
+                }}
+                onMouseEnter={(e) => {
+                  if (activeTab !== "admin")
+                    e.target.style.background = "var(--glass-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== "admin")
+                    e.target.style.background = "transparent";
+                }}
+              >
+                <Icon name="Shield" size={20} />
+                {!sidebarCollapsed && "Admin"}
+              </button>
+            )}
           </nav>
 
           {/* Footer */}
@@ -9604,6 +9656,18 @@ ${signature}`;
                     addToast={addToast}
                     assessmentResults={assessmentResults}
                   />
+                </Suspense>
+              )}
+
+              {/* Admin Tab */}
+              {activeTab === "admin" && isAdmin && (
+                <Suspense fallback={
+                  <div className="glass-card" style={{ padding: "80px", textAlign: "center" }}>
+                    <div style={{ display: "inline-block", width: "40px", height: "40px", border: "3px solid var(--glass-border)", borderTopColor: "var(--accent-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <h2 style={{ marginTop: "20px", fontSize: "1.3rem", fontWeight: 600 }}>Loading Admin...</h2>
+                  </div>
+                }>
+                  <AdminTab school={adminSchool} />
                 </Suspense>
               )}
 
