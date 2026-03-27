@@ -1265,7 +1265,18 @@ def launch_focus_comms(messages, teacher_id='local-dev'):
         dict with status and total count, or error
     """
     if _focus_comms_state.get("status") == "running":
-        return {"error": "Focus Comms already running. Check status or wait."}
+        # Check if the process is actually still alive — if the browser was closed
+        # manually, the subprocess may have died but state wasn't updated
+        proc = _focus_comms_state.get("process")
+        if proc and proc.poll() is not None:
+            # Process is dead but state says "running" — reset it
+            logger.warning("Focus Comms process died (exit code %s) but state was stuck on 'running'. Resetting.",
+                           proc.returncode)
+            _focus_comms_state["status"] = "idle"
+            _focus_comms_state["process"] = None
+            _focus_comms_state["message"] = "Previous session ended unexpectedly. Ready for new send."
+        else:
+            return {"error": "Focus Comms already running. Check status or wait."}
 
     if not messages:
         return {"error": "No messages to send"}

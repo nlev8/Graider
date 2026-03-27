@@ -895,7 +895,7 @@ COMMUNICATIONS:
   - Email only: provide email_subject + email_body, omit sms_body
   - SMS only: provide email_subject + sms_body, DO NOT provide email_body (omit it entirely, do not pass empty string)
   - Email + SMS: provide all three. The sms_body should be a SHORT notification (e.g. "Please check your email for a message regarding [subject]. -Mr./Ms. [Teacher]") pointing parents to the full email.
-  - When the teacher says "send a message" or "contact parents", default to email + SMS with the SMS as a check-your-email notification.
+  - When the teacher says "send a message" or "contact parents", default to email ONLY (no SMS). Only include sms_body if the teacher explicitly asks for SMS (e.g., "send email and text", "also text them", "send SMS").
   - recipient_type: "Primary Contacts" (default) sends to parents/guardians. "Students" sends directly to the student. Use "Students" when the teacher says "send to [student name]" or "email [student name]" without mentioning parents. Use "Primary Contacts" when the teacher says "contact parents" or "send to [student]'s parents".
 - send_parent_emails: Send emails to parents via Outlook automation. Use ONLY if the teacher specifically asks for Outlook.
 

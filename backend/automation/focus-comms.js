@@ -1592,6 +1592,38 @@ async function main() {
   const creds = loadCredentials();
   fs.mkdirSync(BROWSER_DATA_DIR, { recursive: true });
 
+  // Clean up stale browser lock files from previous crashed sessions.
+  // If the Chrome process died or the window was closed manually, Singleton*
+  // files remain and prevent launchPersistentContext from working.
+  var lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+  for (var lf of lockFiles) {
+    var lockPath = path.join(BROWSER_DATA_DIR, lf);
+    try {
+      var target = fs.readlinkSync(lockPath);
+      // SingletonLock contains "hostname-PID" — check if PID is alive
+      if (lf === 'SingletonLock') {
+        var pidMatch = target.match(/-(\d+)$/);
+        if (pidMatch) {
+          var pid = parseInt(pidMatch[1], 10);
+          try {
+            process.kill(pid, 0); // signal 0 = check if alive
+            // Process is alive — kill it so we can take over
+            emit('status', { message: 'Killing orphaned browser process (PID ' + pid + ')...' });
+            process.kill(pid, 'SIGTERM');
+            // Wait briefly for it to die
+            await new Promise(function(r) { setTimeout(r, 2000); });
+          } catch (e) {
+            // Process is dead — just remove the stale lock
+          }
+        }
+      }
+      fs.unlinkSync(lockPath);
+      emit('status', { message: 'Cleaned stale lock: ' + lf });
+    } catch (e) {
+      // File doesn't exist or isn't a symlink — fine
+    }
+  }
+
   const browser = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
     headless: false,
     viewport: { width: 1440, height: 900 },
