@@ -32,15 +32,72 @@
 Append after the existing `_add_graider_marker` function:
 
 ```python
-def _add_bubble_row(doc, question_number, options, correct_answer=None, is_tf=False):
+def _normalize_correct_answer_to_letter(correct_answer, option_texts):
+    """Normalize a stored answer to a bubble letter (A, B, C, D...).
+
+    Handles all answer storage formats:
+      - Letter: "B" or "b" → "B"
+      - Letter with paren: "B)" → "B"
+      - Full option text: "Declaration of Independence" → finds matching option → "B"
+      - Index: 1 → "B"
+
+    Args:
+        correct_answer: str — the stored answer value
+        option_texts: list of str — the full option text list (e.g., ["A) 3", "B) 4", ...])
+
+    Returns:
+        str — normalized letter ("A", "B", etc.) or None if no match
+    """
+    if not correct_answer or not option_texts:
+        return None
+
+    ans = str(correct_answer).strip()
+
+    # Case 1: Already a single letter A-H
+    if len(ans) == 1 and ans.upper() in 'ABCDEFGH':
+        return ans.upper()
+
+    # Case 2: Letter with paren "B)" or "B."
+    if len(ans) >= 2 and ans[0].upper() in 'ABCDEFGH' and ans[1] in ').':
+        return ans[0].upper()
+
+    # Case 3: Integer index (0-based or 1-based)
+    if ans.isdigit():
+        idx = int(ans)
+        if 0 <= idx < len(option_texts):
+            return chr(65 + idx)
+        if 1 <= idx <= len(option_texts):
+            return chr(65 + idx - 1)
+
+    # Case 4: Full option text match — find which option contains or equals the answer
+    ans_lower = ans.lower()
+    for i, opt in enumerate(option_texts):
+        opt_clean = str(opt).strip().lower()
+        # Strip letter prefix from option: "B) Declaration..." → "declaration..."
+        if len(opt_clean) >= 3 and opt_clean[0] in 'abcdefgh' and opt_clean[1] in ').':
+            opt_body = opt_clean[2:].strip()
+        else:
+            opt_body = opt_clean
+        if ans_lower == opt_body or ans_lower == opt_clean:
+            return chr(65 + i)
+
+    return None
+
+
+def _add_bubble_row(doc, question_number, bubble_labels, correct_answer=None,
+                    is_tf=False, option_texts=None):
     """Add a row of fill-in-the-bubble circles for MC or TF questions.
 
     Args:
         doc: python-docx Document
         question_number: int — question number label
-        options: list of option labels (e.g., ['A', 'B', 'C', 'D'] or ['True', 'False'])
-        correct_answer: str or None — if provided, fills in the correct bubble (answer key mode)
-        is_tf: bool — True/False question (uses T/F labels instead of A/B/C/D)
+        bubble_labels: list of str — bubble labels (e.g., ['A', 'B', 'C', 'D'] or ['True', 'False'])
+        correct_answer: str or None — if provided, fills in the correct bubble (answer key mode).
+            Can be a letter, letter+paren, full text, or index — normalized via
+            _normalize_correct_answer_to_letter.
+        is_tf: bool — True/False question
+        option_texts: list of str — original full option texts for answer normalization
+            (e.g., ["A) 3", "B) 4", ...]). Only needed when correct_answer is full text.
     """
     from docx.shared import Pt, RGBColor, Inches
     from docx.oxml.ns import qn
@@ -55,20 +112,24 @@ def _add_bubble_row(doc, question_number, options, correct_answer=None, is_tf=Fa
     num_run.font.size = Pt(11)
     num_run.font.bold = True
 
+    # Normalize answer to a letter for MC, or keep as-is for TF
+    normalized_answer = None
+    if correct_answer is not None:
+        if is_tf:
+            normalized_answer = str(correct_answer).strip()  # "True" or "False"
+        else:
+            normalized_answer = _normalize_correct_answer_to_letter(
+                correct_answer, option_texts or [])
+
     # Render each bubble
-    for i, opt_label in enumerate(options):
+    for i, opt_label in enumerate(bubble_labels):
         # Determine if this bubble should be filled
         is_correct = False
-        if correct_answer is not None:
+        if normalized_answer is not None:
             if is_tf:
-                is_correct = opt_label.lower().strip() == str(correct_answer).lower().strip()
+                is_correct = opt_label.lower().strip() == normalized_answer.lower().strip()
             else:
-                # Match by letter (A, B, C, D) or by index
-                correct_upper = str(correct_answer).upper().strip()
-                # Handle "A)", "B)", etc.
-                if len(correct_upper) > 1 and correct_upper[1] == ')':
-                    correct_upper = correct_upper[0]
-                is_correct = opt_label.upper().strip() == correct_upper
+                is_correct = opt_label.upper().strip() == normalized_answer
 
         # Bubble character: filled circle ● or empty circle ○
         if is_correct:
@@ -139,9 +200,10 @@ def _add_answer_key_page(doc, questions_with_answers):
         _add_bubble_row(
             doc,
             question_number=q["number"],
-            options=q["options"],
+            bubble_labels=q["options"],
             correct_answer=q["correct_answer"],
             is_tf=q.get("is_tf", False),
+            option_texts=q.get("option_texts"),  # For answer normalization
         )
 
         # Add question text as reference (smaller, gray)
@@ -208,9 +270,57 @@ class TestAddBubbleRow:
         from docx import Document
         from backend.services.worksheet_generator import _add_bubble_row
         doc = Document()
-        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'], correct_answer='B)')
+        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'], correct_answer='B)',
+                               option_texts=['A) 3', 'B) 4', 'C) 5', 'D) 6'])
         text = para.text
         assert text.count('\u25CF') == 1  # Handles "B)" format
+
+    def test_correct_answer_full_text(self):
+        """Answer stored as full option text, not letter."""
+        from docx import Document
+        from backend.services.worksheet_generator import _add_bubble_row
+        doc = Document()
+        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'],
+                               correct_answer='Declaration of Independence',
+                               option_texts=['A) Constitution', 'B) Declaration of Independence',
+                                             'C) Bill of Rights', 'D) Magna Carta'])
+        text = para.text
+        assert text.count('\u25CF') == 1  # Should fill B
+
+    def test_correct_answer_no_match_no_fill(self):
+        """If answer can't be normalized, no bubble is filled."""
+        from docx import Document
+        from backend.services.worksheet_generator import _add_bubble_row
+        doc = Document()
+        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'],
+                               correct_answer='Something totally wrong',
+                               option_texts=['A) One', 'B) Two', 'C) Three', 'D) Four'])
+        text = para.text
+        assert '\u25CF' not in text  # No filled bubble
+
+
+class TestNormalizeAnswer:
+    def test_letter(self):
+        from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+        assert _normalize_correct_answer_to_letter('B', ['A) X', 'B) Y']) == 'B'
+
+    def test_letter_paren(self):
+        from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+        assert _normalize_correct_answer_to_letter('C)', ['A) X', 'B) Y', 'C) Z']) == 'C'
+
+    def test_full_text(self):
+        from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+        result = _normalize_correct_answer_to_letter(
+            'Paris', ['A) London', 'B) Berlin', 'C) Paris', 'D) Madrid'])
+        assert result == 'C'
+
+    def test_no_match(self):
+        from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+        assert _normalize_correct_answer_to_letter('XYZ', ['A) One', 'B) Two']) is None
+
+    def test_index_zero_based(self):
+        from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+        assert _normalize_correct_answer_to_letter('1', ['A) X', 'B) Y', 'C) Z']) == 'B'
 
 
 class TestAddAnswerKeyPage:
@@ -294,7 +404,7 @@ In `backend/routes/planner_routes.py`, find the `_export_assignment_docx_graider
 **Replace with:**
 ```python
             if q_options:
-                # MC/TF: question + options as paragraphs, then bubble row
+                # MC/TF: question + options as paragraphs, then bubble row + Graider table
                 is_tf = q_type in ('true_false', 'tf')
                 if not visual_dict:
                     q_para = doc.add_paragraph()
@@ -307,17 +417,23 @@ In `backend/routes/planner_routes.py`, find the `_export_assignment_docx_graider
                 for opt in q_options:
                     doc.add_paragraph(f"    {opt}")
 
-                # Empty bubble row for student answers
+                # Empty bubble row for student answers (visual)
                 if is_tf:
                     bubble_labels = ['True', 'False']
                 else:
-                    bubble_labels = [chr(65 + i) for i in range(len(q_options))]
+                    bubble_labels = [chr(65 + idx) for idx in range(len(q_options))]
                 _add_bubble_row(doc, q_number, bubble_labels, is_tf=is_tf)
 
-                # Track for answer key page
+                # Keep Graider extraction table (needed for file-based grading)
+                _add_graider_table(doc, f"Answer for Question {q_number}",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, 720)
+
+                # Track for answer key page (include option_texts for normalization)
                 answer_key_questions.append({
                     "number": q_number,
                     "options": bubble_labels,
+                    "option_texts": q_options,  # Full text for answer normalization
                     "correct_answer": q.get('answer', ''),
                     "is_tf": is_tf,
                     "question_text": q_text,
@@ -520,9 +636,19 @@ The answer key is always the **last page** of the exported document, separated b
 ### Backward Compatibility
 
 - Short answer, essay, matching, data table, and math questions are unchanged
-- The Graider extraction table is removed for MC/TF (replaced by bubbles) — this is correct because bubble answers don't need the table-based extraction marker
+- The Graider extraction table is KEPT for MC/TF alongside the bubbles — the table is still needed for file-based grading (when teachers upload student DOCX files, `assignment_grader.py` uses `GRAIDER:QUESTION:N` markers to extract answers). Bubbles are a visual addition for the printed worksheet, not a replacement for the extraction markers.
 - Non-MC/TF questions still use the existing answer space format
 
-### Vision Scanning
+### Scanning Pipeline Compatibility
 
-No code changes needed for scanning. The existing GPT-4o image parsing pipeline in `assignment_grader.py` already handles scanned worksheets. Filled bubbles (●) vs empty bubbles (○) are visually distinct and the model can read them reliably.
+**Two grading paths, both work with bubbles:**
+
+1. **Student Portal (digital):** Students answer MC/TF in the browser. No scanning involved — the portal submits answers as JSON. Bubbles are only for printed exports. No code changes needed.
+
+2. **File-based grading (scanned DOCX/image):** When a teacher scans a printed bubble sheet:
+   - If they scan to DOCX: The Graider extraction table (`GRAIDER:QUESTION:N`) is still present in the document. `assignment_grader.py` uses it as before. The bubbles are visual only — the student writes the letter in the Graider table cell.
+   - If they scan to image (photo/PDF): The GPT-4o vision pipeline in `assignment_grader.py` already handles scanned worksheets. Filled bubbles (●) vs empty bubbles (○) are visually distinct. The vision model reads the filled bubble and maps it to the question number.
+
+**No changes to `assignment_grader.py` are needed for Phase 1.** The Graider table is preserved as the extraction mechanism. Bubbles serve as a visual guide for students, not as a replacement for the structured extraction markers.
+
+**Phase 2 (future):** Add a dedicated bubble-sheet OCR mode to `assignment_grader.py` that can batch-grade scanned bubble sheets without requiring Graider table markers — useful for Scantron-style bulk grading.
