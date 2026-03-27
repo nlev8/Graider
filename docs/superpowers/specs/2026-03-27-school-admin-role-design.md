@@ -140,9 +140,10 @@ Endpoints:
 ### Additions to `backend/routes/district_routes.py`
 
 New endpoints for invite management:
-- `POST /api/district/admin-invite` — create invite code (body: `{school, manual_teachers: [...]}`)
-- `GET /api/district/admins` — list current admins
+- `POST /api/district/admin-invite` — create invite code (body: `{school, manual_teachers: [{user_id, name, email}]}`)
+- `GET /api/district/admins` — list current admins with their school and teacher count
 - `DELETE /api/district/admins` — revoke an admin (body: `{user_id}`)
+- `GET /api/district/teacher-search?q=smith` — search Graider teachers by name/email for manual assignment
 
 ### New Decorator: `backend/utils/auth_decorators.py`
 
@@ -173,31 +174,163 @@ def require_admin(f):
 
 ### Teacher Discovery Logic (in `admin_routes.py`)
 
+Three-layer resolution: SIS auto-discover → manual assignment → all-teachers fallback.
+
+**Layer 1: SIS Auto-Discovery (OneRoster/ClassLink)**
+
+```python
+def _discover_teachers_from_sis(school_name):
+    """Query OneRoster for teachers at a school, match to Graider accounts.
+
+    Steps:
+    1. Load district SIS config (district_sis_config, system)
+    2. Create OneRosterClient with district credentials
+    3. Fetch /schools to find the school_id matching school_name
+    4. Fetch /schools/{school_id}/teachers to get teacher records
+    5. For each SIS teacher, extract: sourcedId, givenName, familyName, email
+    6. Match to Graider user IDs by querying teacher_data for settings entries
+       where teacher_email matches the SIS teacher email (case-insensitive)
+    7. Return list of {user_id, name, email, sis_sourced_id}
+    """
+    from backend.storage import load
+    from backend.supabase_client import get_supabase
+
+    district_config = load("district_sis_config", "system")
+    if not district_config or district_config.get("sis_type") != "oneroster":
+        return []
+
+    # Create client and fetch teachers for the school
+    from backend.oneroster import OneRosterClient
+    import asyncio
+
+    client = OneRosterClient(
+        base_url=district_config["base_url"],
+        client_id=district_config["client_id"],
+        client_secret=district_config["client_secret"],
+        token_url=district_config.get("token_url"),
+    )
+
+    async def _fetch():
+        async with __import__("httpx").AsyncClient(timeout=15.0) as http:
+            await client._ensure_token(http)
+            # Find school by name
+            schools = await client._get_paginated(http, "/schools", "orgs", "schools")
+            school_id = None
+            for s in schools:
+                if s.get("name", "").lower().strip() == school_name.lower().strip():
+                    school_id = s.get("sourcedId")
+                    break
+            if not school_id:
+                return []
+            # Fetch teachers at this school
+            teachers = await client._get_paginated(
+                http, f"/schools/{school_id}/teachers", "users", "teachers")
+            return teachers
+
+    loop = asyncio.new_event_loop()
+    try:
+        sis_teachers = loop.run_until_complete(_fetch())
+    finally:
+        loop.close()
+
+    if not sis_teachers:
+        return []
+
+    # Match SIS teachers to Graider accounts by email
+    # Query all teacher_data settings entries to build email → user_id map
+    db = get_supabase()
+    if not db:
+        return []
+
+    settings_rows = db.table("teacher_data").select(
+        "teacher_id, data"
+    ).eq("data_key", "settings").execute()
+
+    email_to_uid = {}
+    for row in (settings_rows.data or []):
+        data = row.get("data", {})
+        if isinstance(data, dict):
+            email = (data.get("teacher_email") or "").strip().lower()
+            if email:
+                email_to_uid[email] = row["teacher_id"]
+
+    matched = []
+    for t in sis_teachers:
+        sis_email = (t.get("email") or "").strip().lower()
+        graider_uid = email_to_uid.get(sis_email)
+        matched.append({
+            "user_id": graider_uid,  # None if not yet registered in Graider
+            "name": (t.get("givenName", "") + " " + t.get("familyName", "")).strip(),
+            "email": t.get("email", ""),
+            "sis_sourced_id": t.get("sourcedId", ""),
+            "registered": graider_uid is not None,
+        })
+
+    return matched
+```
+
+**Layer 2: Manual Assignment**
+
+The `admin_role:{user_id}` record has `manual_teachers: [{user_id, name, email}]`. These are merged with SIS-discovered teachers, deduplicating by email.
+
+**Layer 3: All-Teachers Fallback**
+
+If both SIS and manual return empty, query `SELECT DISTINCT teacher_id FROM teacher_data WHERE data_key = 'settings'` and load each teacher's name/email from their settings. This is a last resort for deployments without SIS.
+
+**Combined Resolution:**
+
 ```python
 def _discover_teachers(admin_role):
-    """Get list of teacher IDs for this admin's school."""
-    teachers = []
+    """Get list of teachers for this admin. Returns [{user_id, name, email, registered}]."""
+    school = admin_role.get("school", "")
+    all_teachers = []
+    seen_emails = set()
 
-    # 1. Try SIS auto-discovery
-    district_config = load("district_sis_config", "system")
-    if district_config and district_config.get("sis_type") == "oneroster":
-        # Query OneRoster for teachers at this school
-        # Match to Graider user IDs via email or student_id_number
-        pass  # Implementation in plan
+    # 1. SIS auto-discovery
+    sis_teachers = _discover_teachers_from_sis(school)
+    for t in sis_teachers:
+        email = (t.get("email") or "").lower()
+        if email:
+            seen_emails.add(email)
+        all_teachers.append(t)
 
-    # 2. Merge manual assignments
-    manual = admin_role.get("manual_teachers", [])
-    for tid in manual:
-        if tid not in teachers:
-            teachers.append(tid)
+    # 2. Manual assignments (deduplicate by email)
+    for t in admin_role.get("manual_teachers", []):
+        email = (t.get("email") or "").lower()
+        if email and email not in seen_emails:
+            seen_emails.add(email)
+            all_teachers.append(t)
 
-    # 3. If nothing found, discover from teacher_data
-    if not teachers:
-        # Query all distinct teacher_ids that have settings
-        pass  # Implementation in plan
+    # 3. Fallback: discover from teacher_data if nothing found
+    if not all_teachers:
+        from backend.supabase_client import get_supabase
+        db = get_supabase()
+        if db:
+            rows = db.table("teacher_data").select(
+                "teacher_id, data"
+            ).eq("data_key", "settings").execute()
+            for row in (rows.data or []):
+                data = row.get("data", {})
+                if isinstance(data, dict):
+                    all_teachers.append({
+                        "user_id": row["teacher_id"],
+                        "name": data.get("teacher_name", ""),
+                        "email": data.get("teacher_email", ""),
+                        "registered": True,
+                    })
 
-    return teachers
+    return all_teachers
 ```
+
+### Teacher Lookup for Manual Assignment
+
+The district admin at `/district` needs to assign teachers without knowing Graider UUIDs.
+
+**New endpoint:** `GET /api/district/teacher-search?q=smith`
+
+Queries `teacher_data` where `data_key = 'settings'` and the `data` JSON contains a matching `teacher_name` or `teacher_email` (case-insensitive). Returns `[{user_id, name, email}]`. Limited to 20 results. Requires district admin session.
+
+**UI in DistrictSetup.jsx:** The "School Admins" section has a "Add teachers" search field. District admin types a name or email, sees matching teachers, clicks to add them to the invite's `manual_teachers` list.
 
 ## Frontend
 
