@@ -1544,6 +1544,11 @@ def assistant_chat():
                     assistant_content.append({"type": "text", "text": full_response_text})
 
                 tool_results = []
+                # Track resolved students across tool calls in this round
+                # so we can detect mismatches (e.g., lookup returns "London" but
+                # send_focus_comms uses "Cayden" from earlier conversation context)
+                _resolved_students = []  # [{name, student_id}] from lookup_student_info
+
                 for tb in tool_use_blocks:
                     if session_id in cancelled_sessions:
                         break
@@ -1567,6 +1572,41 @@ def assistant_chat():
                     # Uses teacher_id captured at top of assistant_chat() (line ~1145)
                     tool_input["teacher_id"] = teacher_id
                     result = execute_tool(tb["name"], tool_input)
+
+                    # Cross-tool guardrail: track students from lookup calls
+                    if tb["name"] == "lookup_student_info" and isinstance(result, dict):
+                        students = result.get("data", {}).get("students", [])
+                        if isinstance(students, list):
+                            _resolved_students = [{"name": s.get("name", ""), "student_id": s.get("student_id", "")} for s in students]
+
+                    # Cross-tool guardrail: warn if send tools reference students
+                    # that weren't in the most recent lookup result
+                    if tb["name"] in ("send_focus_comms", "send_behavior_email", "send_parent_emails") and _resolved_students:
+                        tool_student_names = tool_input.get("student_names") or []
+                        if isinstance(tool_student_names, str):
+                            tool_student_names = [tool_student_names]
+                        tool_student_name = tool_input.get("student_name", "")
+                        if tool_student_name:
+                            tool_student_names.append(tool_student_name)
+                        if tool_student_names:
+                            resolved_names = [s["name"].lower().strip() for s in _resolved_students]
+                            for sn in tool_student_names:
+                                sn_lower = sn.lower().strip()
+                                # Check if ANY resolved name contains or is contained by the tool's student name
+                                match_found = any(
+                                    sn_lower in rn or rn in sn_lower
+                                    for rn in resolved_names
+                                )
+                                if not match_found and resolved_names:
+                                    # Mismatch: tool is sending to a student not in the lookup result
+                                    logger.warning(
+                                        "Cross-tool mismatch: %s called with student '%s' but lookup_student_info resolved: %s",
+                                        tb["name"], sn, [s["name"] for s in _resolved_students]
+                                    )
+                                    result = {
+                                        "error": f"Student name mismatch: you are trying to send to '{sn}' but the most recent lookup resolved '{_resolved_students[0]['name']}'. "
+                                        f"Please call lookup_student_info for '{sn}' first to verify the correct student."
+                                    }
                     result_str = json.dumps(result)
                     if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
                         result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'

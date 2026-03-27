@@ -2435,7 +2435,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
     # Dry run: return preview
     if dry_run:
         previews = []
-        for m in messages[:3]:
+        for m in messages:
             previews.append({
                 "student_name": m["student_name"],
                 "subject": m["subject"],
@@ -2458,8 +2458,9 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
             "NOT_SENT": True,
             "preview_count": len(previews),
             "total_messages": len(messages),
+            "recipient_names": [m["student_name"] for m in messages],
             "previews": previews,
-            "message": "PREVIEW ONLY — messages have NOT been sent yet. Show this preview to the teacher and ask if they want to send it. If they confirm, call confirm_and_send.",
+            "message": "PREVIEW ONLY — messages have NOT been sent yet. VERIFY the recipient names are correct before asking the teacher to confirm. If they confirm, call confirm_and_send.",
         }
 
     # Actually send via focus-comms.js
