@@ -420,6 +420,18 @@ python graider_app.py
 - `POST /api/district/test-connection` — Test SIS connectivity (admin auth required)
 - `POST /api/oneroster/teacher-id` — Save teacher's OneRoster sourcedId (teacher auth)
 
+### School Admin (Principal)
+- `GET /api/admin/status` — Check if current user is a school admin
+- `POST /api/admin/claim` — Claim admin role with invite code
+- `GET /api/admin/teachers` — List teachers at admin's school
+- `GET /api/admin/overview` — School-wide aggregate stats
+- `GET /api/admin/teacher/<id>/summary` — Per-teacher drill-down
+- `GET /api/admin/activity` — Recent activity across admin's teachers
+- `POST /api/district/admin-invite` — Create admin invite code (district admin)
+- `GET /api/district/admins` — List current admins (district admin)
+- `DELETE /api/district/admins` — Revoke admin (district admin)
+- `GET /api/district/teacher-search` — Search teachers by name/email (district admin)
+
 ### Student Portal
 - `POST /api/student/login` — Student login (email + class code)
 - `GET /api/student/session` — Validate student session
