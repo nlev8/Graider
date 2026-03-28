@@ -154,7 +154,6 @@ export default React.memo(function SettingsTab({
   var [oneRosterSyncResult, setOneRosterSyncResult] = useState(null);
   var [showOneRosterSecret, setShowOneRosterSecret] = useState(false);
   var [oneRosterHasCredentials, setOneRosterHasCredentials] = useState(false);
-  var [showSwitchProviderConfirm, setShowSwitchProviderConfirm] = useState(null);
   var [districtSisProvider, setDistrictSisProvider] = useState(null);
   var [teacherSisId, setTeacherSisId] = useState('');
 
@@ -1994,23 +1993,6 @@ export default React.memo(function SettingsTab({
                   /* FULL FORM - no district config, teacher manages everything */
                   <>
 
-                {/* Switch provider button if OneRoster is active and user wants Clever */}
-                {activeProvider === 'oneroster' && (
-                  <div style={{ marginBottom: "15px" }}>
-                    <button
-                      onClick={function() { setShowSwitchProviderConfirm('clever'); }}
-                      style={{
-                        background: "none", border: "1px solid var(--glass-border)", borderRadius: "8px",
-                        padding: "6px 14px", cursor: "pointer", fontSize: "0.82rem",
-                        color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px",
-                      }}
-                    >
-                      <Icon name="ArrowRightLeft" size={14} />
-                      Switch to Clever
-                    </button>
-                  </div>
-                )}
-
                 {/* Config fields */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "500px" }}>
                   <div>
@@ -2745,83 +2727,6 @@ export default React.memo(function SettingsTab({
                 )}
               </div>
             </div>
-
-            {/* Switch to OneRoster button for Clever users */}
-            {activeProvider === 'clever' && (
-              <div style={{ marginTop: "15px" }}>
-                <button
-                  onClick={function() { setShowSwitchProviderConfirm('oneroster'); }}
-                  style={{
-                    background: "none", border: "1px solid var(--glass-border)", borderRadius: "8px",
-                    padding: "6px 14px", cursor: "pointer", fontSize: "0.82rem",
-                    color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px",
-                  }}
-                >
-                  <Icon name="ArrowRightLeft" size={14} />
-                  Switch to OneRoster
-                </button>
-              </div>
-            )}
-
-            {/* Switch provider confirmation dialog */}
-            {showSwitchProviderConfirm && (
-              <div style={{
-                position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-                background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center",
-                justifyContent: "center", zIndex: 9999,
-              }}>
-                <div style={{
-                  background: "var(--card-bg)", borderRadius: "12px", padding: "24px",
-                  maxWidth: "420px", width: "90%", boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
-                }}>
-                  <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "12px" }}>Switch SIS Provider?</h3>
-                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
-                    {"Currently using " + (showSwitchProviderConfirm === 'oneroster' ? "Clever" : "OneRoster") + ". To switch, all roster data from the current provider will be deleted. This cannot be undone."}
-                  </p>
-                  <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={function() { setShowSwitchProviderConfirm(null); }}
-                      className="btn btn-secondary"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={async function() {
-                        try {
-                          if (showSwitchProviderConfirm === 'oneroster') {
-                            // Delete Clever data, switch to OneRoster
-                            var authHdrs = await getAuthHeaders();
-                            await fetch("/api/clever/delete-data", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json", ...authHdrs },
-                            });
-                            addToast("Clever data deleted. You can now configure OneRoster.", "success");
-                          } else {
-                            // Delete OneRoster data, switch to Clever
-                            await api.deleteOneRosterData();
-                            setOneRosterStatus(null);
-                            setOneRosterSyncResult(null);
-                            setOneRosterAccommodations(null);
-                            setOneRosterTestResult(null);
-                            addToast("OneRoster data deleted. You can now use Clever.", "success");
-                          }
-                          api.listPeriods().then(function(d) { setPeriods(d.periods || []); }).catch(function() {});
-                        } catch (err) {
-                          addToast("Switch failed: " + err.message, "error");
-                        }
-                        setShowSwitchProviderConfirm(null);
-                      }}
-                      style={{
-                        background: "#ef4444", color: "white", border: "none", borderRadius: "8px",
-                        padding: "8px 16px", cursor: "pointer", fontWeight: 600,
-                      }}
-                    >
-                      Delete Data & Switch
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Manual Setup toggle for Clever users */}
             {isCleverUser && (
