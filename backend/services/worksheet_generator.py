@@ -365,112 +365,130 @@ def _normalize_correct_answer_to_letter(correct_answer, option_texts):
     return None
 
 
-def _add_bubble_row(doc, question_number, bubble_labels, correct_answer=None, is_tf=False, option_texts=None):
-    """Render a row of fill-in-the-bubble circles for MC or TF questions.
+def _add_option_with_bubble(doc, option_text, is_filled=False):
+    """Render a single option line with a bubble circle prefix.
+
+    Produces: "    ○  A) Constitution" (empty) or "    ●  A) Constitution" (filled)
 
     Args:
         doc: python-docx Document object
-        question_number: Question number to display
-        bubble_labels: list like ['A', 'B', 'C', 'D'] or ['True', 'False']
-        correct_answer: if provided, fills the correct bubble (answer key mode).
-                        Normalized via _normalize_correct_answer_to_letter.
-        is_tf: True if this is a True/False question
-        option_texts: original full option texts for answer normalization
+        option_text: full option text (e.g., "A) Constitution")
+        is_filled: if True, renders filled circle (answer key mode)
     Returns:
         The paragraph object
     """
     from docx.shared import Pt, RGBColor
     para = doc.add_paragraph()
-    para.paragraph_format.space_after = Pt(2)
-    para.paragraph_format.space_before = Pt(2)
-    # Question number
-    num_run = para.add_run(f"{question_number}.  ")
-    num_run.font.size = Pt(11)
-    num_run.font.bold = True
-    # Normalize answer
-    normalized_answer = None
-    if correct_answer is not None:
-        if is_tf:
-            normalized_answer = str(correct_answer).strip()
-        else:
-            normalized_answer = _normalize_correct_answer_to_letter(correct_answer, option_texts or [])
-    # Render each bubble
-    for i, opt_label in enumerate(bubble_labels):
-        is_correct = False
-        if normalized_answer is not None:
-            if is_tf:
-                is_correct = opt_label.lower().strip() == normalized_answer.lower().strip()
-            else:
-                is_correct = opt_label.upper().strip() == normalized_answer
-        if is_correct:
-            bubble_char = "\u25CF"  # ● filled
-        else:
-            bubble_char = "\u25CB"  # ○ empty
-        bubble_run = para.add_run(f" {bubble_char} ")
-        bubble_run.font.size = Pt(16)
-        if is_correct:
-            bubble_run.font.color.rgb = RGBColor(0, 0, 0)
-        else:
-            bubble_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-        label_run = para.add_run(f"{opt_label}  ")
-        label_run.font.size = Pt(10)
-        label_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+    para.paragraph_format.space_after = Pt(1)
+    para.paragraph_format.space_before = Pt(1)
+
+    # Indent
+    indent_run = para.add_run("    ")
+    indent_run.font.size = Pt(11)
+
+    # Bubble character
+    if is_filled:
+        bubble_char = "\u25CF"  # ● filled
+        bubble_run = para.add_run(f"{bubble_char}  ")
+        bubble_run.font.size = Pt(14)
+        bubble_run.font.color.rgb = RGBColor(0, 0, 0)
+    else:
+        bubble_char = "\u25CB"  # ○ empty
+        bubble_run = para.add_run(f"{bubble_char}  ")
+        bubble_run.font.size = Pt(14)
+        bubble_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+    # Option text
+    text_run = para.add_run(option_text)
+    text_run.font.size = Pt(11)
+
     return para
 
 
-def _add_answer_key_page(doc, questions_with_answers):
-    """Add an answer key page at the end of the document.
-
-    Adds a page break, "ANSWER KEY" heading, subtitle, then each question
-    with filled correct bubble.
+def _add_options_with_bubbles(doc, options, correct_answer=None, is_tf=False):
+    """Render all options for a question, each with a bubble prefix.
 
     Args:
         doc: python-docx Document object
+        options: list of option texts (e.g., ["A) Constitution", "B) Declaration..."])
+        correct_answer: if provided, fills the correct option's bubble (answer key mode).
+                        Can be letter, letter+paren, full text, or index.
+        is_tf: True if True/False question
+    """
+    # Determine which option index is correct (if answer key mode)
+    correct_idx = None
+    if correct_answer is not None:
+        if is_tf:
+            for i, opt in enumerate(options):
+                if opt.lower().strip() == str(correct_answer).lower().strip():
+                    correct_idx = i
+                    break
+        else:
+            letter = _normalize_correct_answer_to_letter(correct_answer, options)
+            if letter:
+                correct_idx = ord(letter) - ord('A')
+
+    for i, opt in enumerate(options):
+        is_filled = (correct_idx is not None and i == correct_idx)
+        _add_option_with_bubble(doc, opt, is_filled=is_filled)
+
+
+def _create_answer_key_doc(title, questions_with_answers):
+    """Create a separate answer key Document with filled bubbles.
+
+    Returns a new python-docx Document object (caller saves it).
+
+    Args:
+        title: assessment title (for the header)
         questions_with_answers: list of dicts with keys:
             - number: question number
-            - options: list of bubble labels (e.g. ['A', 'B', 'C', 'D'])
-            - correct_answer: the correct answer (any normalized format)
-            - is_tf: bool, True for True/False questions
-            - option_texts: original full option texts (for normalization)
-            - question_text: optional short question text for reference
+            - option_texts: list of full option texts
+            - correct_answer: the correct answer (any format)
+            - is_tf: bool
+            - question_text: the question prompt
+    Returns:
+        docx.Document — the answer key document (not saved yet)
     """
+    from docx import Document
     from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
+
     if not questions_with_answers:
-        return
-    # Page break
-    page_break_para = doc.add_paragraph()
-    run = page_break_para.add_run()
-    br = OxmlElement('w:br')
-    br.set(qn('w:type'), 'page')
-    run._element.append(br)
+        return None
+
+    doc = Document()
+
     # Header
-    heading = doc.add_heading("ANSWER KEY", level=1)
+    heading = doc.add_heading(f"{title} — ANSWER KEY", level=1)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     sub = doc.add_paragraph("For teacher use only — do not distribute to students")
     sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     sub.runs[0].font.size = Pt(9)
     sub.runs[0].font.color.rgb = RGBColor(0x99, 0x99, 0x99)
     sub.runs[0].italic = True
+
     doc.add_paragraph()
-    # Each question with filled bubble
+
+    # Each question with filled correct bubble
     for q in questions_with_answers:
-        _add_bubble_row(
-            doc,
-            question_number=q["number"],
-            bubble_labels=q["options"],
-            correct_answer=q["correct_answer"],
-            is_tf=q.get("is_tf", False),
-            option_texts=q.get("option_texts"),
-        )
-        if q.get("question_text"):
-            ref_para = doc.add_paragraph()
-            ref_run = ref_para.add_run(f"    {q['question_text'][:100]}")
-            ref_run.font.size = Pt(8)
-            ref_run.font.color.rgb = RGBColor(0xAA, 0xAA, 0xAA)
-            ref_run.italic = True
+        q_text = q.get("question_text", "")
+        q_number = q.get("number", 0)
+        options = q.get("option_texts", [])
+        correct = q.get("correct_answer", "")
+        is_tf = q.get("is_tf", False)
+
+        # Question text
+        q_para = doc.add_paragraph()
+        q_para.add_run(f"{q_number}. ").bold = True
+        q_para.add_run(q_text[:150])
+
+        # Options with correct bubble filled
+        _add_options_with_bubbles(doc, options, correct_answer=correct, is_tf=is_tf)
+
+        doc.add_paragraph()  # Spacer
+
+    return doc
 
 
 def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,

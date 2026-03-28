@@ -4098,7 +4098,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     from docx.shared import Inches, Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker, _embed_visual
-    from backend.services.worksheet_generator import _add_bubble_row, _add_answer_key_page
+    from backend.services.worksheet_generator import _add_options_with_bubbles, _create_answer_key_doc
 
     doc = Document()
 
@@ -4189,25 +4189,17 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                         run = q_para.add_run(f" ({q_points} pts)")
                         run.italic = True
 
-                for opt in q_options:
-                    doc.add_paragraph(f"    {opt}")
-
-                # Empty bubble row for student answers
-                if is_tf:
-                    bubble_labels = ['True', 'False']
-                else:
-                    bubble_labels = [chr(65 + idx) for idx in range(len(q_options))]
-                _add_bubble_row(doc, q_number, bubble_labels, is_tf=is_tf)
+                # Options with empty bubbles beside each
+                _add_options_with_bubbles(doc, q_options, is_tf=is_tf)
 
                 # Keep Graider extraction table for file-based grading
                 _add_graider_table(doc, f"Answer for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 720)  # 0.5 inch
 
-                # Track for answer key page
+                # Track for separate answer key file
                 answer_key_questions.append({
                     "number": q_number,
-                    "options": bubble_labels,
                     "option_texts": q_options,
                     "correct_answer": q.get('answer', ''),
                     "is_tf": is_tf,
@@ -4338,14 +4330,17 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     # Add Graider marker at end
     _add_graider_marker(doc)
 
-    # Append answer key page with filled bubbles
-    if answer_key_questions:
-        _add_answer_key_page(doc, answer_key_questions)
-
-    # Save
+    # Save student worksheet
     filename = f"{safe_title}_Student.docx"
     filepath = os.path.join(output_folder, filename)
     doc.save(filepath)
+
+    # Save separate answer key file
+    if answer_key_questions:
+        answer_key_doc = _create_answer_key_doc(title, answer_key_questions)
+        if answer_key_doc:
+            key_filepath = os.path.join(output_folder, f"{safe_title}_Answer_Key.docx")
+            answer_key_doc.save(key_filepath)
 
     return filepath
 
@@ -4543,10 +4538,30 @@ def export_generated_assignment():
                     ))
                     story.append(Spacer(1, 0.05*inch))
 
-                # Multiple choice options
+                # Multiple choice options with bubble circles
                 if q_options and q_type != 'matching':
-                    for opt in q_options:
-                        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;{opt}", normal_style))
+                    is_tf = q_type in ('true_false', 'tf')
+                    # Determine correct answer index for answer key
+                    correct_idx = None
+                    if include_answers and q_answer:
+                        if is_tf:
+                            for oi, opt in enumerate(q_options):
+                                if opt.lower().strip() == str(q_answer).lower().strip():
+                                    correct_idx = oi
+                                    break
+                        else:
+                            from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+                            letter = _normalize_correct_answer_to_letter(q_answer, q_options)
+                            if letter:
+                                correct_idx = ord(letter) - ord('A')
+
+                    for oi, opt in enumerate(q_options):
+                        is_filled = (include_answers and correct_idx is not None and oi == correct_idx)
+                        bubble = "\u25CF" if is_filled else "\u25CB"
+                        story.append(Paragraph(
+                            f"&nbsp;&nbsp;&nbsp;&nbsp;{bubble}&nbsp;&nbsp;{opt}",
+                            normal_style
+                        ))
 
                 # Matching question: render terms and definitions columns
                 q_terms = q.get('terms', [])
@@ -4610,18 +4625,22 @@ def export_generated_assignment():
 
                 # Answer section
                 if include_answers:
-                    # Show answer
-                    if q_type == 'matching' or (q_terms and q_definitions):
+                    # MC/TF: filled bubble already shows the answer — skip text label
+                    if q_options and q_type != 'matching':
+                        pass  # Bubble is already filled above
+                    elif q_type == 'matching' or (q_terms and q_definitions):
                         if isinstance(q_answer, dict):
                             ans_parts = [f"{k} → {v}" for k, v in q_answer.items()]
                             ans_text = "ANSWERS: " + " | ".join(ans_parts)
                         else:
                             ans_text = f"ANSWER: {q_answer}"
+                        story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
                     elif q_type == 'coordinates' and isinstance(q_answer, dict):
                         ans_text = f"ANSWER: Lat: {q_answer.get('lat', 0)}, Lng: {q_answer.get('lng', 0)}"
+                        story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
                     else:
                         ans_text = f"ANSWER: {q_answer}"
-                    story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
+                        story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
 
                     if q_type == 'math_equation':
                         story.append(Paragraph("<i>(Equivalent forms accepted)</i>", normal_style))

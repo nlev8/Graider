@@ -38,97 +38,119 @@ class TestNormalizeAnswer:
         assert _normalize_correct_answer_to_letter('B', []) is None
 
 
-class TestAddBubbleRow:
-    def test_empty_bubbles_mc(self):
+class TestAddOptionWithBubble:
+    def test_empty_bubble(self):
         from docx import Document
-        from backend.services.worksheet_generator import _add_bubble_row
+        from backend.services.worksheet_generator import _add_option_with_bubble
         doc = Document()
-        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'])
+        para = _add_option_with_bubble(doc, 'A) Constitution', is_filled=False)
         text = para.text
-        assert '1.' in text
-        assert 'A' in text
-        assert 'D' in text
-        assert '\u25CB' in text  # empty circles
+        assert 'A) Constitution' in text
+        assert '\u25CB' in text  # empty circle
         assert '\u25CF' not in text  # no filled
 
-    def test_filled_bubble_mc_letter(self):
+    def test_filled_bubble(self):
         from docx import Document
-        from backend.services.worksheet_generator import _add_bubble_row
+        from backend.services.worksheet_generator import _add_option_with_bubble
         doc = Document()
-        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'], correct_answer='B',
-                               option_texts=['A) 3', 'B) 4', 'C) 5', 'D) 6'])
+        para = _add_option_with_bubble(doc, 'B) Declaration of Independence', is_filled=True)
         text = para.text
-        assert text.count('\u25CF') == 1
+        assert 'B) Declaration of Independence' in text
+        assert '\u25CF' in text  # filled circle
 
-    def test_filled_bubble_mc_full_text(self):
+    def test_no_question_number(self):
+        """Bubble rows should NOT contain question numbers."""
         from docx import Document
-        from backend.services.worksheet_generator import _add_bubble_row
+        from backend.services.worksheet_generator import _add_option_with_bubble
         doc = Document()
-        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'],
-                               correct_answer='Declaration of Independence',
-                               option_texts=['A) Constitution', 'B) Declaration of Independence',
-                                             'C) Bill of Rights', 'D) Magna Carta'])
+        para = _add_option_with_bubble(doc, 'A) Test', is_filled=False)
         text = para.text
-        assert text.count('\u25CF') == 1
+        # Should not start with a number
+        assert not text.strip().startswith('1')
+        assert not text.strip().startswith('2')
 
-    def test_empty_bubbles_tf(self):
-        from docx import Document
-        from backend.services.worksheet_generator import _add_bubble_row
-        doc = Document()
-        para = _add_bubble_row(doc, 5, ['True', 'False'], is_tf=True)
-        text = para.text
-        assert 'True' in text
-        assert 'False' in text
-        assert '\u25CF' not in text
 
-    def test_filled_bubble_tf(self):
+class TestAddOptionsWithBubbles:
+    def test_empty_bubbles_mc(self):
         from docx import Document
-        from backend.services.worksheet_generator import _add_bubble_row
+        from backend.services.worksheet_generator import _add_options_with_bubbles
         doc = Document()
-        para = _add_bubble_row(doc, 5, ['True', 'False'], correct_answer='True', is_tf=True)
-        text = para.text
-        assert text.count('\u25CF') == 1
+        _add_options_with_bubbles(doc, ['A) One', 'B) Two', 'C) Three', 'D) Four'])
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert 'A) One' in full_text
+        assert 'D) Four' in full_text
+        assert '\u25CB' in full_text  # empty circles
+        assert '\u25CF' not in full_text  # no filled
+
+    def test_filled_correct_mc(self):
+        from docx import Document
+        from backend.services.worksheet_generator import _add_options_with_bubbles
+        doc = Document()
+        _add_options_with_bubbles(doc, ['A) One', 'B) Two', 'C) Three'], correct_answer='B')
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert full_text.count('\u25CF') == 1  # one filled
+
+    def test_filled_correct_tf(self):
+        from docx import Document
+        from backend.services.worksheet_generator import _add_options_with_bubbles
+        doc = Document()
+        _add_options_with_bubbles(doc, ['True', 'False'], correct_answer='True', is_tf=True)
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert full_text.count('\u25CF') == 1
+
+    def test_full_text_answer(self):
+        from docx import Document
+        from backend.services.worksheet_generator import _add_options_with_bubbles
+        doc = Document()
+        _add_options_with_bubbles(doc,
+                                  ['A) London', 'B) Paris', 'C) Berlin'],
+                                  correct_answer='Paris')
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert full_text.count('\u25CF') == 1
 
     def test_no_match_no_fill(self):
         from docx import Document
-        from backend.services.worksheet_generator import _add_bubble_row
+        from backend.services.worksheet_generator import _add_options_with_bubbles
         doc = Document()
-        para = _add_bubble_row(doc, 1, ['A', 'B', 'C', 'D'],
-                               correct_answer='Nonsense',
-                               option_texts=['A) One', 'B) Two', 'C) Three', 'D) Four'])
-        text = para.text
-        assert '\u25CF' not in text
+        _add_options_with_bubbles(doc, ['A) X', 'B) Y'], correct_answer='Nonsense')
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert '\u25CF' not in full_text
 
 
-class TestAddAnswerKeyPage:
-    def test_answer_key_has_header(self):
-        from docx import Document
-        from backend.services.worksheet_generator import _add_answer_key_page
-        doc = Document()
+class TestCreateAnswerKeyDoc:
+    def test_creates_separate_document(self):
+        from backend.services.worksheet_generator import _create_answer_key_doc
         questions = [
-            {"number": 1, "options": ["A", "B", "C", "D"], "correct_answer": "B",
-             "is_tf": False, "option_texts": ["A) X", "B) Y", "C) Z", "D) W"]},
-            {"number": 2, "options": ["True", "False"], "correct_answer": "True", "is_tf": True},
+            {"number": 1, "option_texts": ["A) X", "B) Y", "C) Z", "D) W"],
+             "correct_answer": "B", "is_tf": False, "question_text": "What is Y?"},
         ]
-        _add_answer_key_page(doc, questions)
+        doc = _create_answer_key_doc("Test Quiz", questions)
+        assert doc is not None
         full_text = "\n".join(p.text for p in doc.paragraphs)
         assert "ANSWER KEY" in full_text
+        assert "Test Quiz" in full_text
+        assert "teacher use only" in full_text.lower()
 
-    def test_answer_key_empty_list(self):
-        from docx import Document
-        from backend.services.worksheet_generator import _add_answer_key_page
-        doc = Document()
-        _add_answer_key_page(doc, [])
-        assert len(doc.paragraphs) == 0
-
-    def test_answer_key_has_filled_bubbles(self):
-        from docx import Document
-        from backend.services.worksheet_generator import _add_answer_key_page
-        doc = Document()
+    def test_has_filled_bubbles(self):
+        from backend.services.worksheet_generator import _create_answer_key_doc
         questions = [
-            {"number": 1, "options": ["A", "B", "C", "D"], "correct_answer": "C",
-             "is_tf": False, "option_texts": ["A) X", "B) Y", "C) Z", "D) W"]},
+            {"number": 1, "option_texts": ["A) X", "B) Y"], "correct_answer": "B",
+             "is_tf": False, "question_text": "Pick Y"},
         ]
-        _add_answer_key_page(doc, questions)
+        doc = _create_answer_key_doc("Quiz", questions)
         full_text = "\n".join(p.text for p in doc.paragraphs)
         assert '\u25CF' in full_text
+
+    def test_empty_list_returns_none(self):
+        from backend.services.worksheet_generator import _create_answer_key_doc
+        assert _create_answer_key_doc("Quiz", []) is None
+
+    def test_includes_question_text(self):
+        from backend.services.worksheet_generator import _create_answer_key_doc
+        questions = [
+            {"number": 1, "option_texts": ["True", "False"], "correct_answer": "True",
+             "is_tf": True, "question_text": "Water boils at 100C"},
+        ]
+        doc = _create_answer_key_doc("Science Quiz", questions)
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert "Water boils" in full_text
