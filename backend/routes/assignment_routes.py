@@ -491,11 +491,33 @@ def _export_pdf(title, instructions, questions, output_folder, safe_title):
                     c.drawString(inch, y, line)
                     y -= 15
 
-            # Answer lines
-            lines = 3 if q_type == 'short_answer' else 6 if q_type == 'essay' else 2
-            for _ in range(lines):
-                y -= 20
-                c.line(inch, y, width - inch, y)
+            # MC/TF: render options with bubbles
+            options = q.get('options', [])
+            if q_type in ('multiple_choice', 'true_false') and options:
+                c.setFont("Helvetica", 11)
+                for opt in options:
+                    if y < 1.5 * inch:
+                        c.showPage()
+                        y = height - inch
+                    # Draw empty bubble circle
+                    bubble_x = inch + 20
+                    bubble_r = 4.5
+                    bubble_cy = y - 2
+                    c.setLineWidth(1.2)
+                    c.setStrokeColorRGB(0.3, 0.3, 0.3)
+                    c.setFillColorRGB(1, 1, 1)
+                    c.circle(bubble_x, bubble_cy, bubble_r, fill=1, stroke=1)
+                    # Draw option text beside bubble
+                    c.setFillColorRGB(0, 0, 0)
+                    c.drawString(bubble_x + bubble_r + 8, y - 4, opt)
+                    y -= 18
+                y -= 12
+            else:
+                # Answer lines for non-MC/TF
+                lines = 3 if q_type == 'short_answer' else 6 if q_type == 'essay' else 2
+                for _ in range(lines):
+                    y -= 20
+                    c.line(inch, y, width - inch, y)
 
             y -= 30
 
