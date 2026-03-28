@@ -56,6 +56,108 @@ def _require_district_admin(f):
     return wrapper
 
 
+def _clear_old_provider_data(old_provider):
+    """Clear roster data from the old SIS provider for ALL teachers.
+
+    Only deletes classes/students/enrollments that were synced by the old
+    provider. Manually-created classes (clever_section_id IS NULL) and
+    CSV-imported students are preserved.
+
+    Detection:
+    - clever_section_id IS NULL → manually created (KEEP)
+    - clever_section_id starts with "oneroster:" → OneRoster synced
+    - clever_section_id is non-null, no prefix → Clever synced
+
+    Returns: int — number of teachers whose data was cleared
+    """
+    from backend.supabase_client import get_supabase as _get_sb
+
+    db = _get_sb()
+    if not db:
+        logger.warning("Cannot clear old provider data: Supabase not configured")
+        return 0
+
+    try:
+        all_classes = db.table("classes").select("id, teacher_id, clever_section_id").execute()
+    except Exception as e:
+        logger.warning("Failed to query classes for provider switch: %s", str(e))
+        return 0
+
+    classes_to_delete = []
+    teachers_affected = set()
+
+    for row in (all_classes.data or []):
+        ext_id = row.get("clever_section_id")
+        teacher_id = row.get("teacher_id", "")
+        class_id = row.get("id", "")
+
+        if not ext_id:
+            continue  # Manual class — preserve
+
+        is_oneroster = ext_id.startswith("oneroster:")
+        should_delete = False
+
+        if old_provider == "oneroster" and is_oneroster:
+            should_delete = True
+        elif old_provider == "clever" and not is_oneroster:
+            should_delete = True
+
+        if should_delete and class_id and teacher_id:
+            classes_to_delete.append({"id": class_id, "teacher_id": teacher_id})
+            teachers_affected.add(teacher_id)
+
+    if not classes_to_delete:
+        logger.info("Provider switch cleanup: no %s-synced classes found", old_provider)
+        return 0
+
+    deleted_enrollments = 0
+    deleted_classes = 0
+    orphaned_students = set()
+
+    for cls in classes_to_delete:
+        try:
+            enrollments = db.table("class_students").select("student_id").eq("class_id", cls["id"]).execute()
+            for e in (enrollments.data or []):
+                orphaned_students.add(e["student_id"])
+
+            result = db.table("class_students").delete().eq("class_id", cls["id"]).execute()
+            deleted_enrollments += len(result.data or [])
+
+            db.table("classes").delete().eq("id", cls["id"]).execute()
+            deleted_classes += 1
+        except Exception as e:
+            logger.warning("Failed to delete class %s: %s", cls["id"], str(e))
+
+    deleted_students = 0
+    for sid in orphaned_students:
+        try:
+            remaining = db.table("class_students").select("id", count="exact").eq("student_id", sid).execute()
+            if remaining.count == 0:
+                db.table("students").delete().eq("id", sid).execute()
+                deleted_students += 1
+        except Exception:
+            pass
+
+    import glob
+    data_dir = os.path.expanduser("~/.graider_data")
+    for tid in teachers_affected:
+        safe_id = tid.replace("/", "_").replace("\\", "_")
+        for pattern in [f"roster_{safe_id}*", f"period_{safe_id}*"]:
+            for f in glob.glob(os.path.join(data_dir, pattern)):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+
+    logger.info(
+        "Provider switch cleanup (%s): %d classes, %d enrollments, %d orphaned students "
+        "deleted across %d teachers. Manually-created classes preserved.",
+        old_provider, deleted_classes, deleted_enrollments, deleted_students,
+        len(teachers_affected)
+    )
+    return len(teachers_affected)
+
+
 # ── POST /api/district/auth ─────────────────────────────────────────────────
 
 @district_bp.route("/api/district/auth", methods=["POST"])
@@ -226,6 +328,18 @@ def district_save_config():
 
         storage_save(_KEY_SIS_CONFIG, merged, "system")
         audit_log("district_sis_config_saved", f"SIS type: {sis_type}", user="district_admin", teacher_id="system")
+
+        # PROVIDER SWITCH: clear old roster data AFTER new config saved successfully
+        old_sis_type = existing_sis.get("sis_type")
+        if old_sis_type and old_sis_type != sis_type:
+            logger.info("District SIS provider switch: %s -> %s", old_sis_type, sis_type)
+            cleared_count = _clear_old_provider_data(old_sis_type)
+            audit_log(
+                "district_provider_switch",
+                f"SIS provider switched from {old_sis_type} to {sis_type}. "
+                f"Cleared roster data for {cleared_count} teachers.",
+                user="district_admin", teacher_id="system"
+            )
 
     # ── AI keys ──
     if ai_data:
