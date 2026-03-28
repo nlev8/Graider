@@ -364,12 +364,16 @@ def _export_docx(title, instructions, questions, output_folder, safe_title,
 
             _add_graider_marker(doc)
         else:
+            from backend.services.worksheet_generator import _add_bubble_row, _add_answer_key_page
+            answer_key_questions = []
+
             # Original paragraph-based export
             for i, q in enumerate(questions, 1):
                 marker = q.get('marker', 'Answer:')
                 prompt = q.get('prompt', '')
                 points = q.get('points', 10)
                 q_type = q.get('type', 'short_answer')
+                options = q.get('options', [])
 
                 # Question header with marker
                 q_para = doc.add_paragraph()
@@ -381,12 +385,37 @@ def _export_docx(title, instructions, questions, output_folder, safe_title,
                 if prompt:
                     doc.add_paragraph(prompt)
 
-                # Answer space
-                lines = 3 if q_type == 'short_answer' else 6 if q_type == 'essay' else 2
-                for _ in range(lines):
-                    doc.add_paragraph("_" * 70)
+                # MC/TF: render options + bubbles
+                if q_type in ('multiple_choice', 'true_false') and options:
+                    is_tf = q_type == 'true_false'
+                    for opt in options:
+                        doc.add_paragraph(f"    {opt}")
+
+                    if is_tf:
+                        bubble_labels = ['True', 'False']
+                    else:
+                        bubble_labels = [chr(65 + j) for j in range(len(options))]
+                    _add_bubble_row(doc, i, bubble_labels, is_tf=is_tf)
+
+                    answer_key_questions.append({
+                        "number": i,
+                        "options": bubble_labels,
+                        "option_texts": options,
+                        "correct_answer": q.get('answer', ''),
+                        "is_tf": is_tf,
+                        "question_text": prompt,
+                    })
+                else:
+                    # Answer space for non-MC/TF
+                    lines = 3 if q_type == 'short_answer' else 6 if q_type == 'essay' else 2
+                    for _ in range(lines):
+                        doc.add_paragraph("_" * 70)
 
                 doc.add_paragraph()
+
+            # Append answer key page
+            if answer_key_questions:
+                _add_answer_key_page(doc, answer_key_questions)
 
         filepath = os.path.join(output_folder, f"{safe_title}.docx")
         doc.save(filepath)
