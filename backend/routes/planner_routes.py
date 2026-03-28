@@ -4385,9 +4385,33 @@ def export_generated_assignment():
         from reportlab.lib.colors import black, gray, lightgrey, red, green
         from reportlab.platypus import (
             SimpleDocTemplate, Paragraph, Spacer, Image,
-            Table, TableStyle, PageBreak, KeepTogether
+            Table, TableStyle, PageBreak, KeepTogether, Flowable
         )
+        from reportlab.lib.colors import white as rl_white
         import io
+
+        # Bubble circle for MC/TF answer sheets
+        class _BubbleCircle(Flowable):
+            """Draws a circle bubble — empty (outline) or filled (solid black)."""
+            def __init__(self, filled=False, size=9):
+                Flowable.__init__(self)
+                self.filled = filled
+                self.size = size
+                self.width = size + 4
+                self.height = size + 4
+            def draw(self):
+                r = self.size / 2
+                cx = r + 2
+                cy = r + 2
+                from reportlab.lib.colors import Color
+                self.canv.setStrokeColor(Color(0.3, 0.3, 0.3))
+                self.canv.setLineWidth(1.2)
+                if self.filled:
+                    self.canv.setFillColor(black)
+                    self.canv.circle(cx, cy, r, fill=1)
+                else:
+                    self.canv.setFillColor(rl_white)
+                    self.canv.circle(cx, cy, r, fill=1, stroke=1)
 
         # Set up styles
         styles = getSampleStyleSheet()
@@ -4557,11 +4581,22 @@ def export_generated_assignment():
 
                     for oi, opt in enumerate(q_options):
                         is_filled = (include_answers and correct_idx is not None and oi == correct_idx)
-                        bubble = "\u25CF" if is_filled else "\u25CB"
-                        story.append(Paragraph(
-                            f"&nbsp;&nbsp;&nbsp;&nbsp;{bubble}&nbsp;&nbsp;{opt}",
-                            normal_style
-                        ))
+                        bubble = _BubbleCircle(filled=is_filled, size=9)
+                        opt_para = Paragraph(opt, normal_style)
+                        row_table = Table(
+                            [[bubble, opt_para]],
+                            colWidths=[0.5*inch, 5.5*inch],
+                        )
+                        row_table.setStyle(TableStyle([
+                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+                            ('LEFTPADDING', (0, 0), (0, 0), 20),
+                            ('LEFTPADDING', (1, 0), (1, 0), 0),
+                            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                            ('TOPPADDING', (0, 0), (-1, -1), 2),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                        ]))
+                        story.append(row_table)
 
                 # Matching question: render terms and definitions columns
                 q_terms = q.get('terms', [])
