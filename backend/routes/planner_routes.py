@@ -4098,6 +4098,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     from docx.shared import Inches, Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker, _embed_visual
+    from backend.services.worksheet_generator import _add_bubble_row, _add_answer_key_page
 
     doc = Document()
 
@@ -4141,6 +4142,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     doc.add_paragraph()  # Space
 
     question_num = 1
+    answer_key_questions = []
 
     for section in sections:
         section_name = section.get('name', 'Section')
@@ -4177,7 +4179,8 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                     print(f"Warning: Could not embed visual for Q{q_number}: {e}")
 
             if q_options:
-                # MC/TF: question + options as paragraphs, then small Graider table
+                # MC/TF: question + options + bubble row + Graider table
+                is_tf = q_type in ('true_false', 'tf')
                 if not visual_dict:
                     q_para = doc.add_paragraph()
                     q_para.add_run(f"{q_number}. ").bold = True
@@ -4189,9 +4192,27 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 for opt in q_options:
                     doc.add_paragraph(f"    {opt}")
 
+                # Empty bubble row for student answers
+                if is_tf:
+                    bubble_labels = ['True', 'False']
+                else:
+                    bubble_labels = [chr(65 + idx) for idx in range(len(q_options))]
+                _add_bubble_row(doc, q_number, bubble_labels, is_tf=is_tf)
+
+                # Keep Graider extraction table for file-based grading
                 _add_graider_table(doc, f"Answer for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 720)  # 0.5 inch
+
+                # Track for answer key page
+                answer_key_questions.append({
+                    "number": q_number,
+                    "options": bubble_labels,
+                    "option_texts": q_options,
+                    "correct_answer": q.get('answer', ''),
+                    "is_tf": is_tf,
+                    "question_text": q_text,
+                })
 
             elif q_type == 'data_table':
                 # Data table: render table headers above, then Graider table for answers
@@ -4316,6 +4337,10 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
 
     # Add Graider marker at end
     _add_graider_marker(doc)
+
+    # Append answer key page with filled bubbles
+    if answer_key_questions:
+        _add_answer_key_page(doc, answer_key_questions)
 
     # Save
     filename = f"{safe_title}_Student.docx"
