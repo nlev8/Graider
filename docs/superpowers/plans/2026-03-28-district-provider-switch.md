@@ -30,28 +30,25 @@
 
 In `backend/routes/district_routes.py`, find the SIS config save block (around line 198). After `sis_type` is validated and `existing_sis` is loaded, add provider switch detection BEFORE saving the new config.
 
-Find this code (around line 209):
-```python
-        existing_sis = storage_load(_KEY_SIS_CONFIG, "system") or {}
-
-        merged = {"sis_type": sis_type}
-```
-
-Insert between those two lines:
+Find the end of the SIS config save block, AFTER `storage_save(_KEY_SIS_CONFIG, merged, "system")` and the audit log (around line 228). Insert AFTER the save succeeds:
 
 ```python
-        # PROVIDER SWITCH: if sis_type is changing, clear old roster data
-        # for ALL teachers who have data from the old provider
+        # PROVIDER SWITCH: if sis_type changed AND new config saved successfully,
+        # clear old roster data for ALL teachers. This runs AFTER the new config
+        # is persisted, so if the save fails, old data is preserved.
         old_sis_type = existing_sis.get("sis_type")
         if old_sis_type and old_sis_type != sis_type:
             logger.info("District SIS provider switch: %s -> %s. Clearing old roster data.", old_sis_type, sis_type)
-            _clear_old_provider_data(old_sis_type)
+            cleared_count = _clear_old_provider_data(old_sis_type)
             audit_log(
                 "district_provider_switch",
-                f"SIS provider switched from {old_sis_type} to {sis_type}. Old roster data cleared.",
+                f"SIS provider switched from {old_sis_type} to {sis_type}. "
+                f"Cleared roster data for {cleared_count} teachers.",
                 user="district_admin", teacher_id="system"
             )
 ```
+
+This ensures cleanup only runs after the new config is saved. If the request fails validation (e.g., missing client_id → 400), the early return happens before this block, and no data is deleted.
 
 - [ ] **Step 2: Add `_clear_old_provider_data()` helper function**
 
@@ -62,51 +59,117 @@ def _clear_old_provider_data(old_provider):
     """Clear roster data from the old SIS provider for ALL teachers.
 
     When the district switches from Clever to OneRoster (or vice versa),
-    this removes all classes/students/enrollments that came from the old
-    provider, so the new provider can sync without conflicts.
+    this removes ONLY classes/students/enrollments that were synced by the
+    old provider. Manually-created classes (clever_section_id IS NULL) and
+    CSV-imported students are preserved.
+
+    Detection logic:
+    - clever_section_id IS NULL → manually created (KEEP)
+    - clever_section_id starts with "oneroster:" → OneRoster synced
+    - clever_section_id is non-null and doesn't start with "oneroster:" → Clever synced
 
     Args:
         old_provider: "clever" or "oneroster" — the provider being replaced
+
+    Returns:
+        int — number of teachers whose provider-synced data was cleared
     """
     from backend.supabase_client import get_supabase as _get_sb
-    from backend.roster_sync import delete_roster_data
 
     db = _get_sb()
     if not db:
         logger.warning("Cannot clear old provider data: Supabase not configured")
-        return
+        return 0
 
-    # Find all teachers who have classes with the old provider's ID prefix
+    # Find all classes that have a provider-synced external ID
     try:
-        all_classes = db.table("classes").select("teacher_id, clever_section_id").execute()
+        all_classes = db.table("classes").select("id, teacher_id, clever_section_id").execute()
     except Exception as e:
         logger.warning("Failed to query classes for provider switch: %s", str(e))
-        return
+        return 0
 
-    # Determine which teachers have data from the old provider
-    teachers_to_clear = set()
+    # Identify classes belonging to the old provider (not manual, not the other provider)
+    classes_to_delete = []  # list of {id, teacher_id}
+    teachers_affected = set()
+
     for row in (all_classes.data or []):
-        ext_id = row.get("clever_section_id", "") or ""
+        ext_id = row.get("clever_section_id")
         teacher_id = row.get("teacher_id", "")
-        if not ext_id or not teacher_id:
+        class_id = row.get("id", "")
+
+        # Skip manually-created classes (no external ID)
+        if not ext_id:
             continue
 
-        if old_provider == "oneroster" and ext_id.startswith("oneroster:"):
-            teachers_to_clear.add(teacher_id)
-        elif old_provider == "clever" and not ext_id.startswith("oneroster:"):
-            teachers_to_clear.add(teacher_id)
+        is_oneroster = ext_id.startswith("oneroster:")
+        should_delete = False
 
-    # Clear roster data for each affected teacher
-    cleared = 0
-    for tid in teachers_to_clear:
+        if old_provider == "oneroster" and is_oneroster:
+            should_delete = True
+        elif old_provider == "clever" and not is_oneroster:
+            should_delete = True
+
+        if should_delete and class_id and teacher_id:
+            classes_to_delete.append({"id": class_id, "teacher_id": teacher_id})
+            teachers_affected.add(teacher_id)
+
+    if not classes_to_delete:
+        logger.info("Provider switch cleanup: no %s-synced classes found", old_provider)
+        return 0
+
+    # Delete enrollments, then classes (order matters for FK constraints)
+    deleted_enrollments = 0
+    deleted_classes = 0
+    orphaned_students = set()
+
+    for cls in classes_to_delete:
         try:
-            delete_roster_data(tid)
-            cleared += 1
-        except Exception as e:
-            logger.warning("Failed to clear roster for teacher %s: %s", tid, str(e))
+            # Collect student IDs before deleting enrollments
+            enrollments = db.table("class_students").select("student_id").eq("class_id", cls["id"]).execute()
+            for e in (enrollments.data or []):
+                orphaned_students.add(e["student_id"])
 
-    logger.info("Provider switch cleanup: cleared roster data for %d/%d teachers",
-                cleared, len(teachers_to_clear))
+            # Delete enrollments for this class
+            result = db.table("class_students").delete().eq("class_id", cls["id"]).execute()
+            deleted_enrollments += len(result.data or [])
+
+            # Delete the class itself
+            db.table("classes").delete().eq("id", cls["id"]).execute()
+            deleted_classes += 1
+        except Exception as e:
+            logger.warning("Failed to delete class %s: %s", cls["id"], str(e))
+
+    # Delete orphaned students (not enrolled in any remaining class)
+    deleted_students = 0
+    for sid in orphaned_students:
+        try:
+            remaining = db.table("class_students").select("id", count="exact").eq("student_id", sid).execute()
+            if remaining.count == 0:
+                db.table("students").delete().eq("id", sid).execute()
+                deleted_students += 1
+        except Exception:
+            pass
+
+    # Clean up local roster CSV files for affected teachers
+    import os
+    import glob
+    data_dir = os.path.expanduser("~/.graider_data")
+    for tid in teachers_affected:
+        safe_id = tid.replace("/", "_").replace("\\", "_")
+        for pattern in [f"roster_{safe_id}*", f"period_{safe_id}*"]:
+            for f in glob.glob(os.path.join(data_dir, pattern)):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+
+    logger.info(
+        "Provider switch cleanup (%s): %d classes, %d enrollments, %d orphaned students "
+        "deleted across %d teachers. Manually-created classes preserved.",
+        old_provider, deleted_classes, deleted_enrollments, deleted_students,
+        len(teachers_affected)
+    )
+    return len(teachers_affected)
 ```
 
 - [ ] **Step 3: Commit**
@@ -286,6 +349,17 @@ git commit -m "test: add provider switch cleanup tests"
 - The cleanup only deletes roster data (classes, students, enrollments, CSV files) — not teacher settings, assignments, rubrics, or grading results
 - Audit-logged: `district_provider_switch` action with old and new provider types
 - If cleanup fails for a specific teacher, it logs a warning and continues with the rest
+
+### Safety: Cleanup Runs After Save
+
+The cleanup only executes AFTER `storage_save(_KEY_SIS_CONFIG, merged, "system")` succeeds. If the request fails validation (missing fields → 400), the early return happens before the cleanup block. Old roster data is never deleted unless the new config is successfully persisted.
+
+### Safety: Manual Data Preserved
+
+`_clear_old_provider_data()` only deletes classes where `clever_section_id` is non-null AND matches the old provider's prefix pattern. Classes with `clever_section_id = NULL` (manually created, CSV-imported) are never touched. This is verified by checking:
+- `ext_id.startswith("oneroster:")` → OneRoster synced
+- `ext_id` is non-null and doesn't start with `"oneroster:"` → Clever synced
+- `ext_id` is null → manual (SKIP)
 
 ### Edge Case: No District Config
 
