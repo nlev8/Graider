@@ -217,3 +217,47 @@ class TestDistrictLogout:
         # Verify session is cleared — config should now require auth
         resp = client.get("/api/district/config")
         assert resp.status_code == 401
+
+
+# ── Provider Switch Tests ─────────────────────────────────────────────────────
+
+class TestProviderSwitch:
+    def test_provider_switch_triggers_cleanup(self, client):
+        """When district admin changes sis_type, old roster data should be cleared."""
+        with client.session_transaction() as sess:
+            sess["district_admin"] = True
+
+        with patch("backend.routes.district_routes.storage_save") as mock_save, \
+             patch("backend.routes.district_routes.storage_load") as mock_load, \
+             patch("backend.routes.district_routes._clear_old_provider_data") as mock_clear:
+            mock_load.return_value = {"sis_type": "clever", "client_id": "old"}
+            resp = client.post("/api/district/config",
+                               data=json.dumps({"sis": {
+                                   "sis_type": "oneroster",
+                                   "client_id": "new-id",
+                                   "client_secret": "new-secret",
+                                   "base_url": "https://example.com",
+                               }}),
+                               content_type="application/json")
+            assert resp.status_code == 200
+            mock_clear.assert_called_once_with("clever")
+
+    def test_same_provider_no_cleanup(self, client):
+        """Saving same sis_type should NOT trigger cleanup."""
+        with client.session_transaction() as sess:
+            sess["district_admin"] = True
+
+        with patch("backend.routes.district_routes.storage_save"), \
+             patch("backend.routes.district_routes.storage_load") as mock_load, \
+             patch("backend.routes.district_routes._clear_old_provider_data") as mock_clear:
+            mock_load.return_value = {"sis_type": "oneroster", "client_id": "existing"}
+            resp = client.post("/api/district/config",
+                               data=json.dumps({"sis": {
+                                   "sis_type": "oneroster",
+                                   "client_id": "updated-id",
+                                   "client_secret": "updated-secret",
+                                   "base_url": "https://example.com",
+                               }}),
+                               content_type="application/json")
+            assert resp.status_code == 200
+            mock_clear.assert_not_called()
