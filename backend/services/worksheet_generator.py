@@ -325,6 +325,154 @@ def _add_graider_marker(doc):
     marker_run.font.color.rgb = RGBColor(255, 255, 255)
 
 
+def _normalize_correct_answer_to_letter(correct_answer, option_texts):
+    """Normalize a stored answer to a bubble letter (A, B, C, D...).
+
+    Handles all formats:
+    - Letter: "B" → "B"
+    - Letter with paren: "B)" or "B." → "B"
+    - Full option text: "Declaration of Independence" → finds matching option → "B"
+    - Integer index: 1 → "B" (0-based)
+    - Returns None if no match
+    """
+    if not correct_answer or not option_texts:
+        return None
+    ans = str(correct_answer).strip()
+    # Case 1: Single letter A-H
+    if len(ans) == 1 and ans.upper() in 'ABCDEFGH':
+        return ans.upper()
+    # Case 2: Letter with paren "B)" or "B."
+    if len(ans) >= 2 and ans[0].upper() in 'ABCDEFGH' and ans[1] in ').':
+        return ans[0].upper()
+    # Case 3: Integer index
+    if ans.isdigit():
+        idx = int(ans)
+        if 0 <= idx < len(option_texts):
+            return chr(65 + idx)
+        if 1 <= idx <= len(option_texts):
+            return chr(65 + idx - 1)
+    # Case 4: Full option text match
+    ans_lower = ans.lower()
+    for i, opt in enumerate(option_texts):
+        opt_clean = str(opt).strip().lower()
+        # Strip letter prefix: "B) Declaration..." → "declaration..."
+        if len(opt_clean) >= 3 and opt_clean[0] in 'abcdefgh' and opt_clean[1] in ').':
+            opt_body = opt_clean[2:].strip()
+        else:
+            opt_body = opt_clean
+        if ans_lower == opt_body or ans_lower == opt_clean:
+            return chr(65 + i)
+    return None
+
+
+def _add_bubble_row(doc, question_number, bubble_labels, correct_answer=None, is_tf=False, option_texts=None):
+    """Render a row of fill-in-the-bubble circles for MC or TF questions.
+
+    Args:
+        doc: python-docx Document object
+        question_number: Question number to display
+        bubble_labels: list like ['A', 'B', 'C', 'D'] or ['True', 'False']
+        correct_answer: if provided, fills the correct bubble (answer key mode).
+                        Normalized via _normalize_correct_answer_to_letter.
+        is_tf: True if this is a True/False question
+        option_texts: original full option texts for answer normalization
+    Returns:
+        The paragraph object
+    """
+    from docx.shared import Pt, RGBColor
+    para = doc.add_paragraph()
+    para.paragraph_format.space_after = Pt(2)
+    para.paragraph_format.space_before = Pt(2)
+    # Question number
+    num_run = para.add_run(f"{question_number}.  ")
+    num_run.font.size = Pt(11)
+    num_run.font.bold = True
+    # Normalize answer
+    normalized_answer = None
+    if correct_answer is not None:
+        if is_tf:
+            normalized_answer = str(correct_answer).strip()
+        else:
+            normalized_answer = _normalize_correct_answer_to_letter(correct_answer, option_texts or [])
+    # Render each bubble
+    for i, opt_label in enumerate(bubble_labels):
+        is_correct = False
+        if normalized_answer is not None:
+            if is_tf:
+                is_correct = opt_label.lower().strip() == normalized_answer.lower().strip()
+            else:
+                is_correct = opt_label.upper().strip() == normalized_answer
+        if is_correct:
+            bubble_char = "\u25CF"  # ● filled
+        else:
+            bubble_char = "\u25CB"  # ○ empty
+        bubble_run = para.add_run(f" {bubble_char} ")
+        bubble_run.font.size = Pt(16)
+        if is_correct:
+            bubble_run.font.color.rgb = RGBColor(0, 0, 0)
+        else:
+            bubble_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        label_run = para.add_run(f"{opt_label}  ")
+        label_run.font.size = Pt(10)
+        label_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+    return para
+
+
+def _add_answer_key_page(doc, questions_with_answers):
+    """Add an answer key page at the end of the document.
+
+    Adds a page break, "ANSWER KEY" heading, subtitle, then each question
+    with filled correct bubble.
+
+    Args:
+        doc: python-docx Document object
+        questions_with_answers: list of dicts with keys:
+            - number: question number
+            - options: list of bubble labels (e.g. ['A', 'B', 'C', 'D'])
+            - correct_answer: the correct answer (any normalized format)
+            - is_tf: bool, True for True/False questions
+            - option_texts: original full option texts (for normalization)
+            - question_text: optional short question text for reference
+    """
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    if not questions_with_answers:
+        return
+    # Page break
+    page_break_para = doc.add_paragraph()
+    run = page_break_para.add_run()
+    br = OxmlElement('w:br')
+    br.set(qn('w:type'), 'page')
+    run._element.append(br)
+    # Header
+    heading = doc.add_heading("ANSWER KEY", level=1)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub = doc.add_paragraph("For teacher use only — do not distribute to students")
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub.runs[0].font.size = Pt(9)
+    sub.runs[0].font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    sub.runs[0].italic = True
+    doc.add_paragraph()
+    # Each question with filled bubble
+    for q in questions_with_answers:
+        _add_bubble_row(
+            doc,
+            question_number=q["number"],
+            bubble_labels=q["options"],
+            correct_answer=q["correct_answer"],
+            is_tf=q.get("is_tf", False),
+            option_texts=q.get("option_texts"),
+        )
+        if q.get("question_text"):
+            ref_para = doc.add_paragraph()
+            ref_run = ref_para.add_run(f"    {q['question_text'][:100]}")
+            ref_run.font.size = Pt(8)
+            ref_run.font.color.rgb = RGBColor(0xAA, 0xAA, 0xAA)
+            ref_run.italic = True
+
+
 def create_worksheet_docx(filepath, title, worksheet_type, vocab_terms,
                           questions, summary_prompt, summary_key_points,
                           total_points, style=None):
