@@ -137,25 +137,9 @@ def sync_roster():
 
     teacher_id = g.teacher_id
 
-    # PROVIDER EXCLUSIVITY: Check for existing non-oneroster data
-    sb = _get_supabase()
-    if sb:
-        try:
-            existing = (
-                sb.table("classes")
-                .select("clever_section_id")
-                .eq("teacher_id", teacher_id)
-                .execute()
-            )
-            for row in (existing.data or []):
-                ext_id = row.get("clever_section_id", "")
-                if ext_id and not ext_id.startswith("oneroster:"):
-                    return jsonify({
-                        "error": "Roster data from another provider (e.g. Clever) already exists. "
-                                 "Delete existing roster data before syncing from OneRoster."
-                    }), 409
-        except Exception as e:
-            logger.warning("Provider exclusivity check failed: %s", str(e))
+    # Provider exclusivity is enforced at the district level.
+    # When the district admin switches providers at /district,
+    # old roster data is automatically cleared for all teachers.
 
     # Load config
     cfg = get_oneroster_config(teacher_id)
