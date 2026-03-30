@@ -2643,7 +2643,7 @@ export default React.memo(function PlannerTab({
                           <button
                             onClick={() => generateLessonPlan(false)}
                             disabled={
-                              plannerLoading || selectedStandards.length === 0
+                              plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                             }
                             className="btn btn-primary"
                             style={{
@@ -2651,7 +2651,7 @@ export default React.memo(function PlannerTab({
                               justifyContent: "center",
                               marginBottom: "10px",
                               opacity:
-                                plannerLoading || selectedStandards.length === 0
+                                plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                                   ? 0.5
                                   : 1,
                             }}
@@ -2676,14 +2676,14 @@ export default React.memo(function PlannerTab({
                           <button
                             onClick={() => generateLessonPlan(true)}
                             disabled={
-                              plannerLoading || selectedStandards.length === 0
+                              plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                             }
                             className="btn btn-secondary"
                             style={{
                               width: "100%",
                               justifyContent: "center",
                               opacity:
-                                plannerLoading || selectedStandards.length === 0
+                                plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                                   ? 0.5
                                   : 1,
                               fontSize: "0.85rem",
