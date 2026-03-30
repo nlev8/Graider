@@ -3427,12 +3427,24 @@ NO TECHNOLOGY TOOLS SPECIFIED: Focus on paper-based or physical deliverables onl
         # Build reference documents block
         ref_docs_block = ""
         if reference_docs:
-            ref_docs_block = "\n=== REFERENCE DOCUMENTS (use this content to inform questions) ===\n"
-            for doc in reference_docs:
-                doc_name = doc.get('filename', 'Document')
-                doc_text = doc.get('text', '')[:6000]
-                ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
-            ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when creating questions.\n"
+            if config_standards:
+                # Standards are active — use docs as supplementary content
+                ref_docs_block = "\n=== REFERENCE DOCUMENTS (supplementary content for question context) ===\n"
+                for doc in reference_docs:
+                    doc_name = doc.get('filename', 'Document')
+                    doc_text = doc.get('text', '')[:6000]
+                    ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
+                ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when creating questions, while aligning to the standards above.\n"
+            else:
+                # NO standards — create questions ONLY from the uploaded resources
+                ref_docs_block = "\n=== SOURCE DOCUMENTS (create ALL questions from this content) ===\n"
+                ref_docs_block += "CRITICAL: Since no curriculum standards are selected, generate ALL questions directly from the content in these documents. "
+                ref_docs_block += "Every question must be answerable using information found in these documents. "
+                ref_docs_block += "Do NOT create questions about topics not covered in the documents.\n\n"
+                for doc in reference_docs:
+                    doc_name = doc.get('filename', 'Document')
+                    doc_text = doc.get('text', '')[:6000]
+                    ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
 
         prompt = f"""You are an expert teacher creating an assessment/assignment based on a lesson plan.
 {subject_boundary}
