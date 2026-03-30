@@ -1132,6 +1132,20 @@ def get_parent_contacts():
             return jsonify({"error": "An internal error occurred"}), 500
 
     try:
+        # Merge student emails from grading results into contacts
+        # Results have student_email (e.g., "2AADB@vcs2go.net") keyed by student_id
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        try:
+            results = storage_load('results', teacher_id) if storage_load else None
+            if results:
+                for r in results:
+                    sid = r.get('student_id', '')
+                    email = r.get('student_email', '')
+                    if sid and email and sid in contacts:
+                        if not contacts[sid].get('student_email'):
+                            contacts[sid]['student_email'] = email
+        except Exception:
+            pass  # Results merge is best-effort
 
         with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
 
