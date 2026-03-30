@@ -352,6 +352,85 @@ export default React.memo(function SettingsTab({
               </div>
             </div>
 
+            {/* State, Grade Level, Subject */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: "20px",
+                marginTop: "20px",
+              }}
+            >
+              <div>
+                <label className="label">State</label>
+                <select
+                  className="input"
+                  value={config.state}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      state: e.target.value,
+                    }))
+                  }
+                >
+                  {availableStates.length > 0 ? availableStates.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name}</option>
+                  )) : (
+                    <option value={config.state}>{config.state}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Grade Level</label>
+                <select
+                  className="input"
+                  value={config.grade_level}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      grade_level: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="6">6th Grade</option>
+                  <option value="7">7th Grade</option>
+                  <option value="8">8th Grade</option>
+                  <option value="9">9th Grade</option>
+                  <option value="10">10th Grade</option>
+                  <option value="11">11th Grade</option>
+                  <option value="12">12th Grade</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Subject</label>
+                <select
+                  className="input"
+                  value={config.subject}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      subject: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="US History">U.S. History</option>
+                  <option value="World History">World History</option>
+                  <option value="Social Studies">Social Studies</option>
+                  <option value="Civics">Civics</option>
+                  <option value="Geography">Geography</option>
+                  <option value="English/ELA">English/ELA</option>
+                  <option value="Math">Math</option>
+                  <option value="Science">Science</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="World Languages">World Languages</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
             {/* Email Signature */}
             <div>
               <label className="label">Email Signature</label>
@@ -598,81 +677,6 @@ export default React.memo(function SettingsTab({
                 gap: "20px",
               }}
             >
-              <div>
-                <label className="label">State</label>
-                <select
-                  className="input"
-                  value={config.state}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      state: e.target.value,
-                    }))
-                  }
-                >
-                  {availableStates.length > 0 ? availableStates.map((s) => (
-                    <option key={s.code} value={s.code}>{s.name}</option>
-                  )) : (
-                    <option value={config.state}>{config.state}</option>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Grade Level</label>
-                <select
-                  className="input"
-                  value={config.grade_level}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      grade_level: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="K">Kindergarten</option>
-                  <option value="1">1st Grade</option>
-                  <option value="2">2nd Grade</option>
-                  <option value="3">3rd Grade</option>
-                  <option value="4">4th Grade</option>
-                  <option value="5">5th Grade</option>
-                  <option value="6">6th Grade</option>
-                  <option value="7">7th Grade</option>
-                  <option value="8">8th Grade</option>
-                  <option value="9">9th Grade</option>
-                  <option value="10">10th Grade</option>
-                  <option value="11">11th Grade</option>
-                  <option value="12">12th Grade</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Subject</label>
-                <select
-                  className="input"
-                  value={config.subject}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      subject: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="US History">U.S. History</option>
-                  <option value="World History">World History</option>
-                  <option value="Social Studies">Social Studies</option>
-                  <option value="Civics">Civics</option>
-                  <option value="Geography">Geography</option>
-                  <option value="English/ELA">English/ELA</option>
-                  <option value="Math">Math</option>
-                  <option value="Science">Science</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="French">French</option>
-                  <option value="World Languages">World Languages</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
               <div>
                 <label className="label">Grading Period</label>
                 <select
