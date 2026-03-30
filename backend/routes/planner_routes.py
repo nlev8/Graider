@@ -2254,12 +2254,16 @@ def load_standards(state, subject, grade=None):
     primary_path = DATA_DIR / 'standards' / framework / (filename + '.json')
     standards = _load_standards_file(primary_path)
 
-    if not standards and framework not in ('ccss', 'ngss'):
-        # State-specific file not found — try fallback
+    if not standards:
+        # Primary file not found — try subject-specific fallback
+        # This handles: CCSS states needing NGSS for science, state-specific
+        # frameworks missing certain subjects, etc.
         fallback_fw = subject_fallbacks.get(subject)
         if fallback_fw is None:
-            result['no_framework'] = True
-        elif fallback_fw:
+            # No fallback defined for this subject (e.g., Spanish, World Languages)
+            if framework not in ('ccss', 'ngss'):
+                result['no_framework'] = True
+        elif fallback_fw and fallback_fw != framework:
             fallback_path = DATA_DIR / 'standards' / fallback_fw / (filename + '.json')
             standards = _load_standards_file(fallback_path)
             if standards:
