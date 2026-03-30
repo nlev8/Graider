@@ -3218,6 +3218,7 @@ export default React.memo(function SettingsTab({
                                   <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
                                     <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Student Name</th>
                                     <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>ID</th>
+                                    <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Student Email</th>
                                     <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Parent Emails</th>
                                     <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600 }}>Parent Phones</th>
                                     <th style={{ textAlign: "right", padding: "6px 8px", color: "var(--text-secondary)", fontWeight: 600, width: "80px" }}>Actions</th>
@@ -3232,6 +3233,9 @@ export default React.memo(function SettingsTab({
                                             <input type="text" value={editStudentData.student_name || ""} onChange={(e) => setEditStudentData({...editStudentData, student_name: e.target.value})} style={{ width: "100%", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                                           </td>
                                           <td style={{ padding: "6px 8px", color: "var(--text-muted)" }}>{student.id}</td>
+                                          <td style={{ padding: "6px 8px" }}>
+                                            <input type="email" value={editStudentData.student_email || ""} onChange={(e) => setEditStudentData({...editStudentData, student_email: e.target.value})} placeholder="student@school.edu" style={{ width: "100%", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                          </td>
                                           <td style={{ padding: "6px 8px" }}>
                                             <input type="text" value={editStudentData.parent_emails || ""} onChange={(e) => setEditStudentData({...editStudentData, parent_emails: e.target.value})} placeholder="email1, email2" style={{ width: "100%", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                                           </td>
@@ -3248,6 +3252,7 @@ export default React.memo(function SettingsTab({
                                                     period_filename: period.filename,
                                                     student_id: student.id,
                                                     student_name: editStudentData.student_name,
+                                                    student_email: editStudentData.student_email || "",
                                                     parent_emails: emails,
                                                     parent_phones: phones,
                                                   });
@@ -3255,7 +3260,7 @@ export default React.memo(function SettingsTab({
                                                   // Refresh
                                                   const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
                                                   const contacts = contactsRes.contacts || {};
-                                                  setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                                  setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
                                                   addToast("Student updated", "success");
                                                 } catch (err) {
                                                   addToast("Update failed: " + err.message, "error");
@@ -3273,6 +3278,7 @@ export default React.memo(function SettingsTab({
                                         <>
                                           <td style={{ padding: "6px 8px" }}>{student.full || (student.first + " " + student.last)}</td>
                                           <td style={{ padding: "6px 8px", color: "var(--text-secondary)" }}>{student.id || "\u2014"}</td>
+                                          <td style={{ padding: "6px 8px", color: student.student_email ? "var(--text-primary)" : "var(--text-muted)" }}>{student.student_email || "\u2014"}</td>
                                           <td style={{ padding: "6px 8px", color: student.parent_emails.length ? "var(--text-primary)" : "var(--text-muted)" }}>
                                             {student.parent_emails.length > 0 ? student.parent_emails.join(", ") : "\u2014"}
                                           </td>
@@ -3287,6 +3293,7 @@ export default React.memo(function SettingsTab({
                                                     setEditingStudentId(student.id);
                                                     setEditStudentData({
                                                       student_name: student.full || (student.first + " " + student.last),
+                                                      student_email: student.student_email || "",
                                                       parent_emails: student.parent_emails.join(", "),
                                                       parent_phones: student.parent_phones.join(", "),
                                                     });
@@ -3301,7 +3308,7 @@ export default React.memo(function SettingsTab({
                                                       await api.removeStudent({ period_filename: period.filename, student_id: student.id });
                                                       const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
                                                       const contacts = contactsRes.contacts || {};
-                                                      setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                                      setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
                                                       const periodsData = await api.listPeriods();
                                                       setPeriods(periodsData.periods || []);
                                                       addToast("Student removed", "success");
@@ -3357,7 +3364,7 @@ export default React.memo(function SettingsTab({
                                       // Refresh
                                       const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
                                       const contacts = contactsRes.contacts || {};
-                                      setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                      setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
                                       const periodsData = await api.listPeriods();
                                       setPeriods(periodsData.periods || []);
                                       addToast("Student added", "success");

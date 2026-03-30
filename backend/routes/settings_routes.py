@@ -1991,6 +1991,7 @@ def update_student():
     try:
         new_name = data.get('student_name', '').strip()
         new_grade = data.get('grade', '').strip()
+        student_email = data.get('student_email', '').strip()
         parent_emails = data.get('parent_emails', [])
         parent_phones = data.get('parent_phones', [])
 
@@ -2033,6 +2034,8 @@ def update_student():
                 contacts[student_id]["parent_phones"] = parent_phones
             if new_name:
                 contacts[student_id]["student_name"] = new_name
+            if student_email is not None:
+                contacts[student_id]["student_email"] = student_email
         else:
             # Create new contact entry
             period_name = ''
@@ -2052,6 +2055,7 @@ def update_student():
 
             contacts[student_id] = {
                 "student_name": new_name or "",
+                "student_email": student_email,
                 "period": period_name,
                 "parent_emails": parent_emails or [],
                 "parent_phones": parent_phones or [],
