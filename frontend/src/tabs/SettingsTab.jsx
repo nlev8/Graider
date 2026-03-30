@@ -3122,11 +3122,18 @@ export default React.memo(function SettingsTab({
                             ]);
                             const students = studentsRes.students || [];
                             const contacts = contactsRes.contacts || {};
-                            // Merge contact info into student list
+                            // Build email lookup from grading results
+                            var resultEmails = {};
+                            (status.results || []).forEach(function(r) {
+                              var sid = r.student_id || r.student || "";
+                              if (sid && r.student_email) { resultEmails[sid] = r.student_email; }
+                            });
+                            // Merge contact info + student email into student list
                             const merged = students.map(s => {
                               const contact = contacts[s.id] || {};
                               return {
                                 ...s,
+                                student_email: contact.student_email || resultEmails[s.id] || "",
                                 parent_emails: contact.parent_emails || [],
                                 parent_phones: contact.parent_phones || [],
                               };
@@ -3260,7 +3267,7 @@ export default React.memo(function SettingsTab({
                                                   // Refresh
                                                   const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
                                                   const contacts = contactsRes.contacts || {};
-                                                  setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                                  var _re = {}; (status.results || []).forEach(function(r) { var _sid = r.student_id || r.student || ""; if (_sid && r.student_email) { _re[_sid] = r.student_email; } }); setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || _re[s.id] || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
                                                   addToast("Student updated", "success");
                                                 } catch (err) {
                                                   addToast("Update failed: " + err.message, "error");
@@ -3308,7 +3315,7 @@ export default React.memo(function SettingsTab({
                                                       await api.removeStudent({ period_filename: period.filename, student_id: student.id });
                                                       const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
                                                       const contacts = contactsRes.contacts || {};
-                                                      setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                                      var _re = {}; (status.results || []).forEach(function(r) { var _sid = r.student_id || r.student || ""; if (_sid && r.student_email) { _re[_sid] = r.student_email; } }); setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || _re[s.id] || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
                                                       const periodsData = await api.listPeriods();
                                                       setPeriods(periodsData.periods || []);
                                                       addToast("Student removed", "success");
@@ -3364,7 +3371,7 @@ export default React.memo(function SettingsTab({
                                       // Refresh
                                       const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
                                       const contacts = contactsRes.contacts || {};
-                                      setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
+                                      var _re = {}; (status.results || []).forEach(function(r) { var _sid = r.student_id || r.student || ""; if (_sid && r.student_email) { _re[_sid] = r.student_email; } }); setExpandedStudents((studentsRes.students || []).map(s => ({ ...s, student_email: (contacts[s.id] || {}).student_email || _re[s.id] || "", parent_emails: (contacts[s.id] || {}).parent_emails || [], parent_phones: (contacts[s.id] || {}).parent_phones || [] })));
                                       const periodsData = await api.listPeriods();
                                       setPeriods(periodsData.periods || []);
                                       addToast("Student added", "success");
