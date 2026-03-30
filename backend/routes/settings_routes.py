@@ -1803,10 +1803,21 @@ def _load_parent_contacts():
     return {}
 
 
-def _save_parent_contacts(contacts):
-    """Save parent_contacts.json."""
+def _save_parent_contacts(contacts, teacher_id=None):
+    """Save parent contacts to both file and Supabase."""
     with open(PARENT_CONTACTS_FILE, 'w') as f:
         json.dump(contacts, f, indent=2)
+    # Also persist to Supabase so authenticated users see the update
+    if teacher_id is None:
+        try:
+            teacher_id = getattr(g, 'user_id', None)
+        except RuntimeError:
+            teacher_id = None  # Outside request context
+    if teacher_id and storage_save:
+        try:
+            storage_save('parent_contacts', contacts, teacher_id)
+        except Exception:
+            pass  # File write succeeded — Supabase failure is not critical
 
 
 @settings_bp.route('/api/add-student', methods=['POST'])
