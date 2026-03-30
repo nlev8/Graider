@@ -1,0 +1,722 @@
+[
+  {
+    "code": "D2.Civ.1.6-8",
+    "benchmark": "Distinguish the powers and responsibilities of citizens, political parties, interest groups, and the media in a variety of governmental and nongovernmental contexts.",
+    "topics": ["Civic Participation", "Political Parties", "Media", "Interest Groups"],
+    "dok": 2,
+    "item_specs": "Students identify the roles of various civic actors and explain how they influence government. Items may include scenarios requiring identification of actors and their functions.",
+    "essential_questions": [
+      "How do different groups and institutions influence government and public policy?",
+      "What are the rights and responsibilities of citizens in a democracy?"
+    ],
+    "learning_targets": [
+      "I can explain the roles of political parties in the democratic process.",
+      "I can describe how interest groups and media influence public policy.",
+      "I can distinguish between the responsibilities of citizens and the roles of other civic actors."
+    ],
+    "vocabulary": ["political party", "interest group", "media", "lobbying", "civic duty", "public opinion", "advocacy"],
+    "sample_assessment": "Which BEST describes the PRIMARY role of interest groups in American democracy? A) To elect candidates to office B) To advocate for specific policies and influence legislation C) To report the news objectively D) To enforce laws passed by Congress"
+  },
+  {
+    "code": "D2.Civ.2.6-8",
+    "benchmark": "Explain specific roles played by citizens in the U.S. political system, such as voting, running for office, and serving on juries.",
+    "topics": ["Citizenship", "Voting", "Civic Duty", "Political Participation"],
+    "dok": 1,
+    "item_specs": "Students identify and explain the specific ways citizens participate in the political system. Items include identification and application of civic roles.",
+    "essential_questions": [
+      "What are the most important ways citizens participate in a democracy?",
+      "Why is civic participation essential to a functioning democracy?"
+    ],
+    "learning_targets": [
+      "I can identify specific roles citizens play in the political system.",
+      "I can explain why voting is a fundamental right and responsibility.",
+      "I can describe how citizens can influence government beyond voting."
+    ],
+    "vocabulary": ["suffrage", "ballot", "jury duty", "petition", "civic engagement", "constituent", "public hearing"],
+    "sample_assessment": "Which is a civic RESPONSIBILITY rather than a civic right? A) Freedom of speech B) Freedom of religion C) Serving on a jury when called D) The right to bear arms"
+  },
+  {
+    "code": "D2.Civ.3.6-8",
+    "benchmark": "Examine the origins, purposes, and impact of constitutions, laws, treaties, and international agreements.",
+    "topics": ["Constitutional Government", "Rule of Law", "International Law"],
+    "dok": 2,
+    "item_specs": "Students analyze the purposes and effects of foundational legal documents. Items include document analysis and purpose identification.",
+    "essential_questions": [
+      "Why do societies create constitutions and laws?",
+      "How do international agreements affect individual nations?"
+    ],
+    "learning_targets": [
+      "I can explain the purpose of a constitution in establishing government.",
+      "I can describe how laws protect individual rights and maintain order.",
+      "I can analyze how international agreements affect domestic policy."
+    ],
+    "vocabulary": ["constitution", "treaty", "legislation", "ratification", "sovereignty", "international agreement", "rule of law"],
+    "sample_assessment": "What is the PRIMARY purpose of a constitution? A) To list all laws a country has ever passed B) To establish the framework of government and protect fundamental rights C) To describe a country's history D) To set tax rates for citizens"
+  },
+  {
+    "code": "D2.Civ.4.6-8",
+    "benchmark": "Explain the powers and limits of the three branches of government, the interactions among them, and the impact of those interactions on individual rights.",
+    "topics": ["Separation of Powers", "Checks and Balances", "Three Branches"],
+    "dok": 2,
+    "item_specs": "Students describe how the branches interact and how checks and balances protect individual rights. Items include scenario-based questions about branch interactions.",
+    "essential_questions": [
+      "Why did the founders divide government power among three branches?",
+      "How do checks and balances protect individual rights?"
+    ],
+    "learning_targets": [
+      "I can explain the powers of each branch of government.",
+      "I can describe how checks and balances work in practice.",
+      "I can analyze how interactions among branches affect individual rights."
+    ],
+    "vocabulary": ["legislative", "executive", "judicial", "veto", "override", "judicial review", "checks and balances", "separation of powers"],
+    "sample_assessment": "If Congress passes a law that the President believes is unconstitutional, what can the President do? A) Declare the law unconstitutional B) Veto the law C) Dissolve Congress D) Amend the Constitution directly"
+  },
+  {
+    "code": "D2.Civ.5.6-8",
+    "benchmark": "Explain the origins, functions, and structure of the U.S. Constitution, including the Bill of Rights.",
+    "topics": ["U.S. Constitution", "Bill of Rights", "Founding Documents"],
+    "dok": 2,
+    "item_specs": "Students explain the structure and key provisions of the Constitution and Bill of Rights. Items include identification and application of constitutional principles.",
+    "essential_questions": [
+      "How does the Constitution structure American government?",
+      "Why was the Bill of Rights added to the Constitution?"
+    ],
+    "learning_targets": [
+      "I can explain the structure and key features of the U.S. Constitution.",
+      "I can identify the rights protected by the Bill of Rights.",
+      "I can explain why the founders included an amendment process."
+    ],
+    "vocabulary": ["Preamble", "article", "amendment", "Bill of Rights", "ratification", "federalism", "popular sovereignty"],
+    "sample_assessment": "Why was the Bill of Rights added to the Constitution? A) The original Constitution was too short B) Anti-Federalists demanded explicit protections for individual rights as a condition of ratification C) The President requested additional powers D) Foreign nations required it"
+  },
+  {
+    "code": "D2.Civ.6.6-8",
+    "benchmark": "Describe the roles of political, civil, and economic organizations in shaping people's lives and policies.",
+    "topics": ["Organizations", "Civil Society", "Policy Influence"],
+    "dok": 2,
+    "item_specs": "Students identify how various organizations influence policy and daily life. Items include analysis of organizational roles and their effects on communities.",
+    "essential_questions": [
+      "How do organizations outside of government shape public life and policy?",
+      "What is the role of civil society in a democracy?"
+    ],
+    "learning_targets": [
+      "I can describe the roles of political organizations in shaping policy.",
+      "I can explain how civil organizations contribute to community life.",
+      "I can analyze how economic organizations influence government decisions."
+    ],
+    "vocabulary": ["civil society", "nonprofit", "political action committee", "trade union", "chamber of commerce", "grassroots organization", "coalition"],
+    "sample_assessment": "Which is an example of a civil society organization influencing policy? A) Congress passing a law B) A nonprofit organizing a petition to change a local zoning law C) The President issuing an executive order D) A judge ruling on a court case"
+  },
+  {
+    "code": "D2.Civ.7.6-8",
+    "benchmark": "Apply civic virtues and democratic principles in school and community settings.",
+    "topics": ["Civic Virtues", "Democratic Principles", "Community Engagement"],
+    "dok": 2,
+    "item_specs": "Students demonstrate understanding of civic virtues by applying them in practical scenarios. Items include scenario-based application questions.",
+    "essential_questions": [
+      "What civic virtues are essential for a healthy democracy?",
+      "How can students apply democratic principles in their daily lives?"
+    ],
+    "learning_targets": [
+      "I can identify civic virtues such as honesty, respect, and responsibility.",
+      "I can apply democratic principles like fairness and equality in school settings.",
+      "I can explain why civic virtues are important for a functioning democracy."
+    ],
+    "vocabulary": ["civic virtue", "tolerance", "compromise", "common good", "deliberation", "respect", "responsibility"],
+    "sample_assessment": "A school student council is deciding how to spend activity funds. Which approach BEST reflects democratic principles? A) The council president decides alone B) A vote is taken after all members discuss the options C) The teacher makes the decision D) Only the oldest students get to vote"
+  },
+  {
+    "code": "D2.Civ.8.6-8",
+    "benchmark": "Analyze ideas and principles contained in the founding documents of the United States, and explain how they influence the social and political system.",
+    "topics": ["Founding Documents", "Democratic Ideals", "Constitutional Principles"],
+    "dok": 3,
+    "item_specs": "Students analyze the Declaration of Independence, Constitution, and Federalist Papers to identify key principles and explain their continuing influence. Items include document excerpts for analysis.",
+    "essential_questions": [
+      "How do the principles in the founding documents continue to shape American government?",
+      "What tensions exist between the ideals expressed in the founding documents and historical realities?"
+    ],
+    "learning_targets": [
+      "I can identify key principles in the Declaration of Independence and Constitution.",
+      "I can explain how founding principles influence contemporary American government.",
+      "I can analyze tensions between founding ideals and historical practices."
+    ],
+    "vocabulary": ["natural rights", "consent of the governed", "due process", "equal protection", "limited government", "social contract", "unalienable rights"],
+    "sample_assessment": "The Declaration of Independence states that governments derive 'their just powers from the consent of the governed.' This principle MOST directly supports A) the divine right of kings B) the idea that citizens must have a voice in their government C) unlimited government power D) government by military force"
+  },
+  {
+    "code": "D2.Civ.9.6-8",
+    "benchmark": "Compare deliberative processes used by a wide variety of groups in various settings to manage conflict and reach agreements.",
+    "topics": ["Deliberation", "Conflict Resolution", "Decision-Making"],
+    "dok": 2,
+    "item_specs": "Students compare how different groups use deliberation to resolve conflicts. Items include scenario comparisons and process analysis.",
+    "essential_questions": [
+      "How do different groups use deliberation to resolve conflicts?",
+      "What makes a deliberative process fair and effective?"
+    ],
+    "learning_targets": [
+      "I can describe different deliberative processes used to resolve conflict.",
+      "I can compare how various groups reach agreements through deliberation.",
+      "I can evaluate the effectiveness of different conflict resolution methods."
+    ],
+    "vocabulary": ["deliberation", "consensus", "majority rule", "mediation", "arbitration", "negotiation", "compromise"],
+    "sample_assessment": "Which deliberative process requires all parties to agree before a decision is made? A) Majority rule B) Consensus C) Arbitration D) Executive decision"
+  },
+  {
+    "code": "D2.Civ.10.6-8",
+    "benchmark": "Explain the relevance of personal interests and perspectives, civic virtues, and democratic principles when people address issues and problems in government and civil society.",
+    "topics": ["Civic Engagement", "Problem-Solving", "Perspective-Taking"],
+    "dok": 2,
+    "item_specs": "Students explain how personal interests and civic values influence civic engagement. Items include scenarios requiring analysis of motivations and approaches.",
+    "essential_questions": [
+      "How do personal interests and civic virtues influence civic engagement?",
+      "How can democratic principles guide problem-solving in public life?"
+    ],
+    "learning_targets": [
+      "I can explain how personal interests and values influence civic engagement.",
+      "I can describe how civic virtues guide decision-making in public life.",
+      "I can apply democratic principles to address community issues."
+    ],
+    "vocabulary": ["self-interest", "common good", "public interest", "civic engagement", "informed citizen", "democratic values"],
+    "sample_assessment": "A community member attends a town meeting to oppose a new highway because it would go through their neighborhood. This is an example of A) apathy B) self-interest influencing civic participation C) judicial review D) media influence"
+  },
+  {
+    "code": "D2.Civ.11.6-8",
+    "benchmark": "Differentiate among procedures for making decisions in the classroom, school, civil society, and local, state, and national government.",
+    "topics": ["Decision-Making", "Levels of Government", "Procedures"],
+    "dok": 2,
+    "item_specs": "Students compare decision-making procedures across different levels and contexts. Items include matching procedures to contexts and comparative analysis.",
+    "essential_questions": [
+      "How do decision-making procedures differ at various levels of government?",
+      "Why are different procedures appropriate for different contexts?"
+    ],
+    "learning_targets": [
+      "I can compare decision-making procedures at local, state, and national levels.",
+      "I can explain why different procedures are used in different contexts.",
+      "I can identify which level of government handles specific issues."
+    ],
+    "vocabulary": ["ordinance", "statute", "executive order", "resolution", "referendum", "initiative", "federalism"],
+    "sample_assessment": "A local city council passes an ordinance banning plastic bags. This is an example of decision-making at which level? A) National B) State C) Local D) International"
+  },
+  {
+    "code": "D2.Civ.12.6-8",
+    "benchmark": "Assess specific rules and laws (both actual and proposed) as means of addressing public problems.",
+    "topics": ["Laws and Rules", "Public Policy", "Problem-Solving"],
+    "dok": 3,
+    "item_specs": "Students evaluate whether specific laws effectively address public problems. Items include policy analysis and evaluative reasoning about proposed solutions.",
+    "essential_questions": [
+      "How do we evaluate whether a law effectively addresses a public problem?",
+      "What criteria should be used to assess proposed laws?"
+    ],
+    "learning_targets": [
+      "I can evaluate whether a specific law effectively addresses a public problem.",
+      "I can analyze the potential consequences of proposed legislation.",
+      "I can suggest improvements to laws based on evidence of their effectiveness."
+    ],
+    "vocabulary": ["legislation", "public policy", "enforcement", "compliance", "unintended consequence", "effectiveness", "regulation"],
+    "sample_assessment": "A city passes a law requiring all restaurants to post calorie counts. Which question would BEST evaluate this law's effectiveness? A) How many restaurants are in the city? B) Did the law lead to changes in consumers' eating habits? C) How much did it cost to print the menus? D) Do restaurants like the law?"
+  },
+  {
+    "code": "D2.Civ.13.6-8",
+    "benchmark": "Analyze the purposes, implementation, and consequences of public policies in multiple settings.",
+    "topics": ["Public Policy", "Policy Analysis", "Implementation"],
+    "dok": 3,
+    "item_specs": "Students analyze how public policies are designed, implemented, and evaluated. Items include policy case studies and consequence analysis.",
+    "essential_questions": [
+      "How are public policies designed and implemented?",
+      "What factors determine whether a policy succeeds or fails?"
+    ],
+    "learning_targets": [
+      "I can explain the purpose of a specific public policy.",
+      "I can analyze how a policy is implemented at different levels of government.",
+      "I can evaluate the intended and unintended consequences of a public policy."
+    ],
+    "vocabulary": ["public policy", "implementation", "stakeholder", "cost-benefit analysis", "evaluation", "intended consequence", "unintended consequence"],
+    "sample_assessment": "A state implements a new policy providing free school lunches to all students. Which would be an UNINTENDED consequence of this policy? A) Students eating lunch at school B) Reduced stigma for students who previously qualified for free lunch C) Some families spending less on groceries D) Both B and C"
+  },
+  {
+    "code": "D2.Civ.14.6-8",
+    "benchmark": "Compare historical and contemporary means of changing societies and promoting the common good.",
+    "topics": ["Social Change", "Common Good", "Reform Movements"],
+    "dok": 3,
+    "item_specs": "Students compare methods of social change across time periods. Items include comparative analysis of reform movements and civic action.",
+    "essential_questions": [
+      "What methods have people used throughout history to promote social change?",
+      "How have the tools of civic engagement evolved over time?"
+    ],
+    "learning_targets": [
+      "I can compare historical and modern methods of promoting social change.",
+      "I can analyze how technology has changed civic engagement.",
+      "I can evaluate the effectiveness of different approaches to promoting the common good."
+    ],
+    "vocabulary": ["reform", "activism", "civil disobedience", "social media advocacy", "grassroots organizing", "common good", "protest"],
+    "sample_assessment": "How has technology changed the way citizens engage in civic action compared to the 1960s? A) Technology has made civic action unnecessary B) Social media allows faster organization and broader reach for movements C) Technology has replaced all forms of in-person protest D) Civic engagement has decreased because of technology"
+  },
+  {
+    "code": "D2.Civ.15.6-8",
+    "benchmark": "Explain how the U.S. system of government balances individual rights with the common good.",
+    "topics": ["Individual Rights", "Common Good", "Constitutional Balance"],
+    "dok": 2,
+    "item_specs": "Students analyze how the legal system balances competing interests. Items include scenarios presenting tensions between individual rights and community welfare.",
+    "essential_questions": [
+      "When should individual rights be limited for the common good?",
+      "How does the Constitution balance individual freedom with community welfare?"
+    ],
+    "learning_targets": [
+      "I can explain how the Constitution protects individual rights.",
+      "I can identify situations where individual rights may conflict with the common good.",
+      "I can analyze how courts balance individual rights with public interests."
+    ],
+    "vocabulary": ["individual rights", "common good", "public safety", "civil liberties", "due process", "compelling interest", "reasonable restriction"],
+    "sample_assessment": "A city requires all motorcyclists to wear helmets. This law is an example of A) the government violating all individual rights B) balancing individual freedom with public safety concerns C) an unconstitutional law D) a law that only benefits the government"
+  },
+  {
+    "code": "D2.Civ.16.6-8",
+    "benchmark": "Describe the roles of state and federal courts in interpreting the Constitution and resolving disputes.",
+    "topics": ["Judicial System", "Courts", "Constitutional Interpretation"],
+    "dok": 2,
+    "item_specs": "Students describe the structure and function of the court system. Items include identification of court roles and jurisdiction questions.",
+    "essential_questions": [
+      "How do courts interpret and apply the Constitution?",
+      "What is the difference between state and federal court jurisdiction?"
+    ],
+    "learning_targets": [
+      "I can describe the structure of the federal and state court systems.",
+      "I can explain the concept of judicial review.",
+      "I can identify which court has jurisdiction in different types of cases."
+    ],
+    "vocabulary": ["jurisdiction", "judicial review", "precedent", "appellate court", "Supreme Court", "ruling", "dissent", "majority opinion"],
+    "sample_assessment": "The power of judicial review allows the Supreme Court to A) make new laws B) declare laws unconstitutional C) appoint federal judges D) override a presidential veto"
+  },
+  {
+    "code": "D2.Civ.17.6-8",
+    "benchmark": "Analyze the impact of landmark Supreme Court cases on individual rights and government power.",
+    "topics": ["Supreme Court", "Landmark Cases", "Constitutional Law"],
+    "dok": 3,
+    "item_specs": "Students analyze how key Supreme Court decisions shaped the interpretation of rights and government authority. Items include case study analysis.",
+    "essential_questions": [
+      "How have Supreme Court decisions shaped the meaning of constitutional rights?",
+      "Why are some Supreme Court cases considered 'landmark' decisions?"
+    ],
+    "learning_targets": [
+      "I can explain the significance of landmark Supreme Court cases.",
+      "I can analyze how Supreme Court decisions affect individual rights.",
+      "I can describe how court rulings shape government power over time."
+    ],
+    "vocabulary": ["landmark case", "precedent", "Marbury v. Madison", "Brown v. Board of Education", "Miranda v. Arizona", "constitutional interpretation"],
+    "sample_assessment": "In Brown v. Board of Education (1954), the Supreme Court ruled that A) separate but equal facilities were constitutional B) racial segregation in public schools was unconstitutional C) prayer in public schools was required D) states could set their own education standards without federal oversight"
+  },
+  {
+    "code": "D2.Civ.18.6-8",
+    "benchmark": "Explain the process by which laws are made at the local, state, and federal levels.",
+    "topics": ["Legislative Process", "Lawmaking", "Levels of Government"],
+    "dok": 2,
+    "item_specs": "Students describe the steps in the legislative process at different government levels. Items include sequencing and identification of legislative steps.",
+    "essential_questions": [
+      "How does a bill become a law?",
+      "How does the lawmaking process differ at local, state, and federal levels?"
+    ],
+    "learning_targets": [
+      "I can describe the steps in the federal legislative process.",
+      "I can compare lawmaking procedures at local, state, and federal levels.",
+      "I can explain the role of committees, debate, and voting in the legislative process."
+    ],
+    "vocabulary": ["bill", "committee", "debate", "filibuster", "vote", "conference committee", "veto", "override"],
+    "sample_assessment": "What happens AFTER a bill is passed by both the House and Senate? A) It automatically becomes law B) It is sent to the President, who can sign or veto it C) It goes back to committee D) The Supreme Court reviews it"
+  },
+  {
+    "code": "D2.Civ.19.6-8",
+    "benchmark": "Explain the role of elections in democratic societies, including the electoral process and voter participation.",
+    "topics": ["Elections", "Voting", "Electoral Process", "Democracy"],
+    "dok": 2,
+    "item_specs": "Students describe the electoral process and analyze factors affecting voter participation. Items include process identification and data analysis about voter turnout.",
+    "essential_questions": [
+      "Why are free and fair elections essential to democracy?",
+      "What factors influence voter participation in elections?"
+    ],
+    "learning_targets": [
+      "I can explain the steps in the electoral process.",
+      "I can analyze factors that affect voter turnout.",
+      "I can describe the role of the Electoral College in presidential elections."
+    ],
+    "vocabulary": ["Electoral College", "primary election", "general election", "voter turnout", "campaign", "platform", "ballot initiative"],
+    "sample_assessment": "Which factor has historically been associated with LOWER voter turnout? A) High levels of education B) Strong civic engagement programs C) Voter registration barriers and lack of access to polling places D) Highly competitive elections"
+  },
+  {
+    "code": "D2.Civ.20.6-8",
+    "benchmark": "Compare the rights and responsibilities of citizens in the United States with those in other democratic and non-democratic countries.",
+    "topics": ["Comparative Government", "Rights", "Responsibilities", "Global Civics"],
+    "dok": 3,
+    "item_specs": "Students compare civic structures across different political systems. Items include comparative analysis of rights and government types.",
+    "essential_questions": [
+      "How do the rights of citizens differ in democratic and non-democratic countries?",
+      "What responsibilities do citizens have in different political systems?"
+    ],
+    "learning_targets": [
+      "I can compare the rights of citizens in democratic and non-democratic countries.",
+      "I can explain how responsibilities of citizenship differ across political systems.",
+      "I can evaluate the advantages and disadvantages of different governmental systems."
+    ],
+    "vocabulary": ["democracy", "autocracy", "theocracy", "human rights", "authoritarianism", "totalitarianism", "parliamentary system"],
+    "sample_assessment": "Which right is MOST commonly protected in democratic countries but restricted in authoritarian regimes? A) The right to pay taxes B) The right to freedom of speech and press C) The right to obey laws D) The right to live in a country"
+  },
+  {
+    "code": "D2.Civ.1.9-12",
+    "benchmark": "Distinguish the powers and responsibilities of local, state, tribal, national, and international civic and political institutions.",
+    "topics": ["Federalism", "Levels of Government", "Institutional Power"],
+    "dok": 2,
+    "item_specs": "Students analyze the distribution of power across governmental levels and identify the responsibilities of each. Items include scenario-based jurisdiction questions.",
+    "essential_questions": [
+      "How is power distributed among different levels of government in the United States?",
+      "What are the advantages and challenges of a federal system?"
+    ],
+    "learning_targets": [
+      "I can distinguish the powers of local, state, and national government.",
+      "I can explain how federalism distributes authority across levels of government.",
+      "I can analyze the relationship between tribal sovereignty and federal authority."
+    ],
+    "vocabulary": ["federalism", "concurrent powers", "reserved powers", "delegated powers", "tribal sovereignty", "intergovernmental relations", "supremacy clause"],
+    "sample_assessment": "Which power is shared by BOTH state and federal governments? A) Declaring war B) Issuing driver's licenses C) Collecting taxes D) Establishing local school districts"
+  },
+  {
+    "code": "D2.Civ.2.9-12",
+    "benchmark": "Analyze the role of citizens in the U.S. political system, with attention to various theories of democracy, changes in Americans' participation over time, and alternative forms of civic engagement.",
+    "topics": ["Democratic Theory", "Civic Participation", "Political Engagement"],
+    "dok": 3,
+    "item_specs": "Students analyze how democratic participation has evolved and compare theories of democratic governance. Items include historical data analysis and theoretical comparison.",
+    "essential_questions": [
+      "How has the concept of citizenship and participation evolved in American democracy?",
+      "What forms of civic engagement beyond voting are most effective?"
+    ],
+    "learning_targets": [
+      "I can analyze how citizen participation in democracy has changed over time.",
+      "I can compare different theories of democracy (participatory, representative, deliberative).",
+      "I can evaluate the effectiveness of various forms of civic engagement."
+    ],
+    "vocabulary": ["participatory democracy", "representative democracy", "deliberative democracy", "civic engagement", "voter suppression", "grassroots activism", "digital citizenship"],
+    "sample_assessment": "How does participatory democracy differ from representative democracy? A) They are identical B) Participatory democracy involves citizens directly in decision-making while representative democracy relies on elected officials C) Representative democracy excludes citizens entirely D) Participatory democracy eliminates the need for government"
+  },
+  {
+    "code": "D2.Civ.3.9-12",
+    "benchmark": "Analyze the impact of constitutions, laws, treaties, and international agreements on the maintenance of national and international order.",
+    "topics": ["Constitutional Law", "International Order", "Legal Systems"],
+    "dok": 3,
+    "item_specs": "Students analyze how legal frameworks maintain order at national and international levels. Items include analysis of specific agreements and their effects.",
+    "essential_questions": [
+      "How do constitutions and international agreements maintain order?",
+      "What happens when national laws conflict with international agreements?"
+    ],
+    "learning_targets": [
+      "I can analyze how constitutions establish the framework for maintaining order.",
+      "I can evaluate the effectiveness of international agreements in promoting stability.",
+      "I can explain tensions between national sovereignty and international obligations."
+    ],
+    "vocabulary": ["sovereignty", "international law", "Geneva Conventions", "UN Charter", "bilateral treaty", "multilateral agreement", "enforcement mechanism"],
+    "sample_assessment": "What is a fundamental challenge of international law compared to domestic law? A) International law does not exist B) There is no single authority to enforce international agreements on sovereign nations C) All countries follow international law perfectly D) International law only applies to small countries"
+  },
+  {
+    "code": "D2.Civ.4.9-12",
+    "benchmark": "Explain how the U.S. Constitution establishes a system of government that has powers, checks, and balances, and analyze how these have evolved over time.",
+    "topics": ["Constitutional Evolution", "Checks and Balances", "Executive Power"],
+    "dok": 3,
+    "item_specs": "Students analyze how the balance of power among branches has shifted over time. Items include historical analysis of constitutional developments.",
+    "essential_questions": [
+      "How has the balance of power among the three branches evolved since the founding?",
+      "Is the system of checks and balances still effective today?"
+    ],
+    "learning_targets": [
+      "I can analyze how checks and balances have evolved through constitutional interpretation.",
+      "I can evaluate how the growth of executive power has affected the balance among branches.",
+      "I can assess current challenges to the system of checks and balances."
+    ],
+    "vocabulary": ["executive power", "congressional oversight", "judicial activism", "judicial restraint", "precedent", "executive order", "signing statement", "war powers"],
+    "sample_assessment": "The expansion of executive orders by modern presidents illustrates A) the stability of the original constitutional framework B) how the balance of power among branches has shifted toward the executive over time C) that Congress has become more powerful D) that the judiciary no longer plays a role in governance"
+  },
+  {
+    "code": "D2.Civ.5.9-12",
+    "benchmark": "Evaluate citizens' and institutions' effectiveness in addressing social and political problems at the local, state, tribal, national, and/or international level.",
+    "topics": ["Civic Effectiveness", "Problem-Solving", "Institutional Accountability"],
+    "dok": 3,
+    "item_specs": "Students evaluate how effectively citizens and institutions address public problems. Items include case study analysis and evaluative prompts.",
+    "essential_questions": [
+      "How can citizens most effectively address social and political problems?",
+      "What makes institutions effective or ineffective at solving public problems?"
+    ],
+    "learning_targets": [
+      "I can evaluate the effectiveness of citizen-led efforts to address public problems.",
+      "I can analyze institutional strengths and weaknesses in addressing social issues.",
+      "I can propose strategies for more effective civic problem-solving."
+    ],
+    "vocabulary": ["accountability", "transparency", "institutional reform", "advocacy", "policy evaluation", "civic capacity", "collective action"],
+    "sample_assessment": "Which approach would MOST effectively address a local environmental pollution problem? A) Ignoring the issue B) A combination of citizen advocacy, media attention, and engagement with local government officials C) Waiting for the federal government to act D) Writing a single letter to the editor"
+  },
+  {
+    "code": "D2.Civ.6.9-12",
+    "benchmark": "Analyze the role of citizens and institutions in the development and implementation of public policy.",
+    "topics": ["Public Policy Development", "Citizen Influence", "Policy Implementation"],
+    "dok": 3,
+    "item_specs": "Students analyze the policy-making process and the role of various stakeholders. Items include policy analysis and stakeholder identification.",
+    "essential_questions": [
+      "How do citizens influence the development of public policy?",
+      "What roles do different institutions play in implementing policy?"
+    ],
+    "learning_targets": [
+      "I can analyze how citizens participate in the policy-making process.",
+      "I can explain how different institutions contribute to policy implementation.",
+      "I can evaluate the effectiveness of public participation in shaping policy."
+    ],
+    "vocabulary": ["policy agenda", "stakeholder", "public comment", "rulemaking", "implementation", "bureaucracy", "regulatory agency"],
+    "sample_assessment": "During the public comment period for a proposed regulation, citizens can A) vote on whether the regulation passes B) submit feedback that agencies must consider before finalizing the rule C) veto the regulation D) appoint new agency leaders"
+  },
+  {
+    "code": "D2.Civ.7.9-12",
+    "benchmark": "Apply civic virtues and democratic principles in school and community settings, and evaluate their role in sustaining democratic governance.",
+    "topics": ["Civic Virtues", "Democratic Sustainability", "Civic Action"],
+    "dok": 3,
+    "item_specs": "Students apply and evaluate civic virtues in practical contexts. Items include scenario analysis and evaluative questions about democratic practice.",
+    "essential_questions": [
+      "What civic virtues are essential for sustaining democratic governance?",
+      "How do civic virtues operate differently in diverse communities?"
+    ],
+    "learning_targets": [
+      "I can apply civic virtues such as deliberation and compromise in community settings.",
+      "I can evaluate the role of civic virtues in sustaining democratic institutions.",
+      "I can analyze how erosion of civic virtues threatens democratic governance."
+    ],
+    "vocabulary": ["civic virtue", "deliberative democracy", "social capital", "civic trust", "democratic norms", "pluralism", "civic culture"],
+    "sample_assessment": "Why is the erosion of civic trust considered a threat to democratic governance? A) It has no impact on democracy B) When citizens lose trust in institutions and each other, democratic processes become less effective and legitimate C) Civic trust is irrelevant to democracy D) Only authoritarian governments require trust"
+  },
+  {
+    "code": "D2.Civ.8.9-12",
+    "benchmark": "Evaluate the effectiveness of the U.S. amendment process and analyze how constitutional interpretation has evolved through Supreme Court decisions.",
+    "topics": ["Amendment Process", "Constitutional Interpretation", "Living Constitution"],
+    "dok": 3,
+    "item_specs": "Students analyze how the Constitution has been changed through formal amendments and judicial interpretation. Items include comparison of amendment and interpretation as methods of change.",
+    "essential_questions": [
+      "How does the Constitution change through formal amendments versus judicial interpretation?",
+      "Is the Constitution a 'living document' or should it be interpreted according to its original meaning?"
+    ],
+    "learning_targets": [
+      "I can evaluate the effectiveness of the amendment process as a means of constitutional change.",
+      "I can analyze how Supreme Court decisions have reinterpreted constitutional provisions.",
+      "I can compare originalist and living constitution approaches to interpretation."
+    ],
+    "vocabulary": ["originalism", "living constitution", "strict construction", "loose construction", "judicial interpretation", "ratification", "supermajority"],
+    "sample_assessment": "The debate between originalism and the living constitution approach centers on A) whether the Constitution should be abolished B) how to interpret the Constitution — based on its original meaning or adapted to modern circumstances C) whether amendments should be added D) the role of the President in interpreting law"
+  },
+  {
+    "code": "D2.Civ.9.9-12",
+    "benchmark": "Use appropriate deliberative processes in multiple settings to make decisions, solve problems, and manage conflict.",
+    "topics": ["Deliberative Processes", "Conflict Management", "Decision-Making"],
+    "dok": 3,
+    "item_specs": "Students apply deliberative processes to complex scenarios. Items require analysis of appropriate processes for specific contexts and evaluation of outcomes.",
+    "essential_questions": [
+      "When are different deliberative processes most appropriate?",
+      "How can deliberation lead to better decisions than other forms of decision-making?"
+    ],
+    "learning_targets": [
+      "I can select and apply appropriate deliberative processes for different contexts.",
+      "I can facilitate productive deliberation in group settings.",
+      "I can evaluate the outcomes of deliberative processes compared to other decision-making methods."
+    ],
+    "vocabulary": ["deliberation", "parliamentary procedure", "Robert's Rules of Order", "stakeholder engagement", "consensus building", "structured debate", "facilitation"],
+    "sample_assessment": "A school board must decide whether to close an elementary school due to budget cuts. Which deliberative process would be MOST appropriate? A) The superintendent decides without input B) Public hearings where community members can present evidence and perspectives before the board votes C) A coin flip D) An anonymous online poll"
+  },
+  {
+    "code": "D2.Civ.10.9-12",
+    "benchmark": "Analyze the impact and the appropriate roles of personal interests and perspectives on the application of civic virtues, democratic principles, constitutional rights, and human rights.",
+    "topics": ["Personal Interests", "Civic Responsibility", "Rights and Principles"],
+    "dok": 3,
+    "item_specs": "Students analyze the tension between personal interests and civic responsibilities. Items include ethical scenario analysis and perspective evaluation.",
+    "essential_questions": [
+      "How should personal interests be balanced with civic responsibility?",
+      "When do personal perspectives enhance or hinder democratic participation?"
+    ],
+    "learning_targets": [
+      "I can analyze how personal interests influence civic decision-making.",
+      "I can evaluate when personal perspectives enhance democratic participation.",
+      "I can identify situations where personal interests may conflict with the common good."
+    ],
+    "vocabulary": ["conflict of interest", "recusal", "public trust", "civic duty", "ethical obligation", "transparency", "accountability"],
+    "sample_assessment": "A city council member owns property near a proposed development project. What should they do when the council votes on the project? A) Vote in favor to increase their property value B) Recuse themselves from the vote due to conflict of interest C) Vote against to appear unbiased D) Keep their property ownership secret"
+  },
+  {
+    "code": "D2.Civ.11.9-12",
+    "benchmark": "Evaluate multiple procedures for making governmental decisions at the local, state, national, and international levels in terms of the civic purposes achieved.",
+    "topics": ["Government Decision-Making", "Procedural Democracy", "Comparative Governance"],
+    "dok": 3,
+    "item_specs": "Students compare and evaluate decision-making procedures across levels of government. Items require evaluative analysis of procedural outcomes.",
+    "essential_questions": [
+      "How do decision-making procedures at different levels of government serve democratic purposes?",
+      "What are the trade-offs between efficiency and democratic participation in government decision-making?"
+    ],
+    "learning_targets": [
+      "I can evaluate decision-making procedures at multiple levels of government.",
+      "I can analyze trade-offs between efficiency and democratic participation.",
+      "I can compare governmental procedures across different political systems."
+    ],
+    "vocabulary": ["referendum", "initiative", "recall", "executive action", "legislative process", "administrative rulemaking", "judicial decree"],
+    "sample_assessment": "A state allows citizens to place proposed laws directly on the ballot through initiatives. This process A) reduces democratic participation B) gives citizens direct lawmaking power, bypassing the legislature C) is only used at the federal level D) requires Supreme Court approval"
+  },
+  {
+    "code": "D2.Civ.12.9-12",
+    "benchmark": "Analyze how laws are enacted at the national level and evaluate the influence of interest groups, lobbyists, and political parties on the legislative process.",
+    "topics": ["Legislative Process", "Lobbying", "Political Influence"],
+    "dok": 3,
+    "item_specs": "Students analyze the formal and informal influences on the legislative process. Items include analysis of campaign finance, lobbying, and party dynamics.",
+    "essential_questions": [
+      "How do interest groups and lobbyists influence the legislative process?",
+      "Should there be limits on the influence of money in politics?"
+    ],
+    "learning_targets": [
+      "I can analyze how a bill moves through Congress from introduction to law.",
+      "I can evaluate the influence of interest groups and lobbyists on legislation.",
+      "I can assess the role of political parties in shaping the legislative agenda."
+    ],
+    "vocabulary": ["lobbyist", "political action committee", "campaign finance", "Citizens United", "gerrymandering", "filibuster", "cloture", "partisan politics"],
+    "sample_assessment": "The Supreme Court's decision in Citizens United v. FEC (2010) is controversial PRIMARILY because A) it limited all political spending B) it allowed unlimited independent political expenditures by corporations and unions, raising concerns about the influence of money in politics C) it banned political advertising D) it eliminated political parties"
+  },
+  {
+    "code": "D2.Civ.13.9-12",
+    "benchmark": "Evaluate public policies in terms of intended and unintended outcomes, and related consequences, using evidence from multiple sources.",
+    "topics": ["Policy Evaluation", "Evidence-Based Analysis", "Consequences"],
+    "dok": 4,
+    "item_specs": "Students conduct evidence-based evaluation of public policies. Items require multi-source analysis and evaluative reasoning about policy outcomes.",
+    "essential_questions": [
+      "How do we evaluate whether a public policy has been successful?",
+      "Why do public policies sometimes produce unintended consequences?"
+    ],
+    "learning_targets": [
+      "I can evaluate public policies using evidence from multiple sources.",
+      "I can identify both intended and unintended consequences of public policies.",
+      "I can propose evidence-based improvements to existing policies."
+    ],
+    "vocabulary": ["policy evaluation", "evidence-based policy", "cost-benefit analysis", "externality", "implementation gap", "program evaluation", "outcome measurement"],
+    "sample_assessment": "The Affordable Care Act was intended to increase health insurance coverage. An evidence-based evaluation would examine A) only whether the law was popular B) data on insurance coverage rates, costs, and health outcomes before and after implementation C) only the opinions of politicians D) whether the law was constitutional"
+  },
+  {
+    "code": "D2.Civ.14.9-12",
+    "benchmark": "Analyze historical, contemporary, and emerging means of changing societies, promoting the common good, and protecting individual rights.",
+    "topics": ["Social Change", "Innovation in Civic Action", "Rights Protection"],
+    "dok": 3,
+    "item_specs": "Students analyze evolving methods of civic action and social change. Items include comparison of historical and modern approaches and evaluation of emerging strategies.",
+    "essential_questions": [
+      "How are new technologies and strategies changing the landscape of civic action?",
+      "What emerging methods of social change show the most promise?"
+    ],
+    "learning_targets": [
+      "I can analyze how methods of social change have evolved from historical to contemporary approaches.",
+      "I can evaluate the effectiveness of emerging civic engagement strategies.",
+      "I can assess how technology is transforming civic participation and social movements."
+    ],
+    "vocabulary": ["digital activism", "crowdsourcing", "civic tech", "social entrepreneurship", "restorative justice", "community organizing", "direct action"],
+    "sample_assessment": "How has social media changed the landscape of civic activism compared to the Civil Rights era? A) It has had no effect B) It enables faster organization and global reach but may reduce depth of commitment C) It has completely replaced in-person activism D) It only benefits authoritarian governments"
+  },
+  {
+    "code": "D2.Civ.15.9-12",
+    "benchmark": "Evaluate the tensions between individual rights, the common good, and national security in democratic societies.",
+    "topics": ["Civil Liberties vs. Security", "Rights Tensions", "Democratic Dilemmas"],
+    "dok": 4,
+    "item_specs": "Students analyze complex scenarios where rights, security, and the common good conflict. Items require evaluative reasoning about competing values.",
+    "essential_questions": [
+      "When is it justified to limit individual rights for national security?",
+      "How should democratic societies resolve tensions between competing values?"
+    ],
+    "learning_targets": [
+      "I can evaluate scenarios where individual rights conflict with national security.",
+      "I can analyze how democratic societies have historically resolved tensions between competing values.",
+      "I can construct an argument about the appropriate balance between liberty and security."
+    ],
+    "vocabulary": ["civil liberties", "national security", "surveillance state", "due process", "habeas corpus", "emergency powers", "proportionality"],
+    "sample_assessment": "Government surveillance programs after 9/11 raised which fundamental tension in American democracy? A) The tension between state and federal power B) The tension between individual privacy rights and national security interests C) The tension between the House and Senate D) The tension between urban and rural voters"
+  },
+  {
+    "code": "D2.Civ.16.9-12",
+    "benchmark": "Analyze the role and impact of the Supreme Court and federal courts in shaping constitutional law and protecting individual rights.",
+    "topics": ["Supreme Court", "Constitutional Law", "Judicial Impact"],
+    "dok": 3,
+    "item_specs": "Students analyze how the federal judiciary shapes law through interpretation. Items include case analysis and evaluation of judicial impact on rights.",
+    "essential_questions": [
+      "How has the Supreme Court shaped the meaning of constitutional rights over time?",
+      "What is the appropriate role of the judiciary in a democratic system?"
+    ],
+    "learning_targets": [
+      "I can analyze how Supreme Court decisions have expanded or limited constitutional rights.",
+      "I can evaluate the role of the judiciary in the system of checks and balances.",
+      "I can assess debates about judicial activism versus judicial restraint."
+    ],
+    "vocabulary": ["judicial activism", "judicial restraint", "stare decisis", "amicus brief", "certiorari", "concurring opinion", "dissenting opinion", "constitutional law"],
+    "sample_assessment": "The concept of stare decisis means that courts should A) always overturn previous decisions B) generally follow established precedent to maintain legal consistency C) ignore all previous rulings D) only follow precedent from the last ten years"
+  },
+  {
+    "code": "D2.Civ.17.9-12",
+    "benchmark": "Evaluate the influence of media on public opinion, political discourse, and democratic accountability.",
+    "topics": ["Media and Democracy", "Public Opinion", "Media Literacy"],
+    "dok": 3,
+    "item_specs": "Students analyze how media shapes political discourse and evaluate its role in democratic accountability. Items include media analysis and evaluation of information sources.",
+    "essential_questions": [
+      "How does media shape public opinion and political discourse?",
+      "What role should media play in holding government accountable?"
+    ],
+    "learning_targets": [
+      "I can analyze how different media outlets frame political issues.",
+      "I can evaluate the role of media in promoting democratic accountability.",
+      "I can identify misinformation and evaluate the credibility of news sources."
+    ],
+    "vocabulary": ["media bias", "framing", "agenda-setting", "watchdog journalism", "echo chamber", "misinformation", "disinformation", "press freedom"],
+    "sample_assessment": "The concept of 'echo chambers' in social media refers to A) improved sound quality in online meetings B) environments where people are primarily exposed to information that reinforces their existing beliefs C) a type of social media platform D) government censorship of online content"
+  },
+  {
+    "code": "D2.Civ.18.9-12",
+    "benchmark": "Analyze the electoral process at the national level, including the Electoral College, campaign finance, and the role of political parties.",
+    "topics": ["Electoral Process", "Electoral College", "Campaign Finance", "Political Parties"],
+    "dok": 3,
+    "item_specs": "Students analyze the complexities of the national electoral system. Items include analysis of the Electoral College, campaign spending data, and party dynamics.",
+    "essential_questions": [
+      "Does the Electoral College effectively represent the will of the people?",
+      "How does campaign finance influence election outcomes and governance?"
+    ],
+    "learning_targets": [
+      "I can analyze how the Electoral College functions and evaluate arguments for and against it.",
+      "I can evaluate the impact of campaign finance on elections and governance.",
+      "I can assess the role of political parties in shaping the electoral process."
+    ],
+    "vocabulary": ["Electoral College", "swing state", "winner-take-all", "Super PAC", "dark money", "primary system", "party platform", "gerrymandering"],
+    "sample_assessment": "A candidate wins the national popular vote but loses the Electoral College. This scenario illustrates A) a flaw in the counting process B) the Electoral College's design, which allocates votes by state rather than by national popular vote C) voter fraud D) that popular votes don't matter at all"
+  },
+  {
+    "code": "D2.Civ.19.9-12",
+    "benchmark": "Evaluate the impact of globalization on citizenship, sovereignty, and human rights in the 21st century.",
+    "topics": ["Globalization", "Sovereignty", "Human Rights", "Global Citizenship"],
+    "dok": 3,
+    "item_specs": "Students analyze how globalization has affected traditional concepts of citizenship and sovereignty. Items include analysis of global institutions and human rights frameworks.",
+    "essential_questions": [
+      "How has globalization challenged traditional concepts of national sovereignty?",
+      "What responsibilities do nations have to protect human rights globally?"
+    ],
+    "learning_targets": [
+      "I can analyze how globalization has affected the concept of national sovereignty.",
+      "I can evaluate the effectiveness of international human rights frameworks.",
+      "I can assess the meaning of global citizenship in the 21st century."
+    ],
+    "vocabulary": ["globalization", "sovereignty", "human rights", "global governance", "International Criminal Court", "humanitarian intervention", "global citizenship"],
+    "sample_assessment": "The tension between national sovereignty and international human rights enforcement is illustrated when A) a country trades with its neighbors B) the international community debates intervening in a country where the government is committing atrocities against its own citizens C) countries compete in the Olympics D) tourists visit foreign countries"
+  },
+  {
+    "code": "D2.Civ.20.9-12",
+    "benchmark": "Analyze how democratic principles and constitutional rights apply to emerging issues in law, technology, and society.",
+    "topics": ["Emerging Issues", "Technology and Rights", "Constitutional Application"],
+    "dok": 4,
+    "item_specs": "Students apply constitutional principles to novel scenarios involving technology and social change. Items require application of principles to unprecedented situations.",
+    "essential_questions": [
+      "How should constitutional principles apply to challenges that the founders could not have anticipated?",
+      "What new rights issues are emerging from advances in technology?"
+    ],
+    "learning_targets": [
+      "I can apply constitutional principles to emerging legal and technological issues.",
+      "I can evaluate how privacy rights are affected by new technologies.",
+      "I can analyze how democratic principles should guide responses to unprecedented challenges."
+    ],
+    "vocabulary": ["digital privacy", "artificial intelligence", "data rights", "algorithmic bias", "net neutrality", "cybersecurity", "digital due process"],
+    "sample_assessment": "The Fourth Amendment protects against unreasonable searches and seizures. How does this apply to digital data? A) It does not apply to digital information B) Courts must continually reinterpret how this protection applies to technologies like smartphones, GPS tracking, and cloud storage C) Digital data has no legal protection D) Only the President can authorize digital searches"
+  }
+]

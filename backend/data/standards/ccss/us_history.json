@@ -1,0 +1,902 @@
+[
+  {
+    "code": "D2.His.1.6-8",
+    "benchmark": "Analyze connections among events and developments in broader historical contexts.",
+    "topics": ["Historical Context", "Cause and Effect", "Chronological Thinking"],
+    "dok": 3,
+    "item_specs": "Students identify how individual events connect to larger patterns and developments across time periods. Items may include timelines, primary source excerpts, or scenario-based prompts.",
+    "essential_questions": [
+      "How do individual events contribute to larger historical patterns?",
+      "Why is it important to understand the context surrounding a historical event?"
+    ],
+    "learning_targets": [
+      "I can explain how a specific event connects to broader historical developments.",
+      "I can identify patterns across multiple historical events.",
+      "I can place events within their proper historical context."
+    ],
+    "vocabulary": ["context", "development", "connection", "pattern", "chronology", "era", "turning point"],
+    "sample_assessment": "The Boston Tea Party (1773) is BEST understood as part of which broader development? A) The growth of American manufacturing B) Colonial resistance to British taxation without representation C) The expansion of trade routes to Asia D) Religious conflicts between colonies"
+  },
+  {
+    "code": "D2.His.2.6-8",
+    "benchmark": "Classify series of historical events and developments as examples of change and/or continuity.",
+    "topics": ["Change and Continuity", "Historical Analysis", "Patterns"],
+    "dok": 2,
+    "item_specs": "Students distinguish between elements of change and continuity across historical periods. Items may present a series of events for classification.",
+    "essential_questions": [
+      "What aspects of society change over time and what stays the same?",
+      "How do historians identify patterns of change and continuity?"
+    ],
+    "learning_targets": [
+      "I can identify examples of change in a historical period.",
+      "I can identify examples of continuity in a historical period.",
+      "I can explain why some aspects of society change while others remain the same."
+    ],
+    "vocabulary": ["change", "continuity", "tradition", "reform", "evolution", "revolution", "status quo"],
+    "sample_assessment": "Which of the following BEST represents continuity in American society from 1800 to 1850? A) The abolition of slavery B) The expansion of voting rights to all white men C) The importance of agriculture in the Southern economy D) The invention of the telegraph"
+  },
+  {
+    "code": "D2.His.3.6-8",
+    "benchmark": "Use questions generated about individuals and groups to analyze why they, and the developments they shaped, are seen as historically significant.",
+    "topics": ["Historical Significance", "Individuals and Groups", "Inquiry"],
+    "dok": 3,
+    "item_specs": "Students formulate and apply questions to evaluate why certain individuals and groups are considered historically significant. Items include document analysis and biographical excerpts.",
+    "essential_questions": [
+      "What makes a person or group historically significant?",
+      "How do we determine which individuals and events deserve to be remembered?"
+    ],
+    "learning_targets": [
+      "I can generate questions about why a historical figure is considered significant.",
+      "I can analyze the lasting impact of individuals and groups on historical developments.",
+      "I can evaluate different criteria for historical significance."
+    ],
+    "vocabulary": ["historical significance", "legacy", "impact", "contribution", "influence", "agency"],
+    "sample_assessment": "Which question would BEST help determine the historical significance of Harriet Tubman? A) Where was she born? B) How did her actions influence the broader abolitionist movement? C) What was her favorite food? D) How many siblings did she have?"
+  },
+  {
+    "code": "D2.His.4.6-8",
+    "benchmark": "Analyze multiple factors that influenced the perspectives of people during different historical eras.",
+    "topics": ["Historical Perspectives", "Point of View", "Colonial America"],
+    "dok": 3,
+    "item_specs": "Students examine how factors such as geography, economics, religion, and social status shaped historical perspectives. Items include primary source analysis requiring identification of perspective.",
+    "essential_questions": [
+      "What factors shape how people view events differently?",
+      "How does understanding perspective help us interpret historical sources?"
+    ],
+    "learning_targets": [
+      "I can identify factors that influenced a historical figure's perspective.",
+      "I can explain why people in the same era might hold different viewpoints.",
+      "I can analyze how background and experience shape historical perspectives."
+    ],
+    "vocabulary": ["perspective", "point of view", "bias", "social status", "worldview", "frame of reference"],
+    "sample_assessment": "A Southern plantation owner and a Northern factory worker in 1850 would MOST LIKELY disagree about which issue? A) The importance of education B) The morality of slavery C) The need for roads D) The value of family"
+  },
+  {
+    "code": "D2.His.5.6-8",
+    "benchmark": "Explain how and why perspectives of people have changed over time.",
+    "topics": ["Changing Perspectives", "Social Change", "Historical Evolution"],
+    "dok": 2,
+    "item_specs": "Students trace how societal perspectives evolved on specific issues across time periods. Items may present paired sources from different eras on the same topic.",
+    "essential_questions": [
+      "Why do societies change their views on important issues over time?",
+      "What forces drive changes in public opinion?"
+    ],
+    "learning_targets": [
+      "I can describe how perspectives on a specific issue changed over time.",
+      "I can identify factors that caused perspectives to shift.",
+      "I can compare perspectives from different historical eras on the same topic."
+    ],
+    "vocabulary": ["evolution", "public opinion", "social norm", "progress", "backlash", "attitude"],
+    "sample_assessment": "How did many Americans' perspective on women's suffrage change between 1850 and 1920? A) Support decreased steadily B) It remained unchanged C) Growing activism led to increased acceptance and eventual constitutional amendment D) Only men changed their views"
+  },
+  {
+    "code": "D2.His.6.6-8",
+    "benchmark": "Analyze how people's perspectives influenced what information is available in the historical sources they created.",
+    "topics": ["Source Analysis", "Bias", "Primary Sources"],
+    "dok": 3,
+    "item_specs": "Students evaluate how the creator's perspective affects the content, tone, and reliability of historical sources. Items include primary source excerpts with analysis questions.",
+    "essential_questions": [
+      "How does an author's perspective shape what they include or exclude in a source?",
+      "Can a biased source still be useful to historians?"
+    ],
+    "learning_targets": [
+      "I can identify how an author's perspective influenced the content of a source.",
+      "I can explain what information might be missing from a source due to the author's bias.",
+      "I can evaluate the usefulness of a source despite its limitations."
+    ],
+    "vocabulary": ["bias", "perspective", "primary source", "reliability", "omission", "propaganda", "objectivity"],
+    "sample_assessment": "A diary entry from a Confederate soldier describes a Civil War battle. What should a historian consider FIRST when using this source? A) The length of the diary entry B) The soldier's perspective and potential bias C) Whether the handwriting is legible D) The type of paper used"
+  },
+  {
+    "code": "D2.His.7.6-8",
+    "benchmark": "Explain the colonial origins and founding principles of the United States government.",
+    "topics": ["Colonial Period", "Founding Principles", "American Revolution"],
+    "dok": 2,
+    "item_specs": "Students explain how colonial experiences and Enlightenment ideas shaped the founding documents and principles of the U.S. government.",
+    "essential_questions": [
+      "How did colonial experiences shape the founders' vision for government?",
+      "Which Enlightenment ideas are reflected in the founding documents?"
+    ],
+    "learning_targets": [
+      "I can explain how colonial self-governance influenced the U.S. Constitution.",
+      "I can identify Enlightenment ideas in the Declaration of Independence.",
+      "I can describe the key principles underlying American government."
+    ],
+    "vocabulary": ["Enlightenment", "self-governance", "social contract", "natural rights", "consent of the governed", "republic"],
+    "sample_assessment": "Which Enlightenment idea is MOST reflected in the Declaration of Independence? A) Divine right of kings B) Natural rights of life, liberty, and the pursuit of happiness C) Mercantilism and trade regulations D) The importance of a state religion"
+  },
+  {
+    "code": "D2.His.8.6-8",
+    "benchmark": "Analyze the causes and consequences of the American Revolution and the creation of the Constitution.",
+    "topics": ["American Revolution", "Constitution", "Cause and Effect"],
+    "dok": 3,
+    "item_specs": "Students identify the political, economic, and social causes of the Revolution and evaluate how these led to the creation of the Constitution. Items may include document-based questions.",
+    "essential_questions": [
+      "What drove the American colonies to declare independence from Britain?",
+      "How did the failures of the Articles of Confederation lead to the Constitution?"
+    ],
+    "learning_targets": [
+      "I can explain the political and economic causes of the American Revolution.",
+      "I can analyze how the Articles of Confederation's weaknesses led to the Constitutional Convention.",
+      "I can evaluate the compromises made during the creation of the Constitution."
+    ],
+    "vocabulary": ["revolution", "taxation", "representation", "Articles of Confederation", "Constitutional Convention", "compromise", "ratification", "federalism"],
+    "sample_assessment": "Which was a MAJOR weakness of the Articles of Confederation that led to the Constitutional Convention? A) The national government had too much power over the states B) The national government could not levy taxes or regulate trade C) The President had too much authority D) There were too many representatives in Congress"
+  },
+  {
+    "code": "D2.His.9.6-8",
+    "benchmark": "Analyze the institution of slavery and its impact on American society from the colonial period through the Civil War.",
+    "topics": ["Slavery", "Civil War", "Social History", "Abolition"],
+    "dok": 3,
+    "item_specs": "Students examine the economic, social, and political dimensions of slavery and its role in causing the Civil War. Items include primary source analysis and cause-effect reasoning.",
+    "essential_questions": [
+      "How did slavery shape the economic, social, and political development of the United States?",
+      "What were the different perspectives on slavery that led to the Civil War?"
+    ],
+    "learning_targets": [
+      "I can explain how slavery was central to the Southern economy.",
+      "I can describe the experiences of enslaved people using primary sources.",
+      "I can analyze how disagreements over slavery contributed to the Civil War."
+    ],
+    "vocabulary": ["slavery", "abolition", "plantation", "Underground Railroad", "compromise", "secession", "emancipation", "sectionalism"],
+    "sample_assessment": "Which event MOST directly increased tensions between North and South over slavery in the 1850s? A) The Louisiana Purchase B) The War of 1812 C) The Kansas-Nebraska Act D) The Monroe Doctrine"
+  },
+  {
+    "code": "D2.His.10.6-8",
+    "benchmark": "Describe the causes and consequences of westward expansion and its impact on Indigenous peoples.",
+    "topics": ["Westward Expansion", "Manifest Destiny", "Indigenous Peoples", "Migration"],
+    "dok": 2,
+    "item_specs": "Students identify motivations for westward movement and analyze its effects on Native American nations. Items may include maps, timelines, and paired perspectives.",
+    "essential_questions": [
+      "What motivated Americans to move westward in the 1800s?",
+      "How did westward expansion affect Indigenous peoples and their lands?"
+    ],
+    "learning_targets": [
+      "I can explain the concept of Manifest Destiny and its influence on expansion.",
+      "I can describe the impact of westward expansion on Native American nations.",
+      "I can identify both positive and negative consequences of territorial growth."
+    ],
+    "vocabulary": ["Manifest Destiny", "frontier", "reservation", "Indian Removal Act", "Trail of Tears", "homestead", "territory"],
+    "sample_assessment": "What was the PRIMARY motivation behind the concept of Manifest Destiny? A) The belief that the U.S. was destined to expand across the continent B) A desire to establish trade with China C) The need to escape religious persecution D) An effort to abolish slavery in new territories"
+  },
+  {
+    "code": "D2.His.11.6-8",
+    "benchmark": "Analyze the causes and effects of the Civil War and Reconstruction on American society.",
+    "topics": ["Civil War", "Reconstruction", "Amendments", "Social Change"],
+    "dok": 3,
+    "item_specs": "Students evaluate the political, economic, and social changes resulting from the Civil War and Reconstruction era. Items include analysis of constitutional amendments and policy changes.",
+    "essential_questions": [
+      "How did the Civil War transform American society?",
+      "To what extent did Reconstruction achieve its goals of equality and rebuilding?"
+    ],
+    "learning_targets": [
+      "I can explain the political and social causes of the Civil War.",
+      "I can analyze the goals and outcomes of Reconstruction.",
+      "I can evaluate the impact of the 13th, 14th, and 15th Amendments."
+    ],
+    "vocabulary": ["Reconstruction", "amendment", "freedmen", "sharecropping", "Jim Crow", "impeachment", "civil rights", "carpetbagger"],
+    "sample_assessment": "Which amendment granted citizenship to all persons born in the United States? A) 13th Amendment B) 14th Amendment C) 15th Amendment D) 19th Amendment"
+  },
+  {
+    "code": "D2.His.12.6-8",
+    "benchmark": "Explain the causes and consequences of industrialization in the United States during the late 1800s.",
+    "topics": ["Industrialization", "Urbanization", "Immigration", "Labor"],
+    "dok": 2,
+    "item_specs": "Students describe how technological innovation, immigration, and urbanization transformed American life. Items include data interpretation and cause-effect analysis.",
+    "essential_questions": [
+      "How did industrialization change the way Americans lived and worked?",
+      "What were the costs and benefits of rapid industrial growth?"
+    ],
+    "learning_targets": [
+      "I can explain how new technologies drove industrialization.",
+      "I can describe the impact of urbanization on American cities.",
+      "I can analyze the experiences of immigrants and workers during industrialization."
+    ],
+    "vocabulary": ["industrialization", "urbanization", "immigration", "labor union", "monopoly", "tenement", "factory system", "robber baron"],
+    "sample_assessment": "Which factor MOST contributed to the rapid growth of American cities in the late 1800s? A) The discovery of gold in California B) Industrialization and the availability of factory jobs C) Government programs to build housing D) The end of the Civil War"
+  },
+  {
+    "code": "D2.His.13.6-8",
+    "benchmark": "Describe the Progressive Era reforms and their impact on American politics and society.",
+    "topics": ["Progressive Era", "Reform", "Government", "Social Justice"],
+    "dok": 2,
+    "item_specs": "Students identify key Progressive Era reforms and explain how they addressed problems of industrialization. Items may include political cartoons and reform legislation analysis.",
+    "essential_questions": [
+      "What problems did Progressive reformers seek to address?",
+      "How did Progressive Era reforms change the relationship between government and citizens?"
+    ],
+    "learning_targets": [
+      "I can identify key reforms of the Progressive Era.",
+      "I can explain how muckrakers raised awareness of social problems.",
+      "I can analyze the impact of Progressive legislation on American society."
+    ],
+    "vocabulary": ["Progressive Era", "muckraker", "reform", "suffrage", "trust-busting", "initiative", "referendum", "recall"],
+    "sample_assessment": "Which BEST describes the role of muckrakers during the Progressive Era? A) They supported big business practices B) They exposed social problems through investigative journalism C) They opposed women's suffrage D) They promoted westward expansion"
+  },
+  {
+    "code": "D2.His.14.6-8",
+    "benchmark": "Analyze the causes and consequences of U.S. involvement in World War I.",
+    "topics": ["World War I", "Foreign Policy", "Home Front", "Global Conflict"],
+    "dok": 2,
+    "item_specs": "Students explain why the U.S. entered WWI and the war's effects on American society and international relations. Items include analysis of propaganda and policy documents.",
+    "essential_questions": [
+      "Why did the United States enter World War I after initially remaining neutral?",
+      "How did World War I change American society and its role in the world?"
+    ],
+    "learning_targets": [
+      "I can explain the causes of U.S. entry into World War I.",
+      "I can describe the impact of WWI on American society at home.",
+      "I can analyze the consequences of the Treaty of Versailles."
+    ],
+    "vocabulary": ["neutrality", "submarine warfare", "Zimmermann Telegram", "propaganda", "Treaty of Versailles", "League of Nations", "isolationism"],
+    "sample_assessment": "Which event MOST directly led to U.S. entry into World War I? A) The assassination of Archduke Franz Ferdinand B) Germany's unrestricted submarine warfare and the Zimmermann Telegram C) The sinking of the Titanic D) The Russian Revolution"
+  },
+  {
+    "code": "D2.His.15.6-8",
+    "benchmark": "Analyze the causes and effects of the Great Depression and evaluate the effectiveness of New Deal programs.",
+    "topics": ["Great Depression", "New Deal", "Economic Crisis", "Government Role"],
+    "dok": 3,
+    "item_specs": "Students explain the economic factors leading to the Depression and evaluate how New Deal programs addressed the crisis. Items include data analysis and program evaluation.",
+    "essential_questions": [
+      "What caused the Great Depression and how did it affect ordinary Americans?",
+      "How effective were New Deal programs in addressing the economic crisis?"
+    ],
+    "learning_targets": [
+      "I can explain the economic causes of the Great Depression.",
+      "I can describe how the Depression affected daily life for Americans.",
+      "I can evaluate the effectiveness of specific New Deal programs."
+    ],
+    "vocabulary": ["stock market crash", "depression", "New Deal", "Social Security", "Dust Bowl", "unemployment", "deficit spending"],
+    "sample_assessment": "Which New Deal program was designed to provide retirement income for elderly Americans? A) Civilian Conservation Corps (CCC) B) Works Progress Administration (WPA) C) Social Security Act D) Tennessee Valley Authority (TVA)"
+  },
+  {
+    "code": "D2.His.16.6-8",
+    "benchmark": "Analyze the causes, major events, and consequences of World War II, including the U.S. role in the Allied victory.",
+    "topics": ["World War II", "Home Front", "Holocaust", "Allied Powers"],
+    "dok": 2,
+    "item_specs": "Students examine the rise of fascism, key military campaigns, the Holocaust, and the war's impact on American society. Items include map analysis and primary source evaluation.",
+    "essential_questions": [
+      "What factors led to the outbreak of World War II?",
+      "How did World War II transform the United States and the world?"
+    ],
+    "learning_targets": [
+      "I can explain the rise of totalitarian governments in Europe and Asia.",
+      "I can describe the impact of WWII on the American home front.",
+      "I can analyze the significance of key events such as D-Day and the atomic bombings."
+    ],
+    "vocabulary": ["fascism", "totalitarianism", "Holocaust", "Allied Powers", "Axis Powers", "D-Day", "atomic bomb", "internment"],
+    "sample_assessment": "Which was a direct consequence of the Japanese attack on Pearl Harbor? A) The United States declared neutrality B) The United States officially entered World War II C) Germany surrendered D) The United Nations was created"
+  },
+  {
+    "code": "D2.His.17.6-8",
+    "benchmark": "Explain the origins, key events, and consequences of the Cold War.",
+    "topics": ["Cold War", "Communism", "Nuclear Arms", "Foreign Policy"],
+    "dok": 2,
+    "item_specs": "Students identify the ideological differences between the U.S. and Soviet Union and analyze key Cold War events. Items may include political cartoons and map analysis.",
+    "essential_questions": [
+      "What were the fundamental differences between the U.S. and the Soviet Union during the Cold War?",
+      "How did the Cold War affect American society and foreign policy?"
+    ],
+    "learning_targets": [
+      "I can explain the ideological differences that caused the Cold War.",
+      "I can describe key events of the Cold War such as the Berlin Wall and Cuban Missile Crisis.",
+      "I can analyze how the Cold War influenced U.S. domestic and foreign policy."
+    ],
+    "vocabulary": ["Cold War", "communism", "capitalism", "containment", "arms race", "Iron Curtain", "proxy war", "deterrence"],
+    "sample_assessment": "The U.S. policy of containment during the Cold War was designed to A) spread communism to new countries B) prevent the spread of communism beyond where it already existed C) eliminate all nuclear weapons D) form a military alliance with the Soviet Union"
+  },
+  {
+    "code": "D2.His.18.6-8",
+    "benchmark": "Analyze the goals, strategies, and achievements of the Civil Rights Movement.",
+    "topics": ["Civil Rights Movement", "Equality", "Nonviolent Protest", "Legislation"],
+    "dok": 3,
+    "item_specs": "Students examine the methods and outcomes of the Civil Rights Movement including key figures, events, and legislation. Items include primary source analysis and cause-effect evaluation.",
+    "essential_questions": [
+      "What strategies did civil rights activists use to fight for equality?",
+      "How did the Civil Rights Movement change American law and society?"
+    ],
+    "learning_targets": [
+      "I can describe the goals of the Civil Rights Movement.",
+      "I can explain how nonviolent protest strategies were used to achieve civil rights.",
+      "I can evaluate the impact of key civil rights legislation."
+    ],
+    "vocabulary": ["civil rights", "segregation", "desegregation", "nonviolent protest", "boycott", "sit-in", "Civil Rights Act", "Voting Rights Act"],
+    "sample_assessment": "Which strategy was MOST associated with Dr. Martin Luther King Jr.'s approach to civil rights? A) Armed resistance B) Nonviolent civil disobedience C) Political lobbying only D) International pressure campaigns"
+  },
+  {
+    "code": "D2.His.19.6-8",
+    "benchmark": "Evaluate the social and cultural changes in the United States during the 1960s and 1970s.",
+    "topics": ["Social Movements", "Counterculture", "Women's Rights", "Environmental Movement"],
+    "dok": 3,
+    "item_specs": "Students analyze multiple social movements of the era and evaluate their lasting impact on American society. Items may include paired sources showing different perspectives.",
+    "essential_questions": [
+      "How did social movements of the 1960s and 1970s reshape American society?",
+      "What connections exist among the various social movements of this era?"
+    ],
+    "learning_targets": [
+      "I can describe major social movements of the 1960s and 1970s.",
+      "I can explain how the women's rights movement changed American society.",
+      "I can evaluate the lasting impact of environmental activism."
+    ],
+    "vocabulary": ["counterculture", "feminism", "Title IX", "Equal Rights Amendment", "environmentalism", "Great Society", "anti-war movement"],
+    "sample_assessment": "Which legislation was a direct result of the women's rights movement? A) The Civil Rights Act of 1964 B) Title IX, prohibiting sex discrimination in education C) The Voting Rights Act of 1965 D) The Clean Air Act"
+  },
+  {
+    "code": "D2.His.20.6-8",
+    "benchmark": "Analyze key developments in the United States from the 1980s to the present, including technological change and globalization.",
+    "topics": ["Modern America", "Technology", "Globalization", "Post-Cold War"],
+    "dok": 2,
+    "item_specs": "Students examine how technology, globalization, and political changes have shaped contemporary American life. Items include data analysis and current events connections.",
+    "essential_questions": [
+      "How have technology and globalization transformed American life since the 1980s?",
+      "What new challenges and opportunities has the United States faced in the modern era?"
+    ],
+    "learning_targets": [
+      "I can describe how the end of the Cold War changed U.S. foreign policy.",
+      "I can explain how technological innovations have transformed American society.",
+      "I can analyze the effects of globalization on the U.S. economy."
+    ],
+    "vocabulary": ["globalization", "Internet", "terrorism", "free trade", "digital revolution", "outsourcing", "immigration reform"],
+    "sample_assessment": "Which development has had the GREATEST impact on how Americans communicate and access information since the 1990s? A) The invention of television B) The growth of the Internet and digital technology C) The expansion of radio broadcasting D) The development of the interstate highway system"
+  },
+  {
+    "code": "D2.His.21.6-8",
+    "benchmark": "Use evidence from multiple sources to develop claims about the causes of historical events in American history.",
+    "topics": ["Evidence-Based Claims", "Historical Argumentation", "Source Analysis"],
+    "dok": 3,
+    "item_specs": "Students synthesize evidence from multiple primary and secondary sources to construct claims about historical causation. Items require multi-source analysis.",
+    "essential_questions": [
+      "How do historians use multiple sources to build arguments about the past?",
+      "Why is it important to consider multiple perspectives when making claims about history?"
+    ],
+    "learning_targets": [
+      "I can gather evidence from multiple sources to support a historical claim.",
+      "I can construct an argument about the causes of a historical event.",
+      "I can evaluate the strength of evidence from different types of sources."
+    ],
+    "vocabulary": ["claim", "evidence", "corroboration", "sourcing", "argumentation", "synthesis", "counterclaim"],
+    "sample_assessment": "A student is writing about the causes of the American Revolution. Which approach BEST demonstrates historical thinking? A) Using only one textbook chapter B) Gathering evidence from multiple primary and secondary sources C) Relying on a single founding father's perspective D) Using only modern interpretations"
+  },
+  {
+    "code": "D2.His.22.6-8",
+    "benchmark": "Explain multiple causes and effects of events and developments in U.S. history.",
+    "topics": ["Causation", "Multiple Causes", "Historical Analysis"],
+    "dok": 2,
+    "item_specs": "Students identify and explain how multiple factors contributed to specific events and how those events had multiple consequences. Items present events requiring multi-causal analysis.",
+    "essential_questions": [
+      "Why do most historical events have more than one cause?",
+      "How can a single event have many different effects on different groups?"
+    ],
+    "learning_targets": [
+      "I can identify multiple causes of a significant historical event.",
+      "I can explain how a single event can have different effects on different groups.",
+      "I can distinguish between short-term and long-term causes and effects."
+    ],
+    "vocabulary": ["multiple causation", "short-term cause", "long-term cause", "consequence", "catalyst", "ripple effect"],
+    "sample_assessment": "Which list includes BOTH a short-term and long-term cause of the Civil War? A) The election of Lincoln (short-term) and decades of sectional conflict over slavery (long-term) B) The Battle of Gettysburg and the Emancipation Proclamation C) The Missouri Compromise and the Compromise of 1850 D) The invention of the cotton gin and the building of railroads"
+  },
+  {
+    "code": "D2.His.23.6-8",
+    "benchmark": "Analyze the role of immigration in shaping American society and culture across different historical periods.",
+    "topics": ["Immigration", "Cultural Diversity", "Nativism", "Assimilation"],
+    "dok": 2,
+    "item_specs": "Students examine patterns of immigration to the U.S. across different eras and analyze how immigrants contributed to and were affected by American society.",
+    "essential_questions": [
+      "How has immigration shaped American culture and identity?",
+      "What challenges have immigrants faced throughout American history?"
+    ],
+    "learning_targets": [
+      "I can describe the push and pull factors that drove immigration to the United States.",
+      "I can explain how different waves of immigration changed American society.",
+      "I can analyze the experiences of immigrant groups in different historical periods."
+    ],
+    "vocabulary": ["immigration", "emigration", "push factor", "pull factor", "nativism", "assimilation", "Ellis Island", "Angel Island"],
+    "sample_assessment": "Which was a common PULL factor that attracted immigrants to the United States in the late 1800s? A) Religious persecution in their home country B) Economic opportunity and available jobs C) Mandatory military service at home D) Natural disasters in their homeland"
+  },
+  {
+    "code": "D2.His.24.6-8",
+    "benchmark": "Evaluate how the United States' role in the world has changed from the early republic to the present.",
+    "topics": ["Foreign Policy", "Isolationism", "Interventionism", "Global Power"],
+    "dok": 3,
+    "item_specs": "Students trace the evolution of U.S. foreign policy from isolationism to global leadership. Items may include policy statement analysis and timeline-based questions.",
+    "essential_questions": [
+      "How has America's role in world affairs changed over time?",
+      "What factors have influenced shifts in U.S. foreign policy?"
+    ],
+    "learning_targets": [
+      "I can describe the shift from isolationism to international engagement.",
+      "I can explain how major events influenced changes in U.S. foreign policy.",
+      "I can evaluate the consequences of U.S. involvement in global affairs."
+    ],
+    "vocabulary": ["isolationism", "interventionism", "imperialism", "diplomacy", "superpower", "Monroe Doctrine", "foreign policy"],
+    "sample_assessment": "Which statement BEST describes how U.S. foreign policy changed after World War II? A) The U.S. returned to strict isolationism B) The U.S. became a global superpower and took an active role in world affairs C) The U.S. focused only on trade relationships D) The U.S. avoided all military alliances"
+  },
+  {
+    "code": "D2.His.25.6-8",
+    "benchmark": "Analyze how technological innovations have influenced economic development and daily life throughout American history.",
+    "topics": ["Technology", "Innovation", "Economic Development", "Daily Life"],
+    "dok": 2,
+    "item_specs": "Students examine how inventions and technological changes affected the economy, work, and daily life across different periods. Items include cause-effect analysis of innovations.",
+    "essential_questions": [
+      "How have technological innovations changed the way Americans live and work?",
+      "What are the unintended consequences of technological progress?"
+    ],
+    "learning_targets": [
+      "I can explain how specific inventions transformed American industries.",
+      "I can describe how technology changed daily life in different historical periods.",
+      "I can analyze both positive and negative effects of technological innovation."
+    ],
+    "vocabulary": ["innovation", "industrialization", "mass production", "assembly line", "automation", "digital revolution", "infrastructure"],
+    "sample_assessment": "How did the transcontinental railroad MOST impact the United States in the late 1800s? A) It ended the Civil War B) It connected eastern and western states, boosting trade and settlement C) It replaced steamboats as the primary form of travel D) It was used mainly for passenger travel in cities"
+  },
+  {
+    "code": "D2.His.1.9-12",
+    "benchmark": "Evaluate how historical events and developments were shaped by unique circumstances of time and place as well as broader historical contexts.",
+    "topics": ["Historical Context", "Contingency", "Periodization"],
+    "dok": 3,
+    "item_specs": "Students analyze how specific circumstances and broader contexts interacted to shape historical outcomes. Items require nuanced analysis of contributing factors and contextual influences.",
+    "essential_questions": [
+      "How do unique circumstances of time and place shape historical outcomes?",
+      "Why might the same idea or movement succeed in one context but fail in another?"
+    ],
+    "learning_targets": [
+      "I can evaluate how specific circumstances shaped a historical event's outcome.",
+      "I can analyze how broader historical contexts influenced developments.",
+      "I can explain why historical outcomes were contingent on particular conditions."
+    ],
+    "vocabulary": ["contingency", "periodization", "historical context", "circumstance", "agency", "structural factors", "turning point"],
+    "sample_assessment": "Which factor BEST explains why the American Revolution succeeded while other colonial revolts of the same era failed? A) Americans had a larger population than Britain B) A combination of geographic distance, French support, and colonial self-governance experience C) Americans had superior military technology D) Britain chose not to fight"
+  },
+  {
+    "code": "D2.His.2.9-12",
+    "benchmark": "Analyze change and continuity in historical eras, evaluating the extent to which various developments represented genuine transformation.",
+    "topics": ["Change and Continuity", "Transformation", "Historical Analysis"],
+    "dok": 3,
+    "item_specs": "Students assess the degree to which historical developments represented fundamental change versus surface-level modification. Items require comparative analysis across time periods.",
+    "essential_questions": [
+      "How do we determine whether a historical change was truly transformative?",
+      "What factors cause some changes to be revolutionary while others are incremental?"
+    ],
+    "learning_targets": [
+      "I can evaluate the extent to which a development represented genuine transformation.",
+      "I can distinguish between fundamental and superficial historical changes.",
+      "I can analyze how continuity persists even during periods of dramatic change."
+    ],
+    "vocabulary": ["transformation", "revolution", "evolution", "incremental change", "fundamental change", "continuity", "watershed moment"],
+    "sample_assessment": "To what extent did Reconstruction represent a genuine transformation of Southern society? A) It completely transformed the South permanently B) It brought temporary political changes but many economic and social structures persisted C) It had no significant impact D) It only affected formerly enslaved people"
+  },
+  {
+    "code": "D2.His.3.9-12",
+    "benchmark": "Use questions generated about individuals and groups to assess how the significance of their actions changes based on the scale of historical analysis.",
+    "topics": ["Historical Significance", "Scale of Analysis", "Individual vs. Structural"],
+    "dok": 4,
+    "item_specs": "Students evaluate how changing the scale of analysis (local, national, global) alters interpretations of significance. Items require multi-scale comparative analysis.",
+    "essential_questions": [
+      "How does changing the scale of analysis affect our understanding of historical significance?",
+      "Are individuals or structural forces more important in driving historical change?"
+    ],
+    "learning_targets": [
+      "I can evaluate how an individual's significance changes when analyzed at different scales.",
+      "I can compare local, national, and global perspectives on the same historical development.",
+      "I can assess the interplay between individual agency and structural forces."
+    ],
+    "vocabulary": ["scale of analysis", "agency", "structural forces", "macro-history", "micro-history", "contingency", "determinism"],
+    "sample_assessment": "How does analyzing the abolitionist movement at a LOCAL scale versus a NATIONAL scale change our understanding of its significance? A) Local analysis reveals identical patterns everywhere B) National analysis shows a unified movement while local analysis reveals diverse strategies and motivations C) Scale does not affect historical interpretation D) Only national-scale analysis is valid"
+  },
+  {
+    "code": "D2.His.4.9-12",
+    "benchmark": "Analyze complex and interacting factors that influenced the perspectives of people during different historical eras.",
+    "topics": ["Historical Perspectives", "Intersectionality", "Complex Causation"],
+    "dok": 3,
+    "item_specs": "Students analyze how multiple, intersecting factors (race, class, gender, religion, geography) shaped perspectives. Items require analysis of how factors interacted rather than operated independently.",
+    "essential_questions": [
+      "How do multiple factors interact to shape a person's historical perspective?",
+      "Why is it insufficient to attribute a historical perspective to a single factor?"
+    ],
+    "learning_targets": [
+      "I can analyze how multiple factors interact to shape historical perspectives.",
+      "I can explain how a person's race, class, gender, and geography simultaneously influenced their worldview.",
+      "I can evaluate primary sources by considering the complex background of their authors."
+    ],
+    "vocabulary": ["intersectionality", "positionality", "social construction", "hegemony", "subaltern", "standpoint", "lived experience"],
+    "sample_assessment": "How would the perspective of a wealthy white Southern woman in 1860 differ from that of an enslaved African American woman in the same region? Consider A) Only their geographic location B) Only their gender C) The intersection of race, class, gender, and social status D) Only their age"
+  },
+  {
+    "code": "D2.His.5.9-12",
+    "benchmark": "Analyze how historical contexts shaped and continue to shape people's perspectives, evaluating the persistence of ideas across time.",
+    "topics": ["Intellectual History", "Persistence of Ideas", "Historical Legacy"],
+    "dok": 3,
+    "item_specs": "Students trace how ideas evolved and persisted across historical periods, analyzing their continuing influence. Items include tracing ideological developments through primary sources.",
+    "essential_questions": [
+      "How do ideas from the past continue to influence the present?",
+      "Why do some ideas persist across centuries while others fade?"
+    ],
+    "learning_targets": [
+      "I can trace the evolution of a significant idea across multiple historical periods.",
+      "I can evaluate how historical contexts shaped the development of ideas.",
+      "I can analyze how ideas from the past continue to influence contemporary society."
+    ],
+    "vocabulary": ["intellectual history", "ideology", "paradigm", "legacy", "discourse", "precedent", "tradition"],
+    "sample_assessment": "How do Enlightenment ideas about natural rights continue to influence modern debates? A) They are no longer relevant B) They form the basis for ongoing debates about civil liberties and government power C) They only apply to 18th-century politics D) They have been completely replaced by new philosophies"
+  },
+  {
+    "code": "D2.His.6.9-12",
+    "benchmark": "Analyze the ways in which the perspectives of those writing history shaped the history that they produced.",
+    "topics": ["Historiography", "Historical Interpretation", "Bias in Sources"],
+    "dok": 4,
+    "item_specs": "Students evaluate how historians' backgrounds, methods, and perspectives influence their interpretations. Items compare different historical interpretations of the same events.",
+    "essential_questions": [
+      "How does the identity and context of a historian shape the history they write?",
+      "Why do historians of different eras interpret the same events differently?"
+    ],
+    "learning_targets": [
+      "I can analyze how a historian's perspective shaped their interpretation of events.",
+      "I can compare multiple historical interpretations of the same event.",
+      "I can evaluate how changing societal values influence how history is written."
+    ],
+    "vocabulary": ["historiography", "interpretation", "revisionism", "presentism", "objectivity", "narrative", "framing"],
+    "sample_assessment": "Why have historical interpretations of Reconstruction changed significantly since the early 1900s? A) New documents were discovered B) Historians' perspectives changed as society's understanding of race evolved C) The events themselves changed D) Earlier historians had better access to sources"
+  },
+  {
+    "code": "D2.His.7.9-12",
+    "benchmark": "Analyze the ideological foundations of the American Revolution and evaluate how competing visions shaped the new nation.",
+    "topics": ["American Revolution", "Political Philosophy", "Founding Era", "Competing Visions"],
+    "dok": 3,
+    "item_specs": "Students evaluate how Enlightenment philosophy, colonial experience, and competing political visions influenced the Revolution and Constitution. Items require analysis of primary source documents.",
+    "essential_questions": [
+      "How did competing political philosophies shape debates during the founding era?",
+      "To what extent did the founders' vision represent a break from or continuity with European traditions?"
+    ],
+    "learning_targets": [
+      "I can analyze how Enlightenment ideas influenced the American Revolution.",
+      "I can compare Federalist and Anti-Federalist visions for the new nation.",
+      "I can evaluate the extent to which the founding documents reflected democratic ideals."
+    ],
+    "vocabulary": ["republicanism", "federalism", "Anti-Federalist", "social contract", "popular sovereignty", "limited government", "checks and balances"],
+    "sample_assessment": "The debate between Federalists and Anti-Federalists primarily centered on A) whether to abolish slavery B) the balance of power between national and state governments C) which country to ally with D) the location of the national capital"
+  },
+  {
+    "code": "D2.His.8.9-12",
+    "benchmark": "Evaluate the extent to which the Constitution resolved tensions of the founding era and created new ones.",
+    "topics": ["Constitution", "Compromise", "Unresolved Tensions", "Federalism"],
+    "dok": 4,
+    "item_specs": "Students assess how constitutional compromises addressed some conflicts while creating or perpetuating others. Items require evaluative analysis of constitutional provisions and their long-term consequences.",
+    "essential_questions": [
+      "How did the Constitution attempt to resolve the major conflicts of the founding era?",
+      "Which tensions did the Constitution leave unresolved, and what were the consequences?"
+    ],
+    "learning_targets": [
+      "I can evaluate how specific constitutional provisions addressed conflicts of the founding era.",
+      "I can analyze how constitutional compromises on slavery created long-term consequences.",
+      "I can assess the effectiveness of the Constitution as a framework for governance."
+    ],
+    "vocabulary": ["Three-Fifths Compromise", "Great Compromise", "Electoral College", "enumerated powers", "implied powers", "elastic clause", "amendment process"],
+    "sample_assessment": "How did the Three-Fifths Compromise attempt to resolve tensions at the Constitutional Convention while simultaneously creating new problems? A) It satisfied all delegates equally B) It gave the South disproportionate representation while embedding slavery into the constitutional framework C) It eliminated slavery immediately D) It had no long-term consequences"
+  },
+  {
+    "code": "D2.His.9.9-12",
+    "benchmark": "Analyze the complex causes of the Civil War, evaluating the relative importance of economic, political, social, and moral factors.",
+    "topics": ["Civil War Causation", "Sectionalism", "Slavery Debate", "Political Crisis"],
+    "dok": 4,
+    "item_specs": "Students weigh multiple causal factors and construct arguments about their relative importance. Items require multi-source analysis and evaluative argumentation.",
+    "essential_questions": [
+      "What was the relative importance of different factors in causing the Civil War?",
+      "Can the Civil War be understood without slavery as its central cause?"
+    ],
+    "learning_targets": [
+      "I can analyze multiple causes of the Civil War and evaluate their relative importance.",
+      "I can construct an evidence-based argument about Civil War causation.",
+      "I can evaluate how economic, political, and moral factors interacted to produce conflict."
+    ],
+    "vocabulary": ["sectionalism", "states' rights", "popular sovereignty", "nullification", "secession", "abolitionism", "free soil", "Dred Scott"],
+    "sample_assessment": "Which statement BEST reflects current historical understanding of Civil War causation? A) States' rights alone caused the war B) The war was caused by a single event C) Slavery was the central issue, but economic, political, and social factors all contributed to the crisis D) The war was inevitable from the founding of the nation"
+  },
+  {
+    "code": "D2.His.10.9-12",
+    "benchmark": "Evaluate the successes and failures of Reconstruction and analyze its long-term consequences for American society.",
+    "topics": ["Reconstruction", "Racial Inequality", "Constitutional Amendments", "Long-term Impact"],
+    "dok": 4,
+    "item_specs": "Students assess Reconstruction policies against their stated goals and trace their long-term effects. Items require evaluative analysis using multiple sources.",
+    "essential_questions": [
+      "To what extent did Reconstruction achieve its goals of rebuilding the nation and securing equality?",
+      "How did the end of Reconstruction shape race relations for the next century?"
+    ],
+    "learning_targets": [
+      "I can evaluate the effectiveness of Reconstruction policies against their stated goals.",
+      "I can analyze how the end of Reconstruction led to Jim Crow laws and systemic inequality.",
+      "I can trace the long-term consequences of Reconstruction into the 20th century."
+    ],
+    "vocabulary": ["Reconstruction Amendments", "Freedmen's Bureau", "Black Codes", "Jim Crow", "Plessy v. Ferguson", "disenfranchisement", "sharecropping", "Redemption"],
+    "sample_assessment": "Which BEST describes the long-term legacy of the failure of Reconstruction? A) It had no lasting impact B) It led to nearly a century of legalized segregation and disenfranchisement of African Americans C) It resulted in immediate equality for all citizens D) It only affected Southern states economically"
+  },
+  {
+    "code": "D2.His.11.9-12",
+    "benchmark": "Analyze the transformation of the American economy during the Gilded Age and evaluate its social consequences.",
+    "topics": ["Gilded Age", "Industrial Capitalism", "Labor Movement", "Social Inequality"],
+    "dok": 3,
+    "item_specs": "Students examine the economic transformation of the late 1800s and evaluate its effects on different social groups. Items include data analysis, primary source evaluation, and comparative questions.",
+    "essential_questions": [
+      "How did industrial capitalism transform American society during the Gilded Age?",
+      "Who benefited from and who was harmed by rapid industrialization?"
+    ],
+    "learning_targets": [
+      "I can analyze how industrial capitalism transformed the American economy.",
+      "I can evaluate the social consequences of rapid industrialization for different groups.",
+      "I can compare the perspectives of industrialists, workers, and reformers."
+    ],
+    "vocabulary": ["Gilded Age", "laissez-faire", "robber baron", "captain of industry", "Social Darwinism", "vertical integration", "horizontal integration", "labor strike"],
+    "sample_assessment": "Andrew Carnegie's 'Gospel of Wealth' argued that A) the government should redistribute wealth equally B) wealthy individuals had a responsibility to use their fortunes for the public good C) workers should form unions to demand higher wages D) capitalism should be replaced with socialism"
+  },
+  {
+    "code": "D2.His.12.9-12",
+    "benchmark": "Evaluate the causes and consequences of American imperialism in the late 19th and early 20th centuries.",
+    "topics": ["Imperialism", "Spanish-American War", "Foreign Policy", "Global Expansion"],
+    "dok": 3,
+    "item_specs": "Students analyze the motivations for U.S. expansion abroad and evaluate its impact on acquired territories and American democracy. Items include primary source analysis and evaluative prompts.",
+    "essential_questions": [
+      "What motivated the United States to pursue an imperialist foreign policy?",
+      "How did imperialism conflict with American democratic ideals?"
+    ],
+    "learning_targets": [
+      "I can analyze the economic, political, and cultural motivations for American imperialism.",
+      "I can evaluate the impact of U.S. imperialism on acquired territories.",
+      "I can assess the debate between imperialists and anti-imperialists."
+    ],
+    "vocabulary": ["imperialism", "Spanish-American War", "Open Door Policy", "yellow journalism", "sphere of influence", "annexation", "self-determination"],
+    "sample_assessment": "Anti-imperialists in the early 1900s argued PRIMARILY that A) the U.S. military was too weak to maintain overseas territories B) American imperialism contradicted the nation's founding principles of self-governance C) overseas territories were too expensive to maintain D) European nations would retaliate against U.S. expansion"
+  },
+  {
+    "code": "D2.His.13.9-12",
+    "benchmark": "Analyze the causes, course, and consequences of U.S. involvement in World War I and evaluate its impact on American society and global affairs.",
+    "topics": ["World War I", "Home Front", "Treaty of Versailles", "Global Impact"],
+    "dok": 3,
+    "item_specs": "Students analyze the complex factors leading to U.S. entry, the war's impact on domestic society, and the consequences of the peace settlement. Items include document analysis and evaluative prompts.",
+    "essential_questions": [
+      "How did World War I transform American society and its role in global affairs?",
+      "To what extent did the Treaty of Versailles set the stage for future conflict?"
+    ],
+    "learning_targets": [
+      "I can analyze the factors that led the U.S. to abandon neutrality and enter WWI.",
+      "I can evaluate how the war transformed American society, including the roles of women and minorities.",
+      "I can assess the consequences of the Treaty of Versailles for global stability."
+    ],
+    "vocabulary": ["neutrality", "total war", "Fourteen Points", "self-determination", "League of Nations", "Red Scare", "Great Migration", "reparations"],
+    "sample_assessment": "Which consequence of the Treaty of Versailles MOST contributed to future instability in Europe? A) The creation of the League of Nations B) Harsh reparations imposed on Germany that fueled economic crisis and resentment C) The recognition of new nation-states D) The disarmament of all European nations"
+  },
+  {
+    "code": "D2.His.14.9-12",
+    "benchmark": "Analyze the social, economic, and cultural transformations of the 1920s and the causes and consequences of the Great Depression.",
+    "topics": ["Roaring Twenties", "Great Depression", "Cultural Change", "Economic Crisis"],
+    "dok": 3,
+    "item_specs": "Students examine the economic boom of the 1920s, cultural shifts, and the systemic factors that caused the Great Depression. Items include economic data analysis and cultural primary sources.",
+    "essential_questions": [
+      "What drove the cultural and economic transformations of the 1920s?",
+      "How did structural economic weaknesses contribute to the Great Depression?"
+    ],
+    "learning_targets": [
+      "I can analyze the cultural and social changes of the 1920s.",
+      "I can explain the systemic economic factors that caused the Great Depression.",
+      "I can evaluate the effectiveness of government responses to the economic crisis."
+    ],
+    "vocabulary": ["consumerism", "Harlem Renaissance", "speculation", "overproduction", "credit", "Dust Bowl", "Hooverville", "New Deal coalition"],
+    "sample_assessment": "Which combination of factors MOST directly caused the Great Depression? A) Foreign invasion and natural disaster B) Stock market speculation, overproduction, uneven wealth distribution, and bank failures C) Government spending and high taxes D) Immigration and urbanization"
+  },
+  {
+    "code": "D2.His.15.9-12",
+    "benchmark": "Analyze the causes, major events, and global consequences of World War II, including the Holocaust and the emergence of the United States as a superpower.",
+    "topics": ["World War II", "Holocaust", "Total War", "Superpower Emergence"],
+    "dok": 3,
+    "item_specs": "Students analyze the rise of totalitarianism, the global scope of the war, the Holocaust, and the postwar order. Items require multi-source analysis and evaluative thinking.",
+    "essential_questions": [
+      "How did World War II reshape the global balance of power?",
+      "What were the causes and consequences of the Holocaust?"
+    ],
+    "learning_targets": [
+      "I can analyze the political and economic conditions that led to World War II.",
+      "I can evaluate the causes and consequences of the Holocaust.",
+      "I can explain how WWII led to the emergence of the U.S. and Soviet Union as superpowers."
+    ],
+    "vocabulary": ["appeasement", "blitzkrieg", "genocide", "Holocaust", "Manhattan Project", "Nuremberg Trials", "United Nations", "Cold War origins"],
+    "sample_assessment": "The policy of appeasement toward Nazi Germany in the 1930s is MOST often criticized because A) it was too expensive B) it emboldened Hitler's aggression by failing to confront early territorial expansion C) it was opposed by all European leaders D) it led to immediate war"
+  },
+  {
+    "code": "D2.His.16.9-12",
+    "benchmark": "Evaluate the origins, evolution, and consequences of the Cold War, analyzing its impact on American society and global politics.",
+    "topics": ["Cold War", "Nuclear Age", "Proxy Wars", "Domestic Impact"],
+    "dok": 3,
+    "item_specs": "Students analyze the ideological, political, and military dimensions of the Cold War and evaluate its domestic and international consequences. Items include policy analysis and comparative evaluation.",
+    "essential_questions": [
+      "How did the Cold War shape American domestic policy and culture?",
+      "What were the global consequences of superpower competition?"
+    ],
+    "learning_targets": [
+      "I can analyze the ideological and geopolitical origins of the Cold War.",
+      "I can evaluate how the Cold War influenced American domestic policy, including McCarthyism.",
+      "I can assess the consequences of Cold War proxy conflicts around the world."
+    ],
+    "vocabulary": ["containment", "domino theory", "McCarthyism", "mutually assured destruction", "detente", "proxy war", "Berlin Wall", "glasnost"],
+    "sample_assessment": "How did McCarthyism reflect the domestic impact of the Cold War on American society? A) It promoted open dialogue about communism B) It created a climate of fear and suspicion that threatened civil liberties C) It had no impact on ordinary Americans D) It strengthened labor unions"
+  },
+  {
+    "code": "D2.His.17.9-12",
+    "benchmark": "Analyze the Civil Rights Movement as a complex, multi-faceted struggle, evaluating the effectiveness of different strategies and their long-term impact.",
+    "topics": ["Civil Rights Movement", "Strategies of Protest", "Legal Change", "Long-term Impact"],
+    "dok": 4,
+    "item_specs": "Students compare different strategies within the movement, evaluate their effectiveness, and assess long-term outcomes. Items require comparative analysis and evaluative argumentation.",
+    "essential_questions": [
+      "How effective were different strategies in advancing civil rights?",
+      "To what extent did the Civil Rights Movement achieve its goals?"
+    ],
+    "learning_targets": [
+      "I can compare and evaluate different strategies used in the Civil Rights Movement.",
+      "I can analyze how legal, political, and grassroots efforts interacted to produce change.",
+      "I can evaluate the extent to which the movement achieved lasting equality."
+    ],
+    "vocabulary": ["civil disobedience", "direct action", "Black Power", "de jure segregation", "de facto segregation", "affirmative action", "intersectionality", "systemic racism"],
+    "sample_assessment": "How did the strategies of Martin Luther King Jr. and Malcolm X differ, and how did both contribute to the broader Civil Rights Movement? A) They had identical approaches B) King advocated nonviolent resistance while Malcolm X initially favored self-defense; both raised awareness and pressured change through different means C) Neither had significant impact D) Only King's approach led to legislative change"
+  },
+  {
+    "code": "D2.His.18.9-12",
+    "benchmark": "Evaluate the social movements of the 1960s-1970s and analyze their lasting impact on American law, culture, and identity.",
+    "topics": ["Social Movements", "Feminism", "Environmentalism", "Identity Politics"],
+    "dok": 3,
+    "item_specs": "Students analyze the interconnections between multiple social movements and evaluate their lasting effects on American society. Items require comparative and evaluative analysis.",
+    "essential_questions": [
+      "How did the social movements of the 1960s and 1970s build on and differ from each other?",
+      "What lasting changes did these movements produce in American law and culture?"
+    ],
+    "learning_targets": [
+      "I can analyze the goals and strategies of multiple social movements of the 1960s-1970s.",
+      "I can evaluate how these movements changed American law and institutions.",
+      "I can assess the lasting cultural impact of these movements on American identity."
+    ],
+    "vocabulary": ["second-wave feminism", "Chicano movement", "American Indian Movement", "counterculture", "environmental justice", "identity politics", "liberation"],
+    "sample_assessment": "Which BEST describes a common thread among the social movements of the 1960s and 1970s? A) They all used identical strategies B) They each challenged existing power structures and demanded expanded rights for marginalized groups C) They were all led by the same organizations D) They focused exclusively on legal reform"
+  },
+  {
+    "code": "D2.His.19.9-12",
+    "benchmark": "Analyze the political, economic, and social transformations of the United States from the 1980s to the present.",
+    "topics": ["Conservative Movement", "Globalization", "Digital Age", "Contemporary Issues"],
+    "dok": 3,
+    "item_specs": "Students examine the rise of conservatism, economic globalization, technological revolution, and contemporary social issues. Items include data analysis and current events connections.",
+    "essential_questions": [
+      "How did the conservative movement reshape American politics beginning in the 1980s?",
+      "How have globalization and technology transformed American society in the modern era?"
+    ],
+    "learning_targets": [
+      "I can analyze the rise of the conservative movement and its impact on American politics.",
+      "I can evaluate the effects of economic globalization on American workers and communities.",
+      "I can assess how digital technology has transformed American society and politics."
+    ],
+    "vocabulary": ["conservatism", "deregulation", "supply-side economics", "globalization", "digital divide", "polarization", "culture war", "neoliberalism"],
+    "sample_assessment": "Which development BEST illustrates how globalization has affected the American economy since the 1990s? A) The growth of subsistence farming B) The outsourcing of manufacturing jobs to countries with lower labor costs C) The end of international trade D) Decreased immigration to the United States"
+  },
+  {
+    "code": "D2.His.20.9-12",
+    "benchmark": "Analyze how the United States responded to terrorism and evaluate the impact of the War on Terror on American civil liberties and foreign policy.",
+    "topics": ["September 11", "War on Terror", "Civil Liberties", "Foreign Policy"],
+    "dok": 3,
+    "item_specs": "Students analyze the causes and consequences of 9/11 and evaluate the balance between national security and civil liberties. Items require evaluative reasoning about policy trade-offs.",
+    "essential_questions": [
+      "How did the September 11 attacks transform American foreign and domestic policy?",
+      "What are the trade-offs between national security and civil liberties?"
+    ],
+    "learning_targets": [
+      "I can analyze how the September 11 attacks changed U.S. foreign policy.",
+      "I can evaluate the impact of anti-terrorism policies on civil liberties.",
+      "I can assess the long-term consequences of the War on Terror."
+    ],
+    "vocabulary": ["terrorism", "Patriot Act", "War on Terror", "homeland security", "surveillance", "civil liberties", "nation-building", "drone warfare"],
+    "sample_assessment": "The USA PATRIOT Act is MOST controversial because A) it increased taxes B) it expanded government surveillance powers, raising concerns about civil liberties C) it reduced military spending D) it was supported unanimously by all Americans"
+  },
+  {
+    "code": "D2.His.21.9-12",
+    "benchmark": "Evaluate competing historical narratives and use evidence to construct well-reasoned arguments about contested events in American history.",
+    "topics": ["Historical Argumentation", "Competing Narratives", "Evidence-Based Reasoning"],
+    "dok": 4,
+    "item_specs": "Students analyze competing interpretations of historical events and construct evidence-based arguments. Items require synthesis of multiple sources and evaluative reasoning.",
+    "essential_questions": [
+      "Why do historians disagree about the interpretation of key events in American history?",
+      "How do we evaluate the strength of competing historical arguments?"
+    ],
+    "learning_targets": [
+      "I can identify and analyze competing narratives about a historical event.",
+      "I can construct an evidence-based argument supporting one interpretation over another.",
+      "I can evaluate the strengths and limitations of different historical arguments."
+    ],
+    "vocabulary": ["narrative", "interpretation", "historiography", "thesis", "evidence", "counterargument", "synthesis", "analysis"],
+    "sample_assessment": "Two historians disagree about the primary cause of American westward expansion. Historian A emphasizes economic opportunity while Historian B emphasizes ideological beliefs about Manifest Destiny. Which approach would BEST evaluate their arguments? A) Choose the historian with more publications B) Examine the evidence each uses and assess which better accounts for the full range of historical data C) Accept both equally without evaluation D) Reject both as biased"
+  },
+  {
+    "code": "D2.His.22.9-12",
+    "benchmark": "Analyze the role of race, class, and gender in shaping the American experience across different historical periods.",
+    "topics": ["Race", "Class", "Gender", "Social History", "Inequality"],
+    "dok": 3,
+    "item_specs": "Students examine how race, class, and gender have intersected to shape opportunities, experiences, and identities. Items require analysis of social structures and their evolution.",
+    "essential_questions": [
+      "How have race, class, and gender shaped the American experience differently for different groups?",
+      "In what ways have systems of inequality been challenged and perpetuated throughout American history?"
+    ],
+    "learning_targets": [
+      "I can analyze how race, class, and gender intersected to shape historical experiences.",
+      "I can trace how systems of inequality evolved across different historical periods.",
+      "I can evaluate efforts to challenge and dismantle systems of inequality."
+    ],
+    "vocabulary": ["systemic inequality", "social stratification", "intersectionality", "privilege", "marginalization", "social mobility", "structural racism"],
+    "sample_assessment": "How did the experiences of working-class women during industrialization differ based on race? A) All women had identical experiences B) White women often worked in factories while Black women were largely excluded from industrial jobs and relegated to domestic work C) Race played no role in women's work experiences D) Only wealthy women worked during this period"
+  },
+  {
+    "code": "D2.His.23.9-12",
+    "benchmark": "Analyze patterns of immigration and migration in the United States, evaluating how they shaped and were shaped by economic, political, and cultural forces.",
+    "topics": ["Immigration Policy", "Migration Patterns", "Cultural Impact", "Nativism"],
+    "dok": 3,
+    "item_specs": "Students analyze how immigration and migration patterns changed over time and evaluate the forces driving those changes. Items include data analysis, policy comparison, and perspective evaluation.",
+    "essential_questions": [
+      "How have immigration policies reflected and shaped American values about inclusion and exclusion?",
+      "What patterns emerge when comparing different waves of immigration throughout American history?"
+    ],
+    "learning_targets": [
+      "I can analyze how immigration and migration patterns have changed over time.",
+      "I can evaluate how immigration policies reflected the economic and cultural concerns of different eras.",
+      "I can compare the experiences of different immigrant groups across historical periods."
+    ],
+    "vocabulary": ["nativism", "quota system", "deportation", "refugee", "asylum", "Great Migration", "chain migration", "Immigration Act of 1965"],
+    "sample_assessment": "The Chinese Exclusion Act (1882) and the Immigration Act of 1924 both reflect A) America's consistent welcoming of all immigrants B) nativist sentiments that used race and national origin to restrict immigration C) economic prosperity that reduced demand for immigrant labor D) immigrants' desire to return to their home countries"
+  },
+  {
+    "code": "D2.His.24.9-12",
+    "benchmark": "Evaluate the evolution of U.S. foreign policy from isolationism to global engagement, analyzing the costs and benefits of America's role as a world power.",
+    "topics": ["Foreign Policy Evolution", "Global Leadership", "Interventionism", "International Institutions"],
+    "dok": 4,
+    "item_specs": "Students analyze the long-term evolution of American foreign policy and evaluate the consequences of different approaches. Items require evaluative analysis of policy outcomes.",
+    "essential_questions": [
+      "What are the costs and benefits of America's role as a global superpower?",
+      "How should the United States balance its national interests with its international responsibilities?"
+    ],
+    "learning_targets": [
+      "I can trace the evolution of U.S. foreign policy from isolationism to global leadership.",
+      "I can evaluate the costs and benefits of American military intervention abroad.",
+      "I can analyze how international institutions reflect and shape U.S. foreign policy goals."
+    ],
+    "vocabulary": ["unilateralism", "multilateralism", "NATO", "United Nations", "interventionism", "soft power", "hard power", "hegemony"],
+    "sample_assessment": "Which statement BEST captures the central tension in U.S. foreign policy since World War II? A) The U.S. has consistently avoided all foreign entanglements B) The U.S. has balanced its desire for global leadership with debates over the costs and limits of intervention C) The U.S. has always acted unilaterally D) Foreign policy has played no role in domestic politics"
+  },
+  {
+    "code": "D2.His.25.9-12",
+    "benchmark": "Analyze how economic systems and policies have shaped American society, evaluating debates over the role of government in the economy.",
+    "topics": ["Economic Policy", "Capitalism", "Government Regulation", "Economic Inequality"],
+    "dok": 3,
+    "item_specs": "Students analyze how economic policies and systems affected different groups and evaluate ongoing debates about government's economic role. Items include policy analysis and data interpretation.",
+    "essential_questions": [
+      "How have debates over the role of government in the economy shaped American history?",
+      "Who benefits and who is harmed by different economic policies?"
+    ],
+    "learning_targets": [
+      "I can analyze how economic policies affected different social groups.",
+      "I can evaluate the arguments for and against government regulation of the economy.",
+      "I can trace how debates over economic policy have evolved throughout American history."
+    ],
+    "vocabulary": ["capitalism", "socialism", "regulation", "deregulation", "progressive taxation", "welfare state", "free market", "mixed economy"],
+    "sample_assessment": "The debate between supporters of the New Deal and its critics PRIMARILY centered on A) whether the Depression was real B) the appropriate role of the federal government in managing the economy and providing social services C) which political party should be in power D) whether to maintain friendly relations with Europe"
+  }
+]

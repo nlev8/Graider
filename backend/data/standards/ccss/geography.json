@@ -1,0 +1,722 @@
+[
+  {
+    "code": "D2.Geo.1.6-8",
+    "benchmark": "Construct maps to represent and explain the spatial patterns of cultural and environmental characteristics.",
+    "topics": ["Map Construction", "Spatial Patterns", "Cultural Geography"],
+    "dok": 3,
+    "item_specs": "Students create and interpret maps that display spatial distributions of cultural and environmental features. Items may include map-based tasks and spatial analysis questions.",
+    "essential_questions": [
+      "How do maps help us understand spatial patterns in the world?",
+      "What choices do mapmakers make that affect how we interpret geographic information?"
+    ],
+    "learning_targets": [
+      "I can construct maps that show spatial patterns of cultural or environmental data.",
+      "I can explain what spatial patterns a map reveals about a region.",
+      "I can identify how mapmakers' choices affect the information conveyed."
+    ],
+    "vocabulary": ["spatial pattern", "thematic map", "choropleth map", "legend", "scale", "projection", "distribution"],
+    "sample_assessment": "A student creates a thematic map showing population density across a state. Which map element is MOST important for interpreting the data correctly? A) A decorative border B) A clear legend explaining the color coding C) The mapmaker's name D) A compass rose"
+  },
+  {
+    "code": "D2.Geo.2.6-8",
+    "benchmark": "Use maps, satellite images, photographs, and other representations to explain relationships between the locations of places and regions and their political, cultural, and economic dynamics.",
+    "topics": ["Spatial Relationships", "Maps and Images", "Place and Region"],
+    "dok": 2,
+    "item_specs": "Students interpret various geographic representations to explain relationships between location and human activity. Items include map and image analysis.",
+    "essential_questions": [
+      "How does location influence the political, cultural, and economic characteristics of a place?",
+      "What can satellite images and photographs reveal that traditional maps cannot?"
+    ],
+    "learning_targets": [
+      "I can use maps and satellite images to explain relationships between location and human activity.",
+      "I can identify how geographic location influences a region's economy and culture.",
+      "I can compare different geographic representations of the same place."
+    ],
+    "vocabulary": ["satellite imagery", "GIS", "aerial photograph", "region", "location", "spatial relationship", "remote sensing"],
+    "sample_assessment": "A satellite image shows a city with a river running through it and a major highway interchange nearby. What can you MOST LIKELY conclude? A) The city has a cold climate B) The city's location near transportation routes contributed to its growth C) The city was founded recently D) The city has a small population"
+  },
+  {
+    "code": "D2.Geo.3.6-8",
+    "benchmark": "Use paper-based and electronic mapping and graphing techniques to calculate and interpret geographic data.",
+    "topics": ["Geographic Data", "Mapping Techniques", "Data Analysis"],
+    "dok": 2,
+    "item_specs": "Students apply mapping and graphing techniques to analyze geographic data. Items include data interpretation and calculation exercises.",
+    "essential_questions": [
+      "How do geographers use data to understand spatial patterns?",
+      "What tools and techniques help us analyze geographic information?"
+    ],
+    "learning_targets": [
+      "I can use mapping techniques to display geographic data.",
+      "I can calculate basic geographic measurements using maps and data.",
+      "I can interpret geographic data presented in graphs and charts."
+    ],
+    "vocabulary": ["GIS", "GPS", "coordinates", "latitude", "longitude", "elevation", "topographic map", "data layer"],
+    "sample_assessment": "Using a map with a scale of 1 inch = 50 miles, two cities are 3.5 inches apart on the map. What is the actual distance between them? A) 100 miles B) 150 miles C) 175 miles D) 200 miles"
+  },
+  {
+    "code": "D2.Geo.4.6-8",
+    "benchmark": "Explain how cultural patterns and economic decisions influence environments and the daily lives of people in both nearby and distant places.",
+    "topics": ["Cultural Patterns", "Economic Decisions", "Human Impact"],
+    "dok": 2,
+    "item_specs": "Students analyze how human cultural practices and economic choices affect environments. Items include case studies and cause-effect analysis.",
+    "essential_questions": [
+      "How do cultural practices shape the environments in which people live?",
+      "How do economic decisions made in one place affect distant environments?"
+    ],
+    "learning_targets": [
+      "I can explain how cultural patterns influence how people interact with their environment.",
+      "I can describe how economic decisions affect environments locally and globally.",
+      "I can analyze connections between everyday choices and environmental impacts."
+    ],
+    "vocabulary": ["cultural landscape", "land use", "deforestation", "resource extraction", "sustainability", "consumer culture", "supply chain"],
+    "sample_assessment": "How does the demand for palm oil in the United States affect environments in Southeast Asia? A) It has no connection B) Increased demand drives deforestation in Indonesia and Malaysia to create palm oil plantations C) It improves forests in Southeast Asia D) It only affects American farms"
+  },
+  {
+    "code": "D2.Geo.5.6-8",
+    "benchmark": "Analyze the combinations of cultural and environmental characteristics that make places both similar to and different from other places.",
+    "topics": ["Place Identity", "Comparison", "Cultural and Environmental Features"],
+    "dok": 3,
+    "item_specs": "Students compare places based on their unique combinations of characteristics. Items include comparative analysis of regions and places.",
+    "essential_questions": [
+      "What combinations of features give a place its unique identity?",
+      "How can two places be similar in some ways and different in others?"
+    ],
+    "learning_targets": [
+      "I can identify cultural and environmental characteristics that define a place.",
+      "I can compare places based on their unique combinations of features.",
+      "I can explain what makes a place similar to or different from other places."
+    ],
+    "vocabulary": ["place identity", "sense of place", "cultural landscape", "physical landscape", "comparison", "region", "characteristics"],
+    "sample_assessment": "New York City and Tokyo are similar in that both are A) located on the same continent B) major global cities with diverse populations and significant economic influence C) governed by the same political system D) surrounded by desert environments"
+  },
+  {
+    "code": "D2.Geo.6.6-8",
+    "benchmark": "Explain how the physical and human characteristics of places and regions are connected to human identities and cultures.",
+    "topics": ["Place and Identity", "Cultural Geography", "Human-Environment Interaction"],
+    "dok": 2,
+    "item_specs": "Students explain connections between geographic characteristics and cultural identity. Items include analysis of how geography shapes culture.",
+    "essential_questions": [
+      "How does where people live shape who they are?",
+      "What is the relationship between geography and cultural identity?"
+    ],
+    "learning_targets": [
+      "I can explain how physical geography influences cultural practices.",
+      "I can describe how human activities shape the character of a place.",
+      "I can analyze the connection between geographic features and cultural identity."
+    ],
+    "vocabulary": ["identity", "culture", "adaptation", "cultural region", "physical environment", "human characteristics", "place attachment"],
+    "sample_assessment": "How does living in a coastal region MOST LIKELY influence a community's culture? A) It has no influence on culture B) Coastal communities often develop cultures centered around fishing, maritime trade, and water-based recreation C) Coastal communities always develop the same culture D) Only inland communities have distinct cultures"
+  },
+  {
+    "code": "D2.Geo.7.6-8",
+    "benchmark": "Explain how changes in transportation and communication technology influence the spatial connections among human settlements and affect the diffusion of ideas and cultural practices.",
+    "topics": ["Transportation", "Communication", "Diffusion", "Connectivity"],
+    "dok": 2,
+    "item_specs": "Students analyze how transportation and communication changes affect spatial connections and cultural diffusion. Items include historical and contemporary examples.",
+    "essential_questions": [
+      "How have advances in transportation and communication changed the way places are connected?",
+      "How does technology influence the spread of ideas and cultural practices?"
+    ],
+    "learning_targets": [
+      "I can explain how transportation technology has changed spatial connections between places.",
+      "I can describe how communication technology influences the diffusion of ideas.",
+      "I can analyze the impact of connectivity on cultural practices."
+    ],
+    "vocabulary": ["diffusion", "connectivity", "infrastructure", "telecommunications", "globalization", "spatial interaction", "time-space compression"],
+    "sample_assessment": "How has the Internet MOST significantly changed cultural diffusion compared to previous centuries? A) It has slowed the spread of ideas B) It allows ideas and cultural practices to spread almost instantly across the globe C) It has no effect on cultural diffusion D) It only spreads ideas within a single country"
+  },
+  {
+    "code": "D2.Geo.8.6-8",
+    "benchmark": "Analyze how relationships between humans and environments extend or contract spatial patterns of settlement and movement.",
+    "topics": ["Settlement Patterns", "Human-Environment Interaction", "Migration"],
+    "dok": 3,
+    "item_specs": "Students analyze how human-environment interactions affect where people settle and move. Items include map analysis and settlement pattern evaluation.",
+    "essential_questions": [
+      "What factors influence where people choose to settle?",
+      "How do environmental changes cause populations to expand or contract?"
+    ],
+    "learning_targets": [
+      "I can analyze how environmental factors influence settlement patterns.",
+      "I can explain how human activities change the environment in ways that affect settlement.",
+      "I can describe how environmental changes cause population movement."
+    ],
+    "vocabulary": ["settlement pattern", "urban sprawl", "rural-to-urban migration", "desertification", "flood plain", "habitability", "carrying capacity"],
+    "sample_assessment": "Which factor BEST explains why ancient civilizations developed near rivers? A) Rivers provided natural borders for defense only B) Rivers provided water for agriculture, transportation, and drinking — essential resources for settlement C) People preferred the scenery near rivers D) Rivers were the only source of building materials"
+  },
+  {
+    "code": "D2.Geo.9.6-8",
+    "benchmark": "Evaluate the influences of long-term human-induced environmental change on spatial patterns of conflict and cooperation.",
+    "topics": ["Environmental Change", "Conflict", "Cooperation", "Resources"],
+    "dok": 3,
+    "item_specs": "Students evaluate how environmental changes caused by humans lead to conflict or cooperation. Items include case studies and evaluative prompts.",
+    "essential_questions": [
+      "How do human-induced environmental changes lead to conflict between groups?",
+      "How can environmental challenges promote cooperation?"
+    ],
+    "learning_targets": [
+      "I can evaluate how human-caused environmental changes create conflict over resources.",
+      "I can describe examples of cooperation in response to environmental challenges.",
+      "I can analyze the relationship between environmental change and geopolitical tensions."
+    ],
+    "vocabulary": ["resource conflict", "water scarcity", "deforestation", "pollution", "environmental cooperation", "climate change", "sustainability"],
+    "sample_assessment": "Water scarcity in the Middle East has MOST LIKELY led to A) increased cooperation among all nations B) both conflict and cooperation, as nations dispute water rights but also negotiate sharing agreements C) no political impact D) decreased water usage by all countries"
+  },
+  {
+    "code": "D2.Geo.10.6-8",
+    "benchmark": "Analyze the ways in which cultural and environmental characteristics vary among various regions of the world.",
+    "topics": ["World Regions", "Cultural Variation", "Environmental Diversity"],
+    "dok": 2,
+    "item_specs": "Students compare cultural and environmental characteristics across world regions. Items include regional comparison and identification of key features.",
+    "essential_questions": [
+      "What makes each world region culturally and environmentally distinct?",
+      "How do environmental conditions influence cultural development across regions?"
+    ],
+    "learning_targets": [
+      "I can describe the cultural characteristics of major world regions.",
+      "I can compare environmental features across different regions.",
+      "I can explain how environmental conditions influence cultural practices in different regions."
+    ],
+    "vocabulary": ["climate zone", "biome", "cultural hearth", "vegetation", "terrain", "ecosystem", "continental climate"],
+    "sample_assessment": "Which statement BEST explains why the Sahel region of Africa has experienced significant cultural and environmental challenges? A) It is located near the ocean B) Its position between the Sahara Desert and tropical forests makes it vulnerable to desertification and resource scarcity C) It has abundant rainfall year-round D) It has no human population"
+  },
+  {
+    "code": "D2.Geo.11.6-8",
+    "benchmark": "Explain how global changes in population distribution patterns affect changes in land use in particular places.",
+    "topics": ["Population Distribution", "Land Use", "Urbanization"],
+    "dok": 2,
+    "item_specs": "Students analyze connections between population changes and land use patterns. Items include data analysis and map interpretation.",
+    "essential_questions": [
+      "How does population growth or decline change the way land is used?",
+      "What are the consequences of rapid urbanization on land use?"
+    ],
+    "learning_targets": [
+      "I can explain how population growth changes land use patterns.",
+      "I can describe the effects of urbanization on surrounding areas.",
+      "I can analyze population distribution data to predict land use changes."
+    ],
+    "vocabulary": ["population density", "urbanization", "suburban sprawl", "land use", "zoning", "agricultural land", "population shift"],
+    "sample_assessment": "As a city's population grows rapidly, surrounding farmland is MOST LIKELY to A) remain unchanged B) be converted to residential and commercial development C) become more productive D) be turned into national parks"
+  },
+  {
+    "code": "D2.Geo.12.6-8",
+    "benchmark": "Explain how natural and human-made catastrophic events affect trade, politics, and migration patterns.",
+    "topics": ["Natural Disasters", "Migration", "Political Impact", "Trade"],
+    "dok": 2,
+    "item_specs": "Students analyze the geographic effects of catastrophic events on human systems. Items include case studies of disaster impacts on trade and migration.",
+    "essential_questions": [
+      "How do catastrophic events change migration patterns and trade routes?",
+      "What long-term geographic effects can natural disasters have on a region?"
+    ],
+    "learning_targets": [
+      "I can explain how natural disasters affect migration patterns.",
+      "I can describe how catastrophic events disrupt trade and economic activity.",
+      "I can analyze the political consequences of major catastrophic events."
+    ],
+    "vocabulary": ["natural disaster", "displacement", "refugee", "supply chain disruption", "economic impact", "disaster relief", "resilience"],
+    "sample_assessment": "After a major earthquake destroyed much of a port city, what geographic consequence would MOST LIKELY follow? A) Increased trade through the port B) Temporary disruption of trade routes and migration of residents to other areas C) No change in the region D) Improved infrastructure immediately"
+  },
+  {
+    "code": "D2.Geo.13.6-8",
+    "benchmark": "Analyze the push and pull factors that contribute to human migration patterns.",
+    "topics": ["Migration", "Push-Pull Factors", "Human Movement"],
+    "dok": 2,
+    "item_specs": "Students identify and analyze factors that drive migration. Items include identification of push and pull factors in historical and contemporary scenarios.",
+    "essential_questions": [
+      "What causes people to leave their homes and move to new places?",
+      "How do push and pull factors work together to drive migration?"
+    ],
+    "learning_targets": [
+      "I can identify push factors that cause people to leave a place.",
+      "I can identify pull factors that attract people to a new place.",
+      "I can analyze how push and pull factors interact to create migration patterns."
+    ],
+    "vocabulary": ["push factor", "pull factor", "migration", "immigration", "emigration", "refugee", "economic opportunity", "persecution"],
+    "sample_assessment": "A family moves from a rural village to a large city seeking better job opportunities. The job opportunities represent a A) push factor B) pull factor C) cultural factor D) environmental factor only"
+  },
+  {
+    "code": "D2.Geo.14.6-8",
+    "benchmark": "Explain how changes in technology contribute to the proliferation of cultural ideas, practices, and products across space.",
+    "topics": ["Technology", "Cultural Diffusion", "Globalization"],
+    "dok": 2,
+    "item_specs": "Students explain how technology drives the spread of culture across geographic space. Items include contemporary examples of technology-driven cultural diffusion.",
+    "essential_questions": [
+      "How does technology accelerate the spread of cultural practices around the world?",
+      "What are the benefits and drawbacks of technology-driven cultural diffusion?"
+    ],
+    "learning_targets": [
+      "I can explain how technology contributes to the spread of cultural ideas.",
+      "I can describe examples of technology-driven cultural diffusion.",
+      "I can evaluate the positive and negative effects of rapid cultural diffusion."
+    ],
+    "vocabulary": ["cultural diffusion", "mass media", "social media", "globalization", "homogenization", "cultural exchange", "digital platform"],
+    "sample_assessment": "The global popularity of K-pop music is PRIMARILY an example of A) forced cultural assimilation B) cultural diffusion accelerated by social media and streaming platforms C) geographic isolation D) political propaganda"
+  },
+  {
+    "code": "D2.Geo.15.6-8",
+    "benchmark": "Describe how environmental and cultural characteristics influence population distribution in specific places or regions.",
+    "topics": ["Population Distribution", "Environmental Influence", "Cultural Factors"],
+    "dok": 2,
+    "item_specs": "Students explain how environmental and cultural features affect where people live. Items include map analysis and data interpretation.",
+    "essential_questions": [
+      "Why are some places densely populated while others are sparsely populated?",
+      "How do environmental and cultural factors together influence where people live?"
+    ],
+    "learning_targets": [
+      "I can describe how environmental features influence population distribution.",
+      "I can explain how cultural factors affect where people choose to live.",
+      "I can analyze maps to identify patterns in population distribution."
+    ],
+    "vocabulary": ["population distribution", "arable land", "water access", "climate", "cultural center", "megacity", "rural depopulation"],
+    "sample_assessment": "Which factor BEST explains why the Nile River valley is densely populated while the surrounding Sahara Desert is not? A) Political boundaries B) The availability of water and fertile soil for agriculture along the Nile C) Religious preferences D) Colonial-era borders"
+  },
+  {
+    "code": "D2.Geo.16.6-8",
+    "benchmark": "Analyze the environmental consequences of resource use and evaluate strategies for sustainable resource management.",
+    "topics": ["Resource Use", "Sustainability", "Environmental Consequences"],
+    "dok": 3,
+    "item_specs": "Students analyze the environmental impact of resource extraction and use, and evaluate sustainability strategies. Items include case studies and evaluative prompts.",
+    "essential_questions": [
+      "What are the environmental consequences of how we use natural resources?",
+      "How can we manage resources more sustainably?"
+    ],
+    "learning_targets": [
+      "I can analyze the environmental consequences of resource extraction and use.",
+      "I can evaluate strategies for sustainable resource management.",
+      "I can describe the trade-offs between economic development and environmental protection."
+    ],
+    "vocabulary": ["renewable resource", "nonrenewable resource", "sustainability", "conservation", "extraction", "carbon footprint", "ecological footprint"],
+    "sample_assessment": "Which is a consequence of overfishing in the world's oceans? A) Increased fish populations B) Depletion of fish stocks that threatens marine ecosystems and food supplies for coastal communities C) Improved water quality D) Decreased demand for seafood"
+  },
+  {
+    "code": "D2.Geo.17.6-8",
+    "benchmark": "Explain how the relationship between the environmental characteristics of places and production of goods influences the spatial patterns of world trade.",
+    "topics": ["World Trade", "Production", "Environmental Characteristics", "Trade Patterns"],
+    "dok": 2,
+    "item_specs": "Students explain how environmental features influence what places produce and trade. Items include analysis of trade data and production maps.",
+    "essential_questions": [
+      "How does a region's environment determine what it produces and trades?",
+      "Why do countries trade with each other instead of producing everything domestically?"
+    ],
+    "learning_targets": [
+      "I can explain how environmental features influence what a region produces.",
+      "I can describe how production patterns shape world trade routes.",
+      "I can analyze the relationship between resources, production, and trade."
+    ],
+    "vocabulary": ["comparative advantage", "export", "import", "trade route", "commodity", "specialization", "natural resource"],
+    "sample_assessment": "Saudi Arabia is a major exporter of oil PRIMARILY because A) it has the largest population in the Middle East B) it has vast petroleum reserves formed by its unique geological conditions C) it imports oil from other countries and resells it D) its climate is ideal for oil production"
+  },
+  {
+    "code": "D2.Geo.18.6-8",
+    "benchmark": "Analyze the environmental impact of urbanization and propose geographic solutions to urban challenges.",
+    "topics": ["Urbanization", "Urban Geography", "Environmental Impact", "Urban Planning"],
+    "dok": 3,
+    "item_specs": "Students analyze urban environmental challenges and propose geographic solutions. Items include urban case studies and solution evaluation.",
+    "essential_questions": [
+      "How does urbanization affect the natural environment?",
+      "What geographic solutions can address the challenges of growing cities?"
+    ],
+    "learning_targets": [
+      "I can analyze the environmental effects of urbanization.",
+      "I can describe urban planning strategies that address environmental challenges.",
+      "I can propose geographic solutions to problems caused by urban growth."
+    ],
+    "vocabulary": ["urbanization", "urban heat island", "green space", "urban planning", "infrastructure", "smart city", "public transit"],
+    "sample_assessment": "Which urban planning strategy would MOST effectively reduce the urban heat island effect? A) Building more parking lots B) Increasing green spaces and planting trees throughout the city C) Adding more lanes to highways D) Building taller buildings"
+  },
+  {
+    "code": "D2.Geo.19.6-8",
+    "benchmark": "Explain how geographic factors influence the development and decline of civilizations throughout history.",
+    "topics": ["Geographic Determinism", "Civilizations", "Historical Geography"],
+    "dok": 2,
+    "item_specs": "Students analyze how geographic factors contributed to the rise and fall of historical civilizations. Items include map analysis and historical case studies.",
+    "essential_questions": [
+      "How does geography influence the rise and fall of civilizations?",
+      "What role do geographic factors play in shaping human history?"
+    ],
+    "learning_targets": [
+      "I can explain how geographic factors contributed to the development of civilizations.",
+      "I can analyze how environmental changes contributed to the decline of civilizations.",
+      "I can evaluate the role of geography in shaping historical outcomes."
+    ],
+    "vocabulary": ["fertile crescent", "river valley civilization", "geographic advantage", "natural barrier", "trade route", "resource depletion", "environmental degradation"],
+    "sample_assessment": "Why did many of the world's earliest civilizations develop in river valleys? A) Rivers provided natural defenses only B) River valleys offered fertile soil, fresh water, and transportation — resources essential for agriculture and trade C) People preferred living near water for recreation D) Rivers were the only source of food"
+  },
+  {
+    "code": "D2.Geo.20.6-8",
+    "benchmark": "Describe how differences in access to resources and opportunities affect quality of life across regions.",
+    "topics": ["Resource Access", "Quality of Life", "Global Inequality"],
+    "dok": 2,
+    "item_specs": "Students analyze how unequal access to resources and opportunities creates disparities in quality of life. Items include data comparison across regions.",
+    "essential_questions": [
+      "How does access to resources affect quality of life in different regions?",
+      "What geographic factors contribute to global inequality?"
+    ],
+    "learning_targets": [
+      "I can describe how access to resources varies across regions.",
+      "I can explain how unequal access to resources affects quality of life.",
+      "I can analyze geographic factors that contribute to global inequality."
+    ],
+    "vocabulary": ["quality of life", "standard of living", "Human Development Index", "inequality", "access to resources", "infrastructure gap", "developing country"],
+    "sample_assessment": "Which geographic factor MOST contributes to differences in quality of life between regions? A) The number of rivers B) Unequal access to clean water, education, healthcare, and economic opportunities C) The size of the country D) Time zone differences"
+  },
+  {
+    "code": "D2.Geo.1.9-12",
+    "benchmark": "Use geospatial and related technologies to create maps to display and explain the spatial patterns of cultural and environmental characteristics.",
+    "topics": ["GIS", "Geospatial Technology", "Advanced Mapping"],
+    "dok": 3,
+    "item_specs": "Students apply geospatial technologies to create and analyze maps showing complex spatial relationships. Items include GIS application and data layer analysis.",
+    "essential_questions": [
+      "How do geospatial technologies enhance our understanding of spatial patterns?",
+      "What advantages does GIS offer over traditional mapping methods?"
+    ],
+    "learning_targets": [
+      "I can use GIS and geospatial technologies to create maps displaying spatial patterns.",
+      "I can analyze multiple data layers to identify relationships between geographic variables.",
+      "I can evaluate the advantages and limitations of different geospatial technologies."
+    ],
+    "vocabulary": ["GIS", "geospatial technology", "data layer", "remote sensing", "GPS", "spatial analysis", "georeferencing", "cartography"],
+    "sample_assessment": "A researcher uses GIS to overlay layers showing income levels, air pollution, and proximity to industrial sites. This analysis would MOST LIKELY be used to A) find the best restaurants in a city B) investigate potential environmental justice issues C) plan a vacation route D) determine the age of buildings"
+  },
+  {
+    "code": "D2.Geo.2.9-12",
+    "benchmark": "Use maps, satellite images, photographs, and other representations to explain relationships between the locations of places and regions and their political, cultural, and economic dynamics at multiple scales.",
+    "topics": ["Multi-Scale Analysis", "Spatial Relationships", "Scale"],
+    "dok": 3,
+    "item_specs": "Students analyze geographic relationships at local, regional, national, and global scales. Items require multi-scale spatial reasoning.",
+    "essential_questions": [
+      "How do geographic relationships look different at local, regional, and global scales?",
+      "Why is it important to analyze spatial patterns at multiple scales?"
+    ],
+    "learning_targets": [
+      "I can analyze geographic relationships at multiple spatial scales.",
+      "I can explain how changing the scale of analysis reveals different patterns.",
+      "I can use multiple representations to explain complex spatial relationships."
+    ],
+    "vocabulary": ["scale", "local", "regional", "global", "spatial scale", "multi-scalar analysis", "generalization", "resolution"],
+    "sample_assessment": "When analyzing deforestation, why is it important to examine the issue at BOTH local and global scales? A) It is not important to use multiple scales B) Local analysis reveals community impacts while global analysis reveals planetary consequences and international trade connections C) Global analysis is always sufficient D) Local analysis provides all necessary information"
+  },
+  {
+    "code": "D2.Geo.3.9-12",
+    "benchmark": "Use geographic data to analyze variations in the spatial patterns of cultural and environmental characteristics at multiple scales.",
+    "topics": ["Data Analysis", "Spatial Variation", "Geographic Research"],
+    "dok": 3,
+    "item_specs": "Students apply quantitative and qualitative geographic data to analyze spatial variation. Items include data interpretation and statistical analysis.",
+    "essential_questions": [
+      "How do geographers use data to identify and explain spatial patterns?",
+      "What methods are most effective for analyzing geographic data at different scales?"
+    ],
+    "learning_targets": [
+      "I can analyze geographic data to identify spatial patterns and variations.",
+      "I can use quantitative methods to examine spatial relationships.",
+      "I can evaluate the reliability and limitations of geographic data sources."
+    ],
+    "vocabulary": ["quantitative data", "qualitative data", "spatial statistics", "correlation", "regression", "census data", "demographic data", "sampling"],
+    "sample_assessment": "A geographer analyzes census data showing that poverty rates are higher in neighborhoods near industrial zones. Before concluding that industry causes poverty, the geographer should A) accept the conclusion immediately B) investigate other variables such as historical segregation, zoning laws, and access to education that might explain the pattern C) ignore the data D) only look at one neighborhood"
+  },
+  {
+    "code": "D2.Geo.4.9-12",
+    "benchmark": "Analyze relationships and interactions within and between human and physical systems to explain reciprocal influences that occur among them.",
+    "topics": ["Human-Physical Systems", "Reciprocal Influences", "Systems Thinking"],
+    "dok": 3,
+    "item_specs": "Students analyze bidirectional relationships between human and physical systems. Items require systems-thinking analysis of geographic interactions.",
+    "essential_questions": [
+      "How do human activities affect physical systems, and how do physical systems affect human activities?",
+      "Why is systems thinking important for understanding human-environment interactions?"
+    ],
+    "learning_targets": [
+      "I can analyze how human activities modify physical systems.",
+      "I can explain how physical systems constrain and enable human activities.",
+      "I can apply systems thinking to understand reciprocal human-environment interactions."
+    ],
+    "vocabulary": ["system", "feedback loop", "human-environment interaction", "anthropogenic change", "natural hazard", "adaptation", "mitigation", "resilience"],
+    "sample_assessment": "The relationship between urbanization and flooding illustrates a feedback loop because A) cities have nothing to do with flooding B) urban development increases impervious surfaces, which increases runoff, which increases flooding, which in turn influences future development decisions C) flooding only occurs in rural areas D) urbanization always prevents flooding"
+  },
+  {
+    "code": "D2.Geo.5.9-12",
+    "benchmark": "Evaluate how political and economic decisions throughout time have influenced cultural and environmental characteristics of various places and regions.",
+    "topics": ["Political Decisions", "Economic Impacts", "Historical Geography"],
+    "dok": 3,
+    "item_specs": "Students evaluate how political and economic decisions have shaped the cultural and environmental landscape. Items include historical case studies and evaluative analysis.",
+    "essential_questions": [
+      "How have political and economic decisions shaped the cultural and environmental character of regions?",
+      "What are the long-term geographic consequences of policy decisions?"
+    ],
+    "learning_targets": [
+      "I can evaluate how political decisions have shaped cultural and environmental characteristics.",
+      "I can analyze the long-term geographic consequences of economic policies.",
+      "I can trace how historical decisions continue to influence contemporary geographic patterns."
+    ],
+    "vocabulary": ["colonialism", "imperialism", "economic policy", "land reform", "environmental regulation", "border", "territorial dispute", "economic zone"],
+    "sample_assessment": "The straight-line national borders in much of Africa are a geographic legacy of A) natural geographic features B) European colonial powers drawing borders without regard for ethnic, linguistic, or cultural boundaries C) African nations choosing simple borders D) United Nations planning"
+  },
+  {
+    "code": "D2.Geo.6.9-12",
+    "benchmark": "Evaluate the impact of human settlement activities on the environmental and cultural characteristics of specific places and regions.",
+    "topics": ["Settlement Impact", "Environmental Modification", "Cultural Transformation"],
+    "dok": 3,
+    "item_specs": "Students evaluate how human settlement has transformed environments and cultures. Items include before-and-after analysis and impact evaluation.",
+    "essential_questions": [
+      "How have human settlements transformed the natural environment?",
+      "What cultural changes accompany the establishment and growth of settlements?"
+    ],
+    "learning_targets": [
+      "I can evaluate how human settlement activities have modified local environments.",
+      "I can analyze how settlement patterns have transformed cultural characteristics of regions.",
+      "I can assess the long-term sustainability of different settlement patterns."
+    ],
+    "vocabulary": ["settlement", "land conversion", "habitat destruction", "cultural assimilation", "gentrification", "displacement", "brownfield", "greenfield"],
+    "sample_assessment": "Gentrification in urban neighborhoods MOST commonly results in A) no changes to the neighborhood B) rising property values, displacement of long-term residents, and transformation of the neighborhood's cultural character C) decreased property values D) increased industrial activity"
+  },
+  {
+    "code": "D2.Geo.7.9-12",
+    "benchmark": "Analyze how changes in transportation and communication technology have influenced the spatial connections among human settlements and affected the spread of ideas and cultural practices.",
+    "topics": ["Transportation Revolution", "Communication Technology", "Global Connectivity"],
+    "dok": 3,
+    "item_specs": "Students analyze the evolving relationship between technology, connectivity, and cultural spread. Items include historical comparison and contemporary analysis.",
+    "essential_questions": [
+      "How have revolutions in transportation and communication fundamentally changed the relationship between distance and human interaction?",
+      "What are the cultural consequences of near-instantaneous global communication?"
+    ],
+    "learning_targets": [
+      "I can analyze how transportation revolutions have changed spatial connections over time.",
+      "I can evaluate the cultural consequences of modern communication technology.",
+      "I can assess how technology has compressed the relationship between time and space."
+    ],
+    "vocabulary": ["time-space compression", "globalization", "digital divide", "information age", "logistics network", "virtual community", "cultural convergence"],
+    "sample_assessment": "The concept of 'time-space compression' refers to A) the physical shrinking of the Earth B) how advances in transportation and communication have effectively reduced the time and cost of moving people, goods, and information across space C) the compression of files on a computer D) time zones becoming closer together"
+  },
+  {
+    "code": "D2.Geo.8.9-12",
+    "benchmark": "Evaluate the consequences of human-made and natural catastrophes on global trade, politics, and human migration.",
+    "topics": ["Catastrophic Events", "Global Consequences", "Systemic Impact"],
+    "dok": 3,
+    "item_specs": "Students evaluate the cascading effects of catastrophic events on interconnected global systems. Items include case study analysis and impact assessment.",
+    "essential_questions": [
+      "How do catastrophic events in one region create cascading effects globally?",
+      "What makes some regions more vulnerable to the consequences of catastrophes?"
+    ],
+    "learning_targets": [
+      "I can evaluate how catastrophic events affect global trade networks.",
+      "I can analyze the political consequences of major catastrophes.",
+      "I can assess how catastrophes drive migration and displacement patterns."
+    ],
+    "vocabulary": ["cascade effect", "supply chain disruption", "climate refugee", "humanitarian crisis", "systemic risk", "vulnerability", "disaster preparedness"],
+    "sample_assessment": "The 2011 earthquake and tsunami in Japan disrupted global supply chains PRIMARILY because A) Japan is geographically isolated B) Japan is a critical node in global manufacturing, particularly for electronics and automotive components C) The tsunami affected all countries equally D) Global trade is independent of regional events"
+  },
+  {
+    "code": "D2.Geo.9.9-12",
+    "benchmark": "Evaluate the influence of long-term climate variability on human migration, settlement patterns, and resource use.",
+    "topics": ["Climate Variability", "Long-term Change", "Historical Migration"],
+    "dok": 3,
+    "item_specs": "Students evaluate how long-term climate changes have influenced human geographic patterns. Items include analysis of historical and projected climate impacts.",
+    "essential_questions": [
+      "How has long-term climate variability shaped where and how humans live?",
+      "How might future climate change affect global migration and settlement patterns?"
+    ],
+    "learning_targets": [
+      "I can evaluate how historical climate changes influenced migration and settlement.",
+      "I can analyze the relationship between climate variability and resource availability.",
+      "I can assess how projected climate changes may affect future human geography."
+    ],
+    "vocabulary": ["climate variability", "ice age", "drought", "sea level rise", "climate migration", "adaptation", "resource scarcity", "desertification"],
+    "sample_assessment": "How might rising sea levels over the next century affect global settlement patterns? A) They will have no effect B) Coastal cities housing hundreds of millions of people may face flooding, displacement, and the need for massive adaptation or relocation C) Only island nations will be affected D) Sea levels are not expected to change"
+  },
+  {
+    "code": "D2.Geo.10.9-12",
+    "benchmark": "Evaluate how economic globalization and the worldwide flow of people, goods, and ideas have changed the spatial patterns of economic activities.",
+    "topics": ["Economic Globalization", "Trade Patterns", "Global Economy"],
+    "dok": 3,
+    "item_specs": "Students evaluate how globalization has restructured economic activities spatially. Items include analysis of global trade data and economic geography patterns.",
+    "essential_questions": [
+      "How has globalization changed where goods are produced and consumed?",
+      "What are the geographic winners and losers of economic globalization?"
+    ],
+    "learning_targets": [
+      "I can evaluate how globalization has changed spatial patterns of production and consumption.",
+      "I can analyze the flow of people, goods, and ideas in the global economy.",
+      "I can assess the geographic consequences of economic globalization for different regions."
+    ],
+    "vocabulary": ["outsourcing", "offshoring", "global supply chain", "free trade zone", "multinational corporation", "economic integration", "trade deficit", "special economic zone"],
+    "sample_assessment": "The shift of manufacturing from the United States to Southeast Asia over the past several decades illustrates A) a decrease in global trade B) how globalization has restructured the spatial patterns of production by moving manufacturing to regions with lower labor costs C) that technology has no role in economic geography D) that all countries produce the same goods"
+  },
+  {
+    "code": "D2.Geo.11.9-12",
+    "benchmark": "Evaluate how the forces of cooperation, competition, diffusion, and innovation influence the distribution of economic activities in different regions.",
+    "topics": ["Economic Geography", "Cooperation and Competition", "Innovation"],
+    "dok": 3,
+    "item_specs": "Students analyze how economic forces shape the spatial distribution of industries and activities. Items include location theory analysis and regional comparison.",
+    "essential_questions": [
+      "What forces determine where economic activities concentrate or disperse?",
+      "How do innovation and competition reshape the economic geography of regions?"
+    ],
+    "learning_targets": [
+      "I can analyze how cooperation and competition influence the location of economic activities.",
+      "I can evaluate how innovation clusters form and affect regional economies.",
+      "I can assess how diffusion of technology and ideas changes economic geography."
+    ],
+    "vocabulary": ["agglomeration", "innovation cluster", "Silicon Valley", "competitive advantage", "economic specialization", "technology transfer", "knowledge economy"],
+    "sample_assessment": "Why have technology companies concentrated in Silicon Valley rather than distributing evenly across the country? A) Government mandated their location B) Agglomeration benefits including shared talent pools, venture capital access, university partnerships, and knowledge spillovers encourage clustering C) The climate is the only factor D) Real estate is cheapest there"
+  },
+  {
+    "code": "D2.Geo.12.9-12",
+    "benchmark": "Evaluate the consequences of human-induced environmental change at local, regional, national, and global scales.",
+    "topics": ["Environmental Change", "Multi-Scale Impact", "Anthropogenic Effects"],
+    "dok": 4,
+    "item_specs": "Students evaluate the cascading effects of environmental change across multiple scales. Items require multi-scale analysis and evidence-based evaluation.",
+    "essential_questions": [
+      "How do local environmental changes have global consequences?",
+      "What responsibilities do nations have for environmental changes that cross borders?"
+    ],
+    "learning_targets": [
+      "I can evaluate environmental changes at multiple geographic scales.",
+      "I can analyze how local environmental actions have global consequences.",
+      "I can assess the responsibilities of different actors in addressing environmental change."
+    ],
+    "vocabulary": ["climate change", "ocean acidification", "biodiversity loss", "transboundary pollution", "environmental governance", "Paris Agreement", "carbon emissions", "tipping point"],
+    "sample_assessment": "Deforestation of the Amazon rainforest is considered a global issue because A) only Brazil is affected B) the Amazon plays a critical role in global carbon cycling, biodiversity, and weather patterns that affect the entire planet C) deforestation has no effect on climate D) the Amazon is located in multiple continents"
+  },
+  {
+    "code": "D2.Geo.13.9-12",
+    "benchmark": "Analyze the reciprocal relationship between urbanization and economic development in different regions of the world.",
+    "topics": ["Urbanization", "Economic Development", "Global Cities"],
+    "dok": 3,
+    "item_specs": "Students analyze how urbanization and economic development influence each other across different contexts. Items include comparative urban analysis and data interpretation.",
+    "essential_questions": [
+      "How do urbanization and economic development reinforce each other?",
+      "Why do urbanization patterns differ between developed and developing countries?"
+    ],
+    "learning_targets": [
+      "I can analyze the relationship between urbanization and economic development.",
+      "I can compare urbanization patterns in developed and developing countries.",
+      "I can evaluate the economic opportunities and challenges created by rapid urbanization."
+    ],
+    "vocabulary": ["megacity", "primate city", "urban primacy", "informal economy", "slum", "urban planning", "economic development", "smart city"],
+    "sample_assessment": "How does urbanization in developing countries often differ from urbanization in developed countries? A) There is no difference B) Developing countries often experience more rapid urbanization that outpaces infrastructure development, leading to informal settlements and strained services C) Developed countries urbanize faster D) Developing countries do not experience urbanization"
+  },
+  {
+    "code": "D2.Geo.14.9-12",
+    "benchmark": "Analyze how global interconnections create complex spatial patterns of inequality and evaluate geographic approaches to addressing global disparities.",
+    "topics": ["Global Inequality", "Spatial Patterns", "Development Geography"],
+    "dok": 4,
+    "item_specs": "Students analyze how global systems create and perpetuate geographic inequality. Items require multi-source analysis and evaluative argumentation.",
+    "essential_questions": [
+      "How do global economic and political systems create geographic patterns of inequality?",
+      "What geographic approaches can help address global disparities?"
+    ],
+    "learning_targets": [
+      "I can analyze how global interconnections create spatial patterns of inequality.",
+      "I can evaluate geographic approaches to reducing global disparities.",
+      "I can assess how historical geography influences contemporary patterns of inequality."
+    ],
+    "vocabulary": ["global inequality", "core-periphery model", "dependency theory", "fair trade", "foreign aid", "sustainable development", "SDGs", "Global South"],
+    "sample_assessment": "The core-periphery model suggests that global inequality exists because A) all countries are equally developed B) wealthy 'core' nations benefit from economic relationships that extract resources and labor from 'peripheral' nations C) geography plays no role in economic development D) inequality is a recent phenomenon"
+  },
+  {
+    "code": "D2.Geo.15.9-12",
+    "benchmark": "Evaluate the impact of climate change on human populations and propose geographic solutions for adaptation and mitigation.",
+    "topics": ["Climate Change", "Adaptation", "Mitigation", "Geographic Solutions"],
+    "dok": 4,
+    "item_specs": "Students evaluate climate change impacts and propose geographic solutions. Items require evidence-based evaluation and solution design.",
+    "essential_questions": [
+      "How is climate change affecting human populations differently across the globe?",
+      "What geographic strategies are most effective for climate adaptation and mitigation?"
+    ],
+    "learning_targets": [
+      "I can evaluate how climate change disproportionately affects different regions and populations.",
+      "I can propose geographic solutions for climate adaptation.",
+      "I can assess the effectiveness of different mitigation strategies."
+    ],
+    "vocabulary": ["climate adaptation", "mitigation", "carbon sequestration", "renewable energy", "sea wall", "climate justice", "vulnerability assessment", "resilience planning"],
+    "sample_assessment": "Climate change is considered a geographic justice issue because A) all regions are affected equally B) the regions that contributed least to greenhouse gas emissions often face the greatest impacts from climate change C) only wealthy countries are affected D) climate change does not affect human populations"
+  },
+  {
+    "code": "D2.Geo.16.9-12",
+    "benchmark": "Analyze the spatial patterns of global migration and evaluate the geographic, economic, political, and cultural factors that drive contemporary migration flows.",
+    "topics": ["Global Migration", "Contemporary Migration", "Diaspora"],
+    "dok": 3,
+    "item_specs": "Students analyze contemporary global migration patterns and evaluate driving factors. Items include migration data analysis and multi-factor evaluation.",
+    "essential_questions": [
+      "What geographic, economic, and political factors drive contemporary global migration?",
+      "How do migration patterns reshape the cultural geography of sending and receiving regions?"
+    ],
+    "learning_targets": [
+      "I can analyze spatial patterns of contemporary global migration.",
+      "I can evaluate the multiple factors that drive migration flows.",
+      "I can assess the geographic and cultural impacts of migration on both sending and receiving regions."
+    ],
+    "vocabulary": ["diaspora", "transnationalism", "remittance", "brain drain", "brain gain", "forced migration", "voluntary migration", "chain migration"],
+    "sample_assessment": "The concept of 'brain drain' refers to A) memory loss due to pollution B) the emigration of highly educated and skilled individuals from developing to developed countries, depleting the sending country's human capital C) increased education spending D) immigration of unskilled workers"
+  },
+  {
+    "code": "D2.Geo.17.9-12",
+    "benchmark": "Evaluate the effectiveness of geographic models and theories in explaining real-world spatial patterns and human behaviors.",
+    "topics": ["Geographic Models", "Theory", "Spatial Analysis"],
+    "dok": 4,
+    "item_specs": "Students evaluate how well geographic models explain real-world phenomena. Items include model application and critical evaluation of theoretical frameworks.",
+    "essential_questions": [
+      "How well do geographic models explain real-world patterns?",
+      "What are the strengths and limitations of geographic theories?"
+    ],
+    "learning_targets": [
+      "I can apply geographic models to explain real-world spatial patterns.",
+      "I can evaluate the strengths and limitations of geographic theories.",
+      "I can analyze how models simplify complex geographic relationships."
+    ],
+    "vocabulary": ["model", "theory", "von Thunen model", "central place theory", "gravity model", "demographic transition model", "concentric zone model", "sector model"],
+    "sample_assessment": "The demographic transition model predicts that countries will move through stages from high birth/death rates to low birth/death rates as they industrialize. A LIMITATION of this model is that A) it perfectly predicts all countries' experiences B) it was developed based primarily on European experiences and may not account for the unique circumstances of all developing nations C) it has never been applied D) no country has gone through the transition"
+  },
+  {
+    "code": "D2.Geo.18.9-12",
+    "benchmark": "Analyze the geographic dimensions of geopolitical conflicts and evaluate how territorial disputes reflect broader power dynamics.",
+    "topics": ["Geopolitics", "Territorial Disputes", "Power and Space"],
+    "dok": 3,
+    "item_specs": "Students analyze how geography influences geopolitical conflicts. Items include territorial dispute analysis and geopolitical evaluation.",
+    "essential_questions": [
+      "How does geography influence geopolitical conflicts?",
+      "What role do natural resources and strategic locations play in territorial disputes?"
+    ],
+    "learning_targets": [
+      "I can analyze the geographic dimensions of geopolitical conflicts.",
+      "I can evaluate how control of territory and resources drives international disputes.",
+      "I can assess how geographic factors influence diplomatic and military strategies."
+    ],
+    "vocabulary": ["geopolitics", "territorial dispute", "strategic resource", "chokepoint", "buffer state", "sphere of influence", "territorial sovereignty", "maritime boundary"],
+    "sample_assessment": "Competing claims in the South China Sea involve multiple nations PRIMARILY because A) the area has pleasant weather B) the region contains significant oil and gas reserves, major shipping routes, and rich fishing grounds C) no country wants the territory D) it is the largest body of water in the world"
+  },
+  {
+    "code": "D2.Geo.19.9-12",
+    "benchmark": "Evaluate how geographic knowledge and geospatial technologies can be applied to solve real-world problems in communities.",
+    "topics": ["Applied Geography", "Problem-Solving", "Community Applications"],
+    "dok": 3,
+    "item_specs": "Students evaluate practical applications of geographic knowledge and technology. Items include problem-solving scenarios and technology application evaluation.",
+    "essential_questions": [
+      "How can geographic knowledge be applied to solve real-world community problems?",
+      "What role do geospatial technologies play in planning and decision-making?"
+    ],
+    "learning_targets": [
+      "I can apply geographic knowledge to analyze community problems.",
+      "I can evaluate how geospatial technologies can inform planning and decision-making.",
+      "I can propose geographic solutions to real-world challenges."
+    ],
+    "vocabulary": ["applied geography", "urban planning", "site analysis", "hazard mapping", "spatial decision support", "community mapping", "participatory GIS"],
+    "sample_assessment": "A city government wants to determine the best location for a new fire station. Which geographic approach would be MOST useful? A) Reading historical novels about the area B) Using GIS to analyze response time data, population density, road networks, and existing station coverage areas C) Choosing the cheapest available land D) Placing it near city hall"
+  },
+  {
+    "code": "D2.Geo.20.9-12",
+    "benchmark": "Analyze how geographic factors contribute to patterns of global health, food security, and quality of life disparities.",
+    "topics": ["Global Health", "Food Security", "Quality of Life", "Health Geography"],
+    "dok": 3,
+    "item_specs": "Students analyze geographic dimensions of health, food security, and well-being. Items include spatial analysis of health and development data.",
+    "essential_questions": [
+      "How does geography influence patterns of health and disease around the world?",
+      "What geographic factors contribute to food insecurity and quality of life disparities?"
+    ],
+    "learning_targets": [
+      "I can analyze geographic patterns of global health and disease.",
+      "I can evaluate how geographic factors contribute to food security and insecurity.",
+      "I can assess how geographic disparities in resources affect quality of life."
+    ],
+    "vocabulary": ["food security", "food desert", "epidemiology", "health geography", "malnutrition", "sanitation", "pandemic", "endemic"],
+    "sample_assessment": "Food deserts in urban areas — neighborhoods with limited access to affordable, nutritious food — are BEST understood as A) a result of climate change only B) a geographic pattern where economic disinvestment, transportation barriers, and poverty intersect to limit food access C) areas where people choose not to eat healthy food D) neighborhoods without any grocery stores worldwide"
+  }
+]

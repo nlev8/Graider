@@ -1,0 +1,902 @@
+[
+  {
+    "code": "D2.His.1.6-8",
+    "benchmark": "Analyze the development of early civilizations in Mesopotamia, Egypt, India, and China, explaining how geographic factors influenced their growth.",
+    "topics": ["Ancient Civilizations", "River Valleys", "Geographic Influence"],
+    "dok": 2,
+    "item_specs": "Students identify key features of early civilizations and explain how geography shaped their development. Items include map analysis and characteristic identification.",
+    "essential_questions": [
+      "What features define a civilization?",
+      "How did geographic factors influence the development of early civilizations?"
+    ],
+    "learning_targets": [
+      "I can identify the key characteristics of early civilizations.",
+      "I can explain how river valleys supported the development of early civilizations.",
+      "I can compare the development of civilizations in different geographic regions."
+    ],
+    "vocabulary": ["civilization", "irrigation", "surplus", "social hierarchy", "cuneiform", "pharaoh", "Indus Valley", "dynasty"],
+    "sample_assessment": "Which geographic feature was MOST important to the development of ancient Egyptian civilization? A) Mountain ranges B) The Nile River, which provided water for irrigation and fertile soil for agriculture C) Dense forests D) Coastal beaches"
+  },
+  {
+    "code": "D2.His.2.6-8",
+    "benchmark": "Describe the political, social, and cultural achievements of ancient Greece and their influence on Western civilization.",
+    "topics": ["Ancient Greece", "Democracy", "Philosophy", "Cultural Legacy"],
+    "dok": 2,
+    "item_specs": "Students identify key Greek achievements and explain their lasting influence. Items include identification and influence analysis.",
+    "essential_questions": [
+      "What were the most significant achievements of ancient Greece?",
+      "How do Greek ideas continue to influence modern society?"
+    ],
+    "learning_targets": [
+      "I can describe the development of democracy in ancient Athens.",
+      "I can explain the contributions of Greek philosophers, artists, and scientists.",
+      "I can analyze how Greek achievements influenced Western civilization."
+    ],
+    "vocabulary": ["democracy", "city-state", "polis", "philosophy", "Socrates", "Plato", "Aristotle", "Hellenistic", "republic"],
+    "sample_assessment": "Which concept from ancient Athens has had the GREATEST lasting influence on modern Western governments? A) Rule by a single emperor B) The idea of democracy — citizens participating in government decision-making C) Government by military generals D) Rule by religious leaders"
+  },
+  {
+    "code": "D2.His.3.6-8",
+    "benchmark": "Analyze the rise, achievements, and fall of the Roman Empire and its lasting impact on law, government, and culture.",
+    "topics": ["Roman Empire", "Law", "Government", "Cultural Legacy"],
+    "dok": 2,
+    "item_specs": "Students examine the causes of Roman expansion and decline, and identify lasting Roman contributions. Items include cause-effect analysis and legacy identification.",
+    "essential_questions": [
+      "What factors contributed to the rise and fall of the Roman Empire?",
+      "How do Roman achievements in law and government continue to influence the modern world?"
+    ],
+    "learning_targets": [
+      "I can explain the factors that contributed to Rome's expansion and power.",
+      "I can describe key Roman achievements in law, engineering, and government.",
+      "I can analyze the causes of the fall of the Roman Empire."
+    ],
+    "vocabulary": ["republic", "empire", "Senate", "Roman law", "aqueduct", "Pax Romana", "barbarian", "decline"],
+    "sample_assessment": "Which Roman contribution has had the MOST lasting influence on modern legal systems? A) Gladiatorial combat B) The concept of written legal codes that apply equally to all citizens C) The use of chariots D) The worship of multiple gods"
+  },
+  {
+    "code": "D2.His.4.6-8",
+    "benchmark": "Explain the origins, beliefs, and spread of major world religions including Hinduism, Buddhism, Judaism, Christianity, and Islam.",
+    "topics": ["World Religions", "Cultural Diffusion", "Belief Systems"],
+    "dok": 2,
+    "item_specs": "Students describe the origins and core beliefs of major world religions and explain how they spread. Items include comparison and diffusion analysis.",
+    "essential_questions": [
+      "What core beliefs define each major world religion?",
+      "How and why did major religions spread across regions and cultures?"
+    ],
+    "learning_targets": [
+      "I can explain the origins and core beliefs of major world religions.",
+      "I can describe how trade routes and conquest helped spread religions.",
+      "I can compare the beliefs and practices of different world religions."
+    ],
+    "vocabulary": ["monotheism", "polytheism", "Hinduism", "Buddhism", "Judaism", "Christianity", "Islam", "prophet", "pilgrimage"],
+    "sample_assessment": "Which factor MOST contributed to the spread of Islam across North Africa and the Middle East in the 7th and 8th centuries? A) European colonization B) A combination of military conquest, trade, and the appeal of Islamic teachings C) The printing press D) Television broadcasting"
+  },
+  {
+    "code": "D2.His.5.6-8",
+    "benchmark": "Describe the political, economic, and social structures of medieval European feudal society.",
+    "topics": ["Medieval Europe", "Feudalism", "Social Structure", "Manor System"],
+    "dok": 2,
+    "item_specs": "Students describe the hierarchical structure of feudal society and explain how it organized political, economic, and social life. Items include structure identification and role analysis.",
+    "essential_questions": [
+      "How did feudalism organize medieval European society?",
+      "What were the rights and obligations of different social classes under feudalism?"
+    ],
+    "learning_targets": [
+      "I can describe the social hierarchy of feudal Europe.",
+      "I can explain the mutual obligations between lords and vassals.",
+      "I can analyze how the manor system organized economic life in medieval Europe."
+    ],
+    "vocabulary": ["feudalism", "vassal", "lord", "serf", "manor", "fief", "knight", "feudal contract", "medieval"],
+    "sample_assessment": "In the feudal system, what did a vassal receive in exchange for military service and loyalty to a lord? A) A salary B) A fief — a grant of land to use and govern C) Freedom from all obligations D) Citizenship in a democracy"
+  },
+  {
+    "code": "D2.His.6.6-8",
+    "benchmark": "Analyze the achievements and influence of Islamic civilization during the Golden Age, including contributions to science, mathematics, and culture.",
+    "topics": ["Islamic Golden Age", "Science", "Mathematics", "Cultural Achievement"],
+    "dok": 2,
+    "item_specs": "Students identify key achievements of the Islamic Golden Age and explain how they influenced other civilizations. Items include achievement identification and influence analysis.",
+    "essential_questions": [
+      "What were the major achievements of Islamic civilization during the Golden Age?",
+      "How did Islamic scholars preserve and advance knowledge from earlier civilizations?"
+    ],
+    "learning_targets": [
+      "I can describe major achievements in science, mathematics, and medicine during the Islamic Golden Age.",
+      "I can explain how Islamic scholars preserved Greek and Roman knowledge.",
+      "I can analyze how Islamic achievements influenced European development."
+    ],
+    "vocabulary": ["Islamic Golden Age", "algebra", "caliphate", "House of Wisdom", "astrolabe", "Arabic numerals", "translation movement", "mosque"],
+    "sample_assessment": "How did Islamic scholars during the Golden Age contribute to the preservation of knowledge? A) They destroyed Greek and Roman texts B) They translated, preserved, and expanded upon Greek, Persian, and Indian works in science and philosophy C) They focused only on religious studies D) They refused to study other cultures' works"
+  },
+  {
+    "code": "D2.His.7.6-8",
+    "benchmark": "Describe the major civilizations and empires of sub-Saharan Africa, including their achievements in trade, governance, and culture.",
+    "topics": ["African Civilizations", "Trade", "Empires", "Cultural Achievement"],
+    "dok": 2,
+    "item_specs": "Students identify major African civilizations and describe their achievements. Items include identification and description of key features.",
+    "essential_questions": [
+      "What were the major empires and civilizations of sub-Saharan Africa?",
+      "How did trade networks connect African civilizations to the wider world?"
+    ],
+    "learning_targets": [
+      "I can describe the major empires of West Africa, including Ghana, Mali, and Songhai.",
+      "I can explain the role of trade in connecting African civilizations to other regions.",
+      "I can identify cultural achievements of African civilizations."
+    ],
+    "vocabulary": ["Ghana Empire", "Mali Empire", "Songhai", "Mansa Musa", "trans-Saharan trade", "Timbuktu", "oral tradition", "gold-salt trade"],
+    "sample_assessment": "The city of Timbuktu in the Mali Empire was significant PRIMARILY because A) it was a major military fortress B) it was a center of learning, trade, and Islamic scholarship C) it was a port city D) it had no connection to trade routes"
+  },
+  {
+    "code": "D2.His.8.6-8",
+    "benchmark": "Analyze the civilizations of East Asia, including the achievements of imperial China, feudal Japan, and the Mongol Empire.",
+    "topics": ["East Asian Civilizations", "Imperial China", "Feudal Japan", "Mongol Empire"],
+    "dok": 2,
+    "item_specs": "Students analyze key developments in East Asian civilizations and compare their political and cultural systems. Items include achievement identification and comparison.",
+    "essential_questions": [
+      "What were the major achievements of Chinese, Japanese, and Mongol civilizations?",
+      "How did East Asian civilizations interact with and influence each other?"
+    ],
+    "learning_targets": [
+      "I can describe major achievements of imperial Chinese dynasties.",
+      "I can explain the structure of feudal Japanese society.",
+      "I can analyze the impact of the Mongol Empire on connecting East and West."
+    ],
+    "vocabulary": ["dynasty", "Silk Road", "samurai", "shogun", "Confucianism", "Mongol Empire", "Genghis Khan", "gunpowder", "compass"],
+    "sample_assessment": "How did the Mongol Empire contribute to increased global connections? A) By isolating conquered peoples from each other B) By creating a vast empire that facilitated trade, communication, and cultural exchange across Eurasia via the Silk Road C) By destroying all trade routes D) By conquering only a small area"
+  },
+  {
+    "code": "D2.His.9.6-8",
+    "benchmark": "Analyze the civilizations of Mesoamerica and South America, including the Maya, Aztec, and Inca empires.",
+    "topics": ["Mesoamerican Civilizations", "Maya", "Aztec", "Inca"],
+    "dok": 2,
+    "item_specs": "Students identify key features and achievements of pre-Columbian American civilizations. Items include comparison and achievement analysis.",
+    "essential_questions": [
+      "What were the major achievements of pre-Columbian civilizations in the Americas?",
+      "How did geography influence the development of Mesoamerican and South American civilizations?"
+    ],
+    "learning_targets": [
+      "I can describe the political and social structures of the Maya, Aztec, and Inca civilizations.",
+      "I can identify key achievements in science, architecture, and agriculture.",
+      "I can explain how geography influenced the development of each civilization."
+    ],
+    "vocabulary": ["Mesoamerica", "Maya", "Aztec", "Inca", "Tenochtitlan", "terrace farming", "quipu", "human sacrifice", "city-state"],
+    "sample_assessment": "The Inca Empire's system of terrace farming was developed PRIMARILY to A) create decorative landscapes B) overcome the challenge of farming on steep mountain terrain in the Andes C) grow rice in wetland areas D) provide land for grazing animals"
+  },
+  {
+    "code": "D2.His.10.6-8",
+    "benchmark": "Explain the causes and consequences of the Renaissance, including the revival of classical learning and its impact on art, science, and thought.",
+    "topics": ["Renaissance", "Classical Revival", "Art", "Humanism"],
+    "dok": 2,
+    "item_specs": "Students explain what caused the Renaissance and describe its cultural and intellectual achievements. Items include cause-effect analysis and achievement identification.",
+    "essential_questions": [
+      "What factors led to the Renaissance in Europe?",
+      "How did the Renaissance change European art, science, and thinking?"
+    ],
+    "learning_targets": [
+      "I can explain the factors that led to the Renaissance in Italy.",
+      "I can describe how Renaissance art and science differed from medieval traditions.",
+      "I can analyze the concept of humanism and its influence on Renaissance thought."
+    ],
+    "vocabulary": ["Renaissance", "humanism", "patron", "perspective", "Leonardo da Vinci", "Michelangelo", "secular", "classical"],
+    "sample_assessment": "Which factor MOST contributed to the beginning of the Renaissance in Italian city-states? A) The decline of trade B) Wealth from trade, exposure to classical texts through contact with the Islamic world, and patronage of the arts C) The spread of feudalism D) The fall of the Roman Empire"
+  },
+  {
+    "code": "D2.His.11.6-8",
+    "benchmark": "Analyze the causes and effects of the Protestant Reformation and its impact on European politics and society.",
+    "topics": ["Reformation", "Religious Conflict", "Church and State"],
+    "dok": 2,
+    "item_specs": "Students explain the causes of the Reformation and analyze its religious, political, and social consequences. Items include cause-effect analysis.",
+    "essential_questions": [
+      "What problems within the Catholic Church led to the Protestant Reformation?",
+      "How did the Reformation change the religious and political landscape of Europe?"
+    ],
+    "learning_targets": [
+      "I can explain the causes of the Protestant Reformation.",
+      "I can describe the key ideas of Martin Luther and other reformers.",
+      "I can analyze the political and social consequences of the Reformation."
+    ],
+    "vocabulary": ["Reformation", "Protestant", "Martin Luther", "95 Theses", "indulgence", "denomination", "Counter-Reformation", "theocracy"],
+    "sample_assessment": "Martin Luther's 95 Theses PRIMARILY criticized A) the feudal system B) the Catholic Church's sale of indulgences and other corrupt practices C) European monarchies D) the scientific method"
+  },
+  {
+    "code": "D2.His.12.6-8",
+    "benchmark": "Describe the causes and consequences of the Age of Exploration, including its impact on indigenous peoples and the Columbian Exchange.",
+    "topics": ["Age of Exploration", "Columbian Exchange", "Colonization", "Indigenous Impact"],
+    "dok": 2,
+    "item_specs": "Students identify motivations for European exploration and analyze its consequences for different populations. Items include cause-effect and impact analysis.",
+    "essential_questions": [
+      "What motivated European exploration in the 15th and 16th centuries?",
+      "How did the Columbian Exchange transform both the Old and New Worlds?"
+    ],
+    "learning_targets": [
+      "I can explain the economic, religious, and technological factors that drove European exploration.",
+      "I can describe the impact of the Columbian Exchange on both hemispheres.",
+      "I can analyze the consequences of European contact for indigenous peoples."
+    ],
+    "vocabulary": ["Age of Exploration", "Columbian Exchange", "colonization", "indigenous", "conquistador", "navigation", "epidemic", "mercantilism"],
+    "sample_assessment": "The Columbian Exchange refers to A) a stock market in Colombia B) the transfer of plants, animals, diseases, and ideas between the Americas and Europe/Africa/Asia after 1492 C) Columbus's trade with India D) A diplomatic agreement between Spain and Portugal"
+  },
+  {
+    "code": "D2.His.13.6-8",
+    "benchmark": "Analyze the Atlantic slave trade, including its causes, the Middle Passage, and its impact on African societies and the Americas.",
+    "topics": ["Atlantic Slave Trade", "Middle Passage", "African Societies", "Forced Labor"],
+    "dok": 3,
+    "item_specs": "Students examine the causes and human impact of the Atlantic slave trade. Items include primary source analysis and impact evaluation.",
+    "essential_questions": [
+      "What drove the Atlantic slave trade and how did it affect African societies?",
+      "How did slavery shape the economic and social development of the Americas?"
+    ],
+    "learning_targets": [
+      "I can explain the economic factors that drove the Atlantic slave trade.",
+      "I can describe the conditions of the Middle Passage.",
+      "I can analyze the impact of the slave trade on African societies and the Americas."
+    ],
+    "vocabulary": ["Atlantic slave trade", "Middle Passage", "triangular trade", "chattel slavery", "plantation", "abolition", "resistance", "diaspora"],
+    "sample_assessment": "What was the PRIMARY economic motivation for the Atlantic slave trade? A) Cultural exchange B) The demand for forced labor on plantations producing sugar, tobacco, and cotton in the Americas C) European tourists visiting Africa D) Religious conversion"
+  },
+  {
+    "code": "D2.His.14.6-8",
+    "benchmark": "Explain the ideas of the Enlightenment and their influence on political revolutions in Europe and the Americas.",
+    "topics": ["Enlightenment", "Political Revolution", "Natural Rights", "Reason"],
+    "dok": 2,
+    "item_specs": "Students explain key Enlightenment ideas and trace their influence on revolutionary movements. Items include idea identification and influence tracing.",
+    "essential_questions": [
+      "What were the key ideas of the Enlightenment?",
+      "How did Enlightenment ideas inspire political revolutions?"
+    ],
+    "learning_targets": [
+      "I can explain key Enlightenment ideas about government, rights, and reason.",
+      "I can describe how Enlightenment ideas influenced the American and French Revolutions.",
+      "I can analyze the connection between Enlightenment philosophy and modern democracy."
+    ],
+    "vocabulary": ["Enlightenment", "reason", "natural rights", "John Locke", "Voltaire", "Montesquieu", "social contract", "separation of powers"],
+    "sample_assessment": "John Locke's idea that people have natural rights to 'life, liberty, and property' MOST directly influenced A) the feudal system B) the Declaration of Independence and the concept of government protecting individual rights C) The Code of Hammurabi D) The Magna Carta"
+  },
+  {
+    "code": "D2.His.15.6-8",
+    "benchmark": "Analyze the causes, events, and consequences of the French Revolution and the rise of Napoleon.",
+    "topics": ["French Revolution", "Napoleon", "Political Change", "Social Upheaval"],
+    "dok": 2,
+    "item_specs": "Students analyze the causes and outcomes of the French Revolution and Napoleon's impact. Items include cause-effect analysis and sequencing.",
+    "essential_questions": [
+      "What caused the French Revolution?",
+      "How did the French Revolution and Napoleon change Europe?"
+    ],
+    "learning_targets": [
+      "I can explain the social, economic, and political causes of the French Revolution.",
+      "I can describe key events of the Revolution including the Reign of Terror.",
+      "I can analyze Napoleon's impact on France and Europe."
+    ],
+    "vocabulary": ["French Revolution", "Bastille", "Declaration of the Rights of Man", "Reign of Terror", "Napoleon", "coup", "Napoleonic Code", "nationalism"],
+    "sample_assessment": "Which was a MAJOR cause of the French Revolution? A) The invasion by Napoleon B) Extreme inequality between the wealthy nobility and the impoverished common people, combined with financial crisis and Enlightenment ideas C) The discovery of gold in France D) A desire to copy the British monarchy"
+  },
+  {
+    "code": "D2.His.16.6-8",
+    "benchmark": "Describe the causes and effects of the Industrial Revolution, including its impact on workers, cities, and the environment.",
+    "topics": ["Industrial Revolution", "Urbanization", "Labor", "Technology"],
+    "dok": 2,
+    "item_specs": "Students describe how industrialization transformed economies, societies, and environments. Items include cause-effect analysis and impact identification.",
+    "essential_questions": [
+      "How did the Industrial Revolution transform the way people lived and worked?",
+      "What were the positive and negative consequences of industrialization?"
+    ],
+    "learning_targets": [
+      "I can explain the factors that led to the Industrial Revolution in Britain.",
+      "I can describe the impact of industrialization on workers and cities.",
+      "I can analyze both positive and negative consequences of the Industrial Revolution."
+    ],
+    "vocabulary": ["Industrial Revolution", "factory system", "urbanization", "steam engine", "child labor", "labor union", "mass production", "pollution"],
+    "sample_assessment": "Which was a NEGATIVE consequence of the Industrial Revolution for workers? A) Higher wages for all B) Dangerous working conditions, long hours, and child labor in factories C) More leisure time D) Better housing for everyone"
+  },
+  {
+    "code": "D2.His.17.6-8",
+    "benchmark": "Analyze the causes and consequences of European imperialism in Africa and Asia during the 19th century.",
+    "topics": ["Imperialism", "Colonization", "Africa", "Asia"],
+    "dok": 3,
+    "item_specs": "Students examine the motivations for and effects of European imperialism. Items include cause-effect analysis and perspective evaluation.",
+    "essential_questions": [
+      "What motivated European nations to colonize Africa and Asia?",
+      "How did imperialism affect the colonized peoples and their societies?"
+    ],
+    "learning_targets": [
+      "I can explain the economic, political, and cultural motivations for European imperialism.",
+      "I can describe the effects of imperialism on colonized peoples in Africa and Asia.",
+      "I can analyze different perspectives on imperialism."
+    ],
+    "vocabulary": ["imperialism", "colonialism", "Scramble for Africa", "Berlin Conference", "raw materials", "Social Darwinism", "White Man's Burden", "resistance"],
+    "sample_assessment": "At the Berlin Conference of 1884-1885, European powers A) invited African leaders to negotiate borders B) divided Africa among themselves with little regard for existing ethnic, linguistic, or political boundaries C) agreed to end colonialism D) established democratic governments in Africa"
+  },
+  {
+    "code": "D2.His.18.6-8",
+    "benchmark": "Explain the rise of nationalism in the 19th century and its role in shaping new nation-states and conflicts.",
+    "topics": ["Nationalism", "Nation-States", "Unification", "Independence"],
+    "dok": 2,
+    "item_specs": "Students explain how nationalism influenced political movements and the formation of new nations. Items include cause-effect analysis.",
+    "essential_questions": [
+      "How did nationalism shape political movements in the 19th century?",
+      "What role did nationalism play in both unification and conflict?"
+    ],
+    "learning_targets": [
+      "I can explain the concept of nationalism and its origins.",
+      "I can describe how nationalism led to the unification of Italy and Germany.",
+      "I can analyze how nationalism contributed to both unity and conflict."
+    ],
+    "vocabulary": ["nationalism", "nation-state", "unification", "self-determination", "patriotism", "ethnic identity", "Otto von Bismarck", "Giuseppe Garibaldi"],
+    "sample_assessment": "How did nationalism contribute to the unification of Germany in 1871? A) Germany was unified by foreign invasion B) Shared language, culture, and the desire for a unified German state, combined with Bismarck's political strategy, brought German states together C) The United Nations created Germany D) Germany was always a unified country"
+  },
+  {
+    "code": "D2.His.19.6-8",
+    "benchmark": "Analyze the causes, major events, and consequences of World War I, including its impact on empires and the global order.",
+    "topics": ["World War I", "Alliance System", "Trench Warfare", "Treaty of Versailles"],
+    "dok": 2,
+    "item_specs": "Students examine the complex causes and far-reaching consequences of WWI. Items include cause-effect analysis and map interpretation.",
+    "essential_questions": [
+      "What combination of factors led to the outbreak of World War I?",
+      "How did World War I reshape the political map of the world?"
+    ],
+    "learning_targets": [
+      "I can explain the main causes of World War I, including alliances, imperialism, militarism, and nationalism.",
+      "I can describe major events and conditions of the war.",
+      "I can analyze the consequences of WWI, including the collapse of empires and the Treaty of Versailles."
+    ],
+    "vocabulary": ["alliance system", "militarism", "imperialism", "nationalism", "assassination", "trench warfare", "armistice", "Treaty of Versailles"],
+    "sample_assessment": "The four MAIN causes of World War I are often abbreviated as MAIN, which stands for A) Maps, Agriculture, Industry, Navigation B) Militarism, Alliances, Imperialism, Nationalism C) Money, Armies, Intelligence, Navy D) Migration, Art, Innovation, Naturalism"
+  },
+  {
+    "code": "D2.His.20.6-8",
+    "benchmark": "Analyze the rise of totalitarian governments in Europe and Asia after World War I, including fascism and communism.",
+    "topics": ["Totalitarianism", "Fascism", "Communism", "Interwar Period"],
+    "dok": 2,
+    "item_specs": "Students examine the conditions that led to totalitarianism and compare different totalitarian systems. Items include comparison and cause analysis.",
+    "essential_questions": [
+      "What conditions allowed totalitarian governments to rise to power after WWI?",
+      "How did fascism and communism differ in ideology but share authoritarian methods?"
+    ],
+    "learning_targets": [
+      "I can explain the conditions that led to the rise of totalitarian governments.",
+      "I can compare fascist and communist ideologies.",
+      "I can describe how totalitarian leaders maintained control over their populations."
+    ],
+    "vocabulary": ["totalitarianism", "fascism", "communism", "propaganda", "Hitler", "Mussolini", "Stalin", "censorship", "secret police"],
+    "sample_assessment": "Which conditions MOST contributed to the rise of Adolf Hitler in Germany? A) Widespread prosperity and satisfaction B) Economic devastation from the Great Depression, humiliation from the Treaty of Versailles, and weak democratic institutions C) A strong democratic tradition D) Military victory in World War I"
+  },
+  {
+    "code": "D2.His.21.6-8",
+    "benchmark": "Analyze the causes, major events, and global consequences of World War II, including the Holocaust.",
+    "topics": ["World War II", "Holocaust", "Global Conflict", "Postwar Order"],
+    "dok": 3,
+    "item_specs": "Students examine the causes of WWII, the Holocaust, and the war's global impact. Items include primary source analysis and cause-effect evaluation.",
+    "essential_questions": [
+      "How did the failures of the post-WWI order contribute to World War II?",
+      "What were the causes and consequences of the Holocaust?"
+    ],
+    "learning_targets": [
+      "I can analyze the causes of World War II.",
+      "I can describe the events and impact of the Holocaust.",
+      "I can explain the global consequences of WWII, including the creation of the United Nations."
+    ],
+    "vocabulary": ["World War II", "Holocaust", "genocide", "D-Day", "atomic bomb", "Allies", "Axis", "Nuremberg Trials", "United Nations"],
+    "sample_assessment": "The Holocaust is defined as A) the bombing of Pearl Harbor B) the systematic, state-sponsored persecution and murder of six million Jews by the Nazi regime C) The Great Depression D) The Russian Revolution"
+  },
+  {
+    "code": "D2.His.22.6-8",
+    "benchmark": "Explain the origins and major events of the Cold War, including its impact on countries around the world.",
+    "topics": ["Cold War", "Superpower Rivalry", "Proxy Wars", "Decolonization"],
+    "dok": 2,
+    "item_specs": "Students explain the ideological conflict between the U.S. and Soviet Union and its global effects. Items include identification and impact analysis.",
+    "essential_questions": [
+      "What caused the Cold War between the United States and the Soviet Union?",
+      "How did the Cold War affect countries beyond the two superpowers?"
+    ],
+    "learning_targets": [
+      "I can explain the ideological differences that caused the Cold War.",
+      "I can describe major Cold War events and crises.",
+      "I can analyze how the Cold War affected countries in Asia, Africa, and Latin America."
+    ],
+    "vocabulary": ["Cold War", "superpower", "proxy war", "Iron Curtain", "NATO", "Warsaw Pact", "Korean War", "Cuban Missile Crisis"],
+    "sample_assessment": "The Korean War and Vietnam War are considered 'proxy wars' because A) they were fought between the U.S. and Soviet Union directly B) they were conflicts where the superpowers supported opposing sides without fighting each other directly C) they had no connection to the Cold War D) they were fought entirely by proxy robots"
+  },
+  {
+    "code": "D2.His.23.6-8",
+    "benchmark": "Analyze the process of decolonization in Africa and Asia after World War II, including the challenges faced by newly independent nations.",
+    "topics": ["Decolonization", "Independence Movements", "Post-Colonial Challenges"],
+    "dok": 3,
+    "item_specs": "Students analyze why and how colonized peoples gained independence and the challenges they faced afterward. Items include cause-effect analysis and challenge identification.",
+    "essential_questions": [
+      "What factors led to the decolonization of Africa and Asia after World War II?",
+      "What challenges did newly independent nations face?"
+    ],
+    "learning_targets": [
+      "I can explain the factors that led to decolonization after WWII.",
+      "I can describe key independence movements in Africa and Asia.",
+      "I can analyze the challenges faced by newly independent nations."
+    ],
+    "vocabulary": ["decolonization", "independence", "self-determination", "Gandhi", "Mandela", "partition", "neocolonialism", "developing nation"],
+    "sample_assessment": "Which challenge was MOST commonly faced by newly independent nations in Africa after decolonization? A) Too much wealth B) Arbitrary colonial borders that divided ethnic groups, lack of infrastructure, and economic dependence on former colonial powers C) Excessive industrialization D) Overpopulation of cities only"
+  },
+  {
+    "code": "D2.His.24.6-8",
+    "benchmark": "Describe the collapse of the Soviet Union and the end of the Cold War, and explain their impact on the global political landscape.",
+    "topics": ["Soviet Collapse", "End of Cold War", "Post-Cold War World"],
+    "dok": 2,
+    "item_specs": "Students describe the factors leading to the end of the Cold War and analyze changes in the global order. Items include cause-effect analysis and impact identification.",
+    "essential_questions": [
+      "What factors led to the collapse of the Soviet Union?",
+      "How did the end of the Cold War change the global political landscape?"
+    ],
+    "learning_targets": [
+      "I can explain the factors that led to the collapse of the Soviet Union.",
+      "I can describe how the end of the Cold War changed the global political order.",
+      "I can analyze the challenges faced by former Soviet states after the collapse."
+    ],
+    "vocabulary": ["glasnost", "perestroika", "Gorbachev", "Berlin Wall", "dissolution", "democratization", "market economy", "unipolarity"],
+    "sample_assessment": "Which factor contributed MOST to the collapse of the Soviet Union? A) Military victory in Afghanistan B) A combination of economic stagnation, political reforms (glasnost and perestroika), nationalist movements, and the arms race C) Joining NATO D) Winning the Space Race"
+  },
+  {
+    "code": "D2.His.25.6-8",
+    "benchmark": "Analyze the effects of globalization on cultures, economies, and politics in the modern world.",
+    "topics": ["Globalization", "Interconnection", "Modern World", "Cultural Exchange"],
+    "dok": 2,
+    "item_specs": "Students analyze how increased global connections affect different aspects of modern life. Items include cause-effect analysis and impact evaluation.",
+    "essential_questions": [
+      "How has globalization changed the way people around the world live?",
+      "What are the benefits and challenges of an increasingly connected world?"
+    ],
+    "learning_targets": [
+      "I can describe how globalization has increased cultural exchange.",
+      "I can analyze the economic effects of globalization on different countries.",
+      "I can evaluate both the benefits and challenges of globalization."
+    ],
+    "vocabulary": ["globalization", "interdependence", "multinational corporation", "outsourcing", "cultural exchange", "free trade", "global economy", "digital age"],
+    "sample_assessment": "Which is a BENEFIT and which is a CHALLENGE of globalization? A) Benefit: increased isolation; Challenge: decreased trade B) Benefit: access to global markets and cultural exchange; Challenge: loss of local industries and cultural homogenization C) Benefit: no trade; Challenge: no communication D) Both are always negative"
+  },
+  {
+    "code": "D2.His.1.9-12",
+    "benchmark": "Evaluate the political, economic, and social structures of early civilizations and analyze how environmental factors shaped their development and decline.",
+    "topics": ["Early Civilizations", "Environmental Influence", "Political Structures"],
+    "dok": 3,
+    "item_specs": "Students evaluate the complexity of early civilizations and analyze environmental factors in their development and decline. Items require evaluative analysis and environmental comparison.",
+    "essential_questions": [
+      "How did environmental factors determine the success or failure of early civilizations?",
+      "What can the structures of early civilizations tell us about universal patterns of human organization?"
+    ],
+    "learning_targets": [
+      "I can evaluate the sophistication of political and economic structures in early civilizations.",
+      "I can analyze how environmental changes contributed to the decline of civilizations.",
+      "I can compare patterns of development across different civilizations."
+    ],
+    "vocabulary": ["state formation", "bureaucracy", "tribute system", "environmental determinism", "collapse", "adaptation", "social stratification", "surplus economy"],
+    "sample_assessment": "The decline of the Maya civilization is MOST likely attributed to A) a single catastrophic event B) a complex combination of environmental degradation, drought, warfare, and political fragmentation C) European colonization D) a sudden epidemic"
+  },
+  {
+    "code": "D2.His.2.9-12",
+    "benchmark": "Analyze the legacy of classical civilizations (Greece, Rome, Han China, Gupta India) and evaluate their lasting influence on subsequent societies.",
+    "topics": ["Classical Civilizations", "Cultural Legacy", "Comparative History"],
+    "dok": 3,
+    "item_specs": "Students compare classical civilizations and evaluate their enduring contributions. Items require comparative analysis and legacy evaluation.",
+    "essential_questions": [
+      "What made classical civilizations 'classical' — what qualities justify their lasting influence?",
+      "How do the legacies of different classical civilizations continue to shape the modern world?"
+    ],
+    "learning_targets": [
+      "I can compare the political, economic, and cultural achievements of classical civilizations.",
+      "I can evaluate the lasting influence of classical civilizations on subsequent societies.",
+      "I can analyze how classical ideas were transmitted across time and space."
+    ],
+    "vocabulary": ["classical civilization", "legacy", "Confucianism", "Pax Romana", "Gupta Empire", "Han Dynasty", "cultural transmission", "philosophical tradition"],
+    "sample_assessment": "Which statement BEST compares the political legacies of classical Greece and Rome? A) Neither had any lasting influence B) Greece contributed the concept of democracy while Rome contributed models of republican government, law, and imperial administration that influenced Western political development C) Only Rome had lasting influence D) Their contributions were identical"
+  },
+  {
+    "code": "D2.His.3.9-12",
+    "benchmark": "Analyze the role of trade networks (Silk Road, Indian Ocean, Trans-Saharan) in facilitating cultural exchange, disease transmission, and economic development across regions.",
+    "topics": ["Trade Networks", "Cultural Exchange", "Economic Development", "Disease Transmission"],
+    "dok": 3,
+    "item_specs": "Students analyze how trade networks connected distant civilizations and facilitated multiple forms of exchange. Items include map analysis and multi-factor evaluation.",
+    "essential_questions": [
+      "How did pre-modern trade networks connect distant civilizations?",
+      "What were the unintended consequences of increased connectivity through trade?"
+    ],
+    "learning_targets": [
+      "I can analyze how major trade networks connected distant regions of the world.",
+      "I can evaluate the cultural, economic, and biological exchanges facilitated by trade.",
+      "I can assess the role of trade networks in spreading both prosperity and disease."
+    ],
+    "vocabulary": ["Silk Road", "Indian Ocean trade", "trans-Saharan trade", "caravansary", "monsoon", "entrepot", "cultural diffusion", "pandemic"],
+    "sample_assessment": "How did the Black Death (1347-1351) illustrate the unintended consequences of trade networks? A) Trade networks had no role in the plague B) Plague bacteria traveled along trade routes from Central Asia to Europe, demonstrating how the same networks that spread goods and ideas also spread disease C) The plague originated in Europe D) Trade stopped completely during the plague"
+  },
+  {
+    "code": "D2.His.4.9-12",
+    "benchmark": "Evaluate how the interaction between Christianity, Islam, and other belief systems shaped political, social, and cultural developments in the medieval world.",
+    "topics": ["Religious Interaction", "Medieval World", "Crusades", "Cultural Exchange"],
+    "dok": 3,
+    "item_specs": "Students evaluate the complex interactions between major religions and their effects on medieval societies. Items require multi-perspective analysis.",
+    "essential_questions": [
+      "How did interactions between different religions shape the medieval world?",
+      "Were religious conflicts primarily about religion, or were political and economic factors also at play?"
+    ],
+    "learning_targets": [
+      "I can evaluate how interactions between Christianity and Islam shaped medieval politics.",
+      "I can analyze the Crusades from multiple religious and political perspectives.",
+      "I can assess how religious interactions led to both conflict and cultural exchange."
+    ],
+    "vocabulary": ["Crusades", "Reconquista", "interfaith dialogue", "religious tolerance", "schism", "caliphate", "papacy", "dhimmi"],
+    "sample_assessment": "The Crusades are BEST understood as A) purely religious wars B) complex events driven by religious fervor, political ambition, economic interests, and cultural misunderstanding C) peaceful cultural exchanges D) conflicts with no lasting consequences"
+  },
+  {
+    "code": "D2.His.5.9-12",
+    "benchmark": "Analyze the political, economic, and cultural transformations of the Renaissance and Reformation and evaluate their role in the transition from medieval to modern Europe.",
+    "topics": ["Renaissance", "Reformation", "Modernity", "Cultural Transformation"],
+    "dok": 3,
+    "item_specs": "Students analyze how the Renaissance and Reformation together transformed European society. Items require synthesis of multiple developments and evaluative analysis.",
+    "essential_questions": [
+      "How did the Renaissance and Reformation together mark the transition from medieval to modern Europe?",
+      "To what extent were the Renaissance and Reformation revolutionary versus evolutionary?"
+    ],
+    "learning_targets": [
+      "I can analyze how the Renaissance transformed European art, thought, and politics.",
+      "I can evaluate the Reformation's impact on religion, politics, and individual conscience.",
+      "I can assess the extent to which these movements represented a break from the medieval world."
+    ],
+    "vocabulary": ["secularism", "individualism", "printing press", "vernacular", "Counter-Reformation", "Council of Trent", "predestination", "bourgeoisie"],
+    "sample_assessment": "How did the invention of the printing press contribute to BOTH the Renaissance and the Reformation? A) It had no significant impact B) It enabled the rapid spread of humanist ideas and religious texts, democratizing knowledge and challenging the Catholic Church's monopoly on information C) It was only used for printing Bibles D) It was invented after both movements ended"
+  },
+  {
+    "code": "D2.His.6.9-12",
+    "benchmark": "Evaluate the global impact of European exploration and colonization, analyzing the perspectives of European colonizers and colonized peoples.",
+    "topics": ["European Exploration", "Colonization", "Multiple Perspectives", "Global Impact"],
+    "dok": 4,
+    "item_specs": "Students evaluate the impact of European exploration from multiple perspectives. Items require multi-perspective analysis and evaluative reasoning.",
+    "essential_questions": [
+      "How did European exploration and colonization reshape the world?",
+      "How do the perspectives of colonizers and colonized peoples differ on the same events?"
+    ],
+    "learning_targets": [
+      "I can evaluate the global impact of European exploration and colonization.",
+      "I can analyze the same events from the perspectives of both colonizers and colonized peoples.",
+      "I can assess the long-term consequences of colonization for different regions."
+    ],
+    "vocabulary": ["colonization", "imperialism", "cultural destruction", "Columbian Exchange", "encomienda", "mestizo", "resistance", "exploitation"],
+    "sample_assessment": "The arrival of Europeans in the Americas is described as 'discovery' by some and 'invasion' by others. This difference reflects A) a simple disagreement about dates B) fundamentally different perspectives — Europeans viewed it as discovery of new lands while indigenous peoples experienced the destruction of existing civilizations C) That only one perspective is correct D) A difference in language only"
+  },
+  {
+    "code": "D2.His.7.9-12",
+    "benchmark": "Analyze the Atlantic slave trade as a system, evaluating its economic foundations, human cost, and lasting impact on Africa, the Americas, and Europe.",
+    "topics": ["Atlantic Slave Trade", "Economic Systems", "Human Cost", "Lasting Impact"],
+    "dok": 4,
+    "item_specs": "Students analyze the slave trade as an economic system and evaluate its multi-continental impact. Items require systems analysis and evaluative reasoning.",
+    "essential_questions": [
+      "How did the Atlantic slave trade function as an economic system?",
+      "What were the lasting impacts of the slave trade on three continents?"
+    ],
+    "learning_targets": [
+      "I can analyze the Atlantic slave trade as an interconnected economic system.",
+      "I can evaluate the human cost and moral implications of the slave trade.",
+      "I can assess the lasting demographic, economic, and cultural impacts on Africa, the Americas, and Europe."
+    ],
+    "vocabulary": ["triangular trade", "chattel slavery", "Middle Passage", "plantation economy", "African diaspora", "abolitionism", "demographic impact", "reparations"],
+    "sample_assessment": "How did the Atlantic slave trade affect African societies BEYOND the loss of enslaved individuals? A) It had no effect on Africa B) It destabilized political structures, fueled inter-group conflict, depopulated regions, and disrupted economic development for centuries C) It made all African nations wealthier D) It affected only coastal regions"
+  },
+  {
+    "code": "D2.His.8.9-12",
+    "benchmark": "Evaluate the Enlightenment's influence on political revolutions (American, French, Haitian, Latin American) and analyze how revolutionary ideals were applied unevenly across different populations.",
+    "topics": ["Enlightenment", "Political Revolutions", "Uneven Application", "Universal Rights"],
+    "dok": 4,
+    "item_specs": "Students evaluate how Enlightenment ideals were selectively applied during revolutionary movements. Items require comparative analysis and evaluative reasoning about ideological consistency.",
+    "essential_questions": [
+      "How consistently were Enlightenment ideals about equality and rights applied during the Age of Revolutions?",
+      "Why did revolutionary movements that proclaimed universal rights often exclude certain groups?"
+    ],
+    "learning_targets": [
+      "I can evaluate how Enlightenment ideas influenced multiple political revolutions.",
+      "I can analyze how revolutionary ideals were applied unevenly across race, gender, and class.",
+      "I can compare the outcomes of different revolutionary movements."
+    ],
+    "vocabulary": ["Enlightenment", "universal rights", "Haitian Revolution", "Simon Bolivar", "Toussaint L'Ouverture", "Declaration of the Rights of Man", "hypocrisy", "selective application"],
+    "sample_assessment": "The Haitian Revolution (1791-1804) is significant in the Age of Revolutions because A) it failed to achieve independence B) it was the only successful slave revolution that created an independent nation, directly challenging the hypocrisy of Enlightenment ideals that excluded enslaved people C) It was led by European colonizers D) It had no connection to Enlightenment ideas"
+  },
+  {
+    "code": "D2.His.9.9-12",
+    "benchmark": "Analyze the global impact of the Industrial Revolution, evaluating how industrialization transformed economic systems, social structures, and the environment across different regions.",
+    "topics": ["Industrial Revolution", "Global Transformation", "Economic Systems", "Environmental Impact"],
+    "dok": 3,
+    "item_specs": "Students analyze the multi-dimensional impact of industrialization across regions. Items include comparative analysis and environmental evaluation.",
+    "essential_questions": [
+      "How did industrialization transform not just economies but entire social structures and environments?",
+      "Why did some regions industrialize before others, and what were the consequences?"
+    ],
+    "learning_targets": [
+      "I can analyze how the Industrial Revolution transformed economic systems globally.",
+      "I can evaluate the social consequences of industrialization for different groups.",
+      "I can assess the environmental impact of industrialization across regions."
+    ],
+    "vocabulary": ["industrialization", "proletariat", "bourgeoisie", "Marxism", "capitalism", "socialism", "environmental degradation", "global commodity chain"],
+    "sample_assessment": "Karl Marx argued that industrialization would inevitably lead to A) universal prosperity B) class conflict between the bourgeoisie (owners) and the proletariat (workers), eventually resulting in a workers' revolution C) The end of all technology D) Permanent harmony between classes"
+  },
+  {
+    "code": "D2.His.10.9-12",
+    "benchmark": "Evaluate the causes and consequences of European imperialism in the 19th and early 20th centuries, analyzing its impact from multiple perspectives including those of colonized peoples.",
+    "topics": ["Imperialism", "Colonized Perspectives", "Resistance", "Legacy"],
+    "dok": 4,
+    "item_specs": "Students evaluate imperialism from multiple perspectives, emphasizing the experiences of colonized peoples. Items require multi-perspective analysis and evaluative argumentation.",
+    "essential_questions": [
+      "How did imperialism reshape the world in ways that persist today?",
+      "How did colonized peoples resist and respond to imperialism?"
+    ],
+    "learning_targets": [
+      "I can evaluate the multiple motivations for European imperialism.",
+      "I can analyze imperialism from the perspectives of both colonizers and colonized peoples.",
+      "I can assess the long-term legacy of imperialism on contemporary global issues."
+    ],
+    "vocabulary": ["imperialism", "colonialism", "resistance movement", "mandate system", "cultural imperialism", "postcolonialism", "neocolonialism", "self-determination"],
+    "sample_assessment": "Which statement BEST captures the long-term legacy of European imperialism? A) Imperialism had no lasting effects B) Colonial boundaries, economic structures, and cultural impacts continue to shape politics, economics, and identity in formerly colonized regions C) All effects ended when colonies gained independence D) Only positive legacies remained"
+  },
+  {
+    "code": "D2.His.11.9-12",
+    "benchmark": "Analyze the complex causes of World War I, evaluating the relative importance of structural factors versus contingent events.",
+    "topics": ["WWI Causation", "Structural vs. Contingent", "Alliance System", "Imperialism"],
+    "dok": 4,
+    "item_specs": "Students weigh structural and contingent causes of WWI. Items require analytical argumentation about relative causal importance.",
+    "essential_questions": [
+      "Was World War I inevitable, or could it have been prevented?",
+      "What is the relative importance of long-term structural factors versus immediate triggers in causing war?"
+    ],
+    "learning_targets": [
+      "I can analyze the structural factors (alliances, imperialism, militarism, nationalism) that made war likely.",
+      "I can evaluate the role of contingent events (assassination of Franz Ferdinand) in triggering the war.",
+      "I can construct an argument about the relative importance of different causal factors."
+    ],
+    "vocabulary": ["structural cause", "contingent event", "alliance system", "militarism", "arms race", "Balkan crisis", "mobilization", "escalation"],
+    "sample_assessment": "A historian argues that WWI was caused by structural factors rather than the assassination of Archduke Franz Ferdinand. Which evidence would BEST support this argument? A) A biography of Franz Ferdinand B) Data showing decades of arms buildup, alliance commitments, imperial rivalries, and nationalist tensions that made large-scale conflict highly probable C) A timeline of events in June 1914 only D) Maps showing European borders"
+  },
+  {
+    "code": "D2.His.12.9-12",
+    "benchmark": "Evaluate the global consequences of World War I, including the reshaping of empires, the rise of new ideologies, and the seeds of future conflict.",
+    "topics": ["WWI Consequences", "Empire Collapse", "New Ideologies", "Interwar Period"],
+    "dok": 3,
+    "item_specs": "Students evaluate how WWI's consequences set the stage for subsequent developments. Items require evaluative analysis of long-term consequences.",
+    "essential_questions": [
+      "How did the outcome of World War I reshape the global political order?",
+      "To what extent did the peace settlement after WWI plant the seeds for WWII?"
+    ],
+    "learning_targets": [
+      "I can evaluate how WWI led to the collapse of four empires.",
+      "I can analyze how the war's aftermath fostered new ideologies including communism and fascism.",
+      "I can assess how the Treaty of Versailles contributed to future instability."
+    ],
+    "vocabulary": ["mandate system", "League of Nations", "self-determination", "Bolshevik Revolution", "Weimar Republic", "hyperinflation", "war guilt clause", "reparations"],
+    "sample_assessment": "The Treaty of Versailles is often criticized for contributing to World War II because A) it was too lenient on Germany B) its harsh terms, including massive reparations and the war guilt clause, humiliated Germany and created economic conditions that extremist movements exploited C) It successfully prevented all future conflicts D) Germany was satisfied with its terms"
+  },
+  {
+    "code": "D2.His.13.9-12",
+    "benchmark": "Analyze the rise of totalitarian regimes in the interwar period, evaluating how economic crisis, political instability, and ideological appeal enabled their rise to power.",
+    "topics": ["Totalitarianism", "Interwar Crisis", "Ideology", "Propaganda"],
+    "dok": 3,
+    "item_specs": "Students analyze the conditions and strategies that enabled totalitarian movements. Items include comparative analysis and evaluative prompts.",
+    "essential_questions": [
+      "What conditions make societies vulnerable to totalitarian movements?",
+      "How did totalitarian leaders use propaganda and ideology to gain and maintain power?"
+    ],
+    "learning_targets": [
+      "I can analyze how economic crisis and political instability enabled totalitarian movements.",
+      "I can compare the ideologies and methods of different totalitarian regimes.",
+      "I can evaluate how propaganda and state control were used to maintain power."
+    ],
+    "vocabulary": ["totalitarianism", "fascism", "Nazism", "Stalinism", "cult of personality", "propaganda", "collectivization", "autarky"],
+    "sample_assessment": "What do fascist Italy, Nazi Germany, and Stalinist Soviet Union have in COMMON despite their ideological differences? A) They all promoted democracy B) All used single-party rule, state propaganda, suppression of dissent, and cult of personality to maintain total control over society C) They had identical economic systems D) They were allied with each other throughout the 1930s"
+  },
+  {
+    "code": "D2.His.14.9-12",
+    "benchmark": "Evaluate the causes, conduct, and global consequences of World War II, with particular attention to the Holocaust, the use of atomic weapons, and the establishment of the postwar international order.",
+    "topics": ["World War II", "Holocaust", "Atomic Age", "Postwar Order"],
+    "dok": 4,
+    "item_specs": "Students evaluate the moral and strategic dimensions of WWII decisions and their lasting consequences. Items require evaluative analysis of complex moral questions.",
+    "essential_questions": [
+      "What moral and strategic questions arose from the conduct of World War II?",
+      "How did the outcomes of WWII shape the international order for decades to come?"
+    ],
+    "learning_targets": [
+      "I can evaluate the moral and strategic dimensions of key WWII decisions.",
+      "I can analyze the Holocaust as a systematic genocide and its implications for human rights.",
+      "I can assess how the postwar order (UN, Bretton Woods, Cold War) was shaped by WWII outcomes."
+    ],
+    "vocabulary": ["genocide", "total war", "Nuremberg Trials", "Universal Declaration of Human Rights", "Bretton Woods", "Marshall Plan", "iron curtain", "deterrence"],
+    "sample_assessment": "The Universal Declaration of Human Rights (1948) was a direct response to A) the Industrial Revolution B) the atrocities of World War II, particularly the Holocaust, which demonstrated the need for an international framework protecting fundamental human rights C) The Cold War D) European colonization of Africa"
+  },
+  {
+    "code": "D2.His.15.9-12",
+    "benchmark": "Analyze the Cold War as a global phenomenon, evaluating how superpower competition affected developing nations and shaped the modern world.",
+    "topics": ["Cold War Global Impact", "Developing Nations", "Proxy Conflicts", "Non-Aligned Movement"],
+    "dok": 3,
+    "item_specs": "Students analyze the Cold War's impact beyond the superpowers, focusing on developing nations. Items require global perspective analysis and evaluative reasoning.",
+    "essential_questions": [
+      "How did Cold War competition affect countries that were not superpowers?",
+      "Did the Cold War help or harm developing nations?"
+    ],
+    "learning_targets": [
+      "I can analyze how the Cold War affected developing nations through proxy conflicts and aid.",
+      "I can evaluate the Non-Aligned Movement as a response to superpower competition.",
+      "I can assess the long-term effects of Cold War interventions on formerly colonized nations."
+    ],
+    "vocabulary": ["proxy war", "Non-Aligned Movement", "containment", "domino theory", "decolonization", "Cold War intervention", "nation-building", "regime change"],
+    "sample_assessment": "The Non-Aligned Movement was created by developing nations PRIMARILY to A) join NATO B) align with the Soviet Union C) maintain independence from both superpowers and pursue their own development paths during the Cold War D) Support American foreign policy"
+  },
+  {
+    "code": "D2.His.16.9-12",
+    "benchmark": "Evaluate the processes and outcomes of decolonization, analyzing how newly independent nations navigated the challenges of state-building, economic development, and identity formation.",
+    "topics": ["Decolonization", "State-Building", "Post-Colonial Challenges", "Identity"],
+    "dok": 4,
+    "item_specs": "Students evaluate the complex challenges of post-colonial nation-building. Items require evaluative analysis of multiple post-colonial case studies.",
+    "essential_questions": [
+      "Why was state-building so challenging for newly independent nations?",
+      "How did the legacy of colonialism shape the challenges of decolonization?"
+    ],
+    "learning_targets": [
+      "I can evaluate the different paths to independence taken by colonized peoples.",
+      "I can analyze how colonial legacies created challenges for newly independent nations.",
+      "I can assess the role of Cold War politics in shaping post-colonial development."
+    ],
+    "vocabulary": ["decolonization", "partition", "ethnic conflict", "nation-building", "neocolonialism", "dependency", "structural adjustment", "Pan-Africanism"],
+    "sample_assessment": "The partition of India in 1947 illustrates the challenges of decolonization because A) it was entirely peaceful B) the division along religious lines led to massive displacement, violence, and the creation of lasting tensions between India and Pakistan C) Britain carefully planned the transition D) No lives were lost"
+  },
+  {
+    "code": "D2.His.17.9-12",
+    "benchmark": "Analyze how human rights movements worldwide have drawn on and adapted historical models of resistance and advocacy.",
+    "topics": ["Human Rights", "Global Movements", "Resistance Models", "Advocacy"],
+    "dok": 3,
+    "item_specs": "Students analyze connections between historical and contemporary human rights movements across cultures. Items include comparative analysis of resistance strategies.",
+    "essential_questions": [
+      "How have human rights movements around the world learned from and inspired each other?",
+      "What strategies have been most effective in advancing human rights globally?"
+    ],
+    "learning_targets": [
+      "I can analyze how human rights movements have adapted historical models of resistance.",
+      "I can compare strategies used by human rights movements across different cultures and contexts.",
+      "I can evaluate the effectiveness of different approaches to advancing human rights."
+    ],
+    "vocabulary": ["human rights", "nonviolent resistance", "civil disobedience", "apartheid", "Truth and Reconciliation", "international solidarity", "grassroots movement", "universal rights"],
+    "sample_assessment": "Nelson Mandela's anti-apartheid movement in South Africa drew inspiration from A) no previous movements B) the American Civil Rights Movement's use of nonviolent resistance, international pressure, and moral argumentation C) European colonialism D) Soviet communism"
+  },
+  {
+    "code": "D2.His.18.9-12",
+    "benchmark": "Evaluate how economic systems (capitalism, socialism, mixed economies) have developed and competed throughout modern history, analyzing their effects on different populations.",
+    "topics": ["Economic Systems", "Capitalism", "Socialism", "Comparative Economics"],
+    "dok": 3,
+    "item_specs": "Students compare economic systems and evaluate their real-world effects. Items include comparative analysis and evidence-based evaluation.",
+    "essential_questions": [
+      "How have different economic systems affected the well-being of populations?",
+      "What are the strengths and weaknesses of different economic approaches?"
+    ],
+    "learning_targets": [
+      "I can compare the theoretical foundations of capitalism, socialism, and mixed economies.",
+      "I can evaluate the real-world outcomes of different economic systems.",
+      "I can analyze how economic systems have evolved and adapted over time."
+    ],
+    "vocabulary": ["capitalism", "socialism", "communism", "mixed economy", "free market", "planned economy", "privatization", "welfare state"],
+    "sample_assessment": "Most modern economies are BEST described as A) purely capitalist B) purely socialist C) mixed economies that combine elements of both market capitalism and government intervention D) completely unregulated"
+  },
+  {
+    "code": "D2.His.19.9-12",
+    "benchmark": "Analyze the causes, events, and consequences of genocide and mass atrocities in the 20th and 21st centuries, evaluating the international community's responses.",
+    "topics": ["Genocide", "Mass Atrocities", "International Response", "Prevention"],
+    "dok": 4,
+    "item_specs": "Students analyze patterns of genocide and evaluate the effectiveness of international prevention and response. Items require evaluative analysis of morally complex situations.",
+    "essential_questions": [
+      "What conditions lead to genocide and mass atrocities?",
+      "How effective has the international community been in preventing and responding to genocide?"
+    ],
+    "learning_targets": [
+      "I can analyze the conditions and warning signs that precede genocide.",
+      "I can evaluate the international community's responses to specific genocides.",
+      "I can assess the effectiveness of international institutions in preventing mass atrocities."
+    ],
+    "vocabulary": ["genocide", "ethnic cleansing", "crimes against humanity", "Rwandan genocide", "Cambodian genocide", "international intervention", "responsibility to protect", "war tribunal"],
+    "sample_assessment": "The international community's failure to prevent the Rwandan genocide in 1994 led to A) no changes in international policy B) renewed debate about the 'Responsibility to Protect' doctrine and the moral obligation of nations to intervene when a government fails to protect its people from mass atrocities C) The abolition of the United Nations D) Immediate global peace"
+  },
+  {
+    "code": "D2.His.20.9-12",
+    "benchmark": "Evaluate the impact of technological innovation on global society, analyzing how technology has transformed communication, warfare, medicine, and daily life across cultures.",
+    "topics": ["Technological Innovation", "Global Impact", "Digital Revolution", "Transformation"],
+    "dok": 3,
+    "item_specs": "Students evaluate how technology has transformed multiple aspects of global society. Items include multi-domain analysis and evaluative reasoning.",
+    "essential_questions": [
+      "How has technology transformed the human experience across cultures?",
+      "What ethical questions arise from rapid technological change?"
+    ],
+    "learning_targets": [
+      "I can evaluate how technological innovations have transformed communication, warfare, and medicine.",
+      "I can analyze how technology has affected different cultures and regions differently.",
+      "I can assess the ethical implications of technological change."
+    ],
+    "vocabulary": ["digital revolution", "nuclear technology", "biotechnology", "artificial intelligence", "green revolution", "information age", "technological determinism", "digital divide"],
+    "sample_assessment": "The 'digital divide' refers to A) a physical gap in the Internet B) the unequal access to digital technology and the Internet between wealthy and developing nations, which reinforces existing patterns of global inequality C) A new type of computer virus D) The difference between computers and smartphones"
+  },
+  {
+    "code": "D2.His.21.9-12",
+    "benchmark": "Analyze the forces of globalization in the late 20th and early 21st centuries, evaluating how economic integration, cultural exchange, and political interconnection create both opportunities and challenges.",
+    "topics": ["Globalization", "Economic Integration", "Cultural Exchange", "Global Challenges"],
+    "dok": 3,
+    "item_specs": "Students analyze the multi-dimensional nature of globalization and evaluate its complex effects. Items include data analysis and evaluative argumentation.",
+    "essential_questions": [
+      "Is globalization primarily beneficial or harmful, and for whom?",
+      "How do global challenges like climate change, pandemics, and inequality require international cooperation?"
+    ],
+    "learning_targets": [
+      "I can analyze how economic globalization has created both opportunities and challenges.",
+      "I can evaluate how cultural globalization affects local cultures and identities.",
+      "I can assess the need for international cooperation to address global challenges."
+    ],
+    "vocabulary": ["globalization", "economic integration", "cultural homogenization", "localization", "glocalization", "transnational", "World Trade Organization", "global governance"],
+    "sample_assessment": "The concept of 'glocalization' refers to A) global isolation B) the adaptation of global products and ideas to fit local cultures, showing that globalization and local identity can coexist C) The elimination of all local cultures D) Government regulation of global trade"
+  },
+  {
+    "code": "D2.His.22.9-12",
+    "benchmark": "Evaluate how terrorism, regional conflicts, and failed states have shaped global politics and international relations in the 21st century.",
+    "topics": ["Terrorism", "Regional Conflicts", "Failed States", "International Relations"],
+    "dok": 3,
+    "item_specs": "Students evaluate how contemporary security challenges affect global politics. Items include analysis of current events and evaluative reasoning about policy responses.",
+    "essential_questions": [
+      "What conditions give rise to terrorism and failed states?",
+      "How should the international community respond to transnational security threats?"
+    ],
+    "learning_targets": [
+      "I can evaluate the conditions that contribute to terrorism and state failure.",
+      "I can analyze how regional conflicts affect international stability.",
+      "I can assess different approaches to addressing transnational security threats."
+    ],
+    "vocabulary": ["terrorism", "failed state", "insurgency", "radicalization", "asymmetric warfare", "humanitarian intervention", "nation-building", "counterterrorism"],
+    "sample_assessment": "Failed states often become sources of regional instability because A) they have strong governments B) the absence of effective governance creates power vacuums that can be exploited by extremist groups, criminal networks, and rival factions C) They have too much economic development D) International organizations prevent them from recovering"
+  },
+  {
+    "code": "D2.His.23.9-12",
+    "benchmark": "Analyze how environmental challenges including climate change, resource depletion, and biodiversity loss have become defining issues of the 21st century, evaluating global responses.",
+    "topics": ["Climate Change", "Environmental Challenges", "Global Response", "Sustainability"],
+    "dok": 3,
+    "item_specs": "Students analyze environmental challenges as historical and geographic phenomena. Items include data analysis and evaluation of international responses.",
+    "essential_questions": [
+      "How have environmental challenges become central issues in global politics?",
+      "What approaches have been most effective in addressing global environmental problems?"
+    ],
+    "learning_targets": [
+      "I can analyze how climate change has emerged as a defining challenge of the 21st century.",
+      "I can evaluate international responses to environmental challenges.",
+      "I can assess the relationship between economic development and environmental sustainability."
+    ],
+    "vocabulary": ["climate change", "Paris Agreement", "sustainable development", "carbon emissions", "renewable energy", "environmental justice", "Anthropocene", "biodiversity"],
+    "sample_assessment": "The challenge of addressing climate change is complicated by the fact that A) all countries agree on the solution B) the countries that have contributed most historically to greenhouse gas emissions are often different from those most affected by climate change, creating debates about responsibility and fairness C) Climate science is completely uncertain D) Only one country needs to act"
+  },
+  {
+    "code": "D2.His.24.9-12",
+    "benchmark": "Evaluate competing historical interpretations of world events, constructing evidence-based arguments about contested questions in world history.",
+    "topics": ["Historical Interpretation", "Historiography", "Evidence-Based Argumentation"],
+    "dok": 4,
+    "item_specs": "Students evaluate competing interpretations of world historical events and construct their own evidence-based arguments. Items require historiographic analysis and argumentation.",
+    "essential_questions": [
+      "Why do historians disagree about the interpretation of world events?",
+      "How do we construct and evaluate historical arguments using evidence?"
+    ],
+    "learning_targets": [
+      "I can evaluate competing interpretations of world historical events.",
+      "I can construct evidence-based arguments about contested questions in world history.",
+      "I can analyze how perspective, methodology, and evidence selection shape historical narratives."
+    ],
+    "vocabulary": ["historiography", "revisionism", "Eurocentric", "world-systems theory", "postcolonial perspective", "subaltern studies", "primary source", "secondary source"],
+    "sample_assessment": "A 'Eurocentric' interpretation of world history is criticized because A) it accurately represents all perspectives B) it privileges European experiences and achievements while marginalizing the contributions and perspectives of non-European civilizations C) It was written by historians outside Europe D) All historical interpretations are identical"
+  },
+  {
+    "code": "D2.His.25.9-12",
+    "benchmark": "Analyze how the interconnected challenges of the 21st century — including pandemics, migration, technological disruption, and political polarization — represent both continuity with and departure from historical patterns.",
+    "topics": ["21st Century Challenges", "Historical Continuity", "Contemporary Issues", "Global Interconnection"],
+    "dok": 4,
+    "item_specs": "Students analyze contemporary challenges through the lens of historical patterns. Items require synthesis of historical knowledge and application to contemporary issues.",
+    "essential_questions": [
+      "How do today's global challenges reflect patterns from the past?",
+      "In what ways are 21st-century challenges fundamentally different from those of previous eras?"
+    ],
+    "learning_targets": [
+      "I can analyze how contemporary global challenges connect to historical patterns.",
+      "I can evaluate which aspects of current challenges are new and which reflect historical continuity.",
+      "I can apply historical thinking to understand and address contemporary issues."
+    ],
+    "vocabulary": ["pandemic", "migration crisis", "technological disruption", "political polarization", "disinformation", "global interconnection", "historical analogy", "precedent"],
+    "sample_assessment": "The COVID-19 pandemic can be compared to historical pandemics such as the Black Death and the 1918 influenza. Which aspect represents a DEPARTURE from historical patterns? A) The disease spread along trade and travel routes B) It disproportionately affected vulnerable populations C) Real-time global communication and rapid vaccine development through international scientific cooperation D) Governments imposed quarantine measures"
+  }
+]
