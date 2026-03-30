@@ -4273,7 +4273,6 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                         _pr = q_para.add_run(f" ({q_points} pts)")
                         _pr.italic = True
                         _pr.font.color.rgb = RGBColor(0, 0, 0)
-                        run.italic = True
 
                 inst_para = doc.add_paragraph()
                 inst_para.add_run("Directions: ").bold = True
