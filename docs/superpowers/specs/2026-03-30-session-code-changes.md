@@ -233,3 +233,54 @@ To:
 disabled={plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)}
 ```
 Applied to both Create and Generate Variations buttons. Teachers can now create assignments from uploaded resources without selecting standards.
+
+---
+
+## 8. Code Review Fixes (1 commit)
+
+**Commit:** `8ab3622`
+
+### Finding 1: Stale `clever_section_id` in assignments/grades
+**Status:** Non-issue. Verified that `clever_section_id` only exists on the `classes` table. Assignments, grades, published_assessments, published_content, and submissions reference `teacher_id`, `class_id`, or `join_code` — none reference `clever_section_id`.
+
+### Finding 2: Race condition — sync during cleanup
+**Fix:** Added provider switch lock flag.
+
+`backend/routes/district_routes.py` — wraps cleanup in lock:
+```python
+storage_save("district:provider_switch_in_progress", True, "system")
+try:
+    cleared_count = _clear_old_provider_data(old_sis_type)
+finally:
+    storage_save("district:provider_switch_in_progress", None, "system")
+```
+
+`backend/routes/oneroster_routes.py` — sync checks lock before proceeding:
+```python
+cleanup_flag = _sl("district:provider_switch_in_progress", "system")
+if cleanup_flag:
+    return jsonify({"error": "A provider switch is in progress. Please wait and try again."}), 503
+```
+
+### Finding 3: Swallowed Supabase errors in `_save_parent_contacts`
+**Fix:** `backend/routes/settings_routes.py` — replaced `pass` with logging:
+```python
+except Exception as e:
+    _logger.warning("Failed to save parent contacts to Supabase for teacher %s: %s. "
+                   "File write succeeded — data is preserved locally.", teacher_id, str(e))
+```
+
+### Finding 4: No server-side email validation
+**Fix:** `backend/routes/settings_routes.py` — added regex validation to both `add_student` and `update_student`:
+```python
+if student_email:
+    import re
+    if not re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', student_email):
+        return jsonify({"error": "Invalid student email format"}), 400
+```
+
+### Finding 5: Resource-only assignment is prompt-only
+**Status:** Accepted limitation. LLM behavior cannot be programmatically enforced — prompt instructions are the best available mechanism. A post-processing validator that checks generated questions against document content would be complex and unreliable.
+
+### Finding 6: Missing tests
+**Status:** Acknowledged. Test coverage for student email persistence, resource-only pathway, and export formatting should be added in a future session.
