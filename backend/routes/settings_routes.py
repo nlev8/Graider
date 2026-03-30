@@ -1827,6 +1827,12 @@ def add_student():
     if not student_name:
         return jsonify({"error": "student_name is required"}), 400
 
+    # Auto-generate student_id if not provided, so parent contacts can be saved.
+    # Parent contacts are keyed by student_id — without one, contact info is lost.
+    if not student_id:
+        import uuid
+        student_id = "manual-" + str(uuid.uuid4())[:8]
+
     filepath = os.path.join(PERIODS_DIR, secure_filename(filename))
     if not os.path.exists(filepath):
         return jsonify({"error": "Period file not found"}), 404
