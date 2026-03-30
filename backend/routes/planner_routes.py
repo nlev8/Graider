@@ -4099,7 +4099,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     Returns the file path of the saved .docx.
     """
     from docx import Document
-    from docx.shared import Inches, Pt
+    from docx.shared import Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker, _embed_visual
     from backend.services.worksheet_generator import _add_options_with_bubbles, _create_answer_key_doc
@@ -4115,35 +4115,37 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     instructions = assignment.get('instructions', '')
     sections = assignment.get('sections', [])
     total_points = assignment.get('total_points', 100)
-    time_estimate = assignment.get('time_estimate', '')
 
-    # Title
+    # Title — 24pt, centered
     heading = doc.add_heading(title, 0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in heading.runs:
+        run.font.size = Pt(24)
+        run.font.color.rgb = RGBColor(0, 0, 0)
+
+    doc.add_paragraph()  # Skip line after title
 
     # Student info line
     info_para = doc.add_paragraph()
     info_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     info_para.add_run("Name: _______________________  Date: _______________  Period: _____")
 
-    # Meta info
-    if time_estimate or total_points:
+    doc.add_paragraph()  # Skip line after name/date
+
+    # Total points (no time limit on assignments)
+    if total_points:
         meta_para = doc.add_paragraph()
         meta_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        meta_parts = []
-        if time_estimate:
-            meta_parts.append(f"Time: {time_estimate}")
-        if total_points:
-            meta_parts.append(f"Total Points: {total_points}")
-        meta_para.add_run("    ".join(meta_parts))
+        meta_para.add_run(f"Total Points: {total_points}")
 
     # Instructions
     if instructions:
+        doc.add_paragraph()
         inst_para = doc.add_paragraph()
         inst_para.add_run("Instructions: ").bold = True
         inst_para.add_run(instructions)
 
-    doc.add_paragraph()  # Space
+    doc.add_paragraph()  # Space before questions
 
     question_num = 1
     answer_key_questions = []
@@ -4157,6 +4159,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
         # Section header
         pts_text = f" ({section_points} points)" if section_points else ""
         doc.add_heading(f"{section_name}{pts_text}", level=1)
+        doc.add_paragraph()  # Space between section header and questions
 
         for q in questions:
             q_number = q.get('number', question_num)
@@ -4170,36 +4173,39 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
             visual_dict = _question_to_visual_dict(q)
             if visual_dict:
                 try:
-                    # Render question text above the visual
+                    # Render question text above the visual — black font
                     q_para = doc.add_paragraph()
-                    q_para.add_run(f"{q_number}. ").bold = True
-                    q_para.add_run(q_text)
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
                     if q_points:
-                        run = q_para.add_run(f" ({q_points} pts)")
-                        run.italic = True
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
 
                     _embed_visual(doc, visual_dict)
                 except Exception as e:
                     print(f"Warning: Could not embed visual for Q{q_number}: {e}")
 
             if q_options:
-                # MC/TF: question + options + bubble row + Graider table
+                # MC/TF: question + options with bubbles (no separate answer table)
                 is_tf = q_type in ('true_false', 'tf')
                 if not visual_dict:
                     q_para = doc.add_paragraph()
-                    q_para.add_run(f"{q_number}. ").bold = True
-                    q_para.add_run(q_text)
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
                     if q_points:
-                        run = q_para.add_run(f" ({q_points} pts)")
-                        run.italic = True
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
 
-                # Options with empty bubbles beside each
+                # Options with empty bubbles — bubbles ARE the answer
                 _add_options_with_bubbles(doc, q_options, is_tf=is_tf)
-
-                # Keep Graider extraction table for file-based grading
-                _add_graider_table(doc, f"Answer for Question {q_number}",
-                                   f"GRAIDER:QUESTION:{q_number}", q_points,
-                                   graider_style, 720)  # 0.5 inch
 
                 # Track for separate answer key file
                 answer_key_questions.append({
@@ -4214,11 +4220,15 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 # Data table: render table headers above, then Graider table for answers
                 if not visual_dict:
                     q_para = doc.add_paragraph()
-                    q_para.add_run(f"{q_number}. ").bold = True
-                    q_para.add_run(q_text)
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
                     if q_points:
-                        run = q_para.add_run(f" ({q_points} pts)")
-                        run.italic = True
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
 
                 # Render visible data table if headers present
                 headers = q.get('headers', q.get('column_headers', []))
@@ -4254,10 +4264,15 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 # Matching: two-column layout with draw-a-line instruction
                 if not visual_dict:
                     q_para = doc.add_paragraph()
-                    q_para.add_run(f"{q_number}. ").bold = True
-                    q_para.add_run(q_text)
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
                     if q_points:
-                        run = q_para.add_run(f" ({q_points} pts)")
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
                         run.italic = True
 
                 inst_para = doc.add_paragraph()
@@ -4307,11 +4322,15 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
             elif q_type == 'coordinates':
                 if not visual_dict:
                     q_para = doc.add_paragraph()
-                    q_para.add_run(f"{q_number}. ").bold = True
-                    q_para.add_run(q_text)
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
                     if q_points:
-                        run = q_para.add_run(f" ({q_points} pts)")
-                        run.italic = True
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
 
                 _add_graider_table(doc, f"Coordinates for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
@@ -4490,14 +4509,10 @@ def export_generated_assignment():
                 center_style
             ))
 
-        # Meta info
-        if time_estimate or total_points:
-            meta_text = []
-            if time_estimate:
-                meta_text.append(f"Time: {time_estimate}")
-            if total_points:
-                meta_text.append(f"Total Points: {total_points}")
-            story.append(Paragraph("    ".join(meta_text), center_style))
+        # Total points only (no time limit on assignments)
+        if total_points:
+            story.append(Spacer(1, 0.1*inch))
+            story.append(Paragraph(f"Total Points: {total_points}", center_style))
 
         story.append(Spacer(1, 0.15*inch))
 
@@ -4518,6 +4533,7 @@ def export_generated_assignment():
             # Section header
             pts_text = f" ({section_points} points)" if section_points else ""
             story.append(Paragraph(f"<b>{section_name}</b>{pts_text}", heading_style))
+            story.append(Spacer(1, 0.1*inch))  # Space between section header and questions
 
             for q in questions:
                 q_number = q.get('number', question_num)
