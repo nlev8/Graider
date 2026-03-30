@@ -333,7 +333,13 @@ def district_save_config():
         old_sis_type = existing_sis.get("sis_type")
         if old_sis_type and old_sis_type != sis_type:
             logger.info("District SIS provider switch: %s -> %s", old_sis_type, sis_type)
-            cleared_count = _clear_old_provider_data(old_sis_type)
+            # Set lock flag so sync endpoints know cleanup is in progress
+            storage_save("district:provider_switch_in_progress", True, "system")
+            try:
+                cleared_count = _clear_old_provider_data(old_sis_type)
+            finally:
+                # Clear lock flag regardless of success/failure
+                storage_save("district:provider_switch_in_progress", None, "system")
             audit_log(
                 "district_provider_switch",
                 f"SIS provider switched from {old_sis_type} to {sis_type}. "

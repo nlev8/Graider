@@ -1830,8 +1830,9 @@ def _save_parent_contacts(contacts, teacher_id=None):
     if teacher_id and storage_save:
         try:
             storage_save('parent_contacts', contacts, teacher_id)
-        except Exception:
-            pass  # File write succeeded — Supabase failure is not critical
+        except Exception as e:
+            _logger.warning("Failed to save parent contacts to Supabase for teacher %s: %s. "
+                           "File write succeeded — data is preserved locally.", teacher_id, str(e))
 
 
 @settings_bp.route('/api/add-student', methods=['POST'])
@@ -1847,6 +1848,12 @@ def add_student():
     student_name = data.get('student_name', '').strip()
     student_id = data.get('student_id', '').strip()
     student_email = data.get('student_email', '').strip()
+
+    # Validate email format if provided
+    if student_email:
+        import re
+        if not re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', student_email):
+            return jsonify({"error": "Invalid student email format"}), 400
 
     if not filename:
         return jsonify({"error": "period_filename is required"}), 400
@@ -2006,6 +2013,13 @@ def update_student():
         new_name = data.get('student_name', '').strip()
         new_grade = data.get('grade', '').strip()
         student_email = data.get('student_email', '').strip()
+
+        # Validate email format if provided
+        if student_email:
+            import re
+            if not re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', student_email):
+                return jsonify({"error": "Invalid student email format"}), 400
+
         parent_emails = data.get('parent_emails', [])
         parent_phones = data.get('parent_phones', [])
 

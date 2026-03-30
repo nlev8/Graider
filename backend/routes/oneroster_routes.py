@@ -138,8 +138,14 @@ def sync_roster():
     teacher_id = g.teacher_id
 
     # Provider exclusivity is enforced at the district level.
-    # When the district admin switches providers at /district,
-    # old roster data is automatically cleared for all teachers.
+    # Guard: if a provider switch cleanup is in progress, block sync
+    try:
+        from backend.storage import load as _sl
+        cleanup_flag = _sl("district:provider_switch_in_progress", "system")
+        if cleanup_flag:
+            return jsonify({"error": "A provider switch is in progress. Please wait and try again."}), 503
+    except Exception:
+        pass
 
     # Load config
     cfg = get_oneroster_config(teacher_id)
