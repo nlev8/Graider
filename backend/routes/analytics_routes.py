@@ -142,6 +142,17 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
 
     valid_names = _load_valid_assignment_names()
 
+    # If valid_names exist but match ZERO results, show all results anyway.
+    # This prevents empty Analytics when assignment configs don't match
+    # the actual graded file names (e.g., "Cornell Notes - Ch 5" vs "us_history_worksheet").
+    if valid_names and not include_unmatched:
+        has_any_match = any(
+            _assignment_matches_config(r.get("assignment", ""), valid_names)
+            for r in results if r.get("student_name", "").strip()
+        )
+        if not has_any_match:
+            valid_names = set()  # No matches → show everything
+
     students = defaultdict(list)
     assignments_map = defaultdict(list)
     categories = defaultdict(lambda: {"content": [], "completeness": [], "writing": [], "effort": []})
