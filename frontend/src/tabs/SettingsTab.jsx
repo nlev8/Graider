@@ -3331,6 +3331,7 @@ export default React.memo(function SettingsTab({
                                 <input type="text" placeholder="Student Name (Last; First)" value={newStudent.name} onChange={(e) => setNewStudent({...newStudent, name: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                                 <input type="text" placeholder="Student ID" value={newStudent.student_id} onChange={(e) => setNewStudent({...newStudent, student_id: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                                 <input type="text" placeholder="Grade (e.g., 06)" value={newStudent.grade} onChange={(e) => setNewStudent({...newStudent, grade: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
+                                <input type="email" placeholder="Student Email" value={newStudent.student_email} onChange={(e) => setNewStudent({...newStudent, student_email: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                                 <input type="text" placeholder="Parent Emails (comma-separated)" value={newStudent.parent_emails} onChange={(e) => setNewStudent({...newStudent, parent_emails: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                                 <input type="text" placeholder="Parent Phones (comma-separated)" value={newStudent.parent_phones} onChange={(e) => setNewStudent({...newStudent, parent_phones: e.target.value})} style={{ padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--glass-border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "0.8rem" }} />
                               </div>
@@ -3345,12 +3346,13 @@ export default React.memo(function SettingsTab({
                                         period_filename: period.filename,
                                         student_name: newStudent.name,
                                         student_id: newStudent.student_id,
+                                        student_email: newStudent.student_email,
                                         grade: newStudent.grade,
                                         parent_emails: emails,
                                         parent_phones: phones,
                                       });
                                       if (res.error) { addToast(res.error, "error"); return; }
-                                      setNewStudent({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' });
+                                      setNewStudent({ name: '', student_id: '', grade: '', student_email: '', parent_emails: '', parent_phones: '' });
                                       setAddingStudent(false);
                                       // Refresh
                                       const [studentsRes, contactsRes] = await Promise.all([api.getPeriodStudents(period.filename), api.getParentContacts()]);
@@ -3367,7 +3369,7 @@ export default React.memo(function SettingsTab({
                                   style={{ fontSize: "0.8rem", padding: "5px 12px" }}
                                 >Add Student</button>
                                 <button
-                                  onClick={() => { setAddingStudent(false); setNewStudent({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' }); }}
+                                  onClick={() => { setAddingStudent(false); setNewStudent({ name: '', student_id: '', grade: '', student_email: '', parent_emails: '', parent_phones: '' }); }}
                                   className="btn btn-secondary"
                                   style={{ fontSize: "0.8rem", padding: "5px 12px" }}
                                 >Cancel</button>

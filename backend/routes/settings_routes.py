@@ -1832,6 +1832,7 @@ def add_student():
     filename = data.get('period_filename')
     student_name = data.get('student_name', '').strip()
     student_id = data.get('student_id', '').strip()
+    student_email = data.get('student_email', '').strip()
 
     if not filename:
         return jsonify({"error": "period_filename is required"}), 400
@@ -1880,10 +1881,10 @@ def add_student():
         _write_period_csv(filepath, headers, rows)
         _update_meta_row_count(filename, len(rows))
 
-        # Update parent contacts if provided
+        # Update contacts if any contact info provided
         parent_emails = data.get('parent_emails', [])
         parent_phones = data.get('parent_phones', [])
-        if (parent_emails or parent_phones) and student_id:
+        if (parent_emails or parent_phones or student_email) and student_id:
             contacts = _load_parent_contacts()
 
             # Try to get the period_name from meta
@@ -1899,6 +1900,7 @@ def add_student():
 
             contacts[student_id] = {
                 "student_name": student_name,
+                "student_email": student_email,
                 "period": period_name,
                 "parent_emails": parent_emails if isinstance(parent_emails, list) else [e.strip() for e in parent_emails.split(',') if e.strip()],
                 "parent_phones": parent_phones if isinstance(parent_phones, list) else [p.strip() for p in parent_phones.split(',') if p.strip()],
