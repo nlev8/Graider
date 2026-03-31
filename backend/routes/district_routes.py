@@ -249,9 +249,14 @@ def district_config_status():
     if ai_keys and isinstance(ai_keys, dict):
         has_ai_keys = bool(ai_keys.get("openai_api_key") or ai_keys.get("anthropic_api_key"))
 
+    # Check if admin password exists (for first-time setup flow)
+    password_hash = _get_district_password_hash()
+    needs_setup = password_hash is None
+
     return jsonify({
         "sis_provider": sis_provider,
         "has_ai_keys": has_ai_keys,
+        "needs_setup": needs_setup,
     })
 
 
