@@ -520,6 +520,17 @@ export default React.memo(function PlannerTab({
   const [selectedSources, setSelectedSources] = useState([]); // [{type, unit, filename, content}]
   const [uploadedDocs, setUploadedDocs] = useState([]); // [{filename, size, text}]
   const [docUploading, setDocUploading] = useState(false);
+  const [contentOnlyMode, setContentOnlyMode] = useState(false);
+
+  // Auto-reset content-only toggle when docs removed OR standards cleared
+  useEffect(function() {
+    var hasDocs = uploadedDocs.length > 0 || selectedSources.length > 0;
+    var hasStandards = selectedStandards.length > 0;
+    if (!hasDocs || !hasStandards) {
+      setContentOnlyMode(false);
+    }
+  }, [uploadedDocs.length, selectedSources.length, selectedStandards.length]);
+
   const [matchingInProgress, setMatchingInProgress] = useState(false);
   const [matchResults, setMatchResults] = useState(null);
   const [showSaveLesson, setShowSaveLesson] = useState(false);
@@ -1210,6 +1221,7 @@ export default React.memo(function PlannerTab({
         selectedIdea: selectedIdea,
         generateVariations: generateVariations,
         referenceDocs: uploadedDocs.length > 0 ? uploadedDocs : undefined,
+        contentOnly: contentOnlyMode && (uploadedDocs.length > 0 || selectedSources.length > 0),
       });
       if (data.error) addToast("Error: " + data.error, "error");
       else if (data.variations) {
@@ -1449,6 +1461,7 @@ export default React.memo(function PlannerTab({
           teacher_name: config.teacher_name,
           globalAINotes: globalAINotes,
           requirements: unitConfig.requirements || "",
+          contentOnly: contentOnlyMode && (uploadedDocs.length > 0 || selectedSources.length > 0),
         },
         { ...assessmentConfig, title },
         allSources
@@ -2640,6 +2653,26 @@ export default React.memo(function PlannerTab({
                           )}
 
                           {/* Generate Plan Button */}
+                          {/* Content-only toggle */}
+                          {uploadedDocs.length > 0 && (
+                            <label style={{
+                              display: "flex", alignItems: "center", gap: "8px",
+                              fontSize: "0.85rem", color: "var(--text-secondary)",
+                              padding: "6px 0 10px", cursor: selectedStandards.length > 0 ? "pointer" : "default",
+                              opacity: selectedStandards.length > 0 ? 1 : 0.7,
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedStandards.length === 0 ? true : contentOnlyMode}
+                                onChange={(e) => setContentOnlyMode(e.target.checked)}
+                                disabled={selectedStandards.length === 0}
+                              />
+                              {selectedStandards.length === 0
+                                ? "Questions will come from uploaded content"
+                                : "Only create questions from uploaded content"}
+                            </label>
+                          )}
+
                           <button
                             onClick={() => generateLessonPlan(false)}
                             disabled={
@@ -4954,6 +4987,26 @@ export default React.memo(function PlannerTab({
                             })()}
                           </div>
                         </div>
+
+                        {/* Content-only toggle for assessments */}
+                        {(uploadedDocs.length > 0 || selectedSources.length > 0) && (
+                          <label style={{
+                            display: "flex", alignItems: "center", gap: "8px",
+                            fontSize: "0.85rem", color: "var(--text-secondary)",
+                            padding: "6px 0 10px", cursor: selectedStandards.length > 0 ? "pointer" : "default",
+                            opacity: selectedStandards.length > 0 ? 1 : 0.7,
+                          }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedStandards.length === 0 ? true : contentOnlyMode}
+                              onChange={(e) => setContentOnlyMode(e.target.checked)}
+                              disabled={selectedStandards.length === 0}
+                            />
+                            {selectedStandards.length === 0
+                              ? "Questions will come from uploaded content"
+                              : "Only create questions from uploaded content"}
+                          </label>
+                        )}
 
                         {/* Generate Button */}
                         <button

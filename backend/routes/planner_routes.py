@@ -3284,6 +3284,7 @@ def generate_assignment_from_lesson():
     config_standards = config.get('standards', [])
     reference_docs = config.get('referenceDocs', [])
     global_ai_notes = config.get('globalAINotes', '')
+    content_only = config.get('contentOnly', False)
 
     if not lesson_plan:
         return jsonify({"error": "No lesson plan provided"})
@@ -3427,8 +3428,20 @@ NO TECHNOLOGY TOOLS SPECIFIED: Focus on paper-based or physical deliverables onl
         # Build reference documents block
         ref_docs_block = ""
         if reference_docs:
-            if config_standards:
-                # Standards are active — use docs as supplementary content
+            if content_only and config_standards:
+                # Standards selected BUT teacher wants questions ONLY from their content
+                ref_docs_block = "\n=== SOURCE DOCUMENTS (create ALL questions from this content) ===\n"
+                ref_docs_block += "CRITICAL: The teacher has selected standards for structure and DOK levels, "
+                ref_docs_block += "but wants ALL questions to come directly from the content in these documents. "
+                ref_docs_block += "Every question must be answerable using ONLY information found in these documents. "
+                ref_docs_block += "Use the standards to guide question format, rigor level (DOK), and cognitive demand — "
+                ref_docs_block += "but do NOT create questions about topics not covered in the documents.\n\n"
+                for doc in reference_docs:
+                    doc_name = doc.get('filename', 'Document')
+                    doc_text = doc.get('text', '')[:6000]
+                    ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
+            elif config_standards:
+                # Standards active, resources supplementary (default behavior)
                 ref_docs_block = "\n=== REFERENCE DOCUMENTS (supplementary content for question context) ===\n"
                 for doc in reference_docs:
                     doc_name = doc.get('filename', 'Document')
@@ -3665,7 +3678,7 @@ Make the questions specific to the lesson content. Include a variety of question
         usage = _extract_usage(completion, "gpt-4o")
         usage = _merge_usage(usage, extra_usage)
         _record_planner_cost(usage)
-        return jsonify({"assignment": assignment, "method": "AI", "usage": usage})
+        return jsonify({"assignment": assignment, "method": "AI", "usage": usage, "content_only_mode": content_only})
 
     except Exception as e:
         error_msg = str(e)
@@ -5423,6 +5436,7 @@ def generate_assessment():
     standards = data.get('standards', [])
     config = data.get('config', {})
     assessment_config = data.get('assessmentConfig', {})
+    content_only = config.get('contentOnly', False)
 
     # Normalize standards: accept both dicts and plain code strings
     normalized = []
@@ -5537,7 +5551,13 @@ def generate_assessment():
                     source_content += doc_text + "\n\n"
 
             source_content += "=== END INSTRUCTIONAL CONTENT ===\n\n"
-            source_content += "IMPORTANT: Questions must directly relate to the content above. Reference specific vocabulary, examples, and concepts from the lessons.\n\n"
+            if content_only:
+                source_content += "CRITICAL: The teacher wants ALL questions to come ONLY from the content above. "
+                source_content += "Every question must be answerable using ONLY information found in these documents/lessons. "
+                source_content += "Use the selected standards to guide question format, rigor level (DOK), and cognitive demand — "
+                source_content += "but do NOT create questions about topics not covered in the content above.\n\n"
+            else:
+                source_content += "IMPORTANT: Questions must directly relate to the content above. Reference specific vocabulary, examples, and concepts from the lessons.\n\n"
 
         # Build standards context
         standards_context = []
