@@ -279,7 +279,7 @@ export default function OnboardingWizard({
         display: "flex", alignItems: "center", justifyContent: "center",
         margin: "0 auto 24px",
       }}>
-        <Icon name="GraduationCap" size={40} style={{ color: "#fff" }} />
+        <img src="/graider-brain-dark.png" alt="Graider" style={{ width: 48, height: 48 }} />
       </div>
       <h2 style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: 12 }}>
         Welcome to Graider!
