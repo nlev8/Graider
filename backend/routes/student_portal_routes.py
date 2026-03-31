@@ -293,6 +293,7 @@ def list_published_assessments():
             "created_at": a.get('created_at'),
             "submission_count": a.get('submission_count', 0),
             "is_active": a.get('is_active', True),
+            "content_type": a.get('settings', {}).get('content_type', 'assessment'),
             "period": a.get('settings', {}).get('period', ''),
             "is_makeup": a.get('settings', {}).get('is_makeup', False),
             "restricted_students": a.get('settings', {}).get('restricted_students', []),

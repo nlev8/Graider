@@ -13755,13 +13755,21 @@ ${signature}`;
                           )}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: selectedAssessmentResults ? "1fr 1fr" : "1fr", gap: "25px" }}>
-                        {/* Published Assessments List */}
-                        <div className="glass-card" style={{ padding: "20px" }}>
+                        {/* Published Content Lists — separated by content type */}
+                        {[
+                          { type: "assessment", label: "Published Assessments", icon: "ClipboardList", emptyText: "No published assessments yet.", emptyHint: "Generate an assessment and click \"Publish to Portal\" to get started." },
+                          { type: "assignment", label: "Published Assignments", icon: "FileText", emptyText: "No published assignments yet.", emptyHint: "Generate an assignment and click \"Publish to Portal\" to get started." },
+                        ].map((section) => {
+                          var sectionItems = publishedAssessments.filter(function(a) { return (a.content_type || "assessment") === section.type; });
+                          return (
+                        <div key={section.type} className="glass-card" style={{ padding: "20px", marginBottom: "16px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                             <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
-                              <Icon name="ClipboardList" size={20} />
-                              Published Assessments
+                              <Icon name={section.icon} size={20} />
+                              {section.label}
+                              <span style={{ fontSize: "0.75rem", fontWeight: 400, color: "var(--text-secondary)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: "10px" }}>{sectionItems.length}</span>
                             </h3>
+                            {section.type === "assessment" && (
                             <button
                               onClick={fetchPublishedAssessments}
                               className="btn btn-secondary"
@@ -13771,22 +13779,23 @@ ${signature}`;
                               <Icon name={loadingPublished ? "Loader2" : "RefreshCw"} size={16} className={loadingPublished ? "spin" : ""} />
                               Refresh
                             </button>
+                            )}
                           </div>
 
                           {loadingPublished ? (
                             <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
                               <Icon name="Loader2" size={32} className="spin" />
-                              <p style={{ marginTop: "10px" }}>Loading assessments...</p>
+                              <p style={{ marginTop: "10px" }}>Loading...</p>
                             </div>
-                          ) : publishedAssessments.length === 0 ? (
-                            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
-                              <Icon name="FileQuestion" size={48} style={{ opacity: 0.5, marginBottom: "15px" }} />
-                              <p>No published assessments yet.</p>
-                              <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>Generate an assessment and click "Publish to Portal" to get started.</p>
+                          ) : sectionItems.length === 0 ? (
+                            <div style={{ textAlign: "center", padding: "30px", color: "var(--text-secondary)" }}>
+                              <Icon name="FileQuestion" size={36} style={{ opacity: 0.5, marginBottom: "10px" }} />
+                              <p style={{ fontSize: "0.9rem" }}>{section.emptyText}</p>
+                              <p style={{ fontSize: "0.8rem", marginTop: "5px", opacity: 0.7 }}>{section.emptyHint}</p>
                             </div>
                           ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                              {publishedAssessments.map((assessment) => (
+                              {sectionItems.map((assessment) => (
                                 <div
                                   key={assessment.join_code}
                                   style={{
@@ -13875,6 +13884,8 @@ ${signature}`;
                             </div>
                           )}
                         </div>
+                          );
+                        })}
 
                         {/* Submissions Detail Panel */}
                         {selectedAssessmentResults && (
