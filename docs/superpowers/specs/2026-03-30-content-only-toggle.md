@@ -54,15 +54,15 @@ Find the section categories area (before the Create button, around line 2640). A
 
 When no standards are selected: checkbox is checked and disabled with explanatory text — the teacher can see that content-only mode is automatic. When standards ARE selected: checkbox is interactive.
 
-**Step 3: Pass flag in assignment generation**
+**Step 3: Pass flag in assignment generation (gated on docs AND sources)**
 
-Find `generateAssignmentFromLessonHandler` (around line 1180). Where it builds the config object for `api.generateAssignmentFromLesson`, add:
+Both assignment and assessment payloads use identical gating:
 
 ```javascript
-contentOnly: contentOnlyMode && uploadedDocs.length > 0,
+contentOnly: contentOnlyMode && (uploadedDocs.length > 0 || selectedSources.length > 0),
 ```
 
-to the config object being sent.
+This is already shipped in both lines 1224 and 1464 of `PlannerTab.jsx`.
 
 **Step 4: Add checkbox in assessment flow**
 
@@ -256,7 +256,16 @@ This is transparent — the teacher knows the toggle was active and is reminded 
 - The "content-only" constraint is enforced via prompt instructions, not programmatic validation
 - The LLM may occasionally generate questions that reference general knowledge beyond the documents
 - The post-generation notice reminds teachers to review
-- A future enhancement could add post-processing that checks each question against the document text and flags potential leaks
+
+## Follow-Up: Post-Generation Validation (Future)
+
+A semantic similarity checker could compare each generated question against the uploaded document content and flag questions that don't have a strong match. This would require:
+1. Embedding the document text (chunk by paragraph)
+2. Embedding each generated question
+3. Computing cosine similarity between question and document chunks
+4. Flagging questions below a threshold (e.g., < 0.6 similarity)
+
+This is a significant project — estimated 1-2 weeks. Not needed for the Volusia pilot. The prompt-based enforcement + teacher review notice is sufficient for launch.
 
 ---
 
