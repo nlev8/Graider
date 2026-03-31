@@ -3684,6 +3684,15 @@ Make the questions specific to the lesson content. Include a variety of question
         error_msg = str(e)
         print(f"Assignment Generation Error: {error_msg}")
 
+        # Detect network-blocked AI provider
+        error_lower = error_msg.lower()
+        if any(kw in error_lower for kw in ['connection', 'timeout', 'unreachable', 'refused', 'apiconnectionerror', 'connecttimeout', 'name resolution']):
+            return jsonify({
+                "error": "Unable to connect to the AI provider. This may be due to network restrictions on your school's network. "
+                         "Try again from a different network or contact your IT department to allow access to OpenAI/Anthropic services.",
+                "network_error": True,
+            }), 503
+
         # Fallback mock assignment
         mock_assignment = {
             "title": f"{assignment_type.title()} - {lesson_plan.get('title', 'Lesson')}",

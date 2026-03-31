@@ -1767,11 +1767,20 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         # Stop on API errors
                         if result.get("is_api_error"):
                             api_error_occurred = True
+                            err_msg = result.get('error', '')
+                            err_lower = err_msg.lower() if err_msg else ''
+                            is_network = any(kw in err_lower for kw in ['connection', 'timeout', 'unreachable', 'refused'])
                             grading_state["log"].append("")
                             grading_state["log"].append("=" * 50)
-                            grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
+                            if is_network:
+                                grading_state["log"].append("⚠️  GRADING STOPPED - NETWORK ERROR")
+                                grading_state["log"].append("Unable to connect to the AI provider. This may be due to")
+                                grading_state["log"].append("network restrictions. Contact your IT department to allow")
+                                grading_state["log"].append("access to OpenAI/Anthropic services.")
+                            else:
+                                grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
                             grading_state["log"].append("=" * 50)
-                            _update_state(error=f"API Error: {result.get('error')}")
+                            _update_state(error=f"{'Network' if is_network else 'API'} Error: {err_msg}")
                             for f in future_to_file:
                                 f.cancel()
                             stop_break = True
