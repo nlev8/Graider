@@ -37,8 +37,16 @@ lti_bp = Blueprint("lti", __name__)
 
 
 def _get_tool_url():
-    """Return the tool's base URL (no trailing slash)."""
-    return os.getenv("LTI_TOOL_URL", request.host_url.rstrip("/"))
+    """Return the tool's base URL (no trailing slash).
+    In production, set LTI_TOOL_URL=https://app.graider.live on Railway."""
+    env_url = os.getenv("LTI_TOOL_URL")
+    if env_url:
+        return env_url.rstrip("/")
+    # Auto-detect production from request host
+    host = request.host_url.rstrip("/")
+    if "graider.live" in host:
+        return "https://app.graider.live"
+    return host
 
 
 # ══════════════════════════════════════════════════════════════
