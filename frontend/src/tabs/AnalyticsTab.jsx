@@ -2378,6 +2378,7 @@ export default React.memo(function AnalyticsTab({
   const [periodStudentMap, setPeriodStudentMap] = useState({});
   const [analyticsSource, setAnalyticsSource] = useState('all');
   const [selectedItemAnalysis, setSelectedItemAnalysis] = useState(null);
+  const [itemAnalysisOpen, setItemAnalysisOpen] = useState(false);
 
 
   // --- Effects ---
@@ -2757,11 +2758,18 @@ export default React.memo(function AnalyticsTab({
                           padding: "16px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
                           borderRadius: "12px", marginBottom: "16px",
                         }}>
-                          <div style={{ fontWeight: 700, fontSize: "0.9rem", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div
+                            onClick={function() { setItemAnalysisOpen(function(p) { return !p; }); }}
+                            style={{ fontWeight: 700, fontSize: "0.9rem", marginBottom: itemAnalysisOpen ? "12px" : "0", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", userSelect: "none" }}
+                          >
+                            <Icon name={itemAnalysisOpen ? "ChevronDown" : "ChevronRight"} size={16} />
                             <Icon name="ClipboardList" size={16} />
                             Item Analysis
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 400, marginLeft: "auto" }}>
+                              {itemAnalysisOpen ? "click to collapse" : "click to expand"}
+                            </span>
                           </div>
-                          <select
+                          {itemAnalysisOpen && (<><select
                             value={selectedItemAnalysis || ''}
                             onChange={function(e) { setSelectedItemAnalysis(e.target.value); }}
                             style={{
@@ -2813,6 +2821,7 @@ export default React.memo(function AnalyticsTab({
                               ]);
                             });
                           })()}
+                          </>)}
                         </div>
                       )}
 
