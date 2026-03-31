@@ -525,7 +525,7 @@ export default React.memo(function SettingsTab({
                   <label className="label">Student Information System</label>
                   <select className="input" value={config.sis_type || 'csv'} onChange={(e) => setConfig((prev) => ({...prev, sis_type: e.target.value}))}>
                     <option value="csv">CSV Export Only</option>
-                    <option value="focus">Focus SIS (Volusia County)</option>
+                    <option value="focus">Focus SIS</option>
                     <option value="powerschool">PowerSchool</option>
                     <option value="canvas">Canvas</option>
                     <option value="infinite_campus">Infinite Campus</option>
