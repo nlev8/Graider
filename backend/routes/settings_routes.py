@@ -1834,12 +1834,18 @@ def _save_parent_contacts(contacts, teacher_id=None):
         except RuntimeError:
             teacher_id = None  # Outside request context
     if teacher_id and storage_save:
-        try:
-            storage_save('parent_contacts', contacts, teacher_id)
-        except Exception as e:
-            result["supabase_ok"] = False
-            _logger.warning("Failed to save parent contacts to Supabase for teacher %s: %s. "
-                           "File write succeeded — data is preserved locally.", teacher_id, str(e))
+        import time as _time
+        for _attempt in range(2):
+            try:
+                storage_save('parent_contacts', contacts, teacher_id)
+                break  # Success
+            except Exception as e:
+                if _attempt == 0:
+                    _time.sleep(1)
+                    continue
+                result["supabase_ok"] = False
+                _logger.warning("Failed to save parent contacts to Supabase for teacher %s after retry: %s. "
+                               "File write succeeded — data is preserved locally.", teacher_id, str(e))
     return result
 
 
@@ -1857,11 +1863,12 @@ def add_student():
     student_id = data.get('student_id', '').strip()
     student_email = data.get('student_email', '').strip()
 
-    # Validate email format if provided
+    # Validate and normalize email
     if student_email:
         import re
         if not re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', student_email):
             return jsonify({"error": "Invalid student email format"}), 400
+        student_email = student_email.lower()
 
     if not filename:
         return jsonify({"error": "period_filename is required"}), 400
@@ -2025,11 +2032,12 @@ def update_student():
         new_grade = data.get('grade', '').strip()
         student_email = data.get('student_email', '').strip()
 
-        # Validate email format if provided
+        # Validate and normalize email
         if student_email:
             import re
             if not re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', student_email):
                 return jsonify({"error": "Invalid student email format"}), 400
+            student_email = student_email.lower()
 
         parent_emails = data.get('parent_emails', [])
         parent_phones = data.get('parent_phones', [])
