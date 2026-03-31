@@ -27,24 +27,30 @@ const [contentOnlyMode, setContentOnlyMode] = useState(false);
 
 **Step 2: Add checkbox in assignment flow (sidebar, near the Create button)**
 
-Find the section categories area (before the Create button, around line 2640). Add after the document upload section, only visible when both docs and standards exist:
+Find the section categories area (before the Create button, around line 2640). Add after the document upload section. Visible whenever docs exist — behavior changes based on whether standards are also selected:
 
 ```jsx
-{uploadedDocs.length > 0 && selectedStandards.length > 0 && (
+{uploadedDocs.length > 0 && (
   <label style={{
     display: "flex", alignItems: "center", gap: "8px",
     fontSize: "0.85rem", color: "var(--text-secondary)",
-    padding: "8px 0", cursor: "pointer",
+    padding: "8px 0", cursor: selectedStandards.length > 0 ? "pointer" : "default",
+    opacity: selectedStandards.length > 0 ? 1 : 0.7,
   }}>
     <input
       type="checkbox"
-      checked={contentOnlyMode}
+      checked={selectedStandards.length === 0 ? true : contentOnlyMode}
       onChange={(e) => setContentOnlyMode(e.target.checked)}
+      disabled={selectedStandards.length === 0}
     />
-    Only create questions from uploaded content
+    {selectedStandards.length === 0
+      ? "Questions will come from uploaded content (no standards selected)"
+      : "Only create questions from uploaded content"}
   </label>
 )}
 ```
+
+When no standards are selected: checkbox is checked and disabled with explanatory text — the teacher can see that content-only mode is automatic. When standards ARE selected: checkbox is interactive.
 
 **Step 3: Pass flag in assignment generation**
 
@@ -61,18 +67,22 @@ to the config object being sent.
 Find the assessment configuration area (around line 4960, near the "Generate Assessment" button). Add the same checkbox:
 
 ```jsx
-{(uploadedDocs.length > 0 || selectedSources.length > 0) && selectedStandards.length > 0 && (
+{(uploadedDocs.length > 0 || selectedSources.length > 0) && (
   <label style={{
     display: "flex", alignItems: "center", gap: "8px",
     fontSize: "0.85rem", color: "var(--text-secondary)",
-    padding: "8px 0", cursor: "pointer",
+    padding: "8px 0", cursor: selectedStandards.length > 0 ? "pointer" : "default",
+    opacity: selectedStandards.length > 0 ? 1 : 0.7,
   }}>
     <input
       type="checkbox"
-      checked={contentOnlyMode}
+      checked={selectedStandards.length === 0 ? true : contentOnlyMode}
       onChange={(e) => setContentOnlyMode(e.target.checked)}
+      disabled={selectedStandards.length === 0}
     />
-    Only create questions from uploaded content
+    {selectedStandards.length === 0
+      ? "Questions will come from uploaded content (no standards selected)"
+      : "Only create questions from uploaded content"}
   </label>
 )}
 ```
@@ -97,20 +107,21 @@ Reset `contentOnlyMode` to `false` in ALL of these scenarios:
 
 Search for every instance of `setUploadedDocs([])`, `setSelectedSources([])`, and places where `selectedStandards` is emptied. Add `setContentOnlyMode(false)` alongside each.
 
-Also add a useEffect guard so the toggle auto-resets if the conditions for showing it disappear:
+Also add a useEffect guard so the toggle auto-resets when docs are removed. Note: we do NOT reset when standards disappear because the checkbox stays visible (disabled+checked) in that case — content-only is implicit when no standards exist.
 
 ```javascript
-// Auto-reset content-only toggle when its prerequisites disappear
+// Auto-reset content-only toggle when all documents/sources are removed.
+// Handles: clearing docs, clearing sources, deselecting sources one by one.
+// Does NOT reset when standards disappear — checkbox stays visible (disabled, always-on).
 useEffect(function() {
   var hasDocs = uploadedDocs.length > 0 || selectedSources.length > 0;
-  var hasStandards = selectedStandards.length > 0;
-  if (!hasDocs || !hasStandards) {
+  if (!hasDocs) {
     setContentOnlyMode(false);
   }
-}, [uploadedDocs.length, selectedSources.length, selectedStandards.length]);
+}, [uploadedDocs.length, selectedSources.length]);
 ```
 
-This ensures the toggle is never stuck `true` when it should be hidden.
+This covers every code path: bulk clear via `setUploadedDocs([])`, individual removal, and one-by-one deselection of sources. The dependency array watches `.length` so it fires on any change to the count.
 
 **Step 7: Gate the assignment flag the same way**
 
