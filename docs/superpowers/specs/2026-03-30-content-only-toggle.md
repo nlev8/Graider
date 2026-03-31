@@ -1,4 +1,6 @@
-# "Only Create Questions from Uploaded Content" Toggle — Proposed Code Edits
+# "Only Create Questions from Uploaded Content" Toggle — SHIPPED
+
+**Status:** Implemented and deployed (commit `ed1656f`)
 
 ## Problem
 
@@ -110,15 +112,17 @@ Search for every instance of `setUploadedDocs([])`, `setSelectedSources([])`, an
 Also add a useEffect guard so the toggle auto-resets when docs are removed. Note: we do NOT reset when standards disappear because the checkbox stays visible (disabled+checked) in that case — content-only is implicit when no standards exist.
 
 ```javascript
-// Auto-reset content-only toggle when all documents/sources are removed.
-// Handles: clearing docs, clearing sources, deselecting sources one by one.
-// Does NOT reset when standards disappear — checkbox stays visible (disabled, always-on).
+// Auto-reset content-only toggle when docs removed OR standards cleared.
+// When standards go to zero, the checkbox becomes disabled+checked (implicit),
+// so the user's manual choice is no longer relevant — reset to avoid stale state
+// when they re-add standards later.
 useEffect(function() {
   var hasDocs = uploadedDocs.length > 0 || selectedSources.length > 0;
-  if (!hasDocs) {
+  var hasStandards = selectedStandards.length > 0;
+  if (!hasDocs || !hasStandards) {
     setContentOnlyMode(false);
   }
-}, [uploadedDocs.length, selectedSources.length]);
+}, [uploadedDocs.length, selectedSources.length, selectedStandards.length]);
 ```
 
 This covers every code path: bulk clear via `setUploadedDocs([])`, individual removal, and one-by-one deselection of sources. The dependency array watches `.length` so it fires on any change to the count.
@@ -255,6 +259,49 @@ This is transparent — the teacher knows the toggle was active and is reminded 
 - A future enhancement could add post-processing that checks each question against the document text and flags potential leaks
 
 ---
+
+---
+
+## What Was Actually Shipped (commit `ed1656f`)
+
+### Frontend (`frontend/src/tabs/PlannerTab.jsx`)
+
+1. **State:** `const [contentOnlyMode, setContentOnlyMode] = useState(false)`
+
+2. **Auto-reset useEffect:**
+```javascript
+useEffect(function() {
+  var hasDocs = uploadedDocs.length > 0 || selectedSources.length > 0;
+  var hasStandards = selectedStandards.length > 0;
+  if (!hasDocs || !hasStandards) {
+    setContentOnlyMode(false);
+  }
+}, [uploadedDocs.length, selectedSources.length, selectedStandards.length]);
+```
+
+3. **Checkbox (identical in both assignment and assessment flows):**
+- Visible when `uploadedDocs.length > 0` or `selectedSources.length > 0`
+- No standards → `checked={true} disabled={true}` with text "Questions will come from uploaded content"
+- Standards selected → interactive with text "Only create questions from uploaded content"
+
+4. **Payload gating:**
+- Assignment: `contentOnly: contentOnlyMode && (uploadedDocs.length > 0 || selectedSources.length > 0)`
+- Assessment: same gating in the config object
+
+### Backend (`backend/routes/planner_routes.py`)
+
+1. **Assignment generation** (`generate_assignment_from_lesson`):
+- Reads `content_only = config.get('contentOnly', False)`
+- Three-branch `ref_docs_block`:
+  - `content_only and config_standards` → "ALL questions from documents, standards for DOK/format only"
+  - `config_standards` → "supplementary content" (default)
+  - no standards → "ALL questions from documents"
+- Response includes `"content_only_mode": content_only`
+
+2. **Assessment generation** (`generate_assessment`):
+- Reads `content_only = config.get('contentOnly', False)`
+- Modifies `source_content` instruction when `content_only` is True
+- Same three-tier prompt logic
 
 ## No Database Changes
 
