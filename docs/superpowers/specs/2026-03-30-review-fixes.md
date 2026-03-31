@@ -82,3 +82,82 @@ if valid_names and not include_unmatched:
 ```
 
 This prevents empty Analytics when teachers grade files without first saving matching assignment configs. When some configs DO match, the filter still works normally.
+
+---
+
+## 3. Second Review Fixes (commit `6b4b18a`)
+
+### Fix: TTL on provider switch lock
+**Files:** `backend/routes/district_routes.py`, `backend/routes/oneroster_routes.py`
+
+**Problem:** If `_clear_old_provider_data` crashes before the `finally` block (or the process dies), the lock flag stays True permanently, blocking all future syncs with 503.
+
+**Fix:** Lock now stores a timestamp instead of `True`:
+```python
+# district_routes.py — set lock with timestamp
+storage_save("district:provider_switch_in_progress", {"timestamp": _time.time()}, "system")
+```
+
+Sync endpoint checks TTL — expires after 5 minutes:
+```python
+# oneroster_routes.py — check lock with expiry
+lock_time = cleanup_flag.get("timestamp", 0) if isinstance(cleanup_flag, dict) else 0
+if _time.time() - lock_time < 300:  # 5 minutes
+    return jsonify({"error": "A provider switch is in progress..."}), 503
+else:
+    # Stale lock — clear it and proceed
+    logger.warning("Stale provider switch lock detected (>5min old). Clearing.")
+    _ss("district:provider_switch_in_progress", None, "system")
+```
+
+### Fix: Surface Supabase write failures to teacher
+**File:** `backend/routes/settings_routes.py`
+
+**Problem:** `_save_parent_contacts` logged Supabase failures but returned 200 with no indication. Teacher's contact edits could silently disappear from the authenticated UI.
+
+**Fix:** Function now returns `{"file_ok": True, "supabase_ok": bool}`. Callers include warning in response:
+```python
+save_result = _save_parent_contacts(contacts)
+response = {"status": "added", "students": students, "count": len(students)}
+if not save_result.get("supabase_ok", True):
+    response["warning"] = "Contact info saved locally but cloud sync failed. Changes may not appear on other devices until the next successful sync."
+```
+
+Applied to both `add_student` and `update_student` endpoints.
+
+### Fix: Analytics filter bypass notice
+**File:** `backend/routes/analytics_routes.py`
+
+**Problem:** When the fallback triggers (no config names match results), Analytics silently shows everything with no explanation.
+
+**Fix:** Response now includes `filter_bypassed: true` flag and a notice string:
+```python
+resp["filters"]["filter_bypassed"] = filter_bypassed
+if filter_bypassed:
+    resp["notice"] = "Showing all graded assignments. Save assignment configs in Grading Setup to enable filtering."
+```
+
+Frontend can display this as an info banner. Teachers understand why filtering isn't active.
+
+---
+
+## Clever & OneRoster Compliance Status
+
+| Requirement | Status | Implementation |
+|-------------|--------|---------------|
+| **Teacher-scoped data** | ✅ | All queries filter by `teacher_id` from JWT. `@require_teacher` on every data endpoint. |
+| **No cross-teacher visibility** | ✅ | RLS on Supabase + backend service key for admin-only cross-teacher queries. |
+| **Audit logging** | ✅ | `audit_log()` on all data access, roster sync, provider switch, admin actions. |
+| **Student PII protection** | ✅ | Names visible only to publishing teacher. Admin sees aggregates only. |
+| **Data deletion on request** | ✅ | `delete_roster_data()` removes enrollments, classes, orphaned students, CSV files. |
+| **Provider exclusivity** | ✅ | District-level enforcement. Auto-cleanup on provider switch. Lock prevents race condition with 5-min TTL. |
+| **Secure credential storage** | ✅ | SIS secrets in Supabase `teacher_data` with `teacher_id="system"`. Never returned in GET responses (`has_secret: true/false`). |
+| **FERPA audit trail** | ✅ | All student data access logged. Provider switches logged. Admin views logged. |
+| **Parent contact integrity** | ✅ | Server-side email validation. Supabase write failures logged and surfaced to teacher. Dual-write (file + Supabase). |
+| **OneRoster section scoping** | ✅ | `/teachers/{id}/classes` endpoint for teacher-scoped roster. Fallback filters by enrollment. |
+| **OneRoster demographics** | ✅ | IEP/ELL extraction from demographics metadata. Accommodation suggestions returned on sync. |
+| **Clever SSO** | ✅ | OAuth flow, session management, account linking to Supabase. |
+| **Clever Secure Sync** | ✅ | Roster, parent contacts, IEP/504, schedule data synced. |
+| **Data disposition (FL 1006.1494)** | ⚠️ | Manual deletion available via `delete_roster_data`. Automated 90-day cleanup not yet implemented (documented as post-beta). |
+
+The only open item is automated 90-day data cleanup per Florida Statute 1006.1494, which is documented as a post-beta enhancement. All other Clever and OneRoster compliance requirements are met.
