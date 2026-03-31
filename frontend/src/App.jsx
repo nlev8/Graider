@@ -767,6 +767,9 @@ function App() {
   const [user, _setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userApproved, setUserApproved] = useState(null); // null=loading, true/false
+  const [aiNoticeDismissed, setAiNoticeDismissed] = useState(function() {
+    return localStorage.getItem('graider_ai_notice_dismissed') === 'true';
+  });
   const logoutIntentRef = useRef(false);
 
   function setUser(u) {
@@ -5503,40 +5506,9 @@ ${signature}`;
     );
   }
 
-  // AI Disclosure — dismissible banner (not blocking)
-  var [aiNoticeDismissed, setAiNoticeDismissed] = useState(function() {
-    return localStorage.getItem('graider_ai_notice_dismissed') === 'true';
-  });
-
   return (
     <div style={{ minHeight: "100vh", padding: "20px" }}>
-      {/* AI Services Notice — dismissible banner */}
-      {!aiNoticeDismissed && (
-        <div style={{
-          padding: "10px 16px", marginBottom: "12px",
-          background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.25)",
-          borderRadius: "10px", fontSize: "0.85rem", color: "#fbbf24",
-          display: "flex", alignItems: "center", gap: "10px",
-        }}>
-          <Icon name="AlertTriangle" size={16} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>
-            Graider uses AI services (OpenAI, Anthropic) to grade and generate content.
-            If you experience connectivity issues, check with your IT department to ensure these services are allowed on your network.
-          </span>
-          <button
-            onClick={function() {
-              localStorage.setItem('graider_ai_notice_dismissed', 'true');
-              setAiNoticeDismissed(true);
-            }}
-            style={{
-              background: "none", border: "none", color: "#fbbf24",
-              cursor: "pointer", padding: "4px", fontSize: "1rem", fontWeight: 700,
-              flexShrink: 0,
-            }}
-            title="Dismiss"
-          >&times;</button>
-        </div>
-      )}
+      {/* AI notice moved to OnboardingWizard */}
       {/* Onboarding Wizard */}
       {showOnboardingWizard && (
         <OnboardingWizard
