@@ -1818,7 +1818,13 @@ def _load_parent_contacts():
 
 
 def _save_parent_contacts(contacts, teacher_id=None):
-    """Save parent contacts to both file and Supabase."""
+    """Save parent contacts to both file and Supabase.
+
+    Returns:
+        dict with 'file_ok' (always True if no exception) and 'supabase_ok' (bool).
+        Callers can surface a warning when supabase_ok is False.
+    """
+    result = {"file_ok": True, "supabase_ok": True}
     with open(PARENT_CONTACTS_FILE, 'w') as f:
         json.dump(contacts, f, indent=2)
     # Also persist to Supabase so authenticated users see the update
@@ -1831,8 +1837,10 @@ def _save_parent_contacts(contacts, teacher_id=None):
         try:
             storage_save('parent_contacts', contacts, teacher_id)
         except Exception as e:
+            result["supabase_ok"] = False
             _logger.warning("Failed to save parent contacts to Supabase for teacher %s: %s. "
                            "File write succeeded — data is preserved locally.", teacher_id, str(e))
+    return result
 
 
 @settings_bp.route('/api/add-student', methods=['POST'])
@@ -1926,11 +1934,14 @@ def add_student():
                 "parent_emails": parent_emails if isinstance(parent_emails, list) else [e.strip() for e in parent_emails.split(',') if e.strip()],
                 "parent_phones": parent_phones if isinstance(parent_phones, list) else [p.strip() for p in parent_phones.split(',') if p.strip()],
             }
-            _save_parent_contacts(contacts)
+            save_result = _save_parent_contacts(contacts)
 
         # Return updated student list
         students = get_students_from_period_file(filepath)
-        return jsonify({"status": "added", "students": students, "count": len(students)})
+        response = {"status": "added", "students": students, "count": len(students)}
+        if 'save_result' in dir() and not save_result.get("supabase_ok", True):
+            response["warning"] = "Contact info saved locally but cloud sync failed. Changes may not appear on other devices until the next successful sync."
+        return jsonify(response)
 
     except Exception as e:
         _logger.exception("Request failed: %s", request.path)
@@ -2089,9 +2100,12 @@ def update_student():
                 "parent_phones": parent_phones or [],
             }
 
-        _save_parent_contacts(contacts)
+        save_result = _save_parent_contacts(contacts)
 
-        return jsonify({"status": "updated"})
+        response = {"status": "updated"}
+        if not save_result.get("supabase_ok", True):
+            response["warning"] = "Contact info saved locally but cloud sync failed. Changes may not appear on other devices until the next successful sync."
+        return jsonify(response)
 
     except Exception as e:
         _logger.exception("Request failed: %s", request.path)

@@ -141,6 +141,7 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
         return jsonify({"error": "No data yet", "students": [], "assignments": [], "trends": []})
 
     valid_names = _load_valid_assignment_names()
+    filter_bypassed = False
 
     # If valid_names exist but match ZERO results, show all results anyway.
     # This prevents empty Analytics when assignment configs don't match
@@ -152,6 +153,7 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
         )
         if not has_any_match:
             valid_names = set()  # No matches → show everything
+            filter_bypassed = True
 
     students = defaultdict(list)
     assignments_map = defaultdict(list)
@@ -298,7 +300,7 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
     }
 
     assessment_stats, assessment_category_summary = _fetch_assessment_analytics(source)
-    return jsonify({
+    resp = {
         "class_stats": class_stats,
         "student_progress": sorted(student_progress, key=lambda x: x["name"]),
         "assignment_stats": assignment_stats,
@@ -318,8 +320,12 @@ def _analytics_from_results(period_filter='all', approval_filter='all', include_
             "skipped_approval": skipped_approval,
             "valid_configs_count": len(valid_names),
             "source": source,
-        }
-    })
+            "filter_bypassed": filter_bypassed if 'filter_bypassed' in dir() else False,
+        },
+    }
+    if 'filter_bypassed' in dir() and filter_bypassed:
+        resp["notice"] = "Showing all graded assignments. Save assignment configs in Grading Setup to enable filtering."
+    return jsonify(resp)
 
 
 def _load_valid_assignment_names():
@@ -629,7 +635,7 @@ def get_analytics():
     }
 
     assessment_stats, assessment_category_summary = _fetch_assessment_analytics(source)
-    return jsonify({
+    resp = {
         "class_stats": class_stats,
         "student_progress": sorted(student_progress, key=lambda x: x["name"]),
         "assignment_stats": assignment_stats,
@@ -649,8 +655,12 @@ def get_analytics():
             "skipped_approval": skipped_approval,
             "valid_configs_count": len(valid_names),
             "source": source,
-        }
-    })
+            "filter_bypassed": filter_bypassed if 'filter_bypassed' in dir() else False,
+        },
+    }
+    if 'filter_bypassed' in dir() and filter_bypassed:
+        resp["notice"] = "Showing all graded assignments. Save assignment configs in Grading Setup to enable filtering."
+    return jsonify(resp)
 
 
 @analytics_bp.route('/api/export-district-report')

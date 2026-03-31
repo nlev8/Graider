@@ -138,12 +138,21 @@ def sync_roster():
     teacher_id = g.teacher_id
 
     # Provider exclusivity is enforced at the district level.
-    # Guard: if a provider switch cleanup is in progress, block sync
+    # Guard: if a provider switch cleanup is in progress, block sync.
+    # Lock has a 5-minute TTL — if the process died, the lock auto-expires.
     try:
-        from backend.storage import load as _sl
+        from backend.storage import load as _sl, save as _ss
+        import time as _time
         cleanup_flag = _sl("district:provider_switch_in_progress", "system")
         if cleanup_flag:
-            return jsonify({"error": "A provider switch is in progress. Please wait and try again."}), 503
+            # Check TTL — expire after 5 minutes to prevent permanent lockout
+            lock_time = cleanup_flag.get("timestamp", 0) if isinstance(cleanup_flag, dict) else 0
+            if _time.time() - lock_time < 300:  # 5 minutes
+                return jsonify({"error": "A provider switch is in progress. Please wait and try again."}), 503
+            else:
+                # Stale lock — clear it and proceed
+                logger.warning("Stale provider switch lock detected (>5min old). Clearing.")
+                _ss("district:provider_switch_in_progress", None, "system")
     except Exception:
         pass
 
