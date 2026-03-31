@@ -2384,21 +2384,28 @@ export default React.memo(function AnalyticsTab({
   // --- Effects ---
 
   // Fetch analytics data (component only mounts when tab is active)
+  const analyticsInitialLoad = React.useRef(true);
   useEffect(() => {
-    setAnalyticsLoading(true);
-    setChartsOverlay(false);
-    setChartsReady(false);
+    // Full loading spinner only on initial load — filter changes just refresh data in place
+    if (analyticsInitialLoad.current) {
+      setAnalyticsLoading(true);
+      setChartsOverlay(false);
+      setChartsReady(false);
+    }
     api
       .getAnalytics(analyticsPeriod, analyticsSource)
       .then((data) => {
         setAnalytics(data);
-        // Phase 1: show overlay spinner (no charts yet)
-        setChartsOverlay(true);
+        if (analyticsInitialLoad.current) {
+          setChartsOverlay(true);
+          analyticsInitialLoad.current = false;
+        }
         setAnalyticsLoading(false);
       })
       .catch((err) => {
         console.error(err);
         setAnalyticsLoading(false);
+        analyticsInitialLoad.current = false;
       });
   }, [analyticsPeriod, analyticsSource, status.results.length]);
 
