@@ -250,6 +250,7 @@ function PasswordField(props) {
 }
 
 function LoginGate(props) {
+  var isDark = props.isDark !== false;
   var needsSetup = props.needsSetup;
   var onSuccess = props.onSuccess;
   var error = props.error;
@@ -304,11 +305,7 @@ function LoginGate(props) {
   var labelStyleThemed = isDark ? styles.label : Object.assign({}, styles.label, { color: "#555" });
 
   var toggleThemeBtn = React.createElement("button", {
-    onClick: function() {
-      var next = isDark ? "light" : "dark";
-      setDistrictTheme(next);
-      localStorage.setItem("graider_district_theme", next);
-    },
+    onClick: props.toggleTheme,
     style: { position: "absolute", top: 16, right: 16, background: "none", border: "1px solid " + (isDark ? "rgba(255,255,255,0.15)" : "#ccc"), borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: isDark ? "#999" : "#666", fontSize: "0.8rem" },
     title: isDark ? "Switch to light mode" : "Switch to dark mode",
   }, isDark ? "☀ Light" : "🌙 Dark");
@@ -357,6 +354,7 @@ function LoginGate(props) {
 }
 
 function ConfigForm(props) {
+  var isDark = props.isDark !== false;
   var onLogout = props.onLogout;
 
   var configState = useState({
@@ -659,11 +657,7 @@ function ConfigForm(props) {
   var configCardStyle = Object.assign({}, styles.configCard, isDark ? {} : { background: "#fff", border: "1px solid #e0e0e0", color: "#333" });
 
   var toggleThemeBtnConfig = React.createElement("button", {
-    onClick: function() {
-      var next = isDark ? "light" : "dark";
-      setDistrictTheme(next);
-      localStorage.setItem("graider_district_theme", next);
-    },
+    onClick: props.toggleTheme,
     style: { position: "absolute", top: 16, right: 16, background: "none", border: "1px solid " + (isDark ? "rgba(255,255,255,0.15)" : "#ccc"), borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: isDark ? "#999" : "#666", fontSize: "0.8rem" },
     title: isDark ? "Switch to light mode" : "Switch to dark mode",
   }, isDark ? "☀ Light" : "🌙 Dark");
@@ -1170,10 +1164,22 @@ export default function DistrictSetup() {
       onSuccess: function() { setAuthenticated(true); },
       error: error,
       setError: setError,
+      isDark: isDark,
+      toggleTheme: function() {
+        var next = isDark ? "light" : "dark";
+        setDistrictTheme(next);
+        localStorage.setItem("graider_district_theme", next);
+      },
     });
   }
 
   return React.createElement(ConfigForm, {
     onLogout: function() { setAuthenticated(false); },
+    isDark: isDark,
+    toggleTheme: function() {
+      var next = isDark ? "light" : "dark";
+      setDistrictTheme(next);
+      localStorage.setItem("graider_district_theme", next);
+    },
   });
 }
