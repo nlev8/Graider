@@ -306,9 +306,9 @@ function LoginGate(props) {
 
   var toggleThemeBtn = React.createElement("button", {
     onClick: props.toggleTheme,
-    style: { position: "absolute", top: 16, right: 16, background: "none", border: "1px solid " + (isDark ? "rgba(255,255,255,0.15)" : "#ccc"), borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: isDark ? "#999" : "#666", fontSize: "0.8rem" },
+    style: { position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", padding: "4px" },
     title: isDark ? "Switch to light mode" : "Switch to dark mode",
-  }, isDark ? "☀ Light" : "🌙 Dark");
+  }, isDark ? "☀️" : "🌙");
 
   return React.createElement("div", { style: pageStyle },
     toggleThemeBtn,
@@ -658,9 +658,9 @@ function ConfigForm(props) {
 
   var toggleThemeBtnConfig = React.createElement("button", {
     onClick: props.toggleTheme,
-    style: { position: "absolute", top: 16, right: 16, background: "none", border: "1px solid " + (isDark ? "rgba(255,255,255,0.15)" : "#ccc"), borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: isDark ? "#999" : "#666", fontSize: "0.8rem" },
+    style: { position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", padding: "4px" },
     title: isDark ? "Switch to light mode" : "Switch to dark mode",
-  }, isDark ? "☀ Light" : "🌙 Dark");
+  }, isDark ? "☀️" : "🌙");
 
   return React.createElement("div", { style: configPageStyle },
     toggleThemeBtnConfig,
