@@ -298,13 +298,30 @@ function LoginGate(props) {
     });
   }
 
-  return React.createElement("div", { style: styles.page },
-    React.createElement("div", { style: styles.card },
+  var pageStyle = Object.assign({}, styles.page, isDark ? {} : { background: "#f5f5f5" });
+  var cardStyle = Object.assign({}, styles.card, isDark ? {} : { background: "#fff", border: "1px solid #e0e0e0", color: "#333" });
+  var inputStyleThemed = isDark ? styles.input : Object.assign({}, styles.input, { background: "#f9f9f9", border: "1px solid #ddd", color: "#333" });
+  var labelStyleThemed = isDark ? styles.label : Object.assign({}, styles.label, { color: "#555" });
+
+  var toggleThemeBtn = React.createElement("button", {
+    onClick: function() {
+      var next = isDark ? "light" : "dark";
+      setDistrictTheme(next);
+      localStorage.setItem("graider_district_theme", next);
+    },
+    style: { position: "absolute", top: 16, right: 16, background: "none", border: "1px solid " + (isDark ? "rgba(255,255,255,0.15)" : "#ccc"), borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: isDark ? "#999" : "#666", fontSize: "0.8rem" },
+    title: isDark ? "Switch to light mode" : "Switch to dark mode",
+  }, isDark ? "☀ Light" : "🌙 Dark");
+
+  return React.createElement("div", { style: pageStyle },
+    toggleThemeBtn,
+    React.createElement("div", { style: cardStyle },
       React.createElement("div", { style: styles.logo },
-        React.createElement("div", { style: styles.logoText }, "Graider"),
-        React.createElement("div", { style: styles.subtitle }, "District Administration")
+        React.createElement("img", { src: isDark ? "/graider-brain-dark.png" : "/graider-brain-light.png", alt: "Graider", style: { width: 48, height: 48, marginBottom: 8 } }),
+        React.createElement("div", { style: Object.assign({}, styles.logoText, isDark ? {} : { color: "#7c3aed" }) }, "Graider"),
+        React.createElement("div", { style: Object.assign({}, styles.subtitle, isDark ? {} : { color: "#888" }) }, "District Administration")
       ),
-      React.createElement("h2", { style: styles.heading },
+      React.createElement("h2", { style: Object.assign({}, styles.heading, isDark ? {} : { color: "#333" }) },
         needsSetup ? "Create District Admin Password" : "District Admin Login"
       ),
       React.createElement("form", { onSubmit: handleSubmit },
@@ -638,12 +655,27 @@ function ConfigForm(props) {
     );
   }
 
-  return React.createElement("div", { style: styles.page },
-    React.createElement("div", { style: styles.configCard },
+  var configPageStyle = Object.assign({}, styles.page, isDark ? {} : { background: "#f5f5f5" });
+  var configCardStyle = Object.assign({}, styles.configCard, isDark ? {} : { background: "#fff", border: "1px solid #e0e0e0", color: "#333" });
+
+  var toggleThemeBtnConfig = React.createElement("button", {
+    onClick: function() {
+      var next = isDark ? "light" : "dark";
+      setDistrictTheme(next);
+      localStorage.setItem("graider_district_theme", next);
+    },
+    style: { position: "absolute", top: 16, right: 16, background: "none", border: "1px solid " + (isDark ? "rgba(255,255,255,0.15)" : "#ccc"), borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: isDark ? "#999" : "#666", fontSize: "0.8rem" },
+    title: isDark ? "Switch to light mode" : "Switch to dark mode",
+  }, isDark ? "☀ Light" : "🌙 Dark");
+
+  return React.createElement("div", { style: configPageStyle },
+    toggleThemeBtnConfig,
+    React.createElement("div", { style: configCardStyle },
       // Header
       React.createElement("div", { style: styles.logo },
-        React.createElement("div", { style: styles.logoText }, "Graider"),
-        React.createElement("div", { style: styles.subtitle }, "District Configuration")
+        React.createElement("img", { src: isDark ? "/graider-brain-dark.png" : "/graider-brain-light.png", alt: "Graider", style: { width: 48, height: 48, marginBottom: 8 } }),
+        React.createElement("div", { style: Object.assign({}, styles.logoText, isDark ? {} : { color: "#7c3aed" }) }, "Graider"),
+        React.createElement("div", { style: Object.assign({}, styles.subtitle, isDark ? {} : { color: "#888" }) }, "District Configuration")
       ),
 
       // Section 1: SIS Provider
@@ -1085,6 +1117,13 @@ export default function DistrictSetup() {
   var setAuthenticated = authState[1];
 
   var needsSetupState = useState(null);
+  var themeState = useState(function() {
+    return localStorage.getItem('graider_district_theme') || 'dark';
+  });
+  var districtTheme = themeState[0];
+  var setDistrictTheme = themeState[1];
+  var isDark = districtTheme !== 'light';
+
   var needsSetup = needsSetupState[0];
   var setNeedsSetup = needsSetupState[1];
 
