@@ -16,6 +16,7 @@ from pathlib import Path
 from backend.extensions import limiter
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.retry import with_retry
 
 ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
@@ -677,14 +678,17 @@ Rules:
 - If flagged as off-subject, replace with an on-subject question for the correct standard
 - Return ONLY the JSON array, no other text"""
 
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You fix assessment questions. Return valid JSON only."},
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You fix assessment questions. Return valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+            ),
+            label="auto_fix_flagged_questions",
         )
 
         content = completion.choices[0].message.content
@@ -2412,14 +2416,17 @@ def align_document_to_standards():
             }
         })
 
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+            ),
+            label="align_document_to_standards",
         )
 
         raw_content = completion.choices[0].message.content
@@ -2501,14 +2508,17 @@ def rewrite_for_alignment():
             }
         })
 
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+            ),
+            label="rewrite_for_alignment",
         )
 
         raw_content = completion.choices[0].message.content
@@ -2717,13 +2727,16 @@ Return JSON with this structure:
 
 Make each idea distinct - vary the approaches (hands-on activities, discussions, projects, simulations, research, collaborative work, technology integration, primary source analysis, games/competitions). Be creative and specific to the content."""
 
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            ),
+            label="brainstorm_lesson_ideas",
         )
 
         content = completion.choices[0].message.content
@@ -3148,13 +3161,16 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
             for approach_name, approach_desc in approaches:
                 variation_prompt = prompt + f"\n\nIMPORTANT: Use a {approach_name} approach. {approach_desc}"
 
-                completion = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
-                        {"role": "user", "content": variation_prompt}
-                    ],
-                    response_format={"type": "json_object"}
+                completion = with_retry(
+                    lambda: client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
+                            {"role": "user", "content": variation_prompt}
+                        ],
+                        response_format={"type": "json_object"}
+                    ),
+                    label="generate_lesson_plan_variation",
                 )
 
                 u = _extract_usage(completion, "gpt-4o")
@@ -3186,13 +3202,16 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
             return jsonify({"variations": variations, "method": "AI", "usage": total_usage})
 
         # Single plan generation
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            ),
+            label="generate_lesson_plan",
         )
 
         content = completion.choices[0].message.content
@@ -3657,13 +3676,16 @@ Make the questions specific to the lesson content. Include a variety of question
 
 """
 
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert teacher. Return valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert teacher. Return valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            ),
+            label="generate_assignment_from_lesson",
         )
 
         content = completion.choices[0].message.content
@@ -5867,14 +5889,17 @@ Generate a complete assessment in this JSON format:
     }}
 }}"""
 
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert assessment developer. Create rigorous, standards-aligned assessments. Return valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.7
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert assessment developer. Create rigorous, standards-aligned assessments. Return valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            ),
+            label="generate_assessment",
         )
 
         content = completion.choices[0].message.content
@@ -6738,14 +6763,17 @@ Evaluate the student's response and provide:
 Respond in JSON format:
 {{"points_earned": <number>, "feedback": "<string>", "is_correct": <boolean>}}"""
 
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {"role": "system", "content": "You are a fair and helpful teacher grading student work. Be encouraging but accurate. Provide constructive feedback."},
-                            {"role": "user", "content": grading_prompt}
-                        ],
-                        response_format={"type": "json_object"},
-                        max_tokens=300
+                    response = with_retry(
+                        lambda: client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[
+                                {"role": "system", "content": "You are a fair and helpful teacher grading student work. Be encouraging but accurate. Provide constructive feedback."},
+                                {"role": "user", "content": grading_prompt}
+                            ],
+                            response_format={"type": "json_object"},
+                            max_tokens=300
+                        ),
+                        label="grade_assessment_answers",
                     )
 
                     u = _extract_usage(response, "gpt-4o-mini")
@@ -6873,14 +6901,17 @@ For math questions, include step-by-step solution in the answer.
 
 Make questions grade-appropriate, clear, and assessable by AI grading systems."""
 
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert assessment developer. Generate high-quality assessment questions that are clear, unambiguous, and appropriate for AI-based grading. Always return valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.8,
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert assessment developer. Generate high-quality assessment questions that are clear, unambiguous, and appropriate for AI-based grading. Always return valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.8,
+            ),
+            label="regenerate_questions",
         )
 
         content = completion.choices[0].message.content
@@ -6978,14 +7009,17 @@ TEXT TO REWRITE:
     try:
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a reading level adjustment specialist. Rewrite text at the requested grade level while preserving meaning and key terms. Always respond with valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a reading level adjustment specialist. Rewrite text at the requested grade level while preserving meaning and key terms. Always respond with valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+            ),
+            label="adjust_reading_level",
         )
 
         usage = _extract_usage(completion, "gpt-4o")
@@ -7071,17 +7105,20 @@ def extract_text_from_file():
 
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
-            completion = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary."},
-                    {"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-                        {"type": "text", "text": "Extract all text from this image."},
-                    ]},
-                ],
-                max_tokens=4000,
-                temperature=0,
+            completion = with_retry(
+                lambda: client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary."},
+                        {"role": "user", "content": [
+                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                            {"type": "text", "text": "Extract all text from this image."},
+                        ]},
+                    ],
+                    max_tokens=4000,
+                    temperature=0,
+                ),
+                label="extract_text_image",
             )
 
             usage = _extract_usage(completion, "gpt-4o")
