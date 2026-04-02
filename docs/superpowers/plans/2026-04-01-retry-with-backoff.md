@@ -1198,7 +1198,22 @@ git commit -m "test: add integration tests for retry-with-backoff under simulate
 | 5 | Migrate `storage.py` | 2 calls (+ delete `_retry_supabase`) | Low — same behavior, shared code |
 | 6 | Integration tests | Validation | None — tests only |
 
-**Total: ~34 API call sites protected with retry-with-backoff.**
+**Total: 34 AI API call sites + 2 Supabase call sites protected with retry-with-backoff.**
 
 **Before:** A single OpenAI 429 during a 30-student grading run kills the entire batch.
 **After:** Transient errors auto-recover with up to 15.5s of backoff, and the teacher never knows it happened.
+
+---
+
+## Follow-Up: Remaining Supabase Inline Retry Loops
+
+Task 5 migrates only the 2 `_retry_supabase()` callers (`_sb_load`, `_sb_save`). Four additional Supabase operations in `storage.py` use their own inline `for attempt in range(3)` retry loops and are **not** migrated by this plan:
+
+| Function | Line | Operation |
+|----------|------|-----------|
+| `_sb_delete()` | ~288 | Delete from `teacher_data` |
+| `_sb_list_keys()` | ~310 | List keys from `teacher_data` |
+| `_sb_load_student_history()` | ~363 | Load from `student_history` |
+| `_sb_save_student_history()` | ~387 | Upsert to `student_history` |
+
+These should be migrated to `with_retry()` in a follow-up task. Each is a straightforward replacement of the inline loop with `with_retry(fn, label="supabase_<op>", max_retries=3)` — same pattern as Task 5.
