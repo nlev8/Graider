@@ -752,12 +752,49 @@ class TestAssessmentToolIntegration:
             result = execute_tool('query_assessment_results', {"teacher_id": "teacher-1"})
 
         assert "error" in result
+
+    def test_tool_definitions_serialize_for_openai_function_calling(self):
+        """Tool definitions must match OpenAI function-calling schema format.
+
+        The assistant route converts TOOL_DEFINITIONS to OpenAI's tools format:
+        {"type": "function", "function": {"name": ..., "description": ..., "parameters": ...}}
+        This test verifies the definitions are structurally valid for that conversion.
+        """
+        from backend.services.assistant_tools import TOOL_DEFINITIONS
+        import json
+
+        assessment_tools = [t for t in TOOL_DEFINITIONS
+                            if t["name"] in ("list_published_assessments", "query_assessment_results")]
+        assert len(assessment_tools) == 2, "Both assessment tools must be registered"
+
+        for tool_def in assessment_tools:
+            # Must have all required fields
+            assert isinstance(tool_def["name"], str) and len(tool_def["name"]) > 0
+            assert isinstance(tool_def["description"], str) and len(tool_def["description"]) > 0
+            assert isinstance(tool_def["input_schema"], dict)
+            assert tool_def["input_schema"]["type"] == "object"
+            assert "properties" in tool_def["input_schema"]
+
+            # Must be JSON-serializable (OpenAI sends it as JSON)
+            serialized = json.dumps(tool_def)
+            assert len(serialized) > 0
+
+            # OpenAI function-calling format conversion must work
+            openai_format = {
+                "type": "function",
+                "function": {
+                    "name": tool_def["name"],
+                    "description": tool_def["description"],
+                    "parameters": tool_def["input_schema"],
+                },
+            }
+            assert json.dumps(openai_format)  # Must serialize without error
 ```
 
 - [ ] **Step 6: Run full test suite**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_assessment_tools.py tests/test_tool_schemas.py -v`
-Expected: All tests PASS (10 unit + 3 integration + 6 schema = 19)
+Expected: All tests PASS (10 unit + 4 integration + 6 schema = 20)
 
 - [ ] **Step 7: Search-based verification — tools are registered**
 
@@ -791,9 +828,9 @@ git commit -m "feat: register assessment tools in assistant tool framework"
 |------|------|-------|------|
 | 1 | `list_published_assessments_tool` + 4 tests | Create 2 new files | None — new files only |
 | 2 | `query_assessment_results` + 6 tests | Modify new file | None — new file only |
-| 3 | Tool definitions + registration + 3 integration tests | Modify `assistant_tools.py` (1 line), `test_tool_schemas.py` (1 test) | Very low — append only |
+| 3 | Tool definitions + registration + 4 integration tests | Modify `assistant_tools.py` (1 line), `test_tool_schemas.py` (1 test) | Very low — append only |
 
-**Total: 2 new tools, 13 tests (10 unit + 3 integration), 1 new file, 2 modified files.**
+**Total: 2 new tools, 14 tests (10 unit + 4 integration), 1 new file, 2 modified files.**
 
 **Before:** Teacher asks "How did my class do on the Unit 3 quiz?" → assistant has no tool to answer.
 **After:** Assistant calls `query_assessment_results(assessment_name="Unit 3")` → returns average 84%, grade distribution, per-student scores.
