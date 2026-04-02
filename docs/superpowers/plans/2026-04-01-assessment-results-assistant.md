@@ -8,6 +8,11 @@
 
 **Tech Stack:** Python, Supabase client (`backend/supabase_client.py`), existing assistant tool framework
 
+**Review history:**
+- Rev 1: Initial plan (3 tasks, 10 tests)
+- Rev 2: Dynamic tool count test (def==handler parity, not hardcoded >=56), fluent-chain Supabase mock, 3 `execute_tool()` integration tests
+- Rev 3: Added OpenAI function-calling serialization test (4th integration test, 14 total tests)
+
 ---
 
 ## File Structure
