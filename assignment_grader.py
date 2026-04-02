@@ -2424,6 +2424,7 @@ ROSTER_FILE = "/Users/alexc/Downloads/Assignment Grader/all_students_updated.xls
 
 # BYOK: API keys resolved per-request via contextvars → user keys → env vars
 from backend.api_keys import get_api_key as _get_api_key
+from backend.retry import with_retry
 
 # Assignment name (used in output files and emails)
 ASSIGNMENT_NAME = ""  # Set dynamically from assignment config; empty = use filename
@@ -3992,14 +3993,14 @@ Respond ONLY with this JSON (no other text):
     try:
         # Use structured output for guaranteed schema
         try:
-            response = client.beta.chat.completions.parse(
+            response = with_retry(lambda: client.beta.chat.completions.parse(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": detection_prompt}],
                 response_format=DetectionResponse,
                 max_tokens=500,
                 temperature=0,
                 seed=42
-            )
+            ), label="detection_structured")
             if token_tracker:
                 token_tracker.record_openai(response, "gpt-4o-mini")
             parsed = response.choices[0].message.parsed
@@ -4009,13 +4010,13 @@ Respond ONLY with this JSON (no other text):
             pass  # Fall through to text fallback
 
         # Text fallback if structured output fails
-        response = client.chat.completions.create(
+        response = with_retry(lambda: client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": detection_prompt}],
             max_tokens=500,
             temperature=0,
             seed=42
-        )
+        ), label="detection_fallback")
         if token_tracker:
             token_tracker.record_openai(response, "gpt-4o-mini")
         response_text = response.choices[0].message.content.strip()
@@ -4620,12 +4621,12 @@ Read these FIRST, then score accordingly:
             }
             actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
 
-            response = client.messages.create(
+            response = with_retry(lambda: client.messages.create(
                 model=actual_model,
                 max_tokens=300,
                 system=system_msg + "\n\n" + json_schema,
                 messages=[{"role": "user", "content": prompt}]
-            )
+            ), label="grade_per_question_anthropic")
             if token_tracker:
                 token_tracker.record_anthropic(response, actual_model)
             result = _try_parse_json_fallback(response.content[0].text.strip())
@@ -4643,7 +4644,7 @@ Read these FIRST, then score accordingly:
             gemini_client = genai.GenerativeModel(actual_model)
 
             full_prompt = system_msg + "\n\n" + json_schema + "\n\n---\n\n" + prompt
-            response = gemini_client.generate_content(full_prompt)
+            response = with_retry(lambda: gemini_client.generate_content(full_prompt), label="grade_per_question_gemini")
             if token_tracker:
                 token_tracker.record_gemini(response, actual_model)
             result = _try_parse_json_fallback(response.text.strip())
@@ -4653,7 +4654,7 @@ Read these FIRST, then score accordingly:
         else:  # OpenAI — use structured output
             from openai import OpenAI
             client = OpenAI(api_key=_get_api_key('openai'))
-            response = client.beta.chat.completions.parse(
+            response = with_retry(lambda: client.beta.chat.completions.parse(
                 model=ai_model,
                 messages=[
                     {"role": "system", "content": system_msg},
@@ -4663,7 +4664,7 @@ Read these FIRST, then score accordingly:
                 max_tokens=300,
                 temperature=0,
                 seed=42
-            )
+            ), label="grade_per_question_structured")
             if token_tracker:
                 token_tracker.record_openai(response, ai_model)
             parsed = response.choices[0].message.parsed
@@ -4877,12 +4878,12 @@ Also identify:
             }
             actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
 
-            response = client.messages.create(
+            response = with_retry(lambda: client.messages.create(
                 model=actual_model,
                 max_tokens=3500,
                 system=system_msg + "\n\n" + json_schema,
                 messages=[{"role": "user", "content": prompt}]
-            )
+            ), label="generate_feedback_anthropic")
             if token_tracker:
                 token_tracker.record_anthropic(response, actual_model)
             result = _try_parse_json_fallback(response.content[0].text.strip())
@@ -4906,7 +4907,7 @@ Also identify:
             gemini_client = genai.GenerativeModel(actual_model)
 
             full_prompt = system_msg + "\n\n" + json_schema + "\n\n---\n\n" + prompt
-            response = gemini_client.generate_content(full_prompt)
+            response = with_retry(lambda: gemini_client.generate_content(full_prompt), label="generate_feedback_gemini")
             if token_tracker:
                 token_tracker.record_gemini(response, actual_model)
             result = _try_parse_json_fallback(response.text.strip())
@@ -4922,7 +4923,7 @@ Also identify:
         else:  # OpenAI — use structured output
             from openai import OpenAI
             client = OpenAI(api_key=_get_api_key('openai'))
-            response = client.beta.chat.completions.parse(
+            response = with_retry(lambda: client.beta.chat.completions.parse(
                 model=ai_model,
                 messages=[
                     {"role": "system", "content": system_msg},
@@ -4932,7 +4933,7 @@ Also identify:
                 max_tokens=3500,
                 temperature=0,
                 seed=42
-            )
+            ), label="generate_feedback_structured")
             if token_tracker:
                 token_tracker.record_openai(response, ai_model)
             parsed = response.choices[0].message.parsed
@@ -5489,11 +5490,11 @@ FEEDBACK TO TRANSLATE:
                 "claude-opus": "claude-opus-4-20250514",
             }
             model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
-            response = client.messages.create(
+            response = with_retry(lambda: client.messages.create(
                 model=model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
-            )
+            ), label="translate_anthropic")
             if token_tracker:
                 token_tracker.record_anthropic(response, model)
             return response.content[0].text.strip()
@@ -5507,7 +5508,7 @@ FEEDBACK TO TRANSLATE:
             }
             model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
             client = genai.GenerativeModel(model)
-            response = client.generate_content(prompt)
+            response = with_retry(lambda: client.generate_content(prompt), label="translate_gemini")
             if token_tracker:
                 token_tracker.record_gemini(response, model)
             return response.text.strip()
@@ -5515,12 +5516,12 @@ FEEDBACK TO TRANSLATE:
         else:
             from openai import OpenAI
             client = OpenAI(api_key=_get_api_key('openai'))
-            response = client.chat.completions.create(
+            response = with_retry(lambda: client.chat.completions.create(
                 model=ai_model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2000,
                 temperature=0.3
-            )
+            ), label="translate_openai")
             if token_tracker:
                 token_tracker.record_openai(response, ai_model)
             return response.choices[0].message.content.strip()
@@ -6487,58 +6488,49 @@ Provide your response in the following JSON format ONLY (no other text):
             else:
                 claude_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
 
-            response = claude_client.messages.create(
+            response = with_retry(lambda: claude_client.messages.create(
                 model=actual_model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": claude_content}]
-            )
+            ), label="grade_assignment_anthropic")
             if token_tracker:
                 token_tracker.record_anthropic(response, actual_model)
             response_text = response.content[0].text.strip()
 
         elif provider == "gemini":
-            # Gemini API call with retry for rate limits
-            import time
-            max_retries = 3
-            retry_delay = 2  # seconds
-
-            for attempt in range(max_retries):
-                try:
-                    if assignment_data.get("type") == "image":
-                        import base64
-                        image_data = base64.b64decode(assignment_data['content'])
-                        image_part = {
-                            "mime_type": assignment_data['media_type'],
-                            "data": image_data
-                        }
-                        full_prompt = prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."
-                        response = gemini_client.generate_content([full_prompt, image_part])
-                    else:
-                        text_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
-                        response = gemini_client.generate_content(text_content)
-                    if token_tracker:
-                        token_tracker.record_gemini(response, actual_model)
-                    response_text = response.text.strip()
-                    break  # Success, exit retry loop
-                except Exception as e:
-                    if "429" in str(e) and attempt < max_retries - 1:
-                        print(f"  ⏳ Rate limited, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
-                    else:
-                        raise  # Re-raise if not rate limit or out of retries
+            if assignment_data.get("type") == "image":
+                import base64
+                image_data = base64.b64decode(assignment_data['content'])
+                image_part = {
+                    "mime_type": assignment_data['media_type'],
+                    "data": image_data
+                }
+                full_prompt = prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."
+                response = with_retry(
+                    lambda: gemini_client.generate_content([full_prompt, image_part]),
+                    label="grade_assignment_gemini_image",
+                )
+            else:
+                text_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
+                response = with_retry(
+                    lambda: gemini_client.generate_content(text_content),
+                    label="grade_assignment_gemini_text",
+                )
+            if token_tracker:
+                token_tracker.record_gemini(response, actual_model)
+            response_text = response.text.strip()
 
         else:
             # OpenAI API call with structured output for guaranteed schema
             try:
-                response = openai_client.beta.chat.completions.parse(
+                response = with_retry(lambda: openai_client.beta.chat.completions.parse(
                     model=ai_model,
                     messages=messages,
                     response_format=GradingResponse,
                     max_tokens=2000,
                     temperature=0,
                     seed=42
-                )
+                ), label="grade_assignment_structured")
                 if token_tracker:
                     token_tracker.record_openai(response, ai_model)
                 parsed = response.choices[0].message.parsed
@@ -6555,13 +6547,13 @@ Provide your response in the following JSON format ONLY (no other text):
             except Exception as structured_err:
                 # Structured output not supported for this model — fall back to standard call
                 print(f"  ⚠️  Structured output failed ({structured_err}), falling back to standard API")
-                response = openai_client.chat.completions.create(
+                response = with_retry(lambda: openai_client.chat.completions.create(
                     model=ai_model,
                     messages=messages,
                     max_tokens=2000,
                     temperature=0,
                     seed=42
-                )
+                ), label="grade_assignment_fallback")
                 if token_tracker:
                     token_tracker.record_openai(response, ai_model)
                 response_text = response.choices[0].message.content.strip()
