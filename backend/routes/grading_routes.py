@@ -17,6 +17,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.retry import with_retry
 
 grading_bp = Blueprint('grading', __name__)
 _logger = logging.getLogger(__name__)
@@ -725,11 +726,11 @@ STUDENTS TO MATCH:
 Return ONLY a JSON object mapping each student name to their ID. If no match found, use "UNMATCHED".
 Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMATCHED"}}"""
 
-            message = client.messages.create(
+            message = with_retry(lambda: client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}]
-            )
+            ), label="grading_fuzzy_match_anthropic")
 
             response_text = message.content[0].text
             json_match = re_mod.search(r'\{[^{}]+\}', response_text, re_mod.DOTALL)

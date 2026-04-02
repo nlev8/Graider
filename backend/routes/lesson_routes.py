@@ -18,6 +18,7 @@ except ImportError:
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.retry import with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -459,11 +460,11 @@ def parse_document_for_calendar():
 
     try:
         client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
+        message = with_retry(lambda: client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
-        )
+        ), label="lesson_calendar_extract_anthropic")
         response_text = message.content[0].text.strip()
 
         # Strip markdown code fences if present

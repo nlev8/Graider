@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, g
 from werkzeug.utils import secure_filename
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.retry import with_retry
 
 _logger = logging.getLogger(__name__)
 
@@ -142,13 +143,13 @@ Return ONLY valid JSON:
         import openai
         from backend.api_keys import get_api_key
         client = openai.OpenAI(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
-        response = client.chat.completions.create(
+        response = with_retry(lambda: client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=3000,
             temperature=0.3,
             response_format={"type": "json_object"}
-        )
+        ), label="assignment_answer_key_openai")
         result = json.loads(response.choices[0].message.content.strip())
         return jsonify(result)
     except json.JSONDecodeError:

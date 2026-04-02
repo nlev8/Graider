@@ -20,6 +20,7 @@ import time
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.retry import with_retry
 
 _logger = logging.getLogger(__name__)
 from pathlib import Path
@@ -339,7 +340,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
         if not image_data.startswith('data:'):
             image_data = f"data:image/png;base64,{image_data}"
 
-        response = client.chat.completions.create(
+        response = with_retry(lambda: client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -356,7 +357,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
             ],
             max_tokens=1000,
             temperature=0,
-        )
+        ), label="player_ocr_gpt4o_vision")
 
         text = response.choices[0].message.content.strip()
         return {
