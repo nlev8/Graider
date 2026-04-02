@@ -349,3 +349,91 @@ class TestConstants:
         assert MAX_RETRIES == 5
         assert JITTER_FACTOR == 0.25
         assert RETRYABLE_STATUS_CODES == {408, 429, 500, 502, 503, 504, 529}
+
+
+# ── Integration helpers ─────────────────────────────────────────────────────
+
+def _make_sdk_error(status_code, message="error"):
+    """Create a lightweight stub exception that mimics SDK error shape."""
+    err = Exception(message)
+    err.status_code = status_code
+    err.response = MagicMock(status_code=status_code, headers={})
+    return err
+
+
+# ── Integration tests: simulated API failure patterns ────────────────────────
+
+class TestRetryIntegration:
+
+    @patch("backend.retry.random.random", return_value=0.0)
+    @patch("backend.retry.time.sleep")
+    def test_retry_openai_rate_limit_then_success(self, mock_sleep, _mock_rng):
+        """Simulate OpenAI 429 twice with Retry-After: 1, then succeed."""
+        call_count = 0
+
+        def openai_rate_limited():
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                exc = _make_sdk_error(429, "Rate limit exceeded")
+                exc.response = MagicMock(
+                    status_code=429,
+                    headers={"Retry-After": "1"},
+                )
+                raise exc
+            return {"choices": [{"message": {"content": "Hello"}}]}
+
+        result = with_retry(openai_rate_limited, label="OpenAI")
+        assert result == {"choices": [{"message": {"content": "Hello"}}]}
+        assert call_count == 3
+        delays = [c.args[0] for c in mock_sleep.call_args_list]
+        assert delays == [pytest.approx(1.0), pytest.approx(1.0)]
+
+    @patch("backend.retry.random.random", return_value=0.0)
+    @patch("backend.retry.time.sleep")
+    def test_retry_anthropic_503_then_success(self, mock_sleep, _mock_rng):
+        """Simulate Anthropic 503 once, then succeed."""
+        call_count = 0
+
+        def anthropic_503():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise _make_sdk_error(503, "Service temporarily unavailable")
+            return {"content": [{"text": "Response"}]}
+
+        result = with_retry(anthropic_503, label="Anthropic")
+        assert result == {"content": [{"text": "Response"}]}
+        assert call_count == 2
+
+    @patch("backend.retry.random.random", return_value=0.0)
+    @patch("backend.retry.time.sleep")
+    def test_retry_connection_reset_recovery(self, mock_sleep, _mock_rng):
+        """Simulate ConnectionError once, then succeed."""
+        call_count = 0
+
+        def conn_reset():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("Connection reset by peer")
+            return "recovered"
+
+        result = with_retry(conn_reset)
+        assert result == "recovered"
+        assert call_count == 2
+
+    @patch("backend.retry.random.random", return_value=0.0)
+    @patch("backend.retry.time.sleep")
+    def test_retry_total_delay_reasonable(self, mock_sleep, _mock_rng):
+        """Exhaust 5 retries with ConnectionError; verify backoff schedule."""
+        def always_fail():
+            raise ConnectionError("network down")
+
+        with pytest.raises(ConnectionError, match="network down"):
+            with_retry(always_fail, max_retries=5)
+
+        assert mock_sleep.call_count == 5
+        delays = [c.args[0] for c in mock_sleep.call_args_list]
+        assert delays == pytest.approx([0.5, 1.0, 2.0, 4.0, 8.0])
+        assert sum(delays) == pytest.approx(15.5)
