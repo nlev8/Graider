@@ -22,7 +22,7 @@
 | `backend/routes/lesson_routes.py` | **Modify** | Wrap `client.messages.create()` call |
 | `backend/routes/assignment_routes.py` | **Modify** | Wrap `client.chat.completions.create()` call |
 | `backend/routes/assignment_player_routes.py` | **Modify** | Wrap `client.chat.completions.create()` call |
-| `backend/storage.py` | **Modify** | Replace `_retry_supabase()` with `with_retry()` from shared module |
+| `backend/storage.py` | **Modify** | Delete `_retry_supabase()`, replace all 6 retry sites with `with_retry()` |
 
 ---
 
@@ -994,10 +994,16 @@ git commit -m "feat: wrap AI API calls in 4 remaining route files with retry-wit
 
 ---
 
-### Task 5: Migrate storage.py to use the shared retry utility
+### Task 5: Migrate all 6 Supabase retry sites in storage.py to shared utility
 
 **Files:**
-- Modify: `backend/storage.py:21-36`
+- Modify: `backend/storage.py`
+
+There are 6 retry sites in `storage.py`:
+- 2 use the `_retry_supabase()` helper: `_sb_load()`, `_sb_save()`
+- 4 use inline `for attempt in range(3)` loops: `_sb_delete()`, `_sb_list_keys()`, `_sb_load_student_history()`, `_sb_save_student_history()`
+
+All 6 will be migrated to `with_retry()`. The inline loops have slightly different error detection (checking `'Resource temporarily unavailable'` only) vs `_retry_supabase` (which checks a broader keyword list), but `is_retryable_error()` from `backend/retry.py` covers all of these cases via its `_TRANSIENT_KEYWORDS` list.
 
 - [ ] **Step 1: Add the import**
 
@@ -1007,7 +1013,7 @@ At the top of `backend/storage.py`, add:
 from backend.retry import with_retry
 ```
 
-- [ ] **Step 2: Replace `_retry_supabase()` with `with_retry()`**
+- [ ] **Step 2: Delete the `_retry_supabase()` function**
 
 Delete the entire `_retry_supabase` function (lines 21-36):
 
@@ -1030,15 +1036,7 @@ def _retry_supabase(fn, max_retries=3, initial_delay=0.5):
             _time.sleep(delay)
 ```
 
-- [ ] **Step 3: Update the 2 callers of `_retry_supabase` to use `with_retry`**
-
-There are exactly 2 call sites for `_retry_supabase` in `storage.py`:
-1. `_sb_load()` (~line 259): `return _retry_supabase(_query)`
-2. `_sb_save()` (~line 279): `return _retry_supabase(_query)`
-
-Replace each with `with_retry(_query, label="supabase_<operation>", max_retries=3)`.
-
-The `max_retries=3` preserves the original Supabase retry count (vs the default 5 for AI APIs).
+- [ ] **Step 3: Migrate `_sb_load()` and `_sb_save()` (the 2 `_retry_supabase` callers)**
 
 ```python
 # _sb_load (~line 259):
@@ -1054,19 +1052,139 @@ return _retry_supabase(_query)
 return with_retry(_query, label="supabase_save", max_retries=3)
 ```
 
-Note: `_sb_delete()`, `_sb_list_keys()`, etc. have their own inline retry loops (not using `_retry_supabase`). Leave those unchanged — migrating them is out of scope for this task.
+- [ ] **Step 4: Migrate `_sb_delete()` (~line 285)**
 
-- [ ] **Step 4: Run storage tests**
+Replace the entire inline retry loop with a `with_retry` call. The function currently:
+1. Loops `for attempt in range(3)`
+2. Tries the Supabase delete
+3. On `'Resource temporarily unavailable'`, sleeps and retries
+4. On other errors or final attempt, logs and returns `False`
+
+Rewrite to:
+
+```python
+def _sb_delete(data_key, teacher_id):
+    """Delete a row from Supabase teacher_data table."""
+    def _op():
+        sb = _get_supabase()
+        if not sb:
+            return False
+        sb.table('teacher_data') \
+            .delete() \
+            .eq('teacher_id', teacher_id) \
+            .eq('data_key', data_key) \
+            .execute()
+        return True
+    try:
+        return with_retry(_op, label="supabase_delete", max_retries=3)
+    except Exception as e:
+        logger.error("Supabase delete failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
+        return False
+```
+
+- [ ] **Step 5: Migrate `_sb_list_keys()` (~line 307)**
+
+Same pattern — extract the operation into a nested function, wrap with `with_retry`:
+
+```python
+def _sb_list_keys(prefix, teacher_id):
+    """List data keys matching a prefix from Supabase."""
+    def _op():
+        sb = _get_supabase()
+        if not sb:
+            return []
+        result = sb.table('teacher_data') \
+            .select('data_key') \
+            .eq('teacher_id', teacher_id) \
+            .like('data_key', f"{prefix}%") \
+            .execute()
+        return sorted([row['data_key'] for row in result.data]) if result.data else []
+    try:
+        return with_retry(_op, label="supabase_list_keys", max_retries=3)
+    except Exception as e:
+        logger.error("Supabase list_keys failed for prefix=%s teacher=%s: %s", prefix, teacher_id, e)
+        return None
+```
+
+- [ ] **Step 6: Migrate `_sb_load_student_history()` (~line 360)**
+
+```python
+def _sb_load_student_history(teacher_id, student_id):
+    """Load student history from Supabase."""
+    def _op():
+        sb = _get_supabase()
+        if not sb:
+            return None
+        result = sb.table('student_history') \
+            .select('history') \
+            .eq('teacher_id', teacher_id) \
+            .eq('student_id', student_id) \
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]['history']
+        return None
+    try:
+        return with_retry(_op, label="supabase_load_history", max_retries=3)
+    except Exception as e:
+        logger.error("Supabase load student_history failed: %s", e)
+        return None
+```
+
+- [ ] **Step 7: Migrate `_sb_save_student_history()` (~line 384)**
+
+```python
+def _sb_save_student_history(teacher_id, student_id, history):
+    """Upsert student history to Supabase."""
+    def _op():
+        sb = _get_supabase()
+        if not sb:
+            return False
+        sb.table('student_history').upsert({
+            'teacher_id': teacher_id,
+            'student_id': student_id,
+            'history': history,
+            'updated_at': datetime.now(tz=timezone.utc).isoformat(),
+        }).execute()
+        return True
+    try:
+        return with_retry(_op, label="supabase_save_history", max_retries=3)
+    except Exception as e:
+        logger.error("Supabase save student_history failed: %s", e)
+        return False
+```
+
+- [ ] **Step 8: Remove stale `import time as _time` lines**
+
+Each of the 4 inline-loop functions has its own `import time as _time`. After migration, these are unused. Remove them from `_sb_delete`, `_sb_list_keys`, `_sb_load_student_history`, and `_sb_save_student_history`.
+
+- [ ] **Step 9: Search-based verification — no inline retry loops remain**
+
+```bash
+cd /Users/alexc/Downloads/Graider
+# Should return ZERO matches (all loops replaced):
+grep -n 'for attempt in range' backend/storage.py
+# Expected: no output
+
+# Should return ZERO matches (_retry_supabase deleted):
+grep -n '_retry_supabase' backend/storage.py
+# Expected: no output
+
+# Should show import + 6 calls:
+grep -c 'with_retry' backend/storage.py
+# Expected: 7 (1 import + 6 calls)
+```
+
+- [ ] **Step 10: Run storage tests**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_storage_keys.py -v`
 Expected: All existing tests PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 cd /Users/alexc/Downloads/Graider
 git add backend/storage.py
-git commit -m "refactor: migrate storage.py from _retry_supabase to shared with_retry utility"
+git commit -m "refactor: migrate all 6 Supabase retry sites in storage.py to shared with_retry utility"
 ```
 
 ---
@@ -1195,25 +1313,10 @@ git commit -m "test: add integration tests for retry-with-backoff under simulate
 | 2 | Wrap `assignment_grader.py` | 16 calls | Low — transparent wrapper |
 | 3 | Wrap `planner_routes.py` | 12 calls | Low — transparent wrapper |
 | 4 | Wrap 4 remaining route files | 4 calls | Low — transparent wrapper |
-| 5 | Migrate `storage.py` | 2 calls (+ delete `_retry_supabase`) | Low — same behavior, shared code |
+| 5 | Migrate `storage.py` | 6 calls (delete `_retry_supabase` + 4 inline loops) | Low — same behavior, shared code |
 | 6 | Integration tests | Validation | None — tests only |
 
-**Total: 34 AI API call sites + 2 Supabase call sites protected with retry-with-backoff.**
+**Total: 38 call sites protected with retry-with-backoff** (32 AI API + 6 Supabase).
 
 **Before:** A single OpenAI 429 during a 30-student grading run kills the entire batch.
 **After:** Transient errors auto-recover with up to 15.5s of backoff, and the teacher never knows it happened.
-
----
-
-## Follow-Up: Remaining Supabase Inline Retry Loops
-
-Task 5 migrates only the 2 `_retry_supabase()` callers (`_sb_load`, `_sb_save`). Four additional Supabase operations in `storage.py` use their own inline `for attempt in range(3)` retry loops and are **not** migrated by this plan:
-
-| Function | Line | Operation |
-|----------|------|-----------|
-| `_sb_delete()` | ~288 | Delete from `teacher_data` |
-| `_sb_list_keys()` | ~310 | List keys from `teacher_data` |
-| `_sb_load_student_history()` | ~363 | Load from `student_history` |
-| `_sb_save_student_history()` | ~387 | Upsert to `student_history` |
-
-These should be migrated to `with_retry()` in a follow-up task. Each is a straightforward replacement of the inline loop with `with_retry(fn, label="supabase_<op>", max_retries=3)` — same pattern as Task 5.
