@@ -243,30 +243,32 @@ Append to `tests/test_assessment_tools.py`:
 
 ```python
 def _mock_supabase_with_submissions(assessments_data, submissions_data):
-    """Create a mock Supabase that returns assessments then submissions."""
+    """Create a mock Supabase that returns assessments then submissions.
+
+    Uses a fluent-chain mock: every chained method (.select(), .eq(), .ilike(),
+    .order(), .limit(), etc.) returns the same mock_table so any combination of
+    Supabase PostgREST chains resolves to the correct .execute().data result.
+    This prevents false confidence from brittle chain-order assumptions.
+    """
     mock_sb = MagicMock()
-
-    # First call: published_assessments query
-    mock_assessments_result = MagicMock()
-    mock_assessments_result.data = assessments_data
-
-    # Second call: submissions query
-    mock_submissions_result = MagicMock()
-    mock_submissions_result.data = submissions_data
-
-    # Chain: table('published_assessments').select().eq().execute()
-    # then:  table('submissions').select().eq().order().execute()
-    call_count = {"n": 0}
-    original_table = mock_sb.table
 
     def table_router(name):
         mock_table = MagicMock()
+        result = MagicMock()
+
         if name == 'published_assessments':
-            mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = mock_assessments_result
-            # Also handle .ilike chain
-            mock_table.select.return_value.eq.return_value.ilike.return_value.execute.return_value = mock_assessments_result
+            result.data = assessments_data
         elif name == 'submissions':
-            mock_table.select.return_value.eq.return_value.order.return_value.execute.return_value = mock_submissions_result
+            result.data = submissions_data
+        else:
+            result.data = []
+
+        # Make every chained method return the same mock_table,
+        # so .select().eq().ilike().order().limit().execute() all work
+        for method in ('select', 'eq', 'neq', 'ilike', 'like', 'order',
+                       'limit', 'offset', 'gt', 'gte', 'lt', 'lte', 'in_'):
+            getattr(mock_table, method).return_value = mock_table
+        mock_table.execute.return_value = result
         return mock_table
 
     mock_sb.table = table_router
@@ -665,14 +667,24 @@ The full line in context:
     ]
 ```
 
-- [ ] **Step 3: Update expected tool count in test_tool_schemas.py**
+- [ ] **Step 3: Make tool count test dynamic in test_tool_schemas.py**
 
-In `tests/test_tool_schemas.py`, find `test_tool_count` (~line 48-50) and update the expected count:
+In `tests/test_tool_schemas.py`, replace the hardcoded `test_tool_count` (~line 48-50) with a dynamic check that verifies handler/definition parity instead of a brittle magic number:
 
 ```python
 def test_tool_count():
-    """Verify we have the expected number of tools (previous + 2 assessment tools)."""
-    assert len(at.TOOL_DEFINITIONS) >= 56, f"Expected >= 56 tools, got {len(at.TOOL_DEFINITIONS)}"
+    """Verify tool count is consistent and non-trivial.
+
+    Uses handler count as the source of truth rather than a hardcoded number,
+    so adding new tool submodules doesn't break this test.
+    """
+    handler_count = len(at.TOOL_HANDLERS)
+    def_count = len(at.TOOL_DEFINITIONS)
+    assert def_count == handler_count, (
+        f"Definition/handler mismatch: {def_count} definitions vs {handler_count} handlers"
+    )
+    # Sanity floor — we know we have at least 50 tools, catch catastrophic registration failure
+    assert def_count >= 50, f"Suspiciously few tools registered: {def_count}"
 ```
 
 - [ ] **Step 4: Run the schema validation tests**
@@ -680,12 +692,74 @@ def test_tool_count():
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_tool_schemas.py -v`
 Expected: All 6 tests PASS (including updated tool count)
 
-- [ ] **Step 5: Run full assessment tools test suite**
+- [ ] **Step 5: Add integration test — tools invocable through `execute_tool`**
+
+Append to `tests/test_assessment_tools.py`:
+
+```python
+class TestAssessmentToolIntegration:
+    """Integration tests: verify tools are registered and callable through execute_tool."""
+
+    def test_execute_tool_dispatches_list_published_assessments(self):
+        """execute_tool('list_published_assessments', ...) should reach the handler."""
+        from backend.services.assistant_tools import execute_tool
+
+        mock_data = [
+            {"id": "uuid-1", "join_code": "ABC123", "title": "Quiz",
+             "created_at": "2026-03-20T10:00:00", "submission_count": 5,
+             "is_active": True, "settings": {}},
+        ]
+
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = _mock_supabase_with_assessments(mock_data)
+            result = execute_tool('list_published_assessments', {"teacher_id": "teacher-1"})
+
+        assert "error" not in result
+        assert "assessments" in result
+        assert result["assessments"][0]["title"] == "Quiz"
+
+    def test_execute_tool_dispatches_query_assessment_results(self):
+        """execute_tool('query_assessment_results', ...) should reach the handler."""
+        from backend.services.assistant_tools import execute_tool
+
+        assessments = [
+            {"id": "uuid-1", "join_code": "XYZ789", "title": "Final Exam",
+             "settings": {}},
+        ]
+        submissions = [
+            {"id": "s1", "student_name": "Alice", "score": 88,
+             "total_points": 100, "percentage": 88.0,
+             "submitted_at": "2026-03-20T10:00:00", "results": None},
+        ]
+
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = _mock_supabase_with_submissions(assessments, submissions)
+            result = execute_tool('query_assessment_results', {
+                "assessment_name": "Final",
+                "teacher_id": "teacher-1",
+            })
+
+        assert "error" not in result
+        assert result["assessment"]["title"] == "Final Exam"
+        assert result["summary"]["total_submissions"] == 1
+
+    def test_execute_tool_returns_error_for_missing_name(self):
+        """execute_tool should propagate the 'provide name or code' error."""
+        from backend.services.assistant_tools import execute_tool
+
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = MagicMock()
+            result = execute_tool('query_assessment_results', {"teacher_id": "teacher-1"})
+
+        assert "error" in result
+```
+
+- [ ] **Step 6: Run full test suite**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_assessment_tools.py tests/test_tool_schemas.py -v`
-Expected: All tests PASS
+Expected: All tests PASS (10 unit + 3 integration + 6 schema = 19)
 
-- [ ] **Step 6: Search-based verification — tools are registered**
+- [ ] **Step 7: Search-based verification — tools are registered**
 
 ```bash
 cd /Users/alexc/Downloads/Graider
@@ -717,9 +791,9 @@ git commit -m "feat: register assessment tools in assistant tool framework"
 |------|------|-------|------|
 | 1 | `list_published_assessments_tool` + 4 tests | Create 2 new files | None — new files only |
 | 2 | `query_assessment_results` + 6 tests | Modify new file | None — new file only |
-| 3 | Tool definitions + registration | Modify `assistant_tools.py` (1 line), `test_tool_schemas.py` (1 line) | Very low — append only |
+| 3 | Tool definitions + registration + 3 integration tests | Modify `assistant_tools.py` (1 line), `test_tool_schemas.py` (1 test) | Very low — append only |
 
-**Total: 2 new tools, 10 tests, 1 new file, 2 modified files.**
+**Total: 2 new tools, 13 tests (10 unit + 3 integration), 1 new file, 2 modified files.**
 
 **Before:** Teacher asks "How did my class do on the Unit 3 quiz?" → assistant has no tool to answer.
 **After:** Assistant calls `query_assessment_results(assessment_name="Unit 3")` → returns average 84%, grade distribution, per-student scores.
