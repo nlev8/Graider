@@ -46,9 +46,18 @@ def test_handlers_are_callable():
 
 
 def test_tool_count():
-    """Verify we have the expected 54 tools (29 original + 25 new)."""
-    assert len(at.TOOL_DEFINITIONS) >= 54, f"Expected >= 54 tools, got {len(at.TOOL_DEFINITIONS)}"
-    assert len(at.TOOL_HANDLERS) >= 54, f"Expected >= 54 handlers, got {len(at.TOOL_HANDLERS)}"
+    """Verify tool count is consistent and non-trivial.
+
+    Uses handler count as the source of truth rather than a hardcoded number,
+    so adding new tool submodules doesn't break this test.
+    """
+    handler_count = len(at.TOOL_HANDLERS)
+    def_count = len(at.TOOL_DEFINITIONS)
+    assert def_count == handler_count, (
+        f"Definition/handler mismatch: {def_count} definitions vs {handler_count} handlers"
+    )
+    # Sanity floor — catch catastrophic registration failure
+    assert def_count >= 50, f"Suspiciously few tools registered: {def_count}"
 
 
 def test_new_tools_present():

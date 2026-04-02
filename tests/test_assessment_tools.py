@@ -167,3 +167,53 @@ class TestQueryAssessmentResults:
         assert dist["B"] == 1
         assert dist["C"] == 1
         assert dist["F"] == 1
+
+
+class TestAssessmentToolIntegration:
+    """Integration tests: verify tools are registered and callable through execute_tool."""
+
+    def test_execute_tool_dispatches_list_published_assessments(self):
+        from backend.services.assistant_tools import execute_tool
+        mock_data = [
+            {"id": "uuid-1", "join_code": "ABC123", "title": "Quiz",
+             "created_at": "2026-03-20T10:00:00", "submission_count": 5,
+             "is_active": True, "settings": {}},
+        ]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = _mock_supabase_with_assessments(mock_data)
+            result = execute_tool('list_published_assessments', {"teacher_id": "teacher-1"})
+        assert "error" not in result
+        assert "assessments" in result
+        assert result["assessments"][0]["title"] == "Quiz"
+
+    def test_execute_tool_dispatches_query_assessment_results(self):
+        from backend.services.assistant_tools import execute_tool
+        assessments = [{"id": "uuid-1", "join_code": "XYZ789", "title": "Final Exam", "settings": {}}]
+        submissions = [{"id": "s1", "student_name": "Alice", "score": 88, "total_points": 100, "percentage": 88.0, "submitted_at": "2026-03-20T10:00:00", "results": None}]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = _mock_supabase_with_submissions(assessments, submissions)
+            result = execute_tool('query_assessment_results', {"assessment_name": "Final", "teacher_id": "teacher-1"})
+        assert "error" not in result
+        assert result["assessment"]["title"] == "Final Exam"
+        assert result["summary"]["total_submissions"] == 1
+
+    def test_execute_tool_returns_error_for_missing_name(self):
+        from backend.services.assistant_tools import execute_tool
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = MagicMock()
+            result = execute_tool('query_assessment_results', {"teacher_id": "teacher-1"})
+        assert "error" in result
+
+    def test_tool_definitions_serialize_for_openai_function_calling(self):
+        from backend.services.assistant_tools import TOOL_DEFINITIONS
+        import json
+        assessment_tools = [t for t in TOOL_DEFINITIONS if t["name"] in ("list_published_assessments", "query_assessment_results")]
+        assert len(assessment_tools) == 2, "Both assessment tools must be registered"
+        for tool_def in assessment_tools:
+            assert isinstance(tool_def["name"], str) and len(tool_def["name"]) > 0
+            assert isinstance(tool_def["description"], str) and len(tool_def["description"]) > 0
+            assert isinstance(tool_def["input_schema"], dict)
+            assert tool_def["input_schema"]["type"] == "object"
+            assert "properties" in tool_def["input_schema"]
+            openai_format = {"type": "function", "function": {"name": tool_def["name"], "description": tool_def["description"], "parameters": tool_def["input_schema"]}}
+            assert json.dumps(openai_format)

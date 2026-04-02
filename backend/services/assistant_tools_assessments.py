@@ -172,3 +172,58 @@ def query_assessment_results(assessment_name=None, join_code=None,
     except Exception as e:
         logger.exception("query_assessment_results failed")
         return {"error": f"Failed to query assessment results: {e}"}
+
+
+# ═══════════════════════════════════════════════════════
+# TOOL DEFINITIONS
+# ═══════════════════════════════════════════════════════
+
+ASSESSMENT_TOOL_DEFINITIONS = [
+    {
+        "name": "list_published_assessments",
+        "description": "List all published assessments and assignments from the student portal. Shows title, join code, submission count, active status, and content type. Use when the teacher asks 'what assessments have I published?' or 'show my portal assignments'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string",
+                    "description": "Filter by type: 'assessment' or 'assignment' (omit for both)"
+                }
+            }
+        }
+    },
+    {
+        "name": "query_assessment_results",
+        "description": "Get results and statistics for a published assessment or assignment from the student portal. Shows per-student scores, class average, grade distribution, highest/lowest scores. Search by title (partial match) or join code. Optionally filter by student name or score range. Use when the teacher asks 'how did my class do on X?', 'who failed the quiz?', 'what was the average on the test?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "assessment_name": {
+                    "type": "string",
+                    "description": "Assessment/assignment title to search for (partial match, case-insensitive)"
+                },
+                "join_code": {
+                    "type": "string",
+                    "description": "Exact 6-character join code (alternative to assessment_name)"
+                },
+                "min_score": {
+                    "type": "number",
+                    "description": "Only include submissions with percentage >= this value"
+                },
+                "max_score": {
+                    "type": "number",
+                    "description": "Only include submissions with percentage <= this value"
+                },
+                "student_name": {
+                    "type": "string",
+                    "description": "Filter to a specific student (partial match)"
+                }
+            }
+        }
+    },
+]
+
+ASSESSMENT_TOOL_HANDLERS = {
+    "list_published_assessments": list_published_assessments_tool,
+    "query_assessment_results": query_assessment_results,
+}
