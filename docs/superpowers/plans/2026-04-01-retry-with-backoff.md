@@ -4,7 +4,7 @@
 
 **Goal:** Add a unified retry-with-exponential-backoff utility (inspired by Claude Code's `withRetry.ts`) and apply it to all unprotected AI API calls across Graider.
 
-**Architecture:** Create a single `backend/retry.py` module exporting a `with_retry()` wrapper and a `@retryable` decorator. Both use exponential backoff (0.5s base, 2x growth, 25% jitter, 32s cap) with Retry-After header support. Apply the wrapper to ~30 unprotected OpenAI/Anthropic/Gemini call sites in `assignment_grader.py`, `planner_routes.py`, and other route files. Migrate the existing `storage.py` retry to use the shared utility.
+**Architecture:** Create a single `backend/retry.py` module exporting a `with_retry()` wrapper function. It uses exponential backoff (0.5s base, 2x growth, 25% jitter, 32s cap) with Retry-After header support. Apply the wrapper to all unprotected OpenAI/Anthropic/Gemini call sites in `assignment_grader.py`, `planner_routes.py`, and other route files. Migrate the existing `storage.py` retry to use the shared utility. (A `@retryable` decorator is intentionally omitted — YAGNI; all current call sites use the inline `with_retry(lambda: ...)` pattern.)
 
 **Tech Stack:** Python 3.11, `time.sleep`, `random`, `logging`, `unittest.mock` for tests
 
@@ -14,7 +14,7 @@
 
 | File | Action | Responsibility |
 |------|--------|----------------|
-| `backend/retry.py` | **Create** | Unified retry utility: `with_retry()`, `@retryable`, `is_retryable_error()`, `get_retry_delay()` |
+| `backend/retry.py` | **Create** | Unified retry utility: `with_retry()`, `is_retryable_error()`, `get_retry_delay()` |
 | `tests/test_retry.py` | **Create** | Unit tests for retry module (backoff math, error classification, max retries, jitter, Retry-After) |
 | `assignment_grader.py` | **Modify** | Wrap all `client.messages.create()`, `client.chat.completions.create()`, `gemini_client.generate_content()` calls |
 | `backend/routes/planner_routes.py` | **Modify** | Wrap all `client.chat.completions.create()` calls |
@@ -180,79 +180,52 @@ Append to `tests/test_retry.py`:
 # ── is_retryable_error tests ──
 
 
+def _make_sdk_error(status_code, message="error"):
+    """Create a lightweight stub exception that mimics SDK error shape.
+
+    Works regardless of whether openai/anthropic packages are installed.
+    The retry utility classifies errors by status_code attribute, not by
+    isinstance checks, so stubs exercise the same code paths as real SDKs.
+    """
+    err = Exception(message)
+    err.status_code = status_code
+    err.response = MagicMock(status_code=status_code, headers={})
+    return err
+
+
 def test_retryable_openai_rate_limit():
-    """OpenAI 429 RateLimitError should be retryable."""
+    """OpenAI-style 429 RateLimitError should be retryable."""
     from backend.retry import is_retryable_error
-    try:
-        import openai
-        err = openai.RateLimitError(
-            message="Rate limit exceeded",
-            response=MagicMock(status_code=429, headers={}),
-            body=None,
-        )
-        assert is_retryable_error(err) is True
-    except ImportError:
-        pytest.skip("openai not installed")
+    err = _make_sdk_error(429, "Rate limit exceeded")
+    assert is_retryable_error(err) is True
 
 
 def test_retryable_openai_server_error():
-    """OpenAI 500 InternalServerError should be retryable."""
+    """OpenAI-style 500 InternalServerError should be retryable."""
     from backend.retry import is_retryable_error
-    try:
-        import openai
-        err = openai.InternalServerError(
-            message="Internal server error",
-            response=MagicMock(status_code=500, headers={}),
-            body=None,
-        )
-        assert is_retryable_error(err) is True
-    except ImportError:
-        pytest.skip("openai not installed")
+    err = _make_sdk_error(500, "Internal server error")
+    assert is_retryable_error(err) is True
 
 
 def test_retryable_anthropic_rate_limit():
-    """Anthropic 429 RateLimitError should be retryable."""
+    """Anthropic-style 429 RateLimitError should be retryable."""
     from backend.retry import is_retryable_error
-    try:
-        import anthropic
-        err = anthropic.RateLimitError(
-            message="Rate limit exceeded",
-            response=MagicMock(status_code=429, headers={}),
-            body=None,
-        )
-        assert is_retryable_error(err) is True
-    except ImportError:
-        pytest.skip("anthropic not installed")
+    err = _make_sdk_error(429, "Rate limit exceeded")
+    assert is_retryable_error(err) is True
 
 
 def test_not_retryable_auth_error():
     """Authentication errors (401) should NOT be retryable."""
     from backend.retry import is_retryable_error
-    try:
-        import openai
-        err = openai.AuthenticationError(
-            message="Invalid API key",
-            response=MagicMock(status_code=401, headers={}),
-            body=None,
-        )
-        assert is_retryable_error(err) is False
-    except ImportError:
-        pytest.skip("openai not installed")
+    err = _make_sdk_error(401, "Invalid API key")
+    assert is_retryable_error(err) is False
 
 
 def test_not_retryable_bad_request():
     """Bad request (400) should NOT be retryable."""
     from backend.retry import is_retryable_error
-    try:
-        import openai
-        err = openai.BadRequestError(
-            message="Invalid request",
-            response=MagicMock(status_code=400, headers={}),
-            body=None,
-        )
-        assert is_retryable_error(err) is False
-    except ImportError:
-        pytest.skip("openai not installed")
+    err = _make_sdk_error(400, "Invalid request")
+    assert is_retryable_error(err) is False
 
 
 def test_retryable_connection_error():
@@ -778,17 +751,34 @@ if token_tracker:
 response_text = response.text.strip()
 ```
 
-- [ ] **Step 7: Verify the app starts without import errors**
+- [ ] **Step 7: Search-based verification — no unwrapped calls remain**
+
+Run these grep commands and verify zero matches (all calls should be inside `with_retry`):
+```bash
+cd /Users/alexc/Downloads/Graider
+# These should return ZERO lines (all wrapped):
+grep -n 'client\.messages\.create(' assignment_grader.py | grep -v 'with_retry' | grep -v '#'
+grep -n 'client\.chat\.completions\.create(' assignment_grader.py | grep -v 'with_retry' | grep -v '#'
+grep -n 'client\.beta\.chat\.completions\.parse(' assignment_grader.py | grep -v 'with_retry' | grep -v '#'
+grep -n 'gemini_client\.generate_content(' assignment_grader.py | grep -v 'with_retry' | grep -v '#'
+grep -n 'client\.generate_content(' assignment_grader.py | grep -v 'with_retry' | grep -v '#'
+
+# This should show the import + all 16 wrapper calls:
+grep -c 'with_retry' assignment_grader.py
+# Expected: 17 (1 import + 16 calls)
+```
+
+- [ ] **Step 8: Verify the app starts without import errors**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -c "import assignment_grader; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 8: Run existing grading tests**
+- [ ] **Step 9: Run existing grading tests**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_grading_pipeline.py tests/test_grading_factors.py -v --timeout=60`
 Expected: All existing tests PASS (the retry wrapper is transparent when calls succeed)
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 cd /Users/alexc/Downloads/Graider
@@ -840,17 +830,29 @@ completion = with_retry(
 
 Each call is inside its own route handler function, so lambda closures are safe.
 
-- [ ] **Step 3: Verify the app starts**
+- [ ] **Step 3: Search-based verification — no unwrapped calls remain**
+
+```bash
+cd /Users/alexc/Downloads/Graider
+# Should return ZERO lines (all wrapped):
+grep -n 'client\.chat\.completions\.create(' backend/routes/planner_routes.py | grep -v 'with_retry' | grep -v '#'
+
+# Should show import + all wrapper calls:
+grep -c 'with_retry' backend/routes/planner_routes.py
+# Expected: 13 (1 import + 12 calls)
+```
+
+- [ ] **Step 4: Verify the app starts**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -c "from backend.routes.planner_routes import planner_bp; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 4: Run existing planner tests**
+- [ ] **Step 5: Run existing planner tests**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_planner_routes.py -v --timeout=60`
 Expected: All existing tests PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd /Users/alexc/Downloads/Graider
@@ -960,17 +962,29 @@ response = with_retry(
 )
 ```
 
-- [ ] **Step 6: Verify all 4 files import cleanly**
+- [ ] **Step 6: Search-based verification — no unwrapped calls remain**
+
+```bash
+cd /Users/alexc/Downloads/Graider
+# Each file should have ZERO bare API calls outside with_retry:
+for f in backend/routes/grading_routes.py backend/routes/lesson_routes.py backend/routes/assignment_routes.py backend/routes/assignment_player_routes.py; do
+  echo "=== $f ==="
+  grep -n 'client\.messages\.create\|client\.chat\.completions\.create' "$f" | grep -v 'with_retry' | grep -v '#'
+done
+# Expected: no output (all calls wrapped)
+```
+
+- [ ] **Step 7: Verify all 4 files import cleanly**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -c "from backend.routes.grading_routes import grading_bp; from backend.routes.lesson_routes import lesson_bp; from backend.routes.assignment_routes import assignment_bp; from backend.routes.assignment_player_routes import assignment_player_bp; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 7: Run existing route tests**
+- [ ] **Step 8: Run existing route tests**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_grading_routes.py tests/test_assignment_routes.py -v --timeout=60`
 Expected: All existing tests PASS
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 cd /Users/alexc/Downloads/Graider
@@ -1016,23 +1030,31 @@ def _retry_supabase(fn, max_retries=3, initial_delay=0.5):
             _time.sleep(delay)
 ```
 
-- [ ] **Step 3: Update all callers of `_retry_supabase` to use `with_retry`**
+- [ ] **Step 3: Update the 2 callers of `_retry_supabase` to use `with_retry`**
 
-Find every call to `_retry_supabase(lambda: ...)` in `storage.py` and replace with `with_retry(lambda: ..., label="supabase_<operation>", max_retries=3)`.
+There are exactly 2 call sites for `_retry_supabase` in `storage.py`:
+1. `_sb_load()` (~line 259): `return _retry_supabase(_query)`
+2. `_sb_save()` (~line 279): `return _retry_supabase(_query)`
+
+Replace each with `with_retry(_query, label="supabase_<operation>", max_retries=3)`.
 
 The `max_retries=3` preserves the original Supabase retry count (vs the default 5 for AI APIs).
 
-Example — in `_sb_load()`:
-
 ```python
+# _sb_load (~line 259):
 # Before:
-return _retry_supabase(lambda: _sb().table("teacher_data")...execute())
-
+return _retry_supabase(_query)
 # After:
-return with_retry(lambda: _sb().table("teacher_data")...execute(), label="supabase_load", max_retries=3)
+return with_retry(_query, label="supabase_load", max_retries=3)
+
+# _sb_save (~line 279):
+# Before:
+return _retry_supabase(_query)
+# After:
+return with_retry(_query, label="supabase_save", max_retries=3)
 ```
 
-Apply the same pattern to `_sb_save()`, `_sb_delete()`, `_sb_list_keys()`, `_sb_load_student_history()`, `_sb_save_student_history()`.
+Note: `_sb_delete()`, `_sb_list_keys()`, etc. have their own inline retry loops (not using `_retry_supabase`). Leave those unchanged — migrating them is out of scope for this task.
 
 - [ ] **Step 4: Run storage tests**
 
@@ -1072,21 +1094,9 @@ def test_retry_openai_rate_limit_then_success():
         nonlocal call_count
         call_count += 1
         if call_count <= 2:
-            try:
-                import openai
-                raise openai.RateLimitError(
-                    message="Rate limit exceeded",
-                    response=MagicMock(
-                        status_code=429,
-                        headers={'retry-after': '1'},
-                    ),
-                    body=None,
-                )
-            except ImportError:
-                err = Exception("rate limit")
-                err.status_code = 429
-                err.response = MagicMock(status_code=429, headers={'retry-after': '1'})
-                raise err
+            err = _make_sdk_error(429, "Rate limit exceeded")
+            err.response = MagicMock(status_code=429, headers={'retry-after': '1'})
+            raise err
         return {"choices": [{"message": {"content": "graded"}}]}
 
     with patch('backend.retry.time.sleep') as mock_sleep:
@@ -1109,17 +1119,7 @@ def test_retry_anthropic_503_then_success():
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            try:
-                import anthropic
-                raise anthropic.InternalServerError(
-                    message="Service temporarily unavailable",
-                    response=MagicMock(status_code=503, headers={}),
-                    body=None,
-                )
-            except ImportError:
-                err = Exception("503 service unavailable")
-                err.status_code = 503
-                raise err
+            raise _make_sdk_error(503, "Service temporarily unavailable")
         return {"content": [{"text": "feedback"}]}
 
     with patch('backend.retry.time.sleep'):
@@ -1195,10 +1195,10 @@ git commit -m "test: add integration tests for retry-with-backoff under simulate
 | 2 | Wrap `assignment_grader.py` | 16 calls | Low — transparent wrapper |
 | 3 | Wrap `planner_routes.py` | 12 calls | Low — transparent wrapper |
 | 4 | Wrap 4 remaining route files | 4 calls | Low — transparent wrapper |
-| 5 | Migrate `storage.py` | 6 calls | Low — same behavior, shared code |
+| 5 | Migrate `storage.py` | 2 calls (+ delete `_retry_supabase`) | Low — same behavior, shared code |
 | 6 | Integration tests | Validation | None — tests only |
 
-**Total: ~38 API call sites protected with retry-with-backoff.**
+**Total: ~34 API call sites protected with retry-with-backoff.**
 
 **Before:** A single OpenAI 429 during a 30-student grading run kills the entire batch.
 **After:** Transient errors auto-recover with up to 15.5s of backoff, and the teacher never knows it happened.
