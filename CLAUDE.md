@@ -17,9 +17,27 @@ Always use this venv for running Python commands, installing packages, and start
 
 ## Deployment
 
-- **Backend (app.graider.live)**: Railway — auto-deploys from `git push origin main`. Env vars configured in Railway dashboard.
+- **Backend (app.graider.live)**: Railway — auto-deploys when PRs merge to `main`. Direct pushes to main are blocked by branch protection.
 - **Landing page (graider.live)**: Vercel — deploy with `cd landing && npx vercel --prod`. Separate Vercel project.
 - **Frontend**: Built with `cd frontend && npm run build`, output goes to `backend/static/`. Deployed with the backend via Railway.
+
+### CI/CD Pipeline
+
+All changes go through Pull Requests:
+
+1. Create branch: `git checkout -b feature/my-change`
+2. Push: `git push -u origin feature/my-change`
+3. Create PR: `gh pr create --title "..." --body "..."`
+4. CI runs automatically (backend tests + frontend build)
+5. Merge when CI passes → Railway auto-deploys
+
+**Branch protection on `main` requires:**
+- `Backend Tests` job passes (pytest with 40% coverage floor)
+- `Frontend Build` job passes (Vite build succeeds)
+
+**Emergency bypass:** Repo admins can merge without CI if `enforce_admins` is false. Use only for critical hotfixes — fix CI immediately after.
+
+**CI job names are locked:** The branch protection rule references `Backend Tests` and `Frontend Build` by exact name. If you rename a job in `.github/workflows/ci.yml`, update the branch protection rule too or merges will be blocked. See `docs/superpowers/plans/2026-04-02-cicd-pipeline.md` Task 3 for the update command.
 
 ## Project Overview
 

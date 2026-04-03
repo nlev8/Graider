@@ -431,11 +431,28 @@ Final result with score, feedback, detection flags, audit trail
 
 Contributions welcome! Please read CLAUDE.md for development guidelines.
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/amazing`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing`)
-5. Open a Pull Request
+### CI Pipeline
+
+This project uses GitHub Actions for continuous integration. Branch protection on `main` requires all checks to pass before merging.
+
+**Required checks:**
+- **Backend Tests** — runs `pytest` with 40% coverage floor (excludes load/stress/e2e tests)
+- **Frontend Build** — runs `npm run build` via Vite
+
+**Workflow:**
+1. Create a feature branch: `git checkout -b feature/my-change`
+2. Push and open a PR: `git push -u origin feature/my-change && gh pr create`
+3. CI runs automatically — both jobs must pass
+4. Merge the PR → Railway auto-deploys to production
+
+**Running tests locally:**
+```bash
+source venv/bin/activate
+python -m pytest tests/ -q --ignore=tests/load --ignore=tests/stress --ignore=tests/e2e -m "not live"
+cd frontend && npm run build
+```
+
+**Note:** Do not push directly to `main`. Direct pushes are blocked by branch protection.
 
 ---
 
