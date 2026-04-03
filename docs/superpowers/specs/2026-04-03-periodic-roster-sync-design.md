@@ -56,17 +56,17 @@ New blueprint: `sync_bp` with single route `POST /api/sync/periodic-roster`.
 
 **Auth:** Validates `Authorization: Bearer <token>` against `PERIODIC_SYNC_SECRET` env var. Returns 401 if missing/invalid.
 
-**Rate limiting:** `@limiter.limit("1 per 5 minutes")` via the existing Flask-Limiter instance at `backend/extensions.py` (already initialized in `app.py:93`, per-IP by default via `get_remote_address`). This is a per-route decorator — does not affect other routes. Already used on `/api/assistant/chat` (20/min) and `/api/grade` (5/min).
+**Rate limiting:** `@limiter.limit("1 per 5 minutes")` via the existing Flask-Limiter instance at `backend/extensions.py` (already initialized in `app.py:93`, per-IP by default via `get_remote_address`). This is a per-route decorator — does not affect other routes. Already used on `/api/assistant/chat` (20/min) and `/api/grade` (5/min). `ProxyFix` is already configured (`app.py:133-134`) so `get_remote_address` resolves to the real client IP behind Railway's proxy, not the proxy IP.
 
 **Teacher discovery (paged across runs):**
 1. Query Supabase `teacher_data` for all rows with `data_key='district:sis_config'` — these are teachers with a SIS provider configured
-2. Cross-reference against `student_sessions` for `created_at` in last 30 days to filter to active teachers
+2. Filter to active teachers: include if EITHER `student_sessions.created_at` is within last 30 days OR the teacher's `district:sis_config` was updated within last 30 days (covers pre-semester rostering and long breaks where no students have logged in yet)
 3. Order by `teacher_id` ascending, cap at 50 per run
 4. Read the paging cursor from `teacher_data` key `"sync:last_cursor"` (teacher_id="system") — this is the last `teacher_id` processed
 5. Start from cursor position (skip already-synced teachers). If cursor is past the end of the list, reset to beginning (wrap around)
 6. After processing the batch successfully, save the new cursor position. **Cursor is only written after the batch completes** — if the Supabase write fails or the process crashes mid-batch, the next run restarts from the same cursor and re-processes the same teachers (idempotent upserts make this safe, not wasteful).
 
-This ensures all teachers get synced within `ceil(total/50)` days. For Volusia County (~20 teachers), every teacher syncs daily. At district scale (200 teachers), every teacher syncs within 4 days.
+This ensures all teachers get synced within `ceil(total/50)` weekdays. For Volusia County (~20 teachers), every teacher syncs daily. At district scale (200 teachers), every teacher syncs within 4 weekdays. **Stakeholder note:** teachers beyond the first batch may wait up to `ceil(total/50)` weekdays for their first periodic sync after the feature launches. This is acceptable because they still have "Sync Now" for immediate updates. If faster coverage is needed, the cap can be raised or the cron can run twice daily (`0 9,21 * * 1-5`).
 
 **Per-teacher sync:**
 1. Load SIS config to determine provider (`clever` or `oneroster`)
