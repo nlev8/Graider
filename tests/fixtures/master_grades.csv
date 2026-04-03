@@ -1,0 +1,61 @@
+Student Name,Student ID,First Name,Date,Assignment,Period,Quarter,Overall Score,Letter Grade,Content Accuracy,Completeness,Writing Quality,Effort Engagement
+Alice Johnson,S001,Alice,2026-01-15,Chapter 1 Notes,Period 1,Period 1,92,A,95,90,88,94
+Bob Martinez,S002,Bob,2026-01-15,Chapter 1 Notes,Period 1,Period 1,78,C,75,80,72,85
+Carol Williams,S003,Carol,2026-01-15,Chapter 1 Notes,Period 1,Period 1,65,D,60,70,55,75
+David Chen,S004,David,2026-01-15,Chapter 1 Notes,Period 1,Period 1,88,B,90,85,88,90
+Emma Davis,S005,Emma,2026-01-15,Chapter 1 Notes,Period 1,Period 1,45,F,40,50,35,55
+Frank Brown,S006,Frank,2026-01-15,Chapter 1 Notes,Period 2,Period 2,95,A,98,92,94,96
+Grace Lee,S007,Grace,2026-01-15,Chapter 1 Notes,Period 2,Period 2,72,C,70,75,65,78
+Henry Wilson,S008,Henry,2026-01-15,Chapter 1 Notes,Period 2,Period 2,83,B,85,80,82,85
+Iris Taylor,S009,Iris,2026-01-15,Chapter 1 Notes,Period 2,Period 2,58,F,55,60,50,67
+Jack Anderson,S010,Jack,2026-01-15,Chapter 1 Notes,Period 2,Period 2,91,A,93,90,88,92
+Kate Thomas,S011,Kate,2026-01-15,Chapter 1 Notes,Period 3,Period 3,97,A,98,96,95,98
+Leo Jackson,S012,Leo,2026-01-15,Chapter 1 Notes,Period 3,Period 3,85,B,88,82,80,90
+Mia White,S013,Mia,2026-01-15,Chapter 1 Notes,Period 3,Period 3,76,C,78,74,70,82
+Noah Harris,S014,Noah,2026-01-15,Chapter 1 Notes,Period 3,Period 3,68,D,65,70,60,77
+Olivia Martin,S015,Olivia,2026-01-15,Chapter 1 Notes,Period 3,Period 3,52,F,48,55,42,63
+Alice Johnson,S001,Alice,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,88,B,90,85,86,90
+Bob Martinez,S002,Bob,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,74,C,72,76,68,80
+Carol Williams,S003,Carol,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,70,C,68,72,62,78
+David Chen,S004,David,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,91,A,93,88,90,92
+Emma Davis,S005,Emma,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,50,F,45,55,38,62
+Frank Brown,S006,Frank,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,92,A,95,90,88,94
+Grace Lee,S007,Grace,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,80,B,78,82,75,85
+Henry Wilson,S008,Henry,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,85,B,88,82,84,86
+Iris Taylor,S009,Iris,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,62,D,58,65,52,73
+Jack Anderson,S010,Jack,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,89,B,92,87,85,91
+Kate Thomas,S011,Kate,2026-02-01,Bill of Rights Quiz,Period 3,Period 3,95,A,97,93,94,96
+Leo Jackson,S012,Leo,2026-02-01,Bill of Rights Quiz,Period 3,Period 3,82,B,85,80,78,85
+Mia White,S013,Mia,2026-02-01,Bill of Rights Quiz,Period 3,Period 3,79,C,80,76,72,88
+Noah Harris,S014,Noah,2026-02-01,Bill of Rights Quiz,Period 3,Period 3,71,C,68,73,64,79
+Olivia Martin,S015,Olivia,2026-02-01,Bill of Rights Quiz,Period 3,Period 3,55,F,50,58,45,67
+Alice Johnson,S001,Alice,2026-02-10,Branches of Government Essay,Period 1,Period 1,85,B,88,82,84,86
+Bob Martinez,S002,Bob,2026-02-10,Branches of Government Essay,Period 1,Period 1,70,C,68,72,65,75
+Carol Williams,S003,Carol,2026-02-10,Branches of Government Essay,Period 1,Period 1,72,C,70,74,68,76
+David Chen,S004,David,2026-02-10,Branches of Government Essay,Period 1,Period 1,93,A,95,90,92,94
+Emma Davis,S005,Emma,2026-02-10,Branches of Government Essay,Period 1,Period 1,55,F,50,58,42,70
+Frank Brown,S006,Frank,2026-02-10,Branches of Government Essay,Period 2,Period 2,90,A,93,88,86,92
+Grace Lee,S007,Grace,2026-02-10,Branches of Government Essay,Period 2,Period 2,84,B,82,86,80,88
+Henry Wilson,S008,Henry,2026-02-10,Branches of Government Essay,Period 2,Period 2,87,B,90,84,86,88
+Iris Taylor,S009,Iris,2026-02-10,Branches of Government Essay,Period 2,Period 2,65,D,60,68,55,77
+Jack Anderson,S010,Jack,2026-02-10,Branches of Government Essay,Period 2,Period 2,88,B,90,86,84,92
+Kate Thomas,S011,Kate,2026-02-10,Branches of Government Essay,Period 3,Period 3,94,A,96,92,93,95
+Leo Jackson,S012,Leo,2026-02-10,Branches of Government Essay,Period 3,Period 3,80,B,82,78,76,84
+Mia White,S013,Mia,2026-02-10,Branches of Government Essay,Period 3,Period 3,82,B,84,80,78,86
+Noah Harris,S014,Noah,2026-02-10,Branches of Government Essay,Period 3,Period 3,74,C,72,76,68,80
+Olivia Martin,S015,Olivia,2026-02-10,Branches of Government Essay,Period 3,Period 3,58,F,54,60,48,70
+Pete Garcia,S016,Pete,2026-01-15,Chapter 1 Notes,Period 1,Period 1,82,B,84,80,78,86
+Pete Garcia,S016,Pete,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,79,C,76,80,74,85
+Pete Garcia,S016,Pete,2026-02-10,Branches of Government Essay,Period 1,Period 1,75,C,72,78,70,80
+Quinn Roberts,S017,Quinn,2026-01-15,Chapter 1 Notes,Period 2,Period 2,70,C,68,72,64,76
+Quinn Roberts,S017,Quinn,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,68,D,65,70,60,77
+Quinn Roberts,S017,Quinn,2026-02-10,Branches of Government Essay,Period 2,Period 2,64,D,60,66,56,74
+Rosa Sanchez,S018,Rosa,2026-01-15,Chapter 1 Notes,Period 3,Period 3,90,A,92,88,86,94
+Rosa Sanchez,S018,Rosa,2026-02-01,Bill of Rights Quiz,Period 3,Period 3,93,A,95,90,92,95
+Rosa Sanchez,S018,Rosa,2026-02-10,Branches of Government Essay,Period 3,Period 3,91,A,93,89,88,94
+Sam Nguyen,S019,Sam,2026-01-15,Chapter 1 Notes,Period 1,Period 1,60,D,55,65,48,72
+Sam Nguyen,S019,Sam,2026-02-01,Bill of Rights Quiz,Period 1,Period 1,58,F,52,62,44,74
+Sam Nguyen,S019,Sam,2026-02-10,Branches of Government Essay,Period 1,Period 1,63,D,58,66,50,78
+Tina Park,S020,Tina,2026-01-15,Chapter 1 Notes,Period 2,Period 2,87,B,89,85,84,90
+Tina Park,S020,Tina,2026-02-01,Bill of Rights Quiz,Period 2,Period 2,90,A,92,88,86,94
+Tina Park,S020,Tina,2026-02-10,Branches of Government Essay,Period 2,Period 2,86,B,88,84,82,90
