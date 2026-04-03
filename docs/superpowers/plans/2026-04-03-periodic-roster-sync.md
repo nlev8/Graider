@@ -990,7 +990,7 @@ git commit -m "feat: register sync blueprint, add cron workflow, document env va
 | 2 | Webhook endpoint + 7 tests | Create `sync_routes.py`, modify tests | Low — new blueprint |
 | 3 | Blueprint registration + cron workflow + docs | Modify `__init__.py`, create workflow, modify `CLAUDE.md` | Low — append only |
 
-**Total: 1 new endpoint, 1 new function, 21 tests (6 deactivation + 7 webhook + 8 discovery), 1 cron workflow.**
+**Total: 1 new endpoint, 1 new function, 20 tests (6 deactivation + 7 webhook + 7 discovery), 1 cron workflow.**
 
 **Post-deploy steps (manual, not in this plan):**
 1. Generate secret: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
