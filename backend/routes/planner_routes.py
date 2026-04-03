@@ -10,13 +10,18 @@ import math
 import re
 import logging
 import subprocess
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, send_file
 from werkzeug.utils import secure_filename
 from pathlib import Path
 from backend.extensions import limiter
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.retry import with_retry
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 
 ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
@@ -7132,3 +7137,109 @@ def extract_text_from_file():
     except Exception as e:
         _logger.exception("Request failed: %s", request.path)
         return jsonify({"error": "An internal error occurred"}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# STUDY GUIDE GENERATION
+# ══════════════════════════════════════════════════════════════
+
+@planner_bp.route('/api/generate-study-guide', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def generate_study_guide():
+    """Generate a structured study guide from content using Gemini Flash."""
+    data = request.get_json(silent=True) or {}
+
+    content = data.get('content', '').strip()
+    title = data.get('title', 'Study Guide')
+    subject = data.get('subject', '')
+    grade = data.get('grade', '')
+    instructions = data.get('instructions', '')
+    lesson_plan = data.get('lessonPlan')
+
+    if not content and not lesson_plan:
+        return jsonify({"error": "Provide content or a lesson plan to generate a study guide."}), 400
+
+    user_id = getattr(g, 'user_id', 'local-dev')
+
+    # Build the prompt
+    prompt_parts = []
+    prompt_parts.append(f"You are an expert {subject} teacher creating a study guide for grade {grade} students.")
+    prompt_parts.append("")
+    prompt_parts.append("Generate a comprehensive study guide in JSON format with these sections:")
+    prompt_parts.append('- "title": string')
+    prompt_parts.append('- "sections": array of objects, each with:')
+    prompt_parts.append('  - "heading": string (section name)')
+    prompt_parts.append('  - "content": array of strings (bullet points) — for Key Concepts, Summary')
+    prompt_parts.append('  - "terms": array of {"term": string, "definition": string} — for Vocabulary section')
+    prompt_parts.append('  - "questions": array of {"question": string, "answer": string} — for Review Questions')
+    prompt_parts.append("")
+    prompt_parts.append("Include these sections in order:")
+    prompt_parts.append("1. Key Concepts — main ideas students should understand")
+    prompt_parts.append("2. Vocabulary — important terms with definitions")
+    prompt_parts.append("3. Review Questions — 5-8 questions with answers to help students self-test")
+    prompt_parts.append("4. Summary — concise recap of the material")
+    prompt_parts.append("")
+    prompt_parts.append("Return ONLY valid JSON. No markdown, no code fences, no extra text.")
+
+    if lesson_plan:
+        prompt_parts.append("")
+        prompt_parts.append("=== LESSON PLAN ===")
+        prompt_parts.append(f"Title: {lesson_plan.get('title', '')}")
+        if lesson_plan.get('overview'):
+            prompt_parts.append(f"Overview: {lesson_plan['overview']}")
+        if lesson_plan.get('objectives'):
+            prompt_parts.append("Objectives:")
+            for obj in lesson_plan['objectives']:
+                prompt_parts.append(f"  - {obj}")
+        if lesson_plan.get('vocabulary'):
+            prompt_parts.append("Vocabulary: " + ", ".join(lesson_plan['vocabulary']))
+        if lesson_plan.get('days'):
+            for day in lesson_plan['days']:
+                prompt_parts.append(f"Day {day.get('day', '?')}: {day.get('topic', '')}")
+        prompt_parts.append("=== END LESSON PLAN ===")
+
+    if content:
+        prompt_parts.append("")
+        prompt_parts.append("=== SOURCE CONTENT ===")
+        prompt_parts.append(content[:8000])
+        prompt_parts.append("=== END SOURCE CONTENT ===")
+
+    if instructions:
+        prompt_parts.append("")
+        prompt_parts.append(f"Additional instructions: {instructions}")
+
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        from backend.api_keys import get_api_key as _gak
+        genai.configure(api_key=_gak('gemini', user_id))
+        model = genai.GenerativeModel("gemini-2.0-flash")
+
+        response = with_retry(
+            lambda: model.generate_content(prompt),
+            label="generate_study_guide",
+        )
+
+        response_text = response.text.strip()
+        # Strip markdown code fences if present
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3].strip()
+        if response_text.startswith("json"):
+            response_text = response_text[4:].strip()
+
+        study_guide = json.loads(response_text)
+
+        return jsonify({
+            "study_guide": study_guide,
+            "title": study_guide.get("title", title),
+        })
+
+    except json.JSONDecodeError as e:
+        _logger.error("Study guide JSON parse failed: %s", e)
+        return jsonify({"error": "Failed to parse study guide. Please try again."}), 500
+    except Exception as e:
+        _logger.exception("Study guide generation failed")
+        return jsonify({"error": f"Generation failed: {str(e)[:200]}"}), 500
