@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-03-periodic-roster-sync-design.md`
 
+**Review history:**
+- Rev 1: Initial plan (3 tasks, 13 tests)
+- Rev 2: Added _discover_teachers unit tests (cursor paging, 30-day filter, 50-teacher cap, wrap-around). Confirmed asyncio.new_event_loop pattern matches existing Clever/OneRoster routes. Confirmed Flask-Limiter uses memory:// in tests — safe to re-init per test app.
+
 ---
 
 ## File Structure
@@ -379,6 +383,155 @@ class TestSyncWebhookOrchestration:
         assert data["total_teachers"] == 2
 ```
 
+Also append tests for `_discover_teachers` (cursor paging, activity filter, cap):
+
+```python
+def _mock_supabase_for_discovery(config_rows, session_rows, cursor_data=None):
+    """Mock Supabase for teacher discovery tests."""
+    mock_sb = MagicMock()
+
+    def table_router(name):
+        mock_table = MagicMock()
+        result = MagicMock()
+        if name == 'teacher_data':
+            result.data = config_rows
+        elif name == 'student_sessions':
+            result.data = session_rows
+        else:
+            result.data = []
+        for method in ('select', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte',
+                       'ilike', 'like', 'order', 'limit', 'offset', 'in_'):
+            getattr(mock_table, method).return_value = mock_table
+        mock_table.execute.return_value = result
+        return mock_table
+
+    mock_sb.table = table_router
+    return mock_sb
+
+
+class TestDiscoverTeachers:
+    def test_finds_teachers_with_sis_config_and_activity(self):
+        """Should return teachers that have SIS config + recent session activity."""
+        from backend.routes.sync_routes import _discover_teachers
+
+        config_rows = [
+            {"teacher_id": "t1", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+            {"teacher_id": "t2", "data": {"provider": "oneroster"}, "updated_at": "2026-01-01T00:00:00"},
+        ]
+        session_rows = [{"teacher_id": "t1"}, {"teacher_id": "t2"}]
+
+        with patch('backend.routes.sync_routes.get_supabase') as mock_get, \
+             patch('backend.routes.sync_routes.storage_load', return_value=None):
+            mock_get.return_value = _mock_supabase_for_discovery(config_rows, session_rows)
+            teachers = _discover_teachers()
+
+        assert len(teachers) == 2
+        assert teachers[0]["teacher_id"] == "t1"
+        assert teachers[0]["provider"] == "clever"
+
+    def test_filters_out_inactive_teachers(self):
+        """Teachers with SIS config but no recent activity should be excluded."""
+        from backend.routes.sync_routes import _discover_teachers
+
+        config_rows = [
+            {"teacher_id": "t1", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+            {"teacher_id": "t2", "data": {"provider": "oneroster"}, "updated_at": "2026-01-01T00:00:00"},
+        ]
+        session_rows = [{"teacher_id": "t1"}]  # t2 has no recent sessions
+
+        with patch('backend.routes.sync_routes.get_supabase') as mock_get, \
+             patch('backend.routes.sync_routes.storage_load', return_value=None):
+            mock_get.return_value = _mock_supabase_for_discovery(config_rows, session_rows)
+            teachers = _discover_teachers()
+
+        assert len(teachers) == 1
+        assert teachers[0]["teacher_id"] == "t1"
+
+    def test_includes_recently_configured_without_sessions(self):
+        """Teachers whose SIS config was updated recently should be included even without sessions."""
+        from backend.routes.sync_routes import _discover_teachers
+        from datetime import datetime, timezone
+
+        recent = datetime.now(tz=timezone.utc).isoformat()
+        config_rows = [
+            {"teacher_id": "t1", "data": {"provider": "clever"}, "updated_at": recent},
+        ]
+        session_rows = []  # No student sessions at all
+
+        with patch('backend.routes.sync_routes.get_supabase') as mock_get, \
+             patch('backend.routes.sync_routes.storage_load', return_value=None):
+            mock_get.return_value = _mock_supabase_for_discovery(config_rows, session_rows)
+            teachers = _discover_teachers()
+
+        assert len(teachers) == 1
+
+    def test_caps_at_50_teachers(self):
+        """Should never return more than 50 teachers per run."""
+        from backend.routes.sync_routes import _discover_teachers
+
+        config_rows = [
+            {"teacher_id": f"t{i:03d}", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"}
+            for i in range(80)
+        ]
+        session_rows = [{"teacher_id": f"t{i:03d}"} for i in range(80)]
+
+        with patch('backend.routes.sync_routes.get_supabase') as mock_get, \
+             patch('backend.routes.sync_routes.storage_load', return_value=None):
+            mock_get.return_value = _mock_supabase_for_discovery(config_rows, session_rows)
+            teachers = _discover_teachers()
+
+        assert len(teachers) == 50
+
+    def test_cursor_skips_already_processed(self):
+        """Cursor should skip teachers already processed in previous runs."""
+        from backend.routes.sync_routes import _discover_teachers
+
+        config_rows = [
+            {"teacher_id": "t1", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+            {"teacher_id": "t2", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+            {"teacher_id": "t3", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+        ]
+        session_rows = [{"teacher_id": "t1"}, {"teacher_id": "t2"}, {"teacher_id": "t3"}]
+        cursor = {"last_teacher_id": "t1"}  # Already processed t1
+
+        with patch('backend.routes.sync_routes.get_supabase') as mock_get, \
+             patch('backend.routes.sync_routes.storage_load', return_value=cursor):
+            mock_get.return_value = _mock_supabase_for_discovery(config_rows, session_rows)
+            teachers = _discover_teachers()
+
+        teacher_ids = [t["teacher_id"] for t in teachers]
+        assert "t1" not in teacher_ids
+        assert "t2" in teacher_ids
+        assert "t3" in teacher_ids
+
+    def test_cursor_wraps_around(self):
+        """When cursor is past the last teacher, should wrap to beginning."""
+        from backend.routes.sync_routes import _discover_teachers
+
+        config_rows = [
+            {"teacher_id": "t1", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+            {"teacher_id": "t2", "data": {"provider": "clever"}, "updated_at": "2026-01-01T00:00:00"},
+        ]
+        session_rows = [{"teacher_id": "t1"}, {"teacher_id": "t2"}]
+        cursor = {"last_teacher_id": "t9"}  # Past all teachers
+
+        with patch('backend.routes.sync_routes.get_supabase') as mock_get, \
+             patch('backend.routes.sync_routes.storage_load', return_value=cursor):
+            mock_get.return_value = _mock_supabase_for_discovery(config_rows, session_rows)
+            teachers = _discover_teachers()
+
+        assert len(teachers) == 2  # Wrapped around to beginning
+
+    def test_returns_empty_when_no_supabase(self):
+        """Should return empty list when Supabase is not configured."""
+        from backend.routes.sync_routes import _discover_teachers
+
+        with patch('backend.routes.sync_routes.get_supabase', return_value=None):
+            teachers = _discover_teachers()
+
+        assert teachers == []
+```
+
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_sync_routes.py::TestSyncWebhookAuth -v`
@@ -410,12 +563,22 @@ from flask import Blueprint, request, jsonify
 
 from backend.extensions import limiter
 from backend.utils.audit import audit_log
+from backend.storage import load as storage_load, save as storage_save
 
 logger = logging.getLogger(__name__)
 
 sync_bp = Blueprint('sync', __name__)
 
 MAX_TEACHERS_PER_RUN = 50
+
+
+def get_supabase():
+    """Get Supabase client. Module-level wrapper for testability."""
+    try:
+        from backend.supabase_client import get_supabase as _get_sb
+        return _get_sb()
+    except Exception:
+        return None
 
 
 def _validate_secret():
@@ -436,12 +599,9 @@ def _discover_teachers():
     Paged via cursor stored in teacher_data key 'sync:last_cursor'.
     """
     try:
-        from backend.supabase_client import get_supabase
         sb = get_supabase()
         if not sb:
             return []
-
-        from backend.storage import load as storage_load
 
         # Get all teachers with SIS config
         config_result = sb.table('teacher_data').select(
@@ -529,7 +689,6 @@ def _discover_teachers():
 def _save_cursor(last_teacher_id):
     """Save the paging cursor after a successful batch."""
     try:
-        from backend.storage import save as storage_save
         storage_save('sync:last_cursor', {'last_teacher_id': last_teacher_id}, 'system')
     except Exception as e:
         logger.warning("Failed to save sync cursor: %s", e)
@@ -674,7 +833,7 @@ def periodic_roster_sync():
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_sync_routes.py -v`
-Expected: All 13 tests PASS (6 deactivation + 7 webhook)
+Expected: All 21 tests PASS (6 deactivation + 7 webhook + 8 discovery)
 
 - [ ] **Step 5: Commit**
 
@@ -831,7 +990,7 @@ git commit -m "feat: register sync blueprint, add cron workflow, document env va
 | 2 | Webhook endpoint + 7 tests | Create `sync_routes.py`, modify tests | Low — new blueprint |
 | 3 | Blueprint registration + cron workflow + docs | Modify `__init__.py`, create workflow, modify `CLAUDE.md` | Low — append only |
 
-**Total: 1 new endpoint, 1 new function, 13 tests, 1 cron workflow.**
+**Total: 1 new endpoint, 1 new function, 21 tests (6 deactivation + 7 webhook + 8 discovery), 1 cron workflow.**
 
 **Post-deploy steps (manual, not in this plan):**
 1. Generate secret: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
