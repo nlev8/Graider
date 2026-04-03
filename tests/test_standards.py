@@ -141,11 +141,12 @@ class TestLoadStandards:
         result = load_standards('FL', 'Math', '6')
         assert len(result['standards']) > 0
 
-    def test_unknown_state_returns_empty(self):
+    def test_unknown_state_falls_back_to_ccss(self):
         from backend.routes.planner_routes import load_standards
         result = load_standards('ZZ', 'Math', '6')
         assert isinstance(result, dict)
-        assert len(result['standards']) == 0
+        # Unknown state defaults to 'ccss' framework, which has math standards
+        assert len(result['standards']) > 0
 
     def test_no_framework_for_french(self):
         from backend.routes.planner_routes import load_standards

@@ -170,8 +170,8 @@ class TestCleverCallback:
         assert resp.status_code == 302
         assert "clever_login=success" in resp.location
 
-    def test_unsupported_role_redirects_error(self):
-        """Non-teacher, non-student role (e.g. 'contact') → unsupported_role redirect."""
+    def test_contact_role_accepted_as_teacher(self):
+        """Non-student roles (e.g. 'contact') are now accepted and treated like teachers."""
         app = _make_app()
 
         with (
@@ -179,6 +179,12 @@ class TestCleverCallback:
                   new=AsyncMock(return_value={"access_token": "test_token"})),
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("contact"))),
+            patch("backend.routes.clever_routes.load_clever_links", return_value={}),
+            patch("backend.routes.clever_routes.save_clever_link"),
+            patch("backend.routes.clever_routes.resolve_clever_user_id",
+                  return_value="clever:clever-teacher-001"),
+            patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
+            patch("backend.routes.clever_routes.os.getenv", return_value=None),
         ):
             with app.test_client() as client:
                 with client.session_transaction() as sess:
@@ -186,7 +192,7 @@ class TestCleverCallback:
                 resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
 
         assert resp.status_code == 302
-        assert "clever_error=unsupported_role" in resp.location
+        assert "clever_login=success" in resp.location
 
     def test_oauth_error_param_redirects_with_error(self):
         """Clever sends back an `error` query param → redirect passes it through."""

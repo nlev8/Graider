@@ -106,7 +106,7 @@ class TestSyncClassesToDbNoSupabase:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=None):
+        with patch("backend.supabase_client.get_supabase", return_value=None):
             # Must not raise
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
@@ -121,7 +121,7 @@ class TestSyncClassesToDbHappyPath:
         sections = [_make_section("sec1", name="Algebra I", subject="math", grade="9", students=["s1"])]
         students = [_make_student("s1", first="Jane", last="Doe", email="jane@school.edu")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         # Verify class upsert called once with a list payload
@@ -168,7 +168,7 @@ class TestSyncClassesToDbHappyPath:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         classes_table = sb.table("classes")
@@ -200,7 +200,7 @@ class TestSyncClassesToDbHappyPath:
         ]
         students = [_make_student("s1")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         # Batched: one call each for classes, students, enrollments
@@ -228,7 +228,7 @@ class TestSyncClassesToDbEdgeCases:
         sections = [{"data": {"name": "No ID Section", "students": []}}]
         students = []
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         sb.table("classes").upsert.assert_not_called()
@@ -242,7 +242,7 @@ class TestSyncClassesToDbEdgeCases:
         sections = [_make_section("sec1", students=["unknown_id"])]
         students = []  # no matching student
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         # Class should still be upserted
@@ -255,7 +255,7 @@ class TestSyncClassesToDbEdgeCases:
         """Empty sections list → no DB calls."""
         sb = _make_supabase_mock()
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db([], [], teacher_id="teacher-001")
 
         sb.table("classes").upsert.assert_not_called()
@@ -270,7 +270,7 @@ class TestSyncClassesToDbEdgeCases:
         )
         sections = [_make_section("sec1", students=[])]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, [], teacher_id="teacher-001")
 
         sb.table("classes").upsert.assert_called_once()
@@ -286,7 +286,7 @@ class TestSyncClassesToDbEdgeCases:
         sections = [{"id": "sec1", "name": "Raw Section", "subject": "math", "grade": "9", "students": ["s1"]}]
         students = [{"id": "s1", "name": {"first": "Jane", "last": "Doe"}, "email": "jane@school.edu"}]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         sb.table("classes").upsert.assert_called_once()
@@ -306,8 +306,8 @@ class TestSyncClassesToDbFailureHandling:
         ]
         students = [_make_student("s1")]
 
-        with caplog.at_level(logging.WARNING, logger="backend.routes.clever_routes"):
-            with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with caplog.at_level(logging.WARNING, logger="backend.roster_sync"):
+            with patch("backend.supabase_client.get_supabase", return_value=sb):
                 _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         # Batch class upsert failed → no student or enrollment calls
@@ -322,7 +322,7 @@ class TestSyncClassesToDbFailureHandling:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         sb.table("students").upsert.assert_not_called()
@@ -337,8 +337,8 @@ class TestSyncClassesToDbFailureHandling:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with caplog.at_level(logging.WARNING, logger="backend.routes.clever_routes"):
-            with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with caplog.at_level(logging.WARNING, logger="backend.roster_sync"):
+            with patch("backend.supabase_client.get_supabase", return_value=sb):
                 _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         sb.table("class_students").upsert.assert_not_called()
@@ -355,8 +355,8 @@ class TestSyncClassesToDbFailureHandling:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with caplog.at_level(logging.WARNING, logger="backend.routes.clever_routes"):
-            with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with caplog.at_level(logging.WARNING, logger="backend.roster_sync"):
+            with patch("backend.supabase_client.get_supabase", return_value=sb):
                 # Must not raise
                 _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
@@ -374,7 +374,7 @@ class TestSyncClassesToDbFailureHandling:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         sb.table("class_students").upsert.assert_not_called()
@@ -390,7 +390,7 @@ class TestSyncClassesToDbFailureHandling:
         sections = [_make_section("sec1", students=["s1"])]
         students = [_make_student("s1")]
 
-        with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        with patch("backend.supabase_client.get_supabase", return_value=sb):
             _sync_classes_to_db(sections, students, teacher_id="teacher-001")
 
         sb.table("class_students").upsert.assert_not_called()

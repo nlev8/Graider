@@ -98,7 +98,10 @@ def standards_dir(tmp_path, monkeypatch):
     """Create a temporary standards data directory and patch DATA_DIR."""
     import backend.routes.planner_routes as pr
     monkeypatch.setattr(pr, 'DATA_DIR', tmp_path)
-    return tmp_path
+    # Reset the cached standards map so tests use the temp directory
+    pr._standards_map_cache = None
+    yield tmp_path
+    pr._standards_map_cache = None
 
 
 class TestLoadStandards:
@@ -116,8 +119,8 @@ class TestLoadStandards:
         filepath.write_text(json.dumps(data))
 
         result = load_standards("FL", "Science")
-        assert len(result) == 2
-        assert result[0]["code"] == "SC.7.E.6.1"
+        assert len(result['standards']) == 2
+        assert result['standards'][0]["code"] == "SC.7.E.6.1"
 
     def test_array_format_loads_correctly(self, standards_dir):
         """Array format [...] loads correctly."""
@@ -128,8 +131,8 @@ class TestLoadStandards:
         filepath.write_text(json.dumps(data))
 
         result = load_standards("FL", "Science")
-        assert len(result) == 1
-        assert result[0]["code"] == "SC.7.E.6.1"
+        assert len(result['standards']) == 1
+        assert result['standards'][0]["code"] == "SC.7.E.6.1"
 
     def test_grade_filtering_by_code_pattern(self, standards_dir):
         """Grade filtering by code pattern (e.g., 'SC.7.E' matches grade 7)."""
@@ -144,8 +147,8 @@ class TestLoadStandards:
         filepath.write_text(json.dumps(data))
 
         result = load_standards("FL", "Science", grade="7")
-        assert len(result) == 1
-        assert result[0]["code"] == "SC.7.E.6.1"
+        assert len(result['standards']) == 1
+        assert result['standards'][0]["code"] == "SC.7.E.6.1"
 
     def test_k12_codes_included_for_any_grade(self, standards_dir):
         """K12 codes (e.g., WL.K12.NH.1.1) apply to all grades."""
@@ -160,13 +163,13 @@ class TestLoadStandards:
 
         result = load_standards("FL", "World Languages", grade="7")
         # K12 code should be included, grade 3 should not
-        assert len(result) == 1
-        assert result[0]["code"] == "WL.K12.NH.1.1"
+        assert len(result['standards']) == 1
+        assert result['standards'][0]["code"] == "WL.K12.NH.1.1"
 
     def test_nonexistent_file_returns_empty_list(self, standards_dir):
         """Non-existent file returns empty list."""
         result = load_standards("FL", "Nonexistent Subject")
-        assert result == []
+        assert result['standards'] == []
 
     def test_grade_filtering_with_range(self, standards_dir):
         """File with grade range '6-8' matches requested grade 7."""
@@ -181,10 +184,11 @@ class TestLoadStandards:
 
         # Code doesn't match grade pattern, but grade is in file range → return all
         result = load_standards("FL", "ELA", grade="7")
-        assert len(result) == 1
+        assert len(result['standards']) == 1
 
     def test_912_course_mapping_filters_by_course(self, standards_dir):
-        """912 codes filter by course field for high school grades."""
+        """912 codes match all high school grades; course mapping is a fallback
+        that only applies when no standards match the grade filter at all."""
         data = {
             "standards": [
                 {"code": "SC.912.L.14.1", "description": "Biology standard", "course": "Biology"},
@@ -194,10 +198,9 @@ class TestLoadStandards:
         filepath = standards_dir / "standards_fl_science.json"
         filepath.write_text(json.dumps(data))
 
-        # Grade 9 maps to Biology for science
+        # Grade 9 matches all 912 codes — both standards returned
         result = load_standards("FL", "Science", grade="9")
-        assert len(result) == 1
-        assert result[0]["course"] == "Biology"
+        assert len(result['standards']) == 2
 
     def test_no_grade_filter_returns_all(self, standards_dir):
         """No grade filter returns all standards."""
@@ -212,10 +215,10 @@ class TestLoadStandards:
         filepath.write_text(json.dumps(data))
 
         result = load_standards("FL", "Science")
-        assert len(result) == 3
+        assert len(result['standards']) == 3
 
-    def test_grade_not_in_file_range_returns_empty(self, standards_dir):
-        """Grade not in file range returns empty list."""
+    def test_grade_not_in_file_range_returns_all_as_fallback(self, standards_dir):
+        """When no standards match the grade filter, all standards are returned as fallback."""
         data = {
             "grade": "6-8",
             "standards": [
@@ -225,9 +228,10 @@ class TestLoadStandards:
         filepath = standards_dir / "standards_fl_ela.json"
         filepath.write_text(json.dumps(data))
 
-        # Grade 11 is outside 6-8 range and no code matches
+        # Grade 11 is outside 6-8 range and no code matches,
+        # but all standards are returned as fallback
         result = load_standards("FL", "ELA", grade="11")
-        assert result == []
+        assert len(result['standards']) == 1
 
     def test_subject_name_cleaning(self, standards_dir):
         """Subject with spaces and slashes gets cleaned for filename lookup."""
@@ -237,7 +241,7 @@ class TestLoadStandards:
         filepath.write_text(json.dumps(data))
 
         result = load_standards("FL", "Social Studies / Civics")
-        assert len(result) == 1
+        assert len(result['standards']) == 1
 
 
 # ---------------------------------------------------------------------------

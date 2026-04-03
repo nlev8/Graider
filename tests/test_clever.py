@@ -9,6 +9,7 @@ import os
 import tempfile
 
 import pytest
+from unittest.mock import patch
 
 # Patch data dirs before importing clever module
 _tmpdir = tempfile.mkdtemp()
@@ -491,6 +492,12 @@ class TestPersistParentContacts:
 
 
 class TestDeleteCleverData:
+    """Tests for delete_clever_data which delegates to roster_sync.delete_roster_data.
+
+    delete_roster_data returns: {"classes": int, "students": int, "enrollments": int, "roster_files": int}
+    It handles Supabase record deletion and local roster CSV file cleanup.
+    """
+
     def _make_students(self, ids):
         return [
             {
@@ -511,19 +518,19 @@ class TestDeleteCleverData:
             if os.path.exists(d):
                 shutil.rmtree(d)
             os.makedirs(d, exist_ok=True)
-        # Clean contacts, accommodations, ELL
-        for f in [
-            os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json"),
-            os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_test.json"),
-            os.path.join(clever.GRAIDER_DATA_DIR, "ell_students.json"),
-        ]:
-            if os.path.exists(f):
-                os.remove(f)
-        accomm_dir = os.path.join(clever.GRAIDER_DATA_DIR, "accommodations")
-        if os.path.exists(accomm_dir):
-            shutil.rmtree(accomm_dir)
-        os.makedirs(accomm_dir, exist_ok=True)
-        yield
+        # Mock Supabase (test teacher_id "clever:t1" is not a valid UUID) and
+        # redirect roster_sync's data_dir to the test's temp dir so file
+        # deletion finds the right paths
+        _original_expanduser = os.path.expanduser
+
+        def _test_expanduser(path):
+            if path == "~/.graider_data":
+                return clever.GRAIDER_DATA_DIR
+            return _original_expanduser(path)
+
+        with patch("backend.supabase_client.get_supabase", return_value=None), \
+             patch("os.path.expanduser", side_effect=_test_expanduser):
+            yield
 
     def test_deletes_roster_files(self):
         clever.persist_roster_as_csv(self._make_students(["a", "b"]), "clever:t1")
@@ -537,112 +544,61 @@ class TestDeleteCleverData:
         assert len(files_after) == 0
         assert result["roster_files"] >= 2
 
-    def test_deletes_period_files(self):
-        sections = [
-            {
-                "data": {
-                    "id": "sec1", "name": "Math", "subject": "Math",
-                    "grade": "7", "teachers": ["t1"], "students": ["s1"],
-                    "period": "1", "term_id": "t",
-                }
-            }
-        ]
-        clever.persist_sections_as_periods(sections, "clever:t1")
-        result = clever.delete_clever_data("clever:t1")
-        assert result["period_files"] >= 2  # JSON + metadata
-
-    def test_removes_only_clever_students_from_contacts(self):
-        """Deletion should only remove students found in the Clever roster, not all contacts."""
-        # Create roster with students a, b
-        clever.persist_roster_as_csv(self._make_students(["a", "b"]), "clever:t1")
-        # Create contacts for a (Clever), b (Clever), and manual_student (manual)
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json")
-        with open(contacts_file, "w") as f:
-            json.dump({
-                "a": {"parent_emails": ["pa@t.com"], "parent_phones": []},
-                "b": {"parent_emails": ["pb@t.com"], "parent_phones": []},
-                "manual_student": {"parent_emails": ["pm@t.com"], "parent_phones": []},
-            }, f)
-
-        result = clever.delete_clever_data("clever:t1")
-        assert result["contacts_removed"] == 2  # a and b removed
-        with open(contacts_file) as f:
-            remaining = json.load(f)
-        assert "manual_student" in remaining  # manual entry preserved
-        assert "a" not in remaining
-        assert "b" not in remaining
-
-    def test_removes_only_clever_students_from_accommodations(self):
-        """Deletion should only remove Clever-sourced students from accommodations."""
-        clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
-        accomm_file = os.path.join(clever.GRAIDER_DATA_DIR, "accommodations", "student_accommodations.json")
-        with open(accomm_file, "w") as f:
-            json.dump({
-                "a": {"presets": ["simplified_language"]},
-                "manual_student": {"presets": ["extra_encouragement"]},
-            }, f)
-
-        result = clever.delete_clever_data("clever:t1")
-        assert result["accommodations_removed"] == 1
-        with open(accomm_file) as f:
-            remaining = json.load(f)
-        assert "manual_student" in remaining
-        assert "a" not in remaining
-
-    def test_removes_ell_entries(self):
-        """Deletion should remove ELL entries for Clever students only."""
-        clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
-        ell_file = os.path.join(clever.GRAIDER_DATA_DIR, "ell_students.json")
-        with open(ell_file, "w") as f:
-            json.dump({
-                "a": {"language": "Spanish"},
-                "manual_student": {"language": "French"},
-            }, f)
-
-        result = clever.delete_clever_data("clever:t1")
-        assert result["ell_removed"] == 1
-        with open(ell_file) as f:
-            remaining = json.load(f)
-        assert "manual_student" in remaining
-        assert "a" not in remaining
-
     def test_handles_empty_state(self):
         """Deletion on clean state should not error."""
         result = clever.delete_clever_data("clever:t1")
         assert result["roster_files"] == 0
-        assert result["period_files"] == 0
-        assert result["contacts_removed"] == 0
-        assert result["accommodations_removed"] == 0
-        assert result["ell_removed"] == 0
+        assert result["classes"] == 0
+        assert result["students"] == 0
+        assert result["enrollments"] == 0
 
-    def test_handles_corrupt_json_files(self):
-        """Corrupt JSON should not crash deletion."""
+    def test_returns_expected_keys(self):
+        """Return dict has the four keys from delete_roster_data."""
+        result = clever.delete_clever_data("clever:t1")
+        assert "classes" in result
+        assert "students" in result
+        assert "enrollments" in result
+        assert "roster_files" in result
+
+    def test_does_not_crash_with_no_supabase(self):
+        """When Supabase is None, deletion completes without error."""
         clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
-        # Write corrupt contacts
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json")
-        with open(contacts_file, "w") as f:
-            f.write("{invalid json")
+        # Supabase is already mocked to None in fixture
+        result = clever.delete_clever_data("clever:t1")
+        assert isinstance(result, dict)
+        assert result["classes"] == 0  # no Supabase → no DB deletions
+
+    def test_multiple_roster_files_all_deleted(self):
+        """Multiple syncs create metadata files; all should be deleted."""
+        clever.persist_roster_as_csv(self._make_students(["a", "b"]), "clever:t1")
+        clever.persist_roster_as_csv(self._make_students(["a", "b", "c"]), "clever:t1")
+
+        result = clever.delete_clever_data("clever:t1")
+        assert result["roster_files"] >= 2
+
+        import glob as globmod
+        safe_id = clever._safe_teacher_id("clever:t1")
+        remaining = globmod.glob(os.path.join(clever.ROSTERS_DIR, f"clever_roster_{safe_id}*"))
+        assert len(remaining) == 0
+
+    def test_does_not_delete_other_teacher_files(self):
+        """Deletion for one teacher should not affect another teacher's roster."""
+        clever.persist_roster_as_csv(self._make_students(["a"]), "clever:t1")
+        clever.persist_roster_as_csv(self._make_students(["b"]), "clever:t2")
+
+        clever.delete_clever_data("clever:t1")
+
+        import glob as globmod
+        safe_t2 = clever._safe_teacher_id("clever:t2")
+        t2_files = globmod.glob(os.path.join(clever.ROSTERS_DIR, f"clever_roster_{safe_t2}*"))
+        assert len(t2_files) >= 2  # t2's files should remain
+
+    def test_corrupt_roster_does_not_crash(self):
+        """Corrupt files in the roster dir should not crash deletion."""
+        safe_id = clever._safe_teacher_id("clever:t1")
+        corrupt_path = os.path.join(clever.ROSTERS_DIR, f"clever_roster_{safe_id}_corrupt.csv")
+        with open(corrupt_path, "w") as f:
+            f.write("{invalid data")
         # Should not raise
         result = clever.delete_clever_data("clever:t1")
-        assert result["contacts_removed"] == 0  # couldn't parse, but didn't crash
-
-    def test_collects_ids_from_period_files(self):
-        """Student IDs should be collected from period files too."""
-        # Create period with student "p1" (no roster file for this teacher)
-        sections = [
-            {
-                "data": {
-                    "id": "sec1", "name": "Math", "subject": "Math",
-                    "grade": "7", "teachers": ["t1"], "students": ["p1"],
-                    "period": "1", "term_id": "t",
-                }
-            }
-        ]
-        clever.persist_sections_as_periods(sections, "clever:t1")
-        # Add contacts for p1
-        contacts_file = os.path.join(clever.GRAIDER_DATA_DIR, "contacts", "parent_contacts_clever_t1.json")
-        with open(contacts_file, "w") as f:
-            json.dump({"p1": {"parent_emails": ["parent@t.com"], "parent_phones": []}}, f)
-
-        result = clever.delete_clever_data("clever:t1")
-        assert result["contacts_removed"] == 1
+        assert result["roster_files"] >= 1
