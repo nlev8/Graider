@@ -841,6 +841,47 @@ function App() {
       window.history.replaceState({}, '', '/');
     }
 
+    // Check for ClassLink login redirect
+    var classlinkLogin = urlParams.get('classlink_login');
+    var classlinkError = urlParams.get('classlink_error');
+
+    if (classlinkLogin === 'success') {
+      fetch('/api/classlink/session')
+        .then(function(r) { return r.json() })
+        .then(function(data) {
+          if (data.authenticated) {
+            _setUser({
+              id: 'classlink:' + data.classlink_id,
+              email: data.email,
+              user_metadata: {
+                name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || ''),
+                approved: true,
+              },
+            });
+            window.__graiderUser = { id: 'classlink:' + data.classlink_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || '') };
+            setAuthLoading(false);
+          }
+        })
+        .catch(function(err) { console.error('ClassLink session check failed:', err) });
+      window.history.replaceState({}, '', '/');
+      return;
+    }
+    if (classlinkError) {
+      console.error('ClassLink login error:', classlinkError);
+      var classlinkErrorMessages = {
+        'no_code': 'Login was cancelled or interrupted. Please try again.',
+        'state_mismatch': 'Login session expired. Please try again.',
+        'token_failed': 'Could not complete login with ClassLink. Please try again.',
+        'no_token': 'Could not complete login with ClassLink. Please try again.',
+        'token_error': 'Could not complete login with ClassLink. Please try again.',
+        'userinfo_failed': 'Could not retrieve your account information from ClassLink.',
+        'userinfo_error': 'Could not retrieve your account information from ClassLink.',
+      };
+      var classlinkFriendlyMsg = classlinkErrorMessages[classlinkError] || ('ClassLink login failed: ' + classlinkError);
+      window.__cleverLoginError = classlinkFriendlyMsg;
+      window.history.replaceState({}, '', '/');
+    }
+
     if (isLocalhost) {
       _setUser({ id: 'local-dev', email: 'dev@localhost' });
       setAuthLoading(false);
