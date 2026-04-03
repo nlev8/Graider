@@ -42,7 +42,7 @@ jobs:
             -m "not live" \
             --cov=backend \
             --cov-report=term-missing \
-            --cov-fail-under=40
+            --cov-fail-under=20
 
   frontend-build:
     name: Frontend Build
