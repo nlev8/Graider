@@ -8,6 +8,15 @@
 
 **Tech Stack:** Gemini 2.0 Flash (`google-generativeai`), python-docx, ReportLab, existing Flask export patterns
 
+**Review history:**
+- Rev 1: Initial plan (3 tasks, 9 tests)
+- Rev 2: Fixed API key helper (uses `_gak` not `_get_api_key_for_user`), added export test assertions for file content, documented all NotebookLM references to clean up (3 files, 206 refs), confirmed Gemini SDK accepts plain string for generate_content
+
+**Implementation notes:**
+- API key helper in planner_routes.py: `from backend.api_keys import get_api_key as _gak` then `_gak('gemini', user_id)`
+- Gemini SDK: `generate_content(prompt_string)` accepts plain strings (verified in assignment_grader.py:4647)
+- NotebookLM references span 3 files: App.jsx (115 refs), api.js (13 refs), PlannerTab.jsx (90 refs). Task 3 replaces the UI block in App.jsx. The api.js functions and PlannerTab.jsx refs become dead code but are left intact (not breaking, can be cleaned up later). State variables in App.jsx that are only used by the NotebookLM section become unused but harmless.
+
 ---
 
 ## File Structure
@@ -100,7 +109,7 @@ class TestGenerateStudyGuide:
         """Should return structured study guide from Gemini."""
         app = _make_app()
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_api_key_for_user', return_value='fake-key'), \
+            with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.routes.planner_routes.genai') as mock_genai:
                 mock_model = MagicMock()
                 mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_STUDY_GUIDE)
@@ -132,7 +141,7 @@ class TestGenerateStudyGuide:
         """Should return 500 with message on Gemini failure."""
         app = _make_app()
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_api_key_for_user', return_value='fake-key'), \
+            with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.routes.planner_routes.genai') as mock_genai:
                 mock_model = MagicMock()
                 mock_model.generate_content.side_effect = Exception("API error")
@@ -152,7 +161,7 @@ class TestGenerateStudyGuide:
         """Should incorporate lesson plan sections into the prompt."""
         app = _make_app()
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_api_key_for_user', return_value='fake-key'), \
+            with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.routes.planner_routes.genai') as mock_genai:
                 mock_model = MagicMock()
                 mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_STUDY_GUIDE)
@@ -179,7 +188,7 @@ class TestGenerateStudyGuide:
         """Should pass custom instructions to the prompt."""
         app = _make_app()
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_api_key_for_user', return_value='fake-key'), \
+            with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.routes.planner_routes.genai') as mock_genai:
                 mock_model = MagicMock()
                 mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_STUDY_GUIDE)
@@ -282,7 +291,8 @@ def generate_study_guide():
 
     try:
         import google.generativeai as genai
-        genai.configure(api_key=_get_api_key_for_user('gemini', user_id))
+        from backend.api_keys import get_api_key as _gak
+        genai.configure(api_key=_gak('gemini', user_id))
         model = genai.GenerativeModel("gemini-2.0-flash")
 
         response = with_retry(
@@ -356,7 +366,7 @@ import tempfile
 
 class TestExportStudyGuide:
     def test_exports_docx(self):
-        """Should export study guide as DOCX."""
+        """Should export study guide as DOCX with actual content."""
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
@@ -369,9 +379,32 @@ class TestExportStudyGuide:
 
         assert resp.status_code == 200
         assert resp.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        # Verify file is non-trivial (DOCX with 4 sections should be > 5KB)
+        assert len(resp.data) > 5000
+
+    def test_docx_contains_sections(self):
+        """Exported DOCX should contain the study guide sections."""
+        from docx import Document
+        from io import BytesIO
+        app = _make_app()
+        guide = json.loads(SAMPLE_STUDY_GUIDE)
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "docx",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        doc = Document(BytesIO(resp.data))
+        text = "\n".join(p.text for p in doc.paragraphs)
+        assert "Key Concepts" in text
+        assert "Vocabulary" in text
+        assert "Federalism" in text
+        assert "Review Questions" in text
 
     def test_exports_pdf(self):
-        """Should export study guide as PDF."""
+        """Should export study guide as valid PDF."""
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
@@ -384,6 +417,9 @@ class TestExportStudyGuide:
 
         assert resp.status_code == 200
         assert resp.content_type == 'application/pdf'
+        # Verify it's a real PDF (starts with %PDF)
+        assert resp.data[:5] == b'%PDF-'
+        assert len(resp.data) > 3000
 
     def test_returns_400_without_study_guide(self):
         """Should reject requests without study_guide data."""
@@ -407,6 +443,24 @@ class TestExportStudyGuide:
 
         assert resp.status_code == 200
         assert 'wordprocessingml' in resp.content_type
+
+    def test_export_handles_empty_sections(self):
+        """Should not crash when study guide has empty sections."""
+        app = _make_app()
+        guide = {"title": "Empty Guide", "sections": [
+            {"heading": "Empty", "content": []},
+            {"heading": "No terms", "terms": []},
+            {"heading": "No questions", "questions": []},
+        ]}
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "docx",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        assert resp.status_code == 200
 ```
 
 - [ ] **Step 2: Implement the export endpoint**
@@ -573,7 +627,7 @@ If not present, add `send_file` to the existing Flask import line.
 - [ ] **Step 3: Run tests**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_study_guide.py -v`
-Expected: All 9 tests PASS (5 generation + 4 export)
+Expected: All 12 tests PASS (5 generation + 7 export)
 
 - [ ] **Step 4: Commit**
 
@@ -839,10 +893,10 @@ git commit -m "feat: replace NotebookLM Materials UI with native study guide gen
 | Task | What | Files | Risk |
 |------|------|-------|------|
 | 1 | Generation endpoint (Gemini Flash) + 5 tests | Modify `planner_routes.py`, create `test_study_guide.py` | Low — new endpoint |
-| 2 | Export endpoint (DOCX + PDF) + 4 tests | Modify `planner_routes.py`, modify tests | Low — new endpoint |
+| 2 | Export endpoint (DOCX + PDF) + 7 tests | Modify `planner_routes.py`, modify tests | Low — new endpoint |
 | 3 | Frontend UI (replace NotebookLM) | Modify `App.jsx` | Medium — replaces existing UI block |
 
-**Total: 2 new endpoints, 9 tests, 1 UI replacement.**
+**Total: 2 new endpoints, 12 tests (5 generation + 7 export), 1 UI replacement.**
 
 **Before:** "Materials" button → NotebookLM (broken for multi-user, uses developer's Google account).
 **After:** "Study Guide" button → Gemini Flash generates structured study guide → preview in-app → export DOCX/PDF. Per-teacher, no shared accounts, ~$0.001 per generation.
