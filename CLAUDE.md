@@ -533,6 +533,9 @@ python graider_app.py
 ### District Admin
 - `DISTRICT_ADMIN_PASSWORD` — Initial district admin password (optional, can be set via /district first-time setup instead)
 
+### Periodic Roster Sync
+- `PERIODIC_SYNC_SECRET` — Shared secret for cron webhook auth (set in Railway + GitHub Actions secrets)
+
 ### Optional
 - `OPENAI_API_KEY` — Default OpenAI key (fallback)
 - `ANTHROPIC_API_KEY` — Default Anthropic key (fallback)

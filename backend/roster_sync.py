@@ -10,6 +10,22 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def _get_supabase():
+    """Get Supabase client, or None if not configured."""
+    try:
+        from backend.supabase_client import get_supabase
+        return get_supabase()
+    except Exception:
+        return None
+
+
+_PROVIDER_PREFIXES = {
+    "clever": "",
+    "oneroster": "oneroster:",
+    "manual": "manual-",
+}
+
+
 def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manual"):
     """Upsert normalised roster data into Supabase.
 
@@ -157,6 +173,50 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manu
         provider, synced_classes, synced_students, synced_enrollments,
     )
     return {"classes": synced_classes, "students": synced_students, "enrollments": synced_enrollments}
+
+
+def deactivate_missing_students(teacher_id, current_student_external_ids, provider):
+    """Soft-deactivate students no longer in the SIS roster.
+
+    Only deactivates students matching the given provider's prefix.
+    Manual students and students from other providers are never touched.
+    """
+    sb = _get_supabase()
+    if sb is None:
+        return 0
+
+    try:
+        result = sb.table('students').select('id, student_id_number').eq(
+            'teacher_id', teacher_id
+        ).eq('is_active', True).execute()
+
+        if not result.data:
+            return 0
+
+        other_prefixes = [p for k, p in _PROVIDER_PREFIXES.items() if k != provider and p]
+
+        deactivated = 0
+        for student in result.data:
+            sid = student.get('student_id_number', '')
+
+            if any(sid.startswith(op) for op in other_prefixes):
+                continue
+
+            if provider == "clever" and any(sid.startswith(op) for op in ['oneroster:', 'manual-']):
+                continue
+
+            if sid not in current_student_external_ids:
+                sb.table('students').update({'is_active': False}).eq('id', student['id']).execute()
+                deactivated += 1
+
+        if deactivated:
+            logger.info("Deactivated %d %s students for teacher %s", deactivated, provider, teacher_id)
+
+        return deactivated
+
+    except Exception as e:
+        logger.error("Failed to deactivate missing students for %s: %s", teacher_id, e)
+        return 0
 
 
 def delete_roster_data(teacher_id):
