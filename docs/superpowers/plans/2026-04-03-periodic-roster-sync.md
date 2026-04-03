@@ -13,6 +13,7 @@
 **Review history:**
 - Rev 1: Initial plan (3 tasks, 13 tests)
 - Rev 2: Added _discover_teachers unit tests (cursor paging, 30-day filter, 50-teacher cap, wrap-around). Confirmed asyncio.new_event_loop pattern matches existing Clever/OneRoster routes. Confirmed Flask-Limiter uses memory:// in tests — safe to re-init per test app.
+- Rev 3: Fixed test count (20 not 21). TestDiscoverTeachers has 7 tests at lines 412-533 covering: activity filter, inactive exclusion, config-without-sessions inclusion, 50-cap, cursor skip, cursor wrap, no-supabase.
 
 ---
 
