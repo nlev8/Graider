@@ -64,7 +64,7 @@ New blueprint: `sync_bp` with single route `POST /api/sync/periodic-roster`.
 3. Order by `teacher_id` ascending, cap at 50 per run
 4. Read the paging cursor from `teacher_data` key `"sync:last_cursor"` (teacher_id="system") — this is the last `teacher_id` processed
 5. Start from cursor position (skip already-synced teachers). If cursor is past the end of the list, reset to beginning (wrap around)
-6. After processing, save the new cursor position
+6. After processing the batch successfully, save the new cursor position. **Cursor is only written after the batch completes** — if the Supabase write fails or the process crashes mid-batch, the next run restarts from the same cursor and re-processes the same teachers (idempotent upserts make this safe, not wasteful).
 
 This ensures all teachers get synced within `ceil(total/50)` days. For Volusia County (~20 teachers), every teacher syncs daily. At district scale (200 teachers), every teacher syncs within 4 days.
 
@@ -162,8 +162,8 @@ jobs:
 **Features:**
 - Runs weekdays at 9:00 UTC (4 AM ET) — no point syncing on weekends
 - `workflow_dispatch` allows manual trigger from GitHub Actions UI for testing
-- 30-minute timeout — prevents runaway jobs from consuming Actions minutes
-- `--max-time 600` on curl — 10 min HTTP timeout
+- 30-minute workflow timeout — prevents runaway jobs from consuming Actions minutes
+- `--max-time 600` on curl — 10 min HTTP timeout. The endpoint processes synchronously and returns a complete JSON response, so 10 min is generous for 50 sequential teacher syncs (~5s each = ~4 min total). If this proves tight after initial runs, increase to `--max-time 1200`.
 - Fails on HTTP error OR partial teacher failures (triggers GitHub email notification)
 - Logs full response body for debugging
 
@@ -207,7 +207,7 @@ audit_log(
 )
 ```
 
-**Retention:** `audit_log` table exists and is actively used across the codebase (`backend/utils/audit.py:16`, `clever_routes.py:47`, `district_routes.py:181`). Automated 90-day retention per Florida Statute 1006.1494 is a documented post-beta task (not yet implemented). Sync audit entries use the same table and will be covered when retention is added.
+**Retention:** `audit_log` table exists and is actively used across the codebase (`backend/utils/audit.py:16`, `clever_routes.py:47`, `district_routes.py:181`). Automated 90-day retention is a documented post-beta task (not yet implemented). Until then, sync audit entries accumulate indefinitely — at 1 entry per teacher per weekday, a 50-teacher district adds ~250 rows/week (~13K/year), which is negligible for Supabase. Sync entries will be covered when the broader retention task lands.
 
 ## What This Does NOT Include
 
