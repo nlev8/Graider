@@ -176,3 +176,121 @@ class TestGenerateStudyGuide:
             assert resp.status_code == 200
             call_args = mock_model.generate_content.call_args[0][0]
             assert "lab safety procedures" in call_args
+
+
+import os
+import tempfile
+
+
+class TestExportStudyGuide:
+    def test_exports_docx(self):
+        """Should export study guide as DOCX with actual content."""
+        app = _make_app()
+        guide = json.loads(SAMPLE_STUDY_GUIDE)
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "docx",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        assert resp.status_code == 200
+        assert resp.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        # Verify file is non-trivial (DOCX with 4 sections should be > 5KB)
+        assert len(resp.data) > 5000
+
+    def test_docx_contains_sections(self):
+        """Exported DOCX should contain the study guide sections."""
+        from docx import Document
+        from io import BytesIO
+        app = _make_app()
+        guide = json.loads(SAMPLE_STUDY_GUIDE)
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "docx",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        doc = Document(BytesIO(resp.data))
+        text = "\n".join(p.text for p in doc.paragraphs)
+        assert "Key Concepts" in text
+        assert "Vocabulary" in text
+        assert "Federalism" in text
+        assert "Review Questions" in text
+
+    def test_exports_pdf(self):
+        """Should export study guide as valid PDF."""
+        app = _make_app()
+        guide = json.loads(SAMPLE_STUDY_GUIDE)
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "pdf",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        assert resp.status_code == 200
+        assert resp.content_type == 'application/pdf'
+        # Verify it's a real PDF (starts with %PDF)
+        assert resp.data[:5] == b'%PDF-'
+        assert len(resp.data) > 1000
+
+    def test_returns_400_without_study_guide(self):
+        """Should reject requests without study_guide data."""
+        app = _make_app()
+        with app.test_client() as client:
+            resp = client.post('/api/export-study-guide', json={
+                "format": "docx",
+            }, headers={"X-Test-Teacher-Id": "teacher-1"})
+        assert resp.status_code == 400
+
+    def test_defaults_to_docx(self):
+        """Should default to DOCX when no format specified."""
+        app = _make_app()
+        guide = json.loads(SAMPLE_STUDY_GUIDE)
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        assert resp.status_code == 200
+        assert 'wordprocessingml' in resp.content_type
+
+    def test_export_handles_empty_sections(self):
+        """Should not crash when study guide has empty sections."""
+        app = _make_app()
+        guide = {"title": "Empty Guide", "sections": [
+            {"heading": "Empty", "content": []},
+            {"heading": "No terms", "terms": []},
+            {"heading": "No questions", "questions": []},
+        ]}
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "docx",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        assert resp.status_code == 200
+
+    def test_non_trivial_file_size(self):
+        """Exported files should have non-trivial size."""
+        app = _make_app()
+        guide = json.loads(SAMPLE_STUDY_GUIDE)
+        with app.test_client() as client:
+            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+                       return_value=tempfile.mkdtemp()):
+                resp = client.post('/api/export-study-guide', json={
+                    "study_guide": guide,
+                    "format": "docx",
+                }, headers={"X-Test-Teacher-Id": "teacher-1"})
+
+        # A DOCX with real content should be several KB
+        assert len(resp.data) > 4000

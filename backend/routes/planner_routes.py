@@ -7243,3 +7243,158 @@ def generate_study_guide():
     except Exception as e:
         _logger.exception("Study guide generation failed")
         return jsonify({"error": f"Generation failed: {str(e)[:200]}"}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# STUDY GUIDE EXPORT
+# ══════════════════════════════════════════════════════════════
+
+def _get_study_guide_export_dir():
+    """Get temp directory for study guide exports."""
+    import tempfile
+    d = os.path.join(tempfile.gettempdir(), "graider_study_guides")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _export_study_guide_docx(study_guide, filepath):
+    """Export a study guide to DOCX format."""
+    from docx import Document
+    from docx.shared import Pt, Inches, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = Document()
+
+    # Title
+    title_para = doc.add_heading(study_guide.get("title", "Study Guide"), level=0)
+    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in title_para.runs:
+        run.font.color.rgb = RGBColor(0, 0, 0)
+
+    doc.add_paragraph("")
+
+    for section in study_guide.get("sections", []):
+        heading = section.get("heading", "")
+        doc.add_heading(heading, level=1)
+
+        # Key Concepts / Summary — bullet points
+        if section.get("content"):
+            for point in section["content"]:
+                para = doc.add_paragraph(point, style='List Bullet')
+                para.paragraph_format.space_after = Pt(4)
+
+        # Vocabulary — term: definition
+        if section.get("terms"):
+            for item in section["terms"]:
+                para = doc.add_paragraph()
+                run_term = para.add_run(item.get("term", "") + ": ")
+                run_term.bold = True
+                run_term.font.size = Pt(11)
+                run_def = para.add_run(item.get("definition", ""))
+                run_def.font.size = Pt(11)
+                para.paragraph_format.space_after = Pt(4)
+
+        # Review Questions — numbered Q&A
+        if section.get("questions"):
+            for i, qa in enumerate(section["questions"], 1):
+                q_para = doc.add_paragraph()
+                q_run = q_para.add_run(f"{i}. {qa.get('question', '')}")
+                q_run.bold = True
+                q_run.font.size = Pt(11)
+
+                a_para = doc.add_paragraph()
+                a_run = a_para.add_run(f"   Answer: {qa.get('answer', '')}")
+                a_run.font.size = Pt(10)
+                a_run.font.color.rgb = RGBColor(80, 80, 80)
+                a_para.paragraph_format.space_after = Pt(8)
+
+    doc.save(filepath)
+
+
+def _export_study_guide_pdf(study_guide, filepath):
+    """Export a study guide to PDF format."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import HexColor
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.75*inch, bottomMargin=0.75*inch,
+                            leftMargin=0.75*inch, rightMargin=0.75*inch)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Title
+    title_style = ParagraphStyle('SGTitle', parent=styles['Title'],
+                                  fontSize=20, spaceAfter=20, alignment=1)
+    story.append(Paragraph(study_guide.get("title", "Study Guide"), title_style))
+    story.append(Spacer(1, 12))
+
+    heading_style = ParagraphStyle('SGHeading', parent=styles['Heading2'],
+                                    fontSize=14, spaceAfter=8, spaceBefore=16,
+                                    textColor=HexColor('#1a56db'))
+    body_style = ParagraphStyle('SGBody', parent=styles['Normal'],
+                                 fontSize=11, spaceAfter=4, leftIndent=12)
+    term_style = ParagraphStyle('SGTerm', parent=styles['Normal'],
+                                 fontSize=11, spaceAfter=4, leftIndent=12)
+    q_style = ParagraphStyle('SGQuestion', parent=styles['Normal'],
+                              fontSize=11, spaceAfter=2, leftIndent=12)
+    a_style = ParagraphStyle('SGAnswer', parent=styles['Normal'],
+                              fontSize=10, spaceAfter=8, leftIndent=24,
+                              textColor=HexColor('#555555'))
+
+    for section in study_guide.get("sections", []):
+        heading = section.get("heading", "")
+        story.append(Paragraph(heading, heading_style))
+
+        if section.get("content"):
+            for point in section["content"]:
+                story.append(Paragraph("&bull; " + point, body_style))
+
+        if section.get("terms"):
+            for item in section["terms"]:
+                term = item.get("term", "")
+                defn = item.get("definition", "")
+                story.append(Paragraph(f"<b>{term}:</b> {defn}", term_style))
+
+        if section.get("questions"):
+            for i, qa in enumerate(section["questions"], 1):
+                story.append(Paragraph(f"<b>{i}. {qa.get('question', '')}</b>", q_style))
+                story.append(Paragraph(f"Answer: {qa.get('answer', '')}", a_style))
+
+    doc.build(story)
+
+
+@planner_bp.route('/api/export-study-guide', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def export_study_guide():
+    """Export a study guide to DOCX or PDF."""
+    data = request.get_json(silent=True) or {}
+    study_guide = data.get('study_guide')
+    fmt = data.get('format', 'docx').lower()
+
+    if not study_guide:
+        return jsonify({"error": "No study guide data provided."}), 400
+
+    title = study_guide.get("title", "Study Guide")
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:80]
+    export_dir = _get_study_guide_export_dir()
+
+    try:
+        if fmt == 'pdf':
+            filepath = os.path.join(export_dir, f"{safe_title}.pdf")
+            _export_study_guide_pdf(study_guide, filepath)
+            mimetype = 'application/pdf'
+        else:
+            filepath = os.path.join(export_dir, f"{safe_title}.docx")
+            _export_study_guide_docx(study_guide, filepath)
+            mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+        return send_file(filepath, mimetype=mimetype, as_attachment=True,
+                         download_name=os.path.basename(filepath))
+
+    except Exception as e:
+        _logger.exception("Study guide export failed")
+        return jsonify({"error": f"Export failed: {str(e)[:200]}"}), 500
