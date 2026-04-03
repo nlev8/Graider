@@ -526,10 +526,6 @@ export default React.memo(function SettingsTab({
                   <select className="input" value={config.sis_type || 'csv'} onChange={(e) => setConfig((prev) => ({...prev, sis_type: e.target.value}))}>
                     <option value="csv">CSV Export Only</option>
                     <option value="focus">Focus SIS</option>
-                    <option value="powerschool">PowerSchool</option>
-                    <option value="canvas">Canvas</option>
-                    <option value="infinite_campus">Infinite Campus</option>
-                    <option value="skyward">Skyward</option>
                   </select>
                 </div>
               </div>
