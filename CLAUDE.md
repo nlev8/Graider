@@ -410,6 +410,12 @@ python graider_app.py
 - `POST /api/clever/student-token` — Exchange auth code for student session token
 - `GET /api/clever/health` — Health check (config + connectivity status)
 
+### ClassLink SSO
+- `GET /api/classlink/login-url` — Get ClassLink OAuth URL
+- `GET /api/classlink/callback` — OAuth callback (ClassLink redirects here)
+- `GET /api/classlink/session` — Check ClassLink session status
+- `POST /api/classlink/logout` — Clear ClassLink session
+
 ### OneRoster Integration (1EdTech)
 - `GET /api/oneroster/config` — Check OneRoster configuration status
 - `POST /api/oneroster/config` — Save OneRoster connection settings
@@ -519,6 +525,11 @@ python graider_app.py
 - `CLEVER_REDIRECT_URI` — OAuth callback URL
 - `CLEVER_DISTRICT_TOKEN` — District app token (for Secure Sync)
 - `CLEVER_API_VERSION` — API version (default: v3.0)
+
+### ClassLink SSO
+- `CLASSLINK_CLIENT_ID` — OAuth client ID (from ClassLink developer portal)
+- `CLASSLINK_CLIENT_SECRET` — OAuth client secret
+- `CLASSLINK_REDIRECT_URI` — OAuth callback URL (defaults to `https://app.graider.live/api/classlink/callback`)
 
 ### OneRoster Integration (1EdTech)
 - `ONEROSTER_BASE_URL` — OneRoster API root (e.g., `https://sis.district.org/ims/oneroster/v1p1`)
