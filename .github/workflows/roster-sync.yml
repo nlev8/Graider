@@ -1,0 +1,36 @@
+name: Periodic Roster Sync
+
+on:
+  schedule:
+    - cron: '0 9 * * 1-5'  # 4:00 AM ET weekdays (UTC-5) / 5:00 AM EDT (UTC-4)
+  workflow_dispatch: {}     # Manual trigger for testing
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Trigger roster sync
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://app.graider.live/api/sync/periodic-roster \
+            -H "Authorization: Bearer ${{ secrets.PERIODIC_SYNC_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 600)
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+          echo "$body" | jq . || echo "$body"
+
+          # Fail on HTTP error
+          if [ "$http_code" -ne 200 ]; then
+            echo "::error::Roster sync failed with HTTP $http_code"
+            exit 1
+          fi
+
+          # Fail if any teacher sync failed (partial failure)
+          has_failures=$(echo "$body" | jq -r '.has_failures // false')
+          if [ "$has_failures" = "true" ]; then
+            failed_count=$(echo "$body" | jq '.failed')
+            echo "::warning::$failed_count teacher sync(s) failed — check details"
+            exit 1
+          fi
