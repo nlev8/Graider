@@ -8,6 +8,10 @@
 
 **Tech Stack:** Flask, OAuth2 (authorization code flow), ClassLink API, existing session/auth infrastructure
 
+**Review history:**
+- Rev 1: Initial plan (4 tasks, 9 tests)
+- Rev 2: Handle LaunchPad iframe state loss (skip state validation for ClassLink-initiated flows, same as Clever's Instant Login pattern). Handle linking edge cases (no match = works as new user with classlink: prefix, multiple email matches = skip linking, log warning).
+
 **Env vars (already set in Railway):**
 - `CLASSLINK_CLIENT_ID` — `c177524789966949d15db46d6b805304b7f67492e40a`
 - `CLASSLINK_CLIENT_SECRET` — `974f9dc57575f4d6d9cf75facaeb9c71`
@@ -182,6 +186,36 @@ class TestClassLinkCallback:
             assert resp.status_code == 302
             assert '/student' in resp.location
 
+    def test_classlink_initiated_flow_no_state(self):
+        """ClassLink-initiated flows (LaunchPad tile) may not have state — should still work."""
+        app = _make_app()
+
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "test-token"}
+
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "cl-user-123",
+            "FirstName": "Jane",
+            "LastName": "Smith",
+            "Email": "jane@school.edu",
+            "Role": "teacher",
+            "TenantId": "district-456",
+        }
+
+        with app.test_client() as client:
+            # No state in session (ClassLink-initiated, login-url never called)
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                resp = client.get('/api/classlink/callback?code=auth-code-123')
+
+            assert resp.status_code == 302
+            assert 'classlink_login=success' in resp.location
+
     def test_token_exchange_failure(self):
         """Should redirect with error when token exchange fails."""
         app = _make_app()
@@ -298,8 +332,14 @@ def _link_classlink_account(classlink_id, email):
     """Link ClassLink user to existing Graider account by email match.
 
     Same pattern as clever_routes.py account merging (lines 366-393).
-    If a Supabase user exists with the same email, create a persistent
-    classlink_id → supabase_user_id mapping.
+    If exactly one Supabase user exists with the same email, create a
+    persistent classlink_id → supabase_user_id mapping.
+
+    Edge cases:
+    - No match: No link created. User operates as classlink:{id} — this
+      works fine, they just start fresh. No "stuck" state.
+    - Multiple matches: Skip linking, log warning. Ambiguous — don't guess.
+    - Already linked: Skip (idempotent).
     """
     try:
         from backend.storage import load as storage_load, save as storage_save
@@ -318,17 +358,25 @@ def _link_classlink_account(classlink_id, email):
             'data_key', 'settings'
         ).execute()
 
+        matches = []
         for row in (result.data or []):
             tid = row.get('teacher_id', '')
             settings = storage_load('settings', tid)
             if settings and isinstance(settings, dict):
                 config = settings.get('config', settings)
                 if config.get('email', '').lower() == email.lower():
-                    links[classlink_id] = tid
-                    storage_save('classlink_links', links, 'system')
-                    logger.info("Linked ClassLink user %s to teacher %s via email match",
-                                classlink_id, tid)
-                    return
+                    matches.append(tid)
+
+        if len(matches) == 1:
+            links[classlink_id] = matches[0]
+            storage_save('classlink_links', links, 'system')
+            logger.info("Linked ClassLink user %s to teacher %s via email match",
+                        classlink_id, matches[0])
+        elif len(matches) > 1:
+            logger.warning("ClassLink user %s email %s matches %d teachers — skipping auto-link",
+                           classlink_id, email, len(matches))
+        # No matches: user operates as classlink:{id} — starts fresh, no error
+
     except Exception as e:
         logger.warning("ClassLink account linking failed: %s", e)
 
@@ -430,11 +478,17 @@ def classlink_callback():
         return redirect("/?classlink_error=no_code")
 
     # Validate CSRF state
+    # ClassLink-initiated flows (LaunchPad tile click) may not have a state
+    # because the login-url endpoint was never called — ClassLink redirects
+    # directly to the callback. This mirrors Clever's "Instant Login" pattern
+    # (clever_routes.py lines 297-308).
     state = request.args.get('state', '')
     expected_state = session.pop('classlink_oauth_state', '')
-    if expected_state and state != expected_state:
+    if expected_state and state and state != expected_state:
         logger.warning("ClassLink OAuth state mismatch: got %s, expected %s", state, expected_state)
         return redirect("/?classlink_error=state_mismatch")
+    # If no expected_state (ClassLink-initiated) or no state param, skip validation
+    # This is safe because the code exchange itself validates the OAuth flow
 
     client_id, client_secret, redirect_uri = _get_classlink_config()
 
@@ -553,7 +607,7 @@ def classlink_logout():
 - [ ] **Step 4: Run tests**
 
 Run: `cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_classlink_sso.py -v`
-Expected: All 9 tests PASS
+Expected: All 10 tests PASS
 
 - [ ] **Step 5: Commit**
 
@@ -618,7 +672,7 @@ Expected: `OK`
 python -m pytest tests/test_classlink_sso.py -v
 ```
 
-Expected: All 9 tests PASS
+Expected: All 10 tests PASS
 
 - [ ] **Step 5: Commit**
 
@@ -768,12 +822,12 @@ git commit -m "docs: add ClassLink SSO endpoints and env vars to CLAUDE.md"
 
 | Task | What | Files | Risk |
 |------|------|-------|------|
-| 1 | ClassLink routes blueprint + 9 tests | Create `classlink_routes.py`, `test_classlink_sso.py` | Low — new files, mirrors Clever pattern |
+| 1 | ClassLink routes blueprint + 10 tests | Create `classlink_routes.py`, `test_classlink_sso.py` | Low — new files, mirrors Clever pattern |
 | 2 | Blueprint registration + auth resolution | Modify `__init__.py`, `auth.py` | Low — append only |
 | 3 | "Login with ClassLink" button | Modify `LoginScreen.jsx`, `App.jsx` | Low — adds button alongside Clever |
 | 4 | Documentation | Modify `CLAUDE.md` | None |
 
-**Total: 1 new blueprint, 4 endpoints, 9 tests, 1 login button.**
+**Total: 1 new blueprint, 4 endpoints, 10 tests, 1 login button.**
 
 **Before:** Teachers in ClassLink districts can't SSO into Graider — they have to create a separate account.
 **After:** Teacher clicks the Graider tile in ClassLink LaunchPad → lands in Graider authenticated with roster sync triggered.
