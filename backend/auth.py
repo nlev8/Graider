@@ -66,6 +66,7 @@ PUBLIC_PREFIXES = [
     '/api/student/join/',      # Anonymous join-code portal (GET assessment by code)
     '/api/student/submit/',    # Anonymous submission (join-code path, POST)
     '/api/clever/',            # Clever OAuth flow (callback must be unauthenticated)
+    '/api/classlink/',         # ClassLink OAuth flow (callback must be unauthenticated)
     '/api/lti/',               # LTI OIDC login, launch callback, JWKS (platform-initiated)
     '/api/district/',           # District admin setup (session-based auth, not JWT)
 ]
@@ -192,6 +193,17 @@ def init_auth(app):
             g.district_id = clever_user.get('district', '')
             return None
 
+        # ClassLink SSO session
+        classlink_user = session.get('classlink_user') if hasattr(session, 'get') else None
+        if classlink_user and not has_bearer:
+            from backend.routes.classlink_routes import _resolve_classlink_user_id
+            g.user_id = _resolve_classlink_user_id(classlink_user['classlink_id'])
+            g.teacher_id = g.user_id
+            g.user_email = classlink_user.get('email', '')
+            g.auth_source = 'classlink'
+            g.district_id = classlink_user.get('tenant_id', '')
+            return None
+
         # Skip non-API routes (static files, index.html, etc.)
         if not request.path.startswith('/api/'):
             return None
@@ -216,8 +228,8 @@ def init_auth(app):
 
         # Approval gate — skip for the approval-status endpoint itself
         if request.path != '/api/auth/approval-status':
-            # Clever users are district-approved by definition — skip gate
-            if getattr(g, 'auth_source', None) == 'clever':
+            # Clever/ClassLink users are district-approved by definition — skip gate
+            if getattr(g, 'auth_source', None) in ('clever', 'classlink'):
                 return None
 
             user_meta = payload.get('user_metadata', {})
