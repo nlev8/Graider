@@ -14964,6 +14964,7 @@ ${signature}`;
                                   lessonPlan: lessonPlan && lessonPlan.overview ? lessonPlan : undefined,
                                   subject: config.subject || '',
                                   grade: config.grade || '',
+                                  globalAINotes: config.globalAINotes || '',
                                   instructions: studyGuideInstructions,
                                 }),
                               });
