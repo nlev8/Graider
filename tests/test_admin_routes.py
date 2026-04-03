@@ -105,9 +105,10 @@ class TestAdminClaim:
 
     def test_claim_valid_code_succeeds(self, authed_client):
         """Claim with valid invite code creates admin role."""
+        from datetime import datetime, timezone
         invite = {
             "school": "Lincoln High",
-            "created_at": "2026-03-25T00:00:00+00:00",
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
             "manual_teachers": [],
         }
 
