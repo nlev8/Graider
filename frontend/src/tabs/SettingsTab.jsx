@@ -939,45 +939,61 @@ export default React.memo(function SettingsTab({
               <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "15px" }}>
                 Choose which AI model to use for grading and assessment generation.
               </p>
-              <select
-                className="input"
-                value={config.ai_model}
-                onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    ai_model: e.target.value,
-                  }))
-                }
-                style={{ maxWidth: "350px" }}
-              >
-                <optgroup label="OpenAI">
-                  <option value="gpt-4o-mini">
-                    GPT-4o Mini (Fast & Cheap)
-                  </option>
-                  <option value="gpt-4o">
-                    GPT-4o (Best Quality)
-                  </option>
-                </optgroup>
-                <optgroup label="Anthropic">
-                  <option value="claude-haiku">
-                    Claude Haiku (Fast & Cheap)
-                  </option>
-                  <option value="claude-sonnet">
-                    Claude Sonnet (Balanced)
-                  </option>
-                  <option value="claude-opus">
-                    Claude Opus (Most Capable)
-                  </option>
-                </optgroup>
-                <optgroup label="Google">
-                  <option value="gemini-flash">
-                    Gemini 2.0 Flash (Fast & Cheap)
-                  </option>
-                  <option value="gemini-pro">
-                    Gemini 2.0 Pro (Balanced)
-                  </option>
-                </optgroup>
-              </select>
+              {(() => {
+                const hasOwnKeys = apiKeys.openaiIsOwn || apiKeys.anthropicIsOwn || apiKeys.geminiIsOwn;
+                return (
+                  <select
+                    className="input"
+                    value={config.ai_model}
+                    onChange={(e) =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        ai_model: e.target.value,
+                      }))
+                    }
+                    style={{ maxWidth: "350px" }}
+                  >
+                    <optgroup label="OpenAI">
+                      <option value="gpt-4o-mini">
+                        GPT-4o Mini (Fast & Cheap)
+                      </option>
+                      {hasOwnKeys && (
+                        <option value="gpt-4o">
+                          GPT-4o (Best Quality)
+                        </option>
+                      )}
+                    </optgroup>
+                    {hasOwnKeys && (
+                      <optgroup label="Anthropic">
+                        <option value="claude-haiku">
+                          Claude Haiku (Fast & Cheap)
+                        </option>
+                        <option value="claude-sonnet">
+                          Claude Sonnet (Balanced)
+                        </option>
+                        <option value="claude-opus">
+                          Claude Opus (Most Capable)
+                        </option>
+                      </optgroup>
+                    )}
+                    <optgroup label="Google">
+                      <option value="gemini-flash">
+                        Gemini 2.0 Flash (Fast & Cheap)
+                      </option>
+                      {hasOwnKeys && (
+                        <option value="gemini-pro">
+                          Gemini 2.0 Pro (Balanced)
+                        </option>
+                      )}
+                    </optgroup>
+                    {!hasOwnKeys && (
+                      <option disabled value="" style={{ fontStyle: "italic", color: "var(--text-muted)" }}>
+                        Add your own API keys in Settings to unlock more models
+                      </option>
+                    )}
+                  </select>
+                );
+              })()}
               <p
                 style={{
                   fontSize: "0.8rem",

@@ -1015,6 +1015,9 @@ function App() {
     openaiConfigured: false,
     anthropicConfigured: false,
     geminiConfigured: false,
+    openaiIsOwn: false,
+    anthropicIsOwn: false,
+    geminiIsOwn: false,
   });
   const [showApiKeys, setShowApiKeys] = useState({
     openai: false,
@@ -2216,6 +2219,9 @@ function App() {
           openaiConfigured: data.openai_configured,
           anthropicConfigured: data.anthropic_configured,
           geminiConfigured: data.gemini_configured,
+          openaiIsOwn: data.openai_is_own || false,
+          anthropicIsOwn: data.anthropic_is_own || false,
+          geminiIsOwn: data.gemini_is_own || false,
         }));
       })
       .catch(console.error);
