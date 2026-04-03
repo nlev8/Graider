@@ -10,6 +10,7 @@
 
 **Review history:**
 - Rev 1: Initial plan
+- Rev 2: Root-caused failing test (hardcoded date, not endpoint bug), added PR branch trigger, documented branch protection rollback, added job name stability note, added README.md update step
 
 ---
 
@@ -36,25 +37,37 @@
 
 ### Task 1: Fix the failing test in CI
 
-The CI pipeline is useless until the test suite passes. The failure is in `test_admin_routes.py:125` — `test_claim_valid_code_succeeds` expects HTTP 200 but gets 410 (Gone). This means the admin claim endpoint returns 410 when the invite code has already been consumed or expired.
+The CI pipeline is useless until the test suite passes. The failure is in `test_admin_routes.py:125` — `test_claim_valid_code_succeeds` expects HTTP 200 but gets 410 (Gone).
+
+**Root cause (verified):** The test hardcodes `"created_at": "2026-03-25T00:00:00+00:00"` (line 110). The endpoint has a 7-day TTL check — if `now - created_at > 7 days`, it returns 410. Since it's now April 2, that date is 8 days old, so the invite is expired. **The endpoint is correct; the test uses a stale hardcoded date.**
 
 **Files:**
-- Modify: `tests/test_admin_routes.py`
+- Modify: `tests/test_admin_routes.py:108-112`
 
-- [ ] **Step 1: Read the failing test and the endpoint it tests**
+- [ ] **Step 1: Fix the test — use a dynamic timestamp**
 
-Read `tests/test_admin_routes.py` around line 125 to understand the test setup. Then read the admin claim endpoint in `backend/routes/admin_routes.py` to understand when it returns 410.
+In `tests/test_admin_routes.py`, find the `test_claim_valid_code_succeeds` method (~line 106). Change the `invite` dict from:
 
-- [ ] **Step 2: Fix the test**
+```python
+        invite = {
+            "school": "Lincoln High",
+            "created_at": "2026-03-25T00:00:00+00:00",
+            "manual_teachers": [],
+        }
+```
 
-The test likely needs to set up a valid, unconsumed invite code before claiming it. Read the actual test fixture and the claim endpoint logic, then fix the test so it creates a fresh invite code that hasn't been consumed.
+to:
 
-Common causes:
-- The test fixture creates an invite code that's already marked as `used`
-- The mock Supabase returns data indicating the code is expired
-- The claim endpoint checks for code existence and the mock doesn't set it up correctly
+```python
+        from datetime import datetime, timezone
+        invite = {
+            "school": "Lincoln High",
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "manual_teachers": [],
+        }
+```
 
-After reading the code, make the minimal fix. Do NOT change the endpoint — fix the test.
+This ensures the invite is always "just created" regardless of when the test runs.
 
 - [ ] **Step 3: Run the test locally**
 
@@ -109,6 +122,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Runs on PRs targeting main from ANY branch
     branches: [main]
 
 concurrency:
@@ -235,6 +249,26 @@ Backend Tests
 Frontend Build
 ```
 
+**If the `gh api` command fails:** Check that the GitHub CLI is authenticated with `repo` scope: `gh auth status`. If scope is insufficient, re-authenticate: `gh auth login --scopes repo`.
+
+**Rollback:** To remove branch protection (e.g., emergency hotfix):
+```bash
+gh api repos/nlev8/Graider/branches/main/protection --method DELETE
+```
+Re-enable afterward by re-running the Step 1 command.
+
+**Job name stability:** The required status check names (`Backend Tests`, `Frontend Build`) must match the `name:` field in each job in `ci.yml` exactly. If you ever rename a job, you must also update the branch protection rule or merges will be blocked. To update:
+```bash
+gh api repos/nlev8/Graider/branches/main/protection \
+  --method PUT \
+  --field required_status_checks='{"strict":true,"contexts":["New Job Name 1","New Job Name 2"]}' \
+  --field enforce_admins=false \
+  --field required_pull_request_reviews='null' \
+  --field restrictions='null' \
+  --field allow_force_pushes=false \
+  --field allow_deletions=false
+```
+
 - [ ] **Step 3: Test the protection by verifying direct push behavior**
 
 After protection is enabled, the workflow for deploys becomes:
@@ -270,12 +304,13 @@ git push origin --delete test/verify-ci
 
 ---
 
-### Task 4: Update CLAUDE.md with the new deploy workflow
+### Task 4: Update CLAUDE.md and README.md with the new deploy workflow
 
 **Files:**
 - Modify: `CLAUDE.md`
+- Modify: `README.md`
 
-- [ ] **Step 1: Update the Deployment section**
+- [ ] **Step 1: Update the Deployment section in CLAUDE.md**
 
 In `CLAUDE.md`, find the `## Deployment` section and replace it with:
 
@@ -301,13 +336,46 @@ All changes go through Pull Requests:
 - `Frontend Build` job passes (Vite build succeeds)
 
 **Emergency bypass:** Repo admins can merge without CI if `enforce_admins` is false. Use only for critical hotfixes — fix CI immediately after.
+
+**CI job names are locked:** The branch protection rule references `Backend Tests` and `Frontend Build` by exact name. If you rename a job in `.github/workflows/ci.yml`, update the branch protection rule too or merges will be blocked. See `docs/superpowers/plans/2026-04-02-cicd-pipeline.md` Task 3 for the update command.
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Add Contributing / CI section to README.md**
+
+Find `README.md` in the project root. Add a `## Contributing` section (or append to an existing one) with:
+
+```markdown
+## Contributing
+
+### CI Pipeline
+
+This project uses GitHub Actions for continuous integration. Branch protection on `main` requires all checks to pass before merging.
+
+**Required checks:**
+- **Backend Tests** — runs `pytest` with 40% coverage floor (excludes load/stress/e2e tests)
+- **Frontend Build** — runs `npm run build` via Vite
+
+**Workflow:**
+1. Create a feature branch: `git checkout -b feature/my-change`
+2. Push and open a PR: `git push -u origin feature/my-change && gh pr create`
+3. CI runs automatically — both jobs must pass
+4. Merge the PR → Railway auto-deploys to production
+
+**Running tests locally:**
+```bash
+source venv/bin/activate
+python -m pytest tests/ -q --ignore=tests/load --ignore=tests/stress --ignore=tests/e2e -m "not live"
+cd frontend && npm run build
+```
+
+**Note:** Do not push directly to `main`. Direct pushes are blocked by branch protection.
+```
+
+- [ ] **Step 3: Commit**
 
 ```bash
-git add CLAUDE.md
-git commit -m "docs: update CLAUDE.md with PR-based deploy workflow"
+git add CLAUDE.md README.md
+git commit -m "docs: update CLAUDE.md and README.md with PR-based deploy workflow and CI instructions"
 ```
 
 ---
@@ -316,12 +384,16 @@ git commit -m "docs: update CLAUDE.md with PR-based deploy workflow"
 
 | Task | What | Risk |
 |------|------|------|
-| 1 | Fix failing test so CI goes green | Low — test fix only |
+| 1 | Fix failing test (hardcoded date → dynamic) | Low — 1-line test fix |
 | 2 | Consolidate to single ci.yml, fix Python version | Low — workflow config only |
 | 3 | Enable branch protection on main | **Medium** — changes deploy workflow permanently |
-| 4 | Document the new workflow in CLAUDE.md | None |
+| 4 | Document workflow in CLAUDE.md + README.md | None |
 
 **Before:** `git push origin main` → broken code deploys to production → teachers can't grade.
 **After:** PR → CI must pass → merge → Railway deploys known-good code.
 
-**Important note for Task 3:** Once branch protection is enabled, you can no longer `git push origin main` directly. All changes must go through PRs. If you need to emergency-push, you can temporarily disable protection via `gh api repos/nlev8/Graider/branches/main/protection --method DELETE`. Make sure you understand this before enabling it.
+**Important note for Task 3:** Once branch protection is enabled, you can no longer `git push origin main` directly. All changes must go through PRs. To temporarily disable protection for an emergency hotfix:
+```bash
+gh api repos/nlev8/Graider/branches/main/protection --method DELETE
+```
+Re-enable immediately after by re-running the Task 3 Step 1 command.
