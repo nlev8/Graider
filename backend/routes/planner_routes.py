@@ -7155,6 +7155,7 @@ def generate_study_guide():
     subject = data.get('subject', '')
     grade = data.get('grade', '')
     instructions = data.get('instructions', '')
+    global_ai_notes = data.get('globalAINotes', '')
     lesson_plan = data.get('lessonPlan')
 
     if not content and not lesson_plan:
@@ -7165,6 +7166,12 @@ def generate_study_guide():
     # Build the prompt
     prompt_parts = []
     prompt_parts.append(f"You are an expert {subject} teacher creating a study guide for grade {grade} students.")
+
+    if global_ai_notes:
+        prompt_parts.append("")
+        prompt_parts.append("=== TEACHER INSTRUCTIONS (MUST FOLLOW) ===")
+        prompt_parts.append(global_ai_notes)
+        prompt_parts.append("=== END TEACHER INSTRUCTIONS ===")
     prompt_parts.append("")
     prompt_parts.append("Generate a comprehensive study guide in JSON format with these sections:")
     prompt_parts.append('- "title": string')
