@@ -28,6 +28,7 @@ from .seo_routes import seo_bp
 from .notebooklm_routes import notebooklm_bp
 from .survey_routes import survey_bp
 from .clever_routes import clever_bp
+from .classlink_routes import classlink_bp
 from .oneroster_routes import oneroster_bp
 from .lti_routes import lti_bp
 from .assessment_results_routes import assessment_results_bp
@@ -64,6 +65,7 @@ def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, 
     app.register_blueprint(notebooklm_bp)
     app.register_blueprint(survey_bp)
     app.register_blueprint(clever_bp)
+    app.register_blueprint(classlink_bp)
     app.register_blueprint(oneroster_bp)
     app.register_blueprint(lti_bp)
     app.register_blueprint(assessment_results_bp)
@@ -93,6 +95,7 @@ __all__ = [
     'notebooklm_bp',
     'survey_bp',
     'clever_bp',
+    'classlink_bp',
     'oneroster_bp',
     'lti_bp',
     'assessment_results_bp',

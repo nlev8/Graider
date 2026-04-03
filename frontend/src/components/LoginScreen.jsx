@@ -354,6 +354,45 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
             </svg>
             Log in with Clever
           </button>
+
+          {/* ClassLink SSO */}
+          <button onClick={async () => {
+            setError('');
+            try {
+              var resp = await fetch('/api/classlink/login-url');
+              var data = await resp.json();
+              if (data.url) {
+                window.location.href = data.url;
+              } else {
+                setError('ClassLink login not configured');
+              }
+            } catch (err) {
+              setError('Could not connect to ClassLink');
+            }
+          }}
+            style={{
+              width: '100%',
+              marginTop: '12px',
+              padding: '12px',
+              borderRadius: '12px',
+              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+              background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              color: isDark ? 'white' : '#1e293b',
+              fontSize: '0.9rem',
+              fontWeight: 500,
+              fontFamily: 'inherit',
+            }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="11" stroke="#1a73e8" strokeWidth="2"/>
+              <path d="M7 12h10M12 7v10" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Log in with ClassLink
+          </button>
           </>
         )}
         <div style={{ textAlign: "center", marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
