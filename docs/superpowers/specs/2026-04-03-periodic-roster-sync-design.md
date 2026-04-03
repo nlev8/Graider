@@ -16,7 +16,8 @@ A daily background sync triggered by GitHub Actions cron. Every 24 hours, a webh
 | Sync scope | Teachers with SIS config + activity in last 30 days | Avoids burning API quota on inactive accounts. Teachers on break whose students haven't logged in are skipped — their roster will sync on next login. |
 | Auth | Shared secret header + rate limit | Simple, prevents abuse. Rate-limited to 1 req/5 min to prevent quota exhaustion if secret leaks. |
 | Removed students | Soft deactivate (`is_active=False`) | Preserves data, recoverable if SIS glitches |
-| Parallelism | Sequential, max 50 teachers per run | Respects Clever 1,200 req/min rate limit. 50-teacher cap ensures completion within GitHub's 6-hour job limit. |
+| Parallelism | Sequential, max 50 teachers per run, paged across days | Respects Clever 1,200 req/min rate limit. Paging cursor ensures all teachers sync within a few days even at district scale. |
+| Weekend syncs | Weekdays only (Mon-Fri) | Roster changes over weekends are picked up Monday 4 AM. Documented assumption: acceptable 48h staleness window for weekend transfers. |
 
 ## Architecture
 
@@ -53,19 +54,26 @@ sync_routes.py — webhook handler
 
 New blueprint: `sync_bp` with single route `POST /api/sync/periodic-roster`.
 
-**Auth:** Validates `Authorization: Bearer <token>` against `PERIODIC_SYNC_SECRET` env var. Returns 401 if missing/invalid. Rate-limited to 1 request per 5 minutes via Flask-Limiter (prevents quota exhaustion if secret leaks).
+**Auth:** Validates `Authorization: Bearer <token>` against `PERIODIC_SYNC_SECRET` env var. Returns 401 if missing/invalid.
 
-**Teacher discovery:**
+**Rate limiting:** `@limiter.limit("1 per 5 minutes")` via the existing Flask-Limiter instance at `backend/extensions.py` (already initialized in `app.py:93`, per-IP by default via `get_remote_address`). This is a per-route decorator — does not affect other routes. Already used on `/api/assistant/chat` (20/min) and `/api/grade` (5/min).
+
+**Teacher discovery (paged across runs):**
 1. Query Supabase `teacher_data` for all rows with `data_key='district:sis_config'` — these are teachers with a SIS provider configured
 2. Cross-reference against `student_sessions` for `created_at` in last 30 days to filter to active teachers
-3. Cap at 50 teachers per run. If more exist, process the 50 most recently active and log a warning. The remaining will be picked up on subsequent runs.
+3. Order by `teacher_id` ascending, cap at 50 per run
+4. Read the paging cursor from `teacher_data` key `"sync:last_cursor"` (teacher_id="system") — this is the last `teacher_id` processed
+5. Start from cursor position (skip already-synced teachers). If cursor is past the end of the list, reset to beginning (wrap around)
+6. After processing, save the new cursor position
+
+This ensures all teachers get synced within `ceil(total/50)` days. For Volusia County (~20 teachers), every teacher syncs daily. At district scale (200 teachers), every teacher syncs within 4 days.
 
 **Per-teacher sync:**
 1. Load SIS config to determine provider (`clever` or `oneroster`)
 2. Call the appropriate sync function (reusing existing code)
 3. Call `deactivate_missing_students()` with the synced external IDs
 4. Write an `audit_log` entry: `action="PERIODIC_SYNC"`, `teacher_id`, `details={provider, counts, deactivated}`
-5. Collect result: `{teacher_id, provider, status, counts, deactivated, error}`
+5. Collect result: `{teacher_id, provider, status, counts, deactivated, duration_s, error}`
 
 **Response:**
 ```json
@@ -76,8 +84,8 @@ New blueprint: `sync_bp` with single route `POST /api/sync/periodic-roster`.
   "total_teachers": 8,
   "has_failures": true,
   "details": [
-    {"teacher_id": "t1", "provider": "clever", "status": "success", "classes": 3, "students": 75, "deactivated": 2},
-    {"teacher_id": "t2", "provider": "oneroster", "status": "failed", "error": "Connection timeout"}
+    {"teacher_id": "t1", "provider": "clever", "status": "success", "classes": 3, "students": 75, "deactivated": 2, "duration_s": 4.2},
+    {"teacher_id": "t2", "provider": "oneroster", "status": "failed", "error": "Connection timeout", "duration_s": 30.0}
   ]
 }
 ```
@@ -159,7 +167,14 @@ jobs:
 - Fails on HTTP error OR partial teacher failures (triggers GitHub email notification)
 - Logs full response body for debugging
 
-**Monitoring:** GitHub sends email notifications on workflow failure by default. If the workflow hasn't run in 24 hours, GitHub's "stale workflow" notification will alert. For additional monitoring, the `audit_log` table in Supabase provides a queryable history of all sync runs.
+**Monitoring:**
+- GitHub sends email notifications on workflow failure by default
+- The `audit_log` table in Supabase provides a queryable history of all sync runs — query `action='PERIODIC_SYNC'` to see daily results
+- Each teacher sync logs its duration (seconds) in the response `details` array for runtime instrumentation
+- If per-teacher sync averages >30s, revisit the 30-min timeout or add 2-worker parallelism with rate-limit aware throttling
+- PostHog is already integrated — a `periodic_sync_completed` event with `{synced, failed, duration_s}` can be added for dashboard visibility
+
+**Weekend assumption:** Cron runs weekdays only. Roster changes made in the SIS over the weekend (e.g., Saturday transfer) are picked up Monday at 4 AM ET. This is acceptable because classes don't meet on weekends, so there's no grading activity against stale rosters.
 
 ### 4. Environment Configuration
 
@@ -192,7 +207,7 @@ audit_log(
 )
 ```
 
-**Retention:** `audit_log` entries follow the existing retention policy (90 days per Florida Statute 1006.1494, implemented as a post-beta cleanup task). Sync audit entries use the same table and lifecycle as all other audit events.
+**Retention:** `audit_log` table exists and is actively used across the codebase (`backend/utils/audit.py:16`, `clever_routes.py:47`, `district_routes.py:181`). Automated 90-day retention per Florida Statute 1006.1494 is a documented post-beta task (not yet implemented). Sync audit entries use the same table and will be covered when retention is added.
 
 ## What This Does NOT Include
 
