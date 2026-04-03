@@ -1,0 +1,316 @@
+"""
+ClassLink OAuth2/OIDC SSO Routes
+=================================
+Mirrors the Clever SSO pattern (clever_routes.py) for ClassLink LaunchPad.
+
+Endpoints:
+  GET  /api/classlink/login-url  — Get ClassLink OAuth authorization URL
+  GET  /api/classlink/callback   — OAuth callback (ClassLink redirects here)
+  GET  /api/classlink/session    — Check ClassLink session status
+  POST /api/classlink/logout     — Clear ClassLink session
+"""
+
+import os
+import logging
+import secrets
+import requests
+from flask import Blueprint, request, redirect, jsonify, session, g
+from urllib.parse import urlencode
+
+logger = logging.getLogger(__name__)
+
+classlink_bp = Blueprint('classlink', __name__)
+
+# ClassLink OAuth2 endpoints
+CLASSLINK_AUTH_URL = 'https://launchpad.classlink.com/oauth2/v2/auth'
+CLASSLINK_TOKEN_URL = 'https://launchpad.classlink.com/oauth2/v2/token'
+CLASSLINK_USERINFO_URL = 'https://nodeapi.classlink.com/v2/my/info'
+
+CLASSLINK_SCOPES = 'profile oneroster email openid'
+
+
+def _get_classlink_config():
+    """Get ClassLink OAuth config from environment."""
+    client_id = os.environ.get('CLASSLINK_CLIENT_ID', '')
+    client_secret = os.environ.get('CLASSLINK_CLIENT_SECRET', '')
+    redirect_uri = os.environ.get(
+        'CLASSLINK_REDIRECT_URI',
+        'https://app.graider.live/api/classlink/callback'
+    )
+    return client_id, client_secret, redirect_uri
+
+
+def _link_classlink_account(classlink_id, email):
+    """Link ClassLink user to existing Graider account by email match.
+
+    Same pattern as clever_routes.py account merging (lines 366-393).
+    If exactly one Supabase user exists with the same email, create a
+    persistent classlink_id → supabase_user_id mapping.
+
+    Edge cases:
+    - No match: No link created. User operates as classlink:{id} — this
+      works fine, they just start fresh. No "stuck" state.
+    - Multiple matches: Skip linking, log warning. Ambiguous — don't guess.
+    - Already linked: Skip (idempotent).
+    """
+    try:
+        from backend.storage import load as storage_load, save as storage_save
+
+        links = storage_load('classlink_links', 'system') or {}
+        if classlink_id in links:
+            return  # Already linked
+
+        from backend.supabase_client import get_supabase
+        sb = get_supabase()
+        if not sb or not email:
+            return
+
+        # Check if teacher_data has any entries with this email
+        result = sb.table('teacher_data').select('teacher_id').eq(
+            'data_key', 'settings'
+        ).execute()
+
+        matches = []
+        for row in (result.data or []):
+            tid = row.get('teacher_id', '')
+            settings = storage_load('settings', tid)
+            if settings and isinstance(settings, dict):
+                config = settings.get('config', settings)
+                if config.get('email', '').lower() == email.lower():
+                    matches.append(tid)
+
+        if len(matches) == 1:
+            links[classlink_id] = matches[0]
+            storage_save('classlink_links', links, 'system')
+            logger.info("Linked ClassLink user %s to teacher %s via email match",
+                        classlink_id, matches[0])
+        elif len(matches) > 1:
+            logger.warning("ClassLink user %s email %s matches %d teachers — skipping auto-link",
+                           classlink_id, email, len(matches))
+        # No matches: user operates as classlink:{id} — starts fresh, no error
+
+    except Exception as e:
+        logger.warning("ClassLink account linking failed: %s", e)
+
+
+def _resolve_classlink_user_id(classlink_id):
+    """Resolve ClassLink user ID to Graider teacher_id.
+
+    Returns linked Supabase UUID if exists, otherwise 'classlink:{id}'.
+    Same pattern as auth.py resolve_clever_user_id().
+    """
+    try:
+        from backend.storage import load as storage_load
+        links = storage_load('classlink_links', 'system') or {}
+        return links.get(str(classlink_id), f"classlink:{classlink_id}")
+    except Exception:
+        return f"classlink:{classlink_id}"
+
+
+def _trigger_roster_sync(teacher_id, tenant_id):
+    """Trigger background OneRoster roster sync after ClassLink login.
+
+    Uses existing OneRoster sync infrastructure — ClassLink's Roster Server
+    exposes OneRoster 1.1 endpoints.
+    """
+    import threading
+
+    def _bg_sync():
+        try:
+            from backend.oneroster import OneRosterClient, normalize_roster, get_oneroster_config
+            from backend.roster_sync import sync_roster_to_db
+
+            config = get_oneroster_config(teacher_id)
+            if not config.get('base_url'):
+                logger.info("No OneRoster config for %s, skipping post-login roster sync", teacher_id)
+                return
+
+            import asyncio
+            client = OneRosterClient(
+                base_url=config['base_url'],
+                client_id=config['client_id'],
+                client_secret=config['client_secret'],
+                token_url=config.get('token_url'),
+            )
+            loop = asyncio.new_event_loop()
+            try:
+                raw = loop.run_until_complete(client.fetch_roster(
+                    school_id=config.get('school_id'),
+                    teacher_sourced_id=config.get('teacher_sourced_id'),
+                ))
+            finally:
+                loop.close()
+
+            normalized = normalize_roster(raw)
+            sync_roster_to_db(
+                normalized['classes'], normalized['students'],
+                normalized['enrollments'], teacher_id, provider="classlink"
+            )
+            logger.info("Post-login ClassLink roster sync complete for %s", teacher_id)
+        except Exception as e:
+            logger.warning("Post-login ClassLink roster sync failed for %s: %s", teacher_id, e)
+
+    thread = threading.Thread(target=_bg_sync, daemon=True)
+    thread.start()
+
+
+# ── GET /api/classlink/login-url ──────────────────────────────────────
+
+@classlink_bp.route('/api/classlink/login-url', methods=['GET'])
+def classlink_login_url():
+    """Return ClassLink OAuth authorization URL with CSRF state token."""
+    client_id, _, redirect_uri = _get_classlink_config()
+    if not client_id:
+        return jsonify({"error": "ClassLink SSO is not configured"}), 400
+
+    state = secrets.token_urlsafe(32)
+    session['classlink_oauth_state'] = state
+
+    params = urlencode({
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': CLASSLINK_SCOPES,
+        'state': state,
+    })
+    return jsonify({"url": f"{CLASSLINK_AUTH_URL}?{params}"})
+
+
+# ── GET /api/classlink/callback ───────────────────────────────────────
+
+@classlink_bp.route('/api/classlink/callback', methods=['GET'])
+def classlink_callback():
+    """Handle ClassLink OAuth callback — exchange code for token, fetch user."""
+    error = request.args.get('error')
+    if error:
+        return redirect(f"/?classlink_error={error}")
+
+    code = request.args.get('code')
+    if not code:
+        return redirect("/?classlink_error=no_code")
+
+    # Validate CSRF state
+    # ClassLink-initiated flows (LaunchPad tile click) may not have a state
+    # because the login-url endpoint was never called — ClassLink redirects
+    # directly to the callback. This mirrors Clever's "Instant Login" pattern
+    # (clever_routes.py lines 297-308).
+    state = request.args.get('state', '')
+    expected_state = session.pop('classlink_oauth_state', '')
+    if expected_state and state and state != expected_state:
+        logger.warning("ClassLink OAuth state mismatch: got %s, expected %s", state, expected_state)
+        return redirect("/?classlink_error=state_mismatch")
+    # If no expected_state (ClassLink-initiated) or no state param, skip validation
+    # This is safe because the code exchange itself validates the OAuth flow
+
+    client_id, client_secret, redirect_uri = _get_classlink_config()
+
+    # Exchange code for token
+    try:
+        token_resp = requests.post(CLASSLINK_TOKEN_URL, data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        }, timeout=15)
+
+        if token_resp.status_code != 200:
+            logger.error("ClassLink token exchange failed: %s %s",
+                         token_resp.status_code, token_resp.text[:200])
+            return redirect("/?classlink_error=token_failed")
+
+        access_token = token_resp.json().get('access_token')
+        if not access_token:
+            return redirect("/?classlink_error=no_token")
+
+    except Exception as e:
+        logger.exception("ClassLink token exchange error: %s", e)
+        return redirect("/?classlink_error=token_error")
+
+    # Fetch user info
+    try:
+        user_resp = requests.get(CLASSLINK_USERINFO_URL, headers={
+            'Authorization': f'Bearer {access_token}',
+        }, timeout=15)
+
+        if user_resp.status_code != 200:
+            logger.error("ClassLink user info failed: %s", user_resp.status_code)
+            return redirect("/?classlink_error=userinfo_failed")
+
+        user_data = user_resp.json()
+    except Exception as e:
+        logger.exception("ClassLink user info error: %s", e)
+        return redirect("/?classlink_error=userinfo_error")
+
+    classlink_id = str(user_data.get('UserId', ''))
+    first_name = user_data.get('FirstName', '')
+    last_name = user_data.get('LastName', '')
+    email = user_data.get('Email', '')
+    role = (user_data.get('Role') or '').lower()
+    tenant_id = str(user_data.get('TenantId', ''))
+
+    # Student login → redirect to student portal
+    if role == 'student':
+        session['classlink_student'] = {
+            'classlink_id': classlink_id,
+            'name': f"{first_name} {last_name}",
+            'email': email,
+            'tenant_id': tenant_id,
+        }
+        return redirect("/student?classlink_login=success")
+
+    # Teacher/admin login
+    session.clear()
+    session.permanent = True
+
+    session['classlink_user'] = {
+        'classlink_id': classlink_id,
+        'email': email,
+        'name': {'first': first_name, 'last': last_name},
+        'type': role or 'teacher',
+        'tenant_id': tenant_id,
+    }
+
+    # Link to existing Graider account by email
+    _link_classlink_account(classlink_id, email)
+
+    # Resolve teacher_id for roster sync
+    teacher_id = _resolve_classlink_user_id(classlink_id)
+
+    # Background roster sync (if OneRoster configured)
+    _trigger_roster_sync(teacher_id, tenant_id)
+
+    from backend.utils.audit import audit_log
+    audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {email}",
+              user="teacher", teacher_id=teacher_id)
+
+    return redirect("/?classlink_login=success")
+
+
+# ── GET /api/classlink/session ────────────────────────────────────────
+
+@classlink_bp.route('/api/classlink/session', methods=['GET'])
+def classlink_session():
+    """Check ClassLink session status."""
+    cl_user = session.get('classlink_user')
+    if not cl_user:
+        return jsonify({"authenticated": False})
+
+    return jsonify({
+        "authenticated": True,
+        "classlink_id": cl_user.get('classlink_id'),
+        "email": cl_user.get('email'),
+        "name": cl_user.get('name'),
+        "type": cl_user.get('type'),
+        "tenant_id": cl_user.get('tenant_id'),
+    })
+
+
+# ── POST /api/classlink/logout ────────────────────────────────────────
+
+@classlink_bp.route('/api/classlink/logout', methods=['POST'])
+def classlink_logout():
+    """Clear ClassLink session."""
+    session.pop('classlink_user', None)
+    session.pop('classlink_student', None)
+    return jsonify({"status": "logged_out"})
