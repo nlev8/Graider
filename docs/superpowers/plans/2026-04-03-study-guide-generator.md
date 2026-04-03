@@ -11,6 +11,7 @@
 **Review history:**
 - Rev 1: Initial plan (3 tasks, 9 tests)
 - Rev 2: Fixed API key helper (uses `_gak` not `_get_api_key_for_user`), added export test assertions for file content, documented all NotebookLM references to clean up (3 files, 206 refs), confirmed Gemini SDK accepts plain string for generate_content
+- Rev 3: Test app patches limiter to no-op (avoids shared state conflicts). Task 3 now strips unused NotebookLM state from App.jsx (not just hides UI). Export tests already cover /api/export-study-guide endpoint (TestExportStudyGuide class).
 
 **Implementation notes:**
 - API key helper in planner_routes.py: `from backend.api_keys import get_api_key as _gak` then `_gak('gemini', user_id)`
@@ -49,10 +50,15 @@ from flask import Flask
 
 
 def _make_app():
-    """Create a minimal Flask app with planner routes."""
+    """Create a minimal Flask app with planner routes.
+
+    Patches the limiter to a no-op to avoid shared state conflicts
+    when other tests have already initialized it.
+    """
     app = Flask(__name__)
     app.config['TESTING'] = True
     app.config['SECRET_KEY'] = 'test'
+    app.config['RATELIMIT_ENABLED'] = False  # Disable rate limiting in tests
 
     from backend.extensions import limiter
     limiter.init_app(app)
@@ -672,16 +678,50 @@ Replace with a Study Guide button that navigates to tools mode:
                               </button>
 ```
 
-- [ ] **Step 2: Add study guide state variables**
+- [ ] **Step 2: Replace NotebookLM state variables with study guide state**
 
-Near the existing NotebookLM state variables (~line 1595), add:
+Find the NotebookLM state block (~line 1595-1615):
+```javascript
+  // NotebookLM materials state
+  const [nlmAuthenticated, setNlmAuthenticated] = useState(false);
+  const [nlmNotebookId, setNlmNotebookId] = useState(null);
+  const [nlmGenerating, setNlmGenerating] = useState(false);
+  const [nlmProgress, setNlmProgress] = useState([]);
+  const [nlmCompleted, setNlmCompleted] = useState([]);
+  const [nlmErrors, setNlmErrors] = useState([]);
+  const [nlmMaterials, setNlmMaterials] = useState({});
+  const [nlmContextFiles, setNlmContextFiles] = useState([]);
+  const [nlmIncludePlan, setNlmIncludePlan] = useState(false);
+  const [nlmUploading, setNlmUploading] = useState(false);
+  const [nlmDownloading, setNlmDownloading] = useState(null);
+  const [nlmSelectedMaterials, setNlmSelectedMaterials] = useState({...});
+  const [nlmOptions, setNlmOptions] = useState({});
+  const [nlmPreviewData, setNlmPreviewData] = useState(null);
+  const [nlmShareResult, setNlmShareResult] = useState(null);
+  const [nlmTotalSelected, setNlmTotalSelected] = useState(0);
+```
 
+Replace the entire block with:
 ```javascript
   // Study Guide state
   const [studyGuide, setStudyGuide] = useState(null);
   const [studyGuideGenerating, setStudyGuideGenerating] = useState(false);
   const [studyGuideInstructions, setStudyGuideInstructions] = useState('');
 ```
+
+- [ ] **Step 2b: Remove NotebookLM useEffect hooks**
+
+Find and remove these useEffect blocks:
+1. NotebookLM auth check (~line 2520-2527): `if (activeTab === "planner") { api.notebookLMAuthStatus()...`
+2. NotebookLM generation status polling (~line 2535-2560): `if (!nlmGenerating) return; var interval = setInterval...`
+
+- [ ] **Step 2c: Remove the handleNLMGenerate function**
+
+Search for `handleNLMGenerate` or `function handleNLMGenerate` and remove the entire function definition. It's only called from the NotebookLM UI which is being replaced.
+
+- [ ] **Step 2d: Remove NLM_MATERIAL_TYPES constant**
+
+Search for `NLM_MATERIAL_TYPES` and remove the array definition. It's only used in the NotebookLM materials grid.
 
 - [ ] **Step 3: Replace the NotebookLM Materials section with Study Guide UI**
 
