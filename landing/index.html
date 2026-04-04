@@ -72,20 +72,12 @@
           "applicationCategory": "EducationalApplication",
           "operatingSystem": "Web Browser",
           "description": "AI-powered grading and planning assistant that grades student assignments (Word docs, PDFs, handwritten work) in seconds with detailed per-question feedback using a 3-pass grading pipeline with 18 contextual factors. Supports GPT-4o, Claude, and Gemini. Generates standards-aligned lesson plans, worksheets, and assessments. FERPA-compliant — student PII is never sent to AI providers.",
-          "offers": [
-            {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "USD",
-              "description": "Free tier with Google Gemini — no API key cost"
-            },
-            {
-              "@type": "Offer",
-              "price": "50",
-              "priceCurrency": "USD",
-              "description": "Under $50/year with bring-your-own API key for GPT-4o or Claude (5,000+ assignments)"
-            }
-          ],
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "description": "Free for beta testers — no API keys required"
+          },
           "featureList": [
             "AI grading with 3-pass pipeline and 18 contextual factors",
             "Per-question scoring with expected answer matching",
@@ -95,15 +87,20 @@
             "Student progress tracking with longitudinal profiles",
             "IEP/504 accommodation presets",
             "ELL bilingual feedback (teacher-configured language)",
-            "Standards-aligned lesson plan generator (Florida B.E.S.T. and expanding)",
+            "Standards-aligned lesson plan generator (all 50 states)",
             "AI worksheet and assessment generator",
             "AI teaching assistant with class context",
             "Focus SIS grade export and browser automation",
             "Parent email automation",
             "FERPA-compliant by design (no cloud PII)",
             "Custom rubrics (Standard, Cornell Notes, Fill-in-the-Blank)",
-            "Class analytics with grade distribution charts"
+            "Class analytics with grade distribution charts",
+            "Study guide generation with DOCX/PDF export",
+            "Student portal with join code access",
+            "Clever-certified SSO and roster sync",
+            "ClassLink/OneRoster roster integration"
           ],
+          "image": "https://graider.live/graider-brain-light.png",
           "screenshot": "https://graider.live/og-image.png?v=2",
           "softwareVersion": "1.0",
           "author": {
@@ -127,7 +124,14 @@
           "@type": "Organization",
           "name": "Graider",
           "url": "https://graider.live",
-          "logo": "https://graider.live/logo.svg",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://graider.live/graider-brain-light.png",
+            "width": 768,
+            "height": 768,
+            "caption": "Graider Logo"
+          },
+          "image": "https://graider.live/graider-brain-light.png",
           "description": "AI-powered grading and planning assistant for 6-12 teachers. Grades assignments, generates lesson plans, creates worksheets, and tracks student progress.",
           "contactPoint": {
             "@type": "ContactPoint",
