@@ -1652,6 +1652,43 @@ function App() {
   const [slideCount, setSlideCount] = useState(10);
   const [slideImages, setSlideImages] = useState(true);
   const [slideFormat, setSlideFormat] = useState('detailed');
+
+  async function shareWithClass(content, contentType, title) {
+    if (!teacherClasses || teacherClasses.length === 0) {
+      addToast('No classes found. Sync your roster first.', 'warning');
+      return;
+    }
+    var targetClass = teacherClasses[0];
+    if (teacherClasses.length > 1) {
+      var classNames = teacherClasses.map(function(c, i) { return (i + 1) + '. ' + c.name; }).join(String.fromCharCode(10));
+      var choice = prompt('Which class?' + String.fromCharCode(10) + classNames + String.fromCharCode(10) + 'Enter number:');
+      if (!choice) return;
+      var idx = parseInt(choice) - 1;
+      if (idx < 0 || idx >= teacherClasses.length) { addToast('Invalid choice', 'error'); return; }
+      targetClass = teacherClasses[idx];
+    }
+    try {
+      var resp = await fetch('/api/publish-to-class', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: targetClass.id,
+          content: content,
+          content_type: contentType,
+          title: title,
+        }),
+      });
+      var data = await resp.json();
+      if (data.error) {
+        addToast(data.error, 'error');
+      } else {
+        addToast('Shared "' + title + '" with ' + targetClass.name, 'success');
+      }
+    } catch (err) {
+      addToast('Failed to share: ' + err.message, 'error');
+    }
+  }
+
   const [rlInput, setRlInput] = useState('');
   const [rlTargetLevel, setRlTargetLevel] = useState('6');
   const [rlPreserveTerms, setRlPreserveTerms] = useState([]);
@@ -15124,6 +15161,13 @@ ${signature}`;
                               >
                                 <Icon name="FileDown" size={16} /> Export PDF
                               </button>
+                              <button
+                                onClick={function() { shareWithClass(studyGuide, 'study_guide', studyGuide.title || 'Study Guide'); }}
+                                className="btn btn-secondary"
+                                style={{ padding: "8px 16px" }}
+                              >
+                                <Icon name="Share2" size={16} /> Share with Class
+                              </button>
                             </div>
                           </div>
                         )}
@@ -15297,6 +15341,13 @@ ${signature}`;
                                 style={{ padding: "8px 16px" }}
                               >
                                 <Icon name="FileText" size={16} /> Export DOCX
+                              </button>
+                              <button
+                                onClick={function() { shareWithClass(flashcards, 'flashcards', flashcards.title || 'Flashcards'); }}
+                                className="btn btn-secondary"
+                                style={{ padding: "8px 16px" }}
+                              >
+                                <Icon name="Share2" size={16} /> Share with Class
                               </button>
                             </div>
                           </div>
@@ -15522,6 +15573,13 @@ ${signature}`;
                               style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px" }}
                             >
                               <Icon name="Download" size={16} /> Download PowerPoint (.pptx)
+                            </button>
+                            <button
+                              onClick={function() { shareWithClass(slideDeck, 'slide_deck', slideDeck.title || 'Slide Deck'); }}
+                              className="btn btn-secondary"
+                              style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px" }}
+                            >
+                              <Icon name="Share2" size={16} /> Share with Class
                             </button>
                           </div>
                         )}
