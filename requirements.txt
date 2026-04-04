@@ -58,6 +58,12 @@ httpx>=0.24.0
 Flask-Session>=0.5.0
 redis>=5.0.0
 
+# Google Gemini (old SDK — used by grading, study guides, flashcards)
+google-generativeai>=0.8.0
+# Slide Deck Generator (new SDK for image gen + PowerPoint assembly)
+google-genai>=1.0.0
+python-pptx>=1.0.0
+
 # Production Server
 gunicorn>=21.0.0
 flask-wtf>=1.2.0

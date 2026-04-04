@@ -7655,3 +7655,127 @@ def export_flashcards():
     except Exception as e:
         _logger.exception("Flashcard export failed")
         return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# SLIDE DECK GENERATION
+# ══════════════════════════════════════════════════════════════
+
+@planner_bp.route('/api/generate-slides', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def generate_slides():
+    """Generate a slide deck from content using Gemini Flash."""
+    data = request.get_json(silent=True) or {}
+
+    content = data.get('content', '').strip()
+    title = data.get('title', 'Slide Deck')
+    subject = data.get('subject', '')
+    grade = data.get('grade', '')
+    instructions = data.get('instructions', '')
+    global_ai_notes = data.get('globalAINotes', '')
+    lesson_plan = data.get('lessonPlan')
+    slide_count = min(data.get('slideCount', 10), 20)
+    max_images = min(data.get('maxImages', 5), 10)
+    generate_images = data.get('generateImages', True)
+    deck_format = data.get('deckFormat', 'detailed')
+
+    if not content and not lesson_plan:
+        return jsonify({"error": "Provide content or a lesson plan to generate slides."}), 400
+
+    user_id = getattr(g, 'user_id', 'local-dev')
+
+    try:
+        from backend.api_keys import get_api_key as _gak
+        api_key = _gak('gemini', user_id)
+
+        from backend.services.slide_generator import (
+            generate_slide_content, generate_slide_images
+        )
+
+        # Phase 1: Generate slide content
+        slide_data = generate_slide_content(
+            content=content, subject=subject, grade=grade, title=title,
+            api_key=api_key, lesson_plan=lesson_plan,
+            global_ai_notes=global_ai_notes, instructions=instructions,
+            slide_count=slide_count,
+            deck_format=deck_format,
+        )
+
+        # Phase 2: Generate images (optional)
+        images_generated = 0
+        if generate_images:
+            try:
+                images = generate_slide_images(
+                    slide_data["slides"], slide_data["theme"],
+                    api_key=api_key, max_images=max_images,
+                )
+                images_generated = len(images)
+                # Store image references in session for export
+                # (images are too large for JSON response)
+                import base64
+                slide_data["_image_data"] = {
+                    str(k): base64.b64encode(v).decode('ascii') for k, v in images.items()
+                }
+            except Exception as e:
+                _logger.warning("Image generation failed, continuing without images: %s", e)
+                slide_data["_image_data"] = {}
+
+        return jsonify({
+            "slides": slide_data,
+            "title": slide_data.get("title", title),
+            "slide_count": len(slide_data.get("slides", [])),
+            "images_generated": images_generated,
+        })
+
+    except json.JSONDecodeError as e:
+        _logger.error("Slide content JSON parse failed: %s", e)
+        return jsonify({"error": "Failed to parse slide content. Please try again."}), 500
+    except Exception as e:
+        _logger.exception("Slide generation failed")
+        return jsonify({"error": "Generation failed: " + str(e)[:200]}), 500
+
+
+@planner_bp.route('/api/export-slides', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def export_slides():
+    """Export generated slides as PowerPoint (.pptx)."""
+    data = request.get_json(silent=True) or {}
+    slide_data = data.get('slides')
+
+    if not slide_data or not slide_data.get('slides'):
+        return jsonify({"error": "No slide data provided."}), 400
+
+    title = slide_data.get("title", "Slide Deck")
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:80]
+    export_dir = _get_export_dir()
+
+    try:
+        import base64
+        from backend.services.slide_generator import assemble_pptx
+
+        # Decode image data from base64
+        images = {}
+        for k, v in slide_data.get("_image_data", {}).items():
+            try:
+                images[int(k)] = base64.b64decode(v)
+            except Exception:
+                pass
+
+        filepath = os.path.join(export_dir, safe_title + ".pptx")
+        assemble_pptx(
+            slide_data["slides"], slide_data.get("theme", {}),
+            title, images, filepath
+        )
+
+        return send_file(
+            filepath,
+            mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            as_attachment=True,
+            download_name=safe_title + ".pptx",
+        )
+
+    except Exception as e:
+        _logger.exception("Slide export failed")
+        return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
