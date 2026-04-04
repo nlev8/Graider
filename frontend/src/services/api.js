@@ -12,10 +12,10 @@ const API_BASE = ''  // Empty for same-origin, Vite proxies /api to Flask
  * Get authorization headers with current session token
  */
 export async function getAuthHeaders() {
-  // Clever users don't have Supabase sessions — skip entirely
+  // Clever/ClassLink users don't have Supabase sessions — skip entirely
   // (the browser sends the session cookie automatically)
   const currentUser = window.__graiderUser;
-  if (currentUser && currentUser.id && currentUser.id.startsWith('clever:')) {
+  if (currentUser && currentUser.id && (currentUser.id.startsWith('clever:') || currentUser.id.startsWith('classlink:'))) {
     return {}
   }
   const { data: { session } } = await supabase.auth.getSession()
