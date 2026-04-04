@@ -1646,6 +1646,9 @@ function App() {
   const [slideDeck, setSlideDeck] = useState(null);
   const [slideDeckGenerating, setSlideDeckGenerating] = useState(false);
   const [slideDeckInstructions, setSlideDeckInstructions] = useState('');
+  const [slideResources, setSlideResources] = useState([]);
+  const [slideResourceList, setSlideResourceList] = useState([]);
+  const [slideResourcesLoading, setSlideResourcesLoading] = useState(false);
   const [slideCount, setSlideCount] = useState(10);
   const [slideImages, setSlideImages] = useState(true);
   const [slideFormat, setSlideFormat] = useState('detailed');
@@ -15340,6 +15343,58 @@ ${signature}`;
                           </div>
                         </div>
 
+                        {/* Resource picker */}
+                        <div style={{ marginBottom: "12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                            <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Include saved resources</label>
+                            <button
+                              onClick={async function() {
+                                setSlideResourcesLoading(true);
+                                try {
+                                  var data = await api.listResources();
+                                  setSlideResourceList(data.resources || []);
+                                } catch (err) {
+                                  addToast('Failed to load resources', 'error');
+                                }
+                                setSlideResourcesLoading(false);
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                              disabled={slideResourcesLoading}
+                            >
+                              {slideResourcesLoading ? 'Loading...' : 'Browse'}
+                            </button>
+                          </div>
+                          {slideResourceList.length > 0 && (
+                            <div style={{ maxHeight: "120px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "8px", padding: "6px" }}>
+                              {slideResourceList.map(function(res) {
+                                var isSelected = slideResources.some(function(r) { return r.id === res.id; });
+                                return (
+                                  React.createElement('label', { key: res.id, style: { display: "flex", alignItems: "center", gap: "8px", padding: "4px 6px", fontSize: "0.8rem", cursor: "pointer", borderRadius: "4px", background: isSelected ? "rgba(139,92,246,0.1)" : "transparent" } },
+                                    React.createElement('input', {
+                                      type: "checkbox",
+                                      checked: isSelected,
+                                      onChange: function() {
+                                        if (isSelected) {
+                                          setSlideResources(slideResources.filter(function(r) { return r.id !== res.id; }));
+                                        } else {
+                                          setSlideResources(slideResources.concat([res]));
+                                        }
+                                      }
+                                    }),
+                                    React.createElement('span', { style: { fontWeight: 500 } }, res.title || 'Untitled'),
+                                    React.createElement('span', { style: { color: "var(--text-secondary)", fontSize: "0.7rem" } }, res.content_type || '')
+                                  )
+                                );
+                              })}
+                            </div>
+                          )}
+                          {slideResources.length > 0 && (
+                            React.createElement('p', { style: { fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px" } },
+                              slideResources.length + ' resource(s) selected')
+                          )}
+                        </div>
+
                         <button
                           onClick={async function() {
                             setSlideDeckGenerating(true);
@@ -15356,8 +15411,21 @@ ${signature}`;
                                   return s.question || '';
                                 }).join(String.fromCharCode(10));
                               }
+                              // Append selected resource content
+                              if (slideResources.length > 0) {
+                                for (var ri = 0; ri < slideResources.length; ri++) {
+                                  try {
+                                    var resData = await api.loadResource(slideResources[ri].id);
+                                    if (resData && resData.resource) {
+                                      var rc = resData.resource.content;
+                                      if (typeof rc === 'object') rc = JSON.stringify(rc);
+                                      content += String.fromCharCode(10) + '--- Resource: ' + (slideResources[ri].title || '') + ' ---' + String.fromCharCode(10) + (rc || '').substring(0, 4000);
+                                    }
+                                  } catch (err) { /* skip failed resource loads */ }
+                                }
+                              }
                               if (!content.trim()) {
-                                addToast('Generate a lesson plan or assessment first.', 'warning');
+                                addToast('Generate a lesson plan, assessment, or select resources first.', 'warning');
                                 setSlideDeckGenerating(false);
                                 return;
                               }
@@ -15390,7 +15458,7 @@ ${signature}`;
                             }
                             setSlideDeckGenerating(false);
                           }}
-                          disabled={slideDeckGenerating || (!lessonPlan && !generatedAssignment)}
+                          disabled={slideDeckGenerating || (!lessonPlan && !generatedAssignment && slideResources.length === 0)}
                           className="btn btn-primary"
                           style={{ padding: "10px 24px", background: "linear-gradient(135deg, #8b5cf6, #6366f1)", display: "flex", alignItems: "center", gap: "8px" }}
                         >
