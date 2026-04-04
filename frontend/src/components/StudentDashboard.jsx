@@ -5,10 +5,26 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeContent, setActiveContent] = useState(null);
+  const [resources, setResources] = useState([]);
+  const [resourcesLoading, setResourcesLoading] = useState(true);
+  const [selectedResource, setSelectedResource] = useState(null);
   const token = localStorage.getItem("student_token");
 
   useEffect(() => {
     loadDashboard();
+  }, []);
+
+  useEffect(function() {
+    if (!token) return;
+    fetch('/api/student/resources', {
+      headers: { 'X-Student-Token': token }
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        setResources(data.resources || []);
+        setResourcesLoading(false);
+      })
+      .catch(function() { setResourcesLoading(false); });
   }, []);
 
   const loadDashboard = async () => {
@@ -158,6 +174,130 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Resources Section */}
+        {resources.length > 0 && (
+          <div style={{ marginTop: "24px" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "1.2rem" }}>{String.fromCharCode(128218)}</span>
+              Study Materials
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px" }}>
+              {resources.map(function(res) {
+                var icon = res.content_type === 'study_guide' ? String.fromCharCode(128214)
+                  : res.content_type === 'flashcards' ? String.fromCharCode(128196)
+                  : res.content_type === 'slide_deck' ? String.fromCharCode(128253)
+                  : String.fromCharCode(128196);
+                var typeLabel = res.content_type === 'study_guide' ? 'Study Guide'
+                  : res.content_type === 'flashcards' ? 'Flashcards'
+                  : res.content_type === 'slide_deck' ? 'Slide Deck'
+                  : res.content_type;
+                return (
+                  <div
+                    key={res.id}
+                    onClick={function() {
+                      fetch('/api/student/resource/' + res.id, {
+                        headers: { 'X-Student-Token': token }
+                      })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                          if (data.resource) {
+                            setSelectedResource(data.resource);
+                          }
+                        })
+                        .catch(function() {});
+                    }}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(99,102,241,0.15)",
+                      background: "rgba(30,41,59,0.8)",
+                      cursor: "pointer",
+                      transition: "transform 0.1s",
+                    }}
+                  >
+                    <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>{icon}</div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{res.title}</div>
+                    <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "4px" }}>{typeLabel}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Resource Viewer Modal */}
+        {selectedResource && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 1000, padding: "20px",
+          }} onClick={function() { setSelectedResource(null); }}>
+            <div
+              style={{
+                background: "#1e293b", borderRadius: "16px",
+                padding: "24px", maxWidth: "700px", width: "100%",
+                maxHeight: "80vh", overflowY: "auto",
+              }}
+              onClick={function(e) { e.stopPropagation(); }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{selectedResource.title}</h3>
+                <button onClick={function() { setSelectedResource(null); }} style={{ background: "none", border: "none", fontSize: "1.5rem", cursor: "pointer", color: "#94a3b8" }}>{String.fromCharCode(10005)}</button>
+              </div>
+
+              {selectedResource.content_type === 'study_guide' && selectedResource.content && (
+                <div>
+                  {(selectedResource.content.sections || []).map(function(section, si) {
+                    return (
+                      <div key={si} style={{ marginBottom: "16px" }}>
+                        <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#e2e8f0", marginBottom: "8px" }}>{section.heading}</h4>
+                        {section.content && section.content.map(function(point, pi) {
+                          return <p key={pi} style={{ fontSize: "0.85rem", marginBottom: "4px", paddingLeft: "12px", color: "#cbd5e1" }}>{String.fromCharCode(8226)} {point}</p>;
+                        })}
+                        {section.terms && section.terms.map(function(item, ti) {
+                          return <p key={ti} style={{ fontSize: "0.85rem", marginBottom: "4px", paddingLeft: "12px", color: "#cbd5e1" }}><strong>{item.term}:</strong> {item.definition}</p>;
+                        })}
+                        {section.questions && section.questions.map(function(qa, qi) {
+                          return (
+                            <div key={qi} style={{ marginBottom: "8px", paddingLeft: "12px" }}>
+                              <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#e2e8f0" }}>{qi + 1}. {qa.question}</p>
+                              <p style={{ fontSize: "0.8rem", color: "#94a3b8", paddingLeft: "16px" }}>Answer: {qa.answer}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedResource.content_type === 'flashcards' && selectedResource.content && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px" }}>
+                  {(selectedResource.content.cards || []).map(function(card, ci) {
+                    return (
+                      <div key={ci} style={{ padding: "16px", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.15)", background: "rgba(15,23,42,0.8)" }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "8px", color: "#e2e8f0" }}>{card.term}</div>
+                        <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>{card.definition}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedResource.content_type === 'slide_deck' && (
+                <div style={{ textAlign: "center", padding: "20px" }}>
+                  <p style={{ fontSize: "0.9rem", color: "#94a3b8", marginBottom: "12px" }}>
+                    This slide deck contains {(selectedResource.content.slides || []).length} slides.
+                  </p>
+                  <p style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    Download the PowerPoint file from your teacher to view the full presentation.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
