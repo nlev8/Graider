@@ -115,12 +115,12 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           <img
             src={isDark ? '/graider-brain-dark.png' : '/graider-brain-light.png'}
             alt="Graider brain"
-            style={{ width: 85, height: 85, display: 'block', margin: '0 auto', marginBottom: -72 }}
+            style={{ width: 95, height: 95, display: 'block', margin: '0 auto', marginBottom: -82 }}
           />
           <img
             src={isDark ? '/graider-wordmark-dark.png' : '/graider-wordmark-light.png'}
             alt="Graider"
-            style={{ width: '75%', maxWidth: 240, display: 'block', margin: '0 auto', marginTop: 10, marginBottom: -32 }}
+            style={{ width: '75%', maxWidth: 240, display: 'block', margin: '0 auto', marginTop: 6, marginBottom: -32 }}
           />
           <p style={{ color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', fontSize: '0.95rem', margin: '0' }}>
             {showForgot ? 'Reset your password' : 'Sign in to continue'}
@@ -317,6 +317,46 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
             </button>
           </div>
 
+          {/* ClassLink SSO */}
+          <button onClick={async () => {
+            setError('');
+            try {
+              var resp = await fetch('/api/classlink/login-url');
+              var data = await resp.json();
+              if (data.url) {
+                window.location.href = data.url;
+              } else {
+                setError('ClassLink login not configured');
+              }
+            } catch (err) {
+              setError('Could not connect to ClassLink');
+            }
+          }}
+            style={{
+              width: '100%',
+              marginTop: '8px',
+              padding: '10px',
+              borderRadius: '12px',
+              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+              background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              color: isDark ? 'white' : '#1e293b',
+              fontSize: '0.9rem',
+              fontWeight: 500,
+              fontFamily: 'inherit',
+            }}>
+            <svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <path d="M80 55c0-16.6-13.4-30-30-30-12.7 0-23.6 7.9-28 19C13.4 44 6 51.4 6 61c0 11 9 20 20 20h54c8.8 0 16-7.2 16-16 0-7.3-5-13.5-12-15.3C83.3 48 80 51.2 80 55z" fill="#2196F3"/>
+              <circle cx="50" cy="42" r="8" fill="white"/>
+              <path d="M38 62c0-6.6 5.4-12 12-12s12 5.4 12 12" stroke="white" strokeWidth="4" fill="none" strokeLinecap="round"/>
+            </svg>
+            Log in with ClassLink
+          </button>
+
           {/* Clever SSO */}
           <button onClick={async () => {
             setError('');
@@ -354,45 +394,6 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
               <path d="M32.8 16.4C29.2 14.3 24.6 14.5 21.2 17C17.8 19.5 16.2 23.7 17 27.8C17.8 31.9 20.8 35.1 24.8 36.2C28.8 37.3 33 35.9 35.6 32.8" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
             </svg>
             Log in with Clever
-          </button>
-
-          {/* ClassLink SSO */}
-          <button onClick={async () => {
-            setError('');
-            try {
-              var resp = await fetch('/api/classlink/login-url');
-              var data = await resp.json();
-              if (data.url) {
-                window.location.href = data.url;
-              } else {
-                setError('ClassLink login not configured');
-              }
-            } catch (err) {
-              setError('Could not connect to ClassLink');
-            }
-          }}
-            style={{
-              width: '100%',
-              marginTop: '8px',
-              padding: '10px',
-              borderRadius: '12px',
-              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
-              background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              color: isDark ? 'white' : '#1e293b',
-              fontSize: '0.9rem',
-              fontWeight: 500,
-              fontFamily: 'inherit',
-            }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="11" stroke="#1a73e8" strokeWidth="2"/>
-              <path d="M7 12h10M12 7v10" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Log in with ClassLink
           </button>
           </>
         )}
