@@ -76,6 +76,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      overflowY: 'auto',
       background: isDark
         ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'
         : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%)',
@@ -108,18 +109,18 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
         backdropFilter: 'blur(20px)',
         borderRadius: '20px',
         border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
-        padding: '40px',
+        padding: '28px 32px',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <img
             src={isDark ? '/graider-brain-dark.png' : '/graider-brain-light.png'}
             alt="Graider brain"
-            style={{ width: 98, height: 98, display: 'block', margin: '0 auto', marginBottom: -86 }}
+            style={{ width: 70, height: 70, display: 'block', margin: '0 auto', marginBottom: -60 }}
           />
           <img
             src={isDark ? '/graider-wordmark-dark.png' : '/graider-wordmark-light.png'}
             alt="Graider"
-            style={{ width: '85%', maxWidth: 280, display: 'block', margin: '0 auto', marginTop: 24, marginBottom: -40 }}
+            style={{ width: '75%', maxWidth: 240, display: 'block', margin: '0 auto', marginTop: 16, marginBottom: -32 }}
           />
           <p style={{ color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', fontSize: '0.95rem', margin: '0' }}>
             {showForgot ? 'Reset your password' : 'Sign in to continue'}
@@ -167,7 +168,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
                   placeholder="you@school.edu" required
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 14px',
                     borderRadius: '12px',
                     border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
                     background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
@@ -202,13 +203,13 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
         ) : (
           <>
           <form onSubmit={handleLogin}>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '8px' }}>Email</label>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '4px' }}>Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@school.edu" required
                 style={{
                   width: '100%',
-                  padding: '12px 16px',
+                  padding: '10px 14px',
                   borderRadius: '12px',
                   border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
                   background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
@@ -218,14 +219,14 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
                   boxSizing: 'border-box',
                 }} />
             </div>
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '8px' }}>Password</label>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', marginBottom: '4px' }}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password" required
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 14px',
                     paddingRight: '44px',
                     borderRadius: '12px',
                     border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
@@ -273,7 +274,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           {/* OAuth divider */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '12px',
-            margin: '24px 0 20px',
+            margin: '16px 0 12px',
           }}>
             <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} />
             <span style={{ fontSize: '0.8rem', color: isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8' }}>or continue with</span>
@@ -333,8 +334,8 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           }}
             style={{
               width: '100%',
-              marginTop: '12px',
-              padding: '12px',
+              marginTop: '8px',
+              padding: '10px',
               borderRadius: '12px',
               border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
               background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
@@ -372,8 +373,8 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           }}
             style={{
               width: '100%',
-              marginTop: '12px',
-              padding: '12px',
+              marginTop: '8px',
+              padding: '10px',
               borderRadius: '12px',
               border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
               background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
@@ -395,7 +396,7 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           </button>
           </>
         )}
-        <div style={{ textAlign: "center", marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ textAlign: "center", marginTop: "12px", borderTop: "1px solid " + (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"), paddingTop: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
           <a href="/student" style={{ color: "#94a3b8", fontSize: "0.85rem", textDecoration: "none" }}>
             I'm a student — go to Student Portal
           </a>
