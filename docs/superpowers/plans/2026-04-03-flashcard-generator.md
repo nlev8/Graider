@@ -8,6 +8,11 @@
 
 **Tech Stack:** Gemini 2.0 Flash, python-docx, ReportLab, existing Flask patterns
 
+**Review notes:**
+- Rename `_get_study_guide_export_dir` → `_get_export_dir` in planner_routes.py (used by both study guide and flashcards)
+- `api.saveResource` already accepts any `content_type` string — 'flashcards' works without changes (verified: `lesson_routes.py:547` stores whatever type is passed)
+- Content passed to prompt is trimmed to 8000 chars (`content[:8000]`) to prevent oversized prompts
+
 ---
 
 ## File Structure
@@ -207,7 +212,7 @@ class TestExportFlashcards:
         app = _make_app()
         cards = json.loads(SAMPLE_FLASHCARDS)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-flashcards', json={
                     "flashcards": cards,
@@ -223,7 +228,7 @@ class TestExportFlashcards:
         app = _make_app()
         cards = json.loads(SAMPLE_FLASHCARDS)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-flashcards', json={
                     "flashcards": cards,
@@ -240,7 +245,7 @@ class TestExportFlashcards:
         app = _make_app()
         cards = json.loads(SAMPLE_FLASHCARDS)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-flashcards', json={
                     "flashcards": cards,
@@ -270,7 +275,7 @@ class TestExportFlashcards:
         app = _make_app()
         cards = json.loads(SAMPLE_FLASHCARDS)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-flashcards', json={
                     "flashcards": cards,
@@ -284,7 +289,7 @@ class TestExportFlashcards:
         app = _make_app()
         cards = {"title": "Empty Set", "cards": []}
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-flashcards', json={
                     "flashcards": cards,
@@ -539,7 +544,7 @@ def export_flashcards():
 
     title = flashcards.get("title", "Flashcards")
     safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:80]
-    export_dir = _get_study_guide_export_dir()
+    export_dir = _get_export_dir()
 
     try:
         if fmt == 'docx':
