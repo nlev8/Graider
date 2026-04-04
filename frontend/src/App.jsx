@@ -15326,8 +15326,8 @@ ${signature}`;
                           <div>
                             <label style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px", display: "block" }}>AI Graphics</label>
                             <select value={slideImages ? "yes" : "no"} onChange={function(e) { setSlideImages(e.target.value === "yes"); }} className="input" style={{ maxWidth: "160px" }}>
-                              <option value="yes">With graphics (~$0.20)</option>
-                              <option value="no">Text only (free)</option>
+                              <option value="yes">With graphics</option>
+                              <option value="no">Text only</option>
                             </select>
                           </div>
                           <div>
