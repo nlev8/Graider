@@ -7256,10 +7256,10 @@ def generate_study_guide():
 # STUDY GUIDE EXPORT
 # ══════════════════════════════════════════════════════════════
 
-def _get_study_guide_export_dir():
-    """Get temp directory for study guide exports."""
+def _get_export_dir():
+    """Get temp directory for exports (study guides, flashcards, etc.)."""
     import tempfile
-    d = os.path.join(tempfile.gettempdir(), "graider_study_guides")
+    d = os.path.join(tempfile.gettempdir(), "graider_exports")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -7387,7 +7387,7 @@ def export_study_guide():
 
     title = study_guide.get("title", "Study Guide")
     safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:80]
-    export_dir = _get_study_guide_export_dir()
+    export_dir = _get_export_dir()
 
     try:
         if fmt == 'pdf':
@@ -7405,3 +7405,253 @@ def export_study_guide():
     except Exception as e:
         _logger.exception("Study guide export failed")
         return jsonify({"error": f"Export failed: {str(e)[:200]}"}), 500
+
+
+# ══════════════════════════════════════════════════════════════
+# FLASHCARD GENERATION
+# ══════════════════════════════════════════════════════════════
+
+@planner_bp.route('/api/generate-flashcards', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def generate_flashcards():
+    """Generate flashcards from content using Gemini Flash."""
+    data = request.get_json(silent=True) or {}
+
+    content = data.get('content', '').strip()
+    title = data.get('title', 'Flashcards')
+    subject = data.get('subject', '')
+    grade = data.get('grade', '')
+    instructions = data.get('instructions', '')
+    global_ai_notes = data.get('globalAINotes', '')
+    lesson_plan = data.get('lessonPlan')
+    card_count = data.get('cardCount', 15)
+
+    if not content and not lesson_plan:
+        return jsonify({"error": "Provide content or a lesson plan to generate flashcards."}), 400
+
+    user_id = getattr(g, 'user_id', 'local-dev')
+
+    prompt_parts = []
+    prompt_parts.append("You are an expert " + subject + " teacher creating flashcards for grade " + grade + " students.")
+
+    if global_ai_notes:
+        prompt_parts.append("")
+        prompt_parts.append("=== TEACHER INSTRUCTIONS (MUST FOLLOW) ===")
+        prompt_parts.append(global_ai_notes)
+        prompt_parts.append("=== END TEACHER INSTRUCTIONS ===")
+
+    prompt_parts.append("")
+    prompt_parts.append("Generate " + str(card_count) + " flashcards in JSON format:")
+    prompt_parts.append('- "title": string (flashcard set title)')
+    prompt_parts.append('- "cards": array of {"term": string, "definition": string}')
+    prompt_parts.append("")
+    prompt_parts.append("Guidelines:")
+    prompt_parts.append("- Each term should be a key vocabulary word, concept, person, or event")
+    prompt_parts.append("- Each definition should be concise (1-2 sentences max)")
+    prompt_parts.append("- Use age-appropriate language for grade " + grade)
+    prompt_parts.append("- Focus on the most important terms from the source material")
+    prompt_parts.append("")
+    prompt_parts.append("Return ONLY valid JSON. No markdown, no code fences, no extra text.")
+
+    if lesson_plan:
+        prompt_parts.append("")
+        prompt_parts.append("=== LESSON PLAN ===")
+        prompt_parts.append("Title: " + (lesson_plan.get('title', '') or ''))
+        if lesson_plan.get('overview'):
+            prompt_parts.append("Overview: " + lesson_plan['overview'])
+        if lesson_plan.get('vocabulary'):
+            prompt_parts.append("Key Vocabulary: " + ", ".join(lesson_plan['vocabulary']))
+        if lesson_plan.get('objectives'):
+            prompt_parts.append("Objectives:")
+            for obj in lesson_plan['objectives']:
+                prompt_parts.append("  - " + obj)
+        prompt_parts.append("=== END LESSON PLAN ===")
+
+    if content:
+        prompt_parts.append("")
+        prompt_parts.append("=== SOURCE CONTENT ===")
+        prompt_parts.append(content[:8000])
+        prompt_parts.append("=== END SOURCE CONTENT ===")
+
+    if instructions:
+        prompt_parts.append("")
+        prompt_parts.append("Additional instructions: " + instructions)
+
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        from backend.api_keys import get_api_key as _gak
+        genai.configure(api_key=_gak('gemini', user_id))
+        model = genai.GenerativeModel("gemini-2.0-flash")
+
+        response = with_retry(
+            lambda: model.generate_content(prompt),
+            label="generate_flashcards",
+        )
+
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3].strip()
+        if response_text.startswith("json"):
+            response_text = response_text[4:].strip()
+
+        flashcards = json.loads(response_text)
+
+        return jsonify({
+            "flashcards": flashcards,
+            "title": flashcards.get("title", title),
+        })
+
+    except json.JSONDecodeError as e:
+        _logger.error("Flashcard JSON parse failed: %s", e)
+        return jsonify({"error": "Failed to parse flashcards. Please try again."}), 500
+    except Exception as e:
+        _logger.exception("Flashcard generation failed")
+        return jsonify({"error": "Generation failed: " + str(e)[:200]}), 500
+
+
+def _export_flashcards_pdf(flashcards, filepath):
+    """Export flashcards as a printable PDF with 2-column card grid."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import HexColor, Color
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.5*inch, bottomMargin=0.5*inch,
+                            leftMargin=0.5*inch, rightMargin=0.5*inch)
+    styles = getSampleStyleSheet()
+    story = []
+
+    title_style = ParagraphStyle('FCTitle', parent=styles['Title'],
+                                  fontSize=16, spaceAfter=16, alignment=1)
+    term_style = ParagraphStyle('FCTerm', parent=styles['Normal'],
+                                 fontSize=13, alignment=1, leading=16,
+                                 textColor=HexColor('#1a56db'))
+    def_style = ParagraphStyle('FCDef', parent=styles['Normal'],
+                                fontSize=10, alignment=1, leading=13,
+                                textColor=HexColor('#374151'))
+
+    story.append(Paragraph(flashcards.get("title", "Flashcards"), title_style))
+
+    cards = flashcards.get("cards", [])
+    if not cards:
+        story.append(Paragraph("No flashcards generated.", styles['Normal']))
+        doc.build(story)
+        return
+
+    # Build 2-column table of cards
+    card_width = 3.5 * inch
+    card_height = 2.2 * inch
+    table_data = []
+    row = []
+
+    for card in cards:
+        cell_content = [
+            Paragraph("<b>" + (card.get("term", "") or "") + "</b>", term_style),
+            Spacer(1, 8),
+            Paragraph(card.get("definition", "") or "", def_style),
+        ]
+        row.append(cell_content)
+        if len(row) == 2:
+            table_data.append(row)
+            row = []
+
+    if row:
+        row.append([Paragraph("", styles['Normal'])])
+        table_data.append(row)
+
+    if table_data:
+        t = Table(table_data, colWidths=[card_width, card_width],
+                  rowHeights=[card_height] * len(table_data))
+        t.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#d1d5db')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, HexColor('#d1d5db')),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ]))
+        story.append(t)
+
+    doc.build(story)
+
+
+def _export_flashcards_docx(flashcards, filepath):
+    """Export flashcards as a DOCX with a 2-column table."""
+    from docx import Document
+    from docx.shared import Pt, Inches, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+
+    doc = Document()
+
+    title_para = doc.add_heading(flashcards.get("title", "Flashcards"), level=0)
+    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in title_para.runs:
+        run.font.color.rgb = RGBColor(0, 0, 0)
+
+    cards = flashcards.get("cards", [])
+    if not cards:
+        doc.add_paragraph("No flashcards generated.")
+        doc.save(filepath)
+        return
+
+    table = doc.add_table(rows=len(cards), cols=2)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    for i, card in enumerate(cards):
+        term_cell = table.cell(i, 0)
+        def_cell = table.cell(i, 1)
+
+        term_para = term_cell.paragraphs[0]
+        term_run = term_para.add_run(card.get("term", ""))
+        term_run.bold = True
+        term_run.font.size = Pt(12)
+        term_run.font.color.rgb = RGBColor(26, 86, 219)
+
+        def_para = def_cell.paragraphs[0]
+        def_run = def_para.add_run(card.get("definition", ""))
+        def_run.font.size = Pt(11)
+
+    doc.save(filepath)
+
+
+@planner_bp.route('/api/export-flashcards', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def export_flashcards():
+    """Export flashcards to PDF or DOCX."""
+    data = request.get_json(silent=True) or {}
+    flashcards = data.get('flashcards')
+    fmt = data.get('format', 'pdf').lower()
+
+    if not flashcards:
+        return jsonify({"error": "No flashcard data provided."}), 400
+
+    title = flashcards.get("title", "Flashcards")
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:80]
+    export_dir = _get_export_dir()
+
+    try:
+        if fmt == 'docx':
+            filepath = os.path.join(export_dir, safe_title + ".docx")
+            _export_flashcards_docx(flashcards, filepath)
+            mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        else:
+            filepath = os.path.join(export_dir, safe_title + ".pdf")
+            _export_flashcards_pdf(flashcards, filepath)
+            mimetype = 'application/pdf'
+
+        return send_file(filepath, mimetype=mimetype, as_attachment=True,
+                         download_name=os.path.basename(filepath))
+
+    except Exception as e:
+        _logger.exception("Flashcard export failed")
+        return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
