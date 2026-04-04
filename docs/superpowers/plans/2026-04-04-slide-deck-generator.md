@@ -4,7 +4,18 @@
 
 **Goal:** Generate professional slide decks from lesson plans with AI-generated themed graphics, varied layouts, and speaker notes — exportable as PowerPoint (.pptx). Quality target: match Google NotebookLM's slide output.
 
-**Architecture:** Three-phase pipeline: (1) Gemini 2.5 Flash generates slide content as structured JSON with layout types and image descriptions per slide, (2) Gemini 2.5 Flash Image generates themed graphics using a style-reference approach (first image becomes the reference for all subsequent images), (3) python-pptx assembles content + images into a professional .pptx using pre-built layout masters. New service module `backend/services/slide_generator.py` keeps the heavy logic out of planner_routes.py. Two new endpoints: `POST /api/generate-slides` (content + images) and `POST /api/export-slides` (download .pptx). Frontend adds a Slide Deck card to the Tools tab.
+**Architecture:** Three-phase pipeline: (1) Gemini 2.5 Flash generates slide content as structured JSON with layout types and image descriptions per slide, (2) Gemini 2.5 Flash Image generates themed graphics using a style-reference approach (first image is held in memory as a PIL Image and passed as a reference to all subsequent image generation calls within the same request), (3) python-pptx assembles content + images into a .pptx using absolute positioning (no layout masters — all slide element positioning is handled programmatically via coordinates in `slide_generator.py`). New service module `backend/services/slide_generator.py` keeps the heavy logic out of planner_routes.py. Two new endpoints: `POST /api/generate-slides` (content + images) and `POST /api/export-slides` (download .pptx). Frontend adds a Slide Deck card to the Tools tab.
+
+**Implementation notes:**
+- **No layout masters:** The .pptx template is a blank 16:9 presentation. All slide layouts (title, content, two-column, etc.) are built programmatically with absolute coordinates. There are no real PowerPoint layout masters.
+- **Style-reference caching:** The first generated image is stored as a PIL Image object in memory for the duration of the request. It's passed as a reference image to all subsequent Gemini image generation calls. No disk caching — it lives in the request's Python memory and is garbage collected when the request completes.
+- **Temp file cleanup:** Generated images are held in memory as bytes (never written to disk). The only file written is the final .pptx, which goes to `_get_export_dir()` (same temp dir as study guides/flashcards).
+- **Error handling for images:** Each image generation call is wrapped in try/except. If one image fails, the slide is rendered without a graphic (text-only fallback). The response includes `images_generated` count so the frontend can tell the user "Generated 10 slides with 3/5 graphics." Uses existing `with_retry` for the text content generation call. The google-genai client calls are individually try/excepted (not retried) because retrying a $0.04 image call that timed out is acceptable loss vs retrying and double-charging.
+- **Color palette:** Teacher chooses their own color scheme from the frontend (not subject-locked). Default is professional blue (#1a56db / #60a5fa).
+
+**Review history:**
+- Rev 1: Initial plan (5 tasks, 11 tests)
+- Rev 2: Clarified no layout masters (absolute positioning), style-reference held in memory not disk, no temp image files (bytes in memory), per-image error handling with text-only fallback, dropped subject-based color palettes (teacher chooses colors)
 
 **Tech Stack:**
 - `google-genai` (new SDK) — replaces deprecated `google-generativeai` for image generation
@@ -404,23 +415,30 @@ class TestAssemblePptx:
         assert len(prs.slides) == 6
 
 
-class TestColorTheme:
-    def test_subject_color_mapping(self):
-        """Should return appropriate colors for different subjects."""
-        from backend.services.slide_generator import get_subject_colors
+class TestColorPalette:
+    def test_named_palette(self):
+        """Should return colors for a named palette."""
+        from backend.services.slide_generator import get_color_palette
 
-        science = get_subject_colors("Science")
-        assert "primary_color" in science
-        assert science["primary_color"].startswith("#")
+        blue = get_color_palette("blue")
+        assert "primary_color" in blue
+        assert blue["primary_color"].startswith("#")
 
-        history = get_subject_colors("US History")
-        assert history["primary_color"] != science["primary_color"]
+        purple = get_color_palette("purple")
+        assert purple["primary_color"] != blue["primary_color"]
 
-    def test_unknown_subject_returns_default(self):
-        """Should return a default color for unknown subjects."""
-        from backend.services.slide_generator import get_subject_colors
+    def test_unknown_name_returns_default(self):
+        """Should return default blue for unknown palette name."""
+        from backend.services.slide_generator import get_color_palette
 
-        result = get_subject_colors("Underwater Basket Weaving")
+        result = get_color_palette("rainbow_sparkle")
+        assert result["primary_color"] == "#1a56db"
+
+    def test_none_returns_default(self):
+        """Should return default when no color specified."""
+        from backend.services.slide_generator import get_color_palette
+
+        result = get_color_palette(None)
         assert "primary_color" in result
 ```
 
@@ -459,47 +477,34 @@ from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
-# ── Subject color palettes ──────────────────────────────────────────────
+# ── Color palettes ──────────────────────────────────────────────────────
 
-SUBJECT_COLORS = {
-    "math": {"primary_color": "#059669", "secondary_color": "#34d399", "accent": "#d1fae5"},
-    "algebra": {"primary_color": "#059669", "secondary_color": "#34d399", "accent": "#d1fae5"},
-    "geometry": {"primary_color": "#059669", "secondary_color": "#34d399", "accent": "#d1fae5"},
-    "science": {"primary_color": "#0284c7", "secondary_color": "#38bdf8", "accent": "#e0f2fe"},
-    "biology": {"primary_color": "#0284c7", "secondary_color": "#38bdf8", "accent": "#e0f2fe"},
-    "chemistry": {"primary_color": "#0284c7", "secondary_color": "#38bdf8", "accent": "#e0f2fe"},
-    "physics": {"primary_color": "#0284c7", "secondary_color": "#38bdf8", "accent": "#e0f2fe"},
-    "history": {"primary_color": "#b45309", "secondary_color": "#f59e0b", "accent": "#fef3c7"},
-    "us history": {"primary_color": "#b45309", "secondary_color": "#f59e0b", "accent": "#fef3c7"},
-    "world history": {"primary_color": "#b45309", "secondary_color": "#f59e0b", "accent": "#fef3c7"},
-    "social studies": {"primary_color": "#b45309", "secondary_color": "#f59e0b", "accent": "#fef3c7"},
-    "civics": {"primary_color": "#7c3aed", "secondary_color": "#a78bfa", "accent": "#ede9fe"},
-    "geography": {"primary_color": "#0d9488", "secondary_color": "#5eead4", "accent": "#ccfbf1"},
-    "ela": {"primary_color": "#dc2626", "secondary_color": "#f87171", "accent": "#fee2e2"},
-    "english": {"primary_color": "#dc2626", "secondary_color": "#f87171", "accent": "#fee2e2"},
-    "reading": {"primary_color": "#dc2626", "secondary_color": "#f87171", "accent": "#fee2e2"},
-    "writing": {"primary_color": "#dc2626", "secondary_color": "#f87171", "accent": "#fee2e2"},
+COLOR_PRESETS = {
+    "blue": {"primary_color": "#1a56db", "secondary_color": "#60a5fa", "accent": "#dbeafe"},
+    "teal": {"primary_color": "#0d9488", "secondary_color": "#5eead4", "accent": "#ccfbf1"},
+    "purple": {"primary_color": "#7c3aed", "secondary_color": "#a78bfa", "accent": "#ede9fe"},
+    "amber": {"primary_color": "#b45309", "secondary_color": "#f59e0b", "accent": "#fef3c7"},
+    "green": {"primary_color": "#059669", "secondary_color": "#34d399", "accent": "#d1fae5"},
+    "red": {"primary_color": "#dc2626", "secondary_color": "#f87171", "accent": "#fee2e2"},
+    "sky": {"primary_color": "#0284c7", "secondary_color": "#38bdf8", "accent": "#e0f2fe"},
+    "slate": {"primary_color": "#334155", "secondary_color": "#94a3b8", "accent": "#f1f5f9"},
 }
 
-DEFAULT_COLORS = {"primary_color": "#1a56db", "secondary_color": "#60a5fa", "accent": "#dbeafe"}
+DEFAULT_COLORS = COLOR_PRESETS["blue"]
 
 
-def get_subject_colors(subject):
-    """Get color palette for a subject."""
-    if not subject:
+def get_color_palette(color_name=None):
+    """Get color palette by name. Defaults to blue."""
+    if not color_name:
         return DEFAULT_COLORS.copy()
-    key = subject.lower().strip()
-    for name, colors in SUBJECT_COLORS.items():
-        if name in key or key in name:
-            return colors.copy()
-    return DEFAULT_COLORS.copy()
+    return COLOR_PRESETS.get(color_name.lower(), DEFAULT_COLORS).copy()
 
 
 # ── Phase 1: Content generation ─────────────────────────────────────────
 
 def generate_slide_content(content, subject, grade, title, api_key,
                            lesson_plan=None, global_ai_notes="", instructions="",
-                           slide_count=10):
+                           slide_count=10, color_name=None):
     """Generate structured slide content from source material.
 
     Returns dict with: title, theme, slides[]
@@ -511,7 +516,7 @@ def generate_slide_content(content, subject, grade, title, api_key,
     import google.generativeai as genai
     from backend.retry import with_retry
 
-    colors = get_subject_colors(subject)
+    colors = get_color_palette(color_name)
 
     prompt_parts = []
     prompt_parts.append("You are an expert " + subject + " teacher creating a slide deck for grade " + grade + " students.")
@@ -642,6 +647,20 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
 
     Returns:
         dict mapping slide index → PNG image bytes
+
+    Style-reference strategy:
+        The first successfully generated image is stored as a PIL Image
+        object in memory (not disk). It's passed as a reference image to
+        all subsequent Gemini calls in the same request, ensuring visual
+        consistency across the deck. The PIL Image is garbage collected
+        when the function returns — no cleanup needed.
+
+    Error handling:
+        Each image generation is individually try/excepted. If one fails
+        (timeout, safety filter, quota), that slide gets no image — the
+        PPTX assembler renders it as text-only. No retry on image calls
+        (acceptable $0.04 loss vs double-charging on retry). The caller
+        sees how many images succeeded via len(returned dict).
     """
     from google.genai import types
     from PIL import Image
@@ -659,7 +678,7 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
     image_slides = image_slides[:max_images]
 
     images = {}
-    reference_image = None
+    reference_image = None  # PIL Image held in memory for style consistency
 
     for idx, (slide_index, image_prompt) in enumerate(image_slides):
         try:
@@ -667,7 +686,7 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
 
             contents = []
             if reference_image is not None:
-                # Use first generated image as style reference
+                # Pass the first image as a style reference (PIL Image in memory)
                 contents.append(reference_image)
                 contents.append(
                     "Generate an illustration in the EXACT same visual style as the reference image above. "
@@ -687,23 +706,26 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
                 ),
             )
 
-            # Extract image bytes
+            # Extract image bytes from response
             for part in response.candidates[0].content.parts:
                 if hasattr(part, 'inline_data') and part.inline_data is not None:
                     image_data = part.inline_data.data
-                    images[slide_index] = image_data
+                    images[slide_index] = image_data  # Store as bytes in memory
 
-                    # Save first image as reference for consistency
+                    # First successful image becomes the style reference
                     if reference_image is None:
                         reference_image = Image.open(BytesIO(image_data))
+                        logger.info("Style reference image set from slide %d", slide_index)
 
                     break
 
         except Exception as e:
-            logger.warning("Failed to generate image for slide %d: %s", slide_index, e)
-            # Continue with remaining slides — missing images are handled gracefully
+            # Individual image failure — slide renders as text-only (graceful degradation)
+            logger.warning("Image generation failed for slide %d (will render text-only): %s", slide_index, e)
+            # Do NOT retry — $0.04 loss is acceptable vs double-charging
 
     logger.info("Generated %d/%d slide images", len(images), len(image_slides))
+    # reference_image (PIL Image) is garbage collected when this function returns
     return images
 
 
@@ -1070,6 +1092,7 @@ def generate_slides():
     slide_count = min(data.get('slideCount', 10), 20)
     max_images = min(data.get('maxImages', 5), 10)
     generate_images = data.get('generateImages', True)
+    color_name = data.get('colorName', 'blue')
 
     if not content and not lesson_plan:
         return jsonify({"error": "Provide content or a lesson plan to generate slides."}), 400
@@ -1090,6 +1113,7 @@ def generate_slides():
             api_key=api_key, lesson_plan=lesson_plan,
             global_ai_notes=global_ai_notes, instructions=instructions,
             slide_count=slide_count,
+            color_name=color_name,
         )
 
         # Phase 2: Generate images (optional)
@@ -1203,6 +1227,7 @@ Find the flashcard state variables (search for `const [flashcards`). Add immedia
   const [slideDeckInstructions, setSlideDeckInstructions] = useState('');
   const [slideCount, setSlideCount] = useState(10);
   const [slideImages, setSlideImages] = useState(true);
+  const [slideColor, setSlideColor] = useState('blue');
 ```
 
 - [ ] **Step 2: Add Slide Deck Generator UI card below Flashcard section**
@@ -1235,6 +1260,19 @@ Find the closing `</div>` of the Flashcard Generator glass-card. Add IMMEDIATELY
                             <select value={slideImages ? "yes" : "no"} onChange={function(e) { setSlideImages(e.target.value === "yes"); }} className="input" style={{ maxWidth: "160px" }}>
                               <option value="yes">With graphics (~$0.20)</option>
                               <option value="no">Text only (free)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px", display: "block" }}>Color Theme</label>
+                            <select value={slideColor} onChange={function(e) { setSlideColor(e.target.value); }} className="input" style={{ maxWidth: "130px" }}>
+                              <option value="blue">Blue</option>
+                              <option value="teal">Teal</option>
+                              <option value="purple">Purple</option>
+                              <option value="amber">Amber</option>
+                              <option value="green">Green</option>
+                              <option value="red">Red</option>
+                              <option value="sky">Sky</option>
+                              <option value="slate">Slate</option>
                             </select>
                           </div>
                           <div style={{ flex: 1, minWidth: "200px" }}>
@@ -1278,6 +1316,7 @@ Find the closing `</div>` of the Flashcard Generator glass-card. Add IMMEDIATELY
                                   slideCount: slideCount,
                                   generateImages: slideImages,
                                   maxImages: 5,
+                                  colorName: slideColor,
                                 }),
                               });
                               var data = await resp.json();
@@ -1425,13 +1464,16 @@ git commit -m "docs: add slide deck dependencies and API endpoints"
 **Total: 1 new service module, 2 new endpoints, 11 tests, 1 UI card, 2 new dependencies.**
 
 **Quality features:**
-- Subject-based color palettes (science=blue, history=amber, math=green, etc.)
-- Style-reference image generation (first image becomes reference for all subsequent)
+- Teacher-chosen color palette (8 presets: blue, teal, purple, amber, green, red, sky, slate)
+- Style-reference image generation (first image held in memory as PIL Image, passed to all subsequent calls)
 - 6 layout types (title, content, key_concept, two_column, image_focus, section_divider)
+- All positioning via absolute coordinates (no layout masters)
 - Speaker notes on every slide
 - Accent bars, colored backgrounds, divider lines
 - 16:9 aspect ratio
 - "With graphics" vs "Text only" toggle (cost control)
+- Per-image error handling (failed images → text-only fallback, no full-deck retry)
+- No temp files — images held as bytes in memory, only final .pptx written to disk
 
 **Cost per deck:**
 - Text only: ~$0.001
