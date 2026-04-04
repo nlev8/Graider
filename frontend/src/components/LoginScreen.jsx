@@ -115,12 +115,12 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
           <img
             src={isDark ? '/graider-brain-dark.png' : '/graider-brain-light.png'}
             alt="Graider brain"
-            style={{ width: 70, height: 70, display: 'block', margin: '0 auto', marginBottom: -60 }}
+            style={{ width: 85, height: 85, display: 'block', margin: '0 auto', marginBottom: -72 }}
           />
           <img
             src={isDark ? '/graider-wordmark-dark.png' : '/graider-wordmark-light.png'}
             alt="Graider"
-            style={{ width: '75%', maxWidth: 240, display: 'block', margin: '0 auto', marginTop: 16, marginBottom: -32 }}
+            style={{ width: '75%', maxWidth: 240, display: 'block', margin: '0 auto', marginTop: 10, marginBottom: -32 }}
           />
           <p style={{ color: isDark ? 'rgba(255,255,255,0.6)' : '#475569', fontSize: '0.95rem', margin: '0' }}>
             {showForgot ? 'Reset your password' : 'Sign in to continue'}
