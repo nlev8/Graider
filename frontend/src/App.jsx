@@ -13635,7 +13635,7 @@ ${signature}`;
                           </div>
                           {teacherClasses.length === 0 ? (
                               <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                                  No classes yet. Classes are created automatically when you sync your Clever roster.
+                                  No classes yet. Classes are created automatically when you sync your roster via Clever, ClassLink, or CSV import.
                               </p>
                           ) : (
                               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
