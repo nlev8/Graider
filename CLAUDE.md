@@ -503,6 +503,10 @@ python graider_app.py
 - `POST /api/notebooklm/generate` — Generate study materials
 - `GET /api/notebooklm/download/<type>` — Download generated material
 
+### Slide Deck Generation
+- `POST /api/generate-slides` — Generate slide deck content + AI graphics from lesson plan
+- `POST /api/export-slides` — Export generated slides as PowerPoint (.pptx)
+
 ### Surveys
 - `POST /api/survey/create` — Create feedback survey
 - `GET /api/survey/results` — Get survey results
