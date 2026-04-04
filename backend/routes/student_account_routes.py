@@ -331,8 +331,9 @@ def publish_to_class():
 
         if not content:
             return jsonify({"error": "No content provided"}), 400
-        if content_type not in ('assessment', 'assignment'):
-            return jsonify({"error": "content_type must be 'assessment' or 'assignment'"}), 400
+        ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
+        if content_type not in ALLOWED_CONTENT_TYPES:
+            return jsonify({"error": "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES)}), 400
 
         join_code = _generate_class_code()
 
@@ -1115,3 +1116,94 @@ def mark_confirmations_sent():
     except Exception as e:
         _logger.exception("Request failed: %s", request.path)
         return jsonify({"error": "An internal error occurred"}), 500
+
+
+# ============ Student Resource Endpoints ============
+
+RESOURCE_CONTENT_TYPES = ['study_guide', 'flashcards', 'slide_deck']
+
+
+@student_account_bp.route('/api/student/resources', methods=['GET'])
+@handle_route_errors
+def student_resources():
+    """List resources (study guides, flashcards, slide decks) published to student's class.
+
+    Uses X-Student-Token header for auth (same as student dashboard).
+    Returns only resource-type content, not assessments/assignments.
+    """
+    session = _validate_student_session()
+    if session is None:
+        return jsonify({"error": "Not logged in"}), 401
+
+    student_id, class_id = session
+
+    try:
+        db = _get_supabase()
+
+        # Get published content for this class
+        content_result = db.table('published_content').select(
+            'id, title, content_type, created_at, settings'
+        ).eq('class_id', class_id).eq('is_active', True).order(
+            'created_at', desc=True
+        ).execute()
+
+        resources = []
+        for item in (content_result.data or []):
+            if item.get('content_type') in RESOURCE_CONTENT_TYPES:
+                resources.append({
+                    "id": item['id'],
+                    "title": item.get('title', 'Untitled'),
+                    "content_type": item['content_type'],
+                    "created_at": item.get('created_at', ''),
+                })
+
+        return jsonify({"resources": resources})
+
+    except Exception as e:
+        _logger.exception("Student resources error")
+        return jsonify({"error": "Failed to load resources"}), 500
+
+
+@student_account_bp.route('/api/student/resource/<content_id>', methods=['GET'])
+@handle_route_errors
+def student_resource_content(content_id):
+    """Get full resource content for viewing/downloading.
+
+    Returns the content JSON for study guides/flashcards, or the
+    slide deck data for download.
+    """
+    session = _validate_student_session()
+    if session is None:
+        return jsonify({"error": "Not logged in"}), 401
+
+    student_id, class_id = session
+
+    try:
+        db = _get_supabase()
+
+        # Get the resource — must belong to student's class
+        content_result = db.table('published_content').select(
+            'id, title, content_type, content, settings'
+        ).eq('id', content_id).eq('class_id', class_id).eq(
+            'is_active', True
+        ).execute()
+
+        if not content_result.data:
+            return jsonify({"error": "Resource not found"}), 404
+
+        item = content_result.data[0]
+        if item.get('content_type') not in RESOURCE_CONTENT_TYPES:
+            return jsonify({"error": "Not a resource"}), 400
+
+        return jsonify({
+            "resource": {
+                "id": item['id'],
+                "title": item.get('title', 'Untitled'),
+                "content_type": item['content_type'],
+                "content": item.get('content', {}),
+            }
+        })
+
+    except Exception as e:
+        _logger.exception("Student resource content error")
+        return jsonify({"error": "Failed to load resource"}), 500
