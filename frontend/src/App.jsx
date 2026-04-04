@@ -10922,14 +10922,12 @@ ${signature}`;
                                   {publishingAssessment ? "Publishing..." : "Publish to Portal"}
                                 </button>
                               )}
-                              {/* Hide Create Assignment when already viewing an assignment or project (but show for lesson plans even if they have sections) */}
+                              {/* Create assignment/project/essay from this lesson plan */}
                               {(!lessonPlan.sections || lessonPlan.days) && !lessonPlan.phases && (
                               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                 <select
                                   value={assignmentType}
-                                  onChange={(e) =>
-                                    setAssignmentType(e.target.value)
-                                  }
+                                  onChange={function(e) { setAssignmentType(e.target.value); }}
                                   className="input"
                                   style={{
                                     padding: "8px 12px",
@@ -10956,8 +10954,8 @@ ${signature}`;
                                     </>
                                   ) : (
                                     <>
-                                      <Icon name="FileText" size={16} /> Create
-                                      Assignment
+                                      <Icon name="FileText" size={16} />{" "}
+                                      {"Create " + (assignmentType === "essay" ? "Essay" : assignmentType === "project" ? "Project" : "Assignment") + " from Lesson"}
                                     </>
                                   )}
                                 </button>
