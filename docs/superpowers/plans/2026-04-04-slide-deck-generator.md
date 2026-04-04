@@ -11,11 +11,13 @@
 - **Style-reference caching:** The first generated image is stored as a PIL Image object in memory for the duration of the request. It's passed as a reference image to all subsequent Gemini image generation calls. No disk caching — it lives in the request's Python memory and is garbage collected when the request completes.
 - **Temp file cleanup:** Generated images are held in memory as bytes (never written to disk). The only file written is the final .pptx, which goes to `_get_export_dir()` (same temp dir as study guides/flashcards).
 - **Error handling for images:** Each image generation call is wrapped in try/except. If one image fails, the slide is rendered without a graphic (text-only fallback). The response includes `images_generated` count so the frontend can tell the user "Generated 10 slides with 3/5 graphics." Uses existing `with_retry` for the text content generation call. The google-genai client calls are individually try/excepted (not retried) because retrying a $0.04 image call that timed out is acceptable loss vs retrying and double-charging.
-- **Color palette:** Teacher chooses their own color scheme from the frontend (not subject-locked). Default is professional blue (#1a56db / #60a5fa).
+- **Color/style decisions:** The AI picks colors, layouts, and visual style based on the content — teachers don't choose. Teachers can optionally provide a style prompt ("bold and playful", "Christmas-themed", "professional and minimal") which guides the AI's choices for both content structure and image generation.
+- **Two format modes** (matching NotebookLM): "Detailed Deck" (comprehensive, full text, standalone) and "Presenter Slides" (clean visuals, key talking points only).
 
 **Review history:**
 - Rev 1: Initial plan (5 tasks, 11 tests)
-- Rev 2: Clarified no layout masters (absolute positioning), style-reference held in memory not disk, no temp image files (bytes in memory), per-image error handling with text-only fallback, dropped subject-based color palettes (teacher chooses colors)
+- Rev 2: Clarified no layout masters (absolute positioning), style-reference held in memory not disk, no temp image files (bytes in memory), per-image error handling with text-only fallback, dropped subject-based color palettes
+- Rev 3: AI decides all visual choices (colors, layouts, style) — teacher only provides optional style prompt. Added format selector (Detailed Deck vs Presenter Slides). Dropped teacher color picker. Matches NotebookLM's "just generate" approach.
 
 **Tech Stack:**
 - `google-genai` (new SDK) — replaces deprecated `google-generativeai` for image generation
@@ -415,31 +417,46 @@ class TestAssemblePptx:
         assert len(prs.slides) == 6
 
 
-class TestColorPalette:
-    def test_named_palette(self):
-        """Should return colors for a named palette."""
-        from backend.services.slide_generator import get_color_palette
+class TestDeckFormat:
+    def test_detailed_format_includes_full_text(self):
+        """Detailed format prompt should mention full text and standalone."""
+        from backend.services.slide_generator import generate_slide_content
 
-        blue = get_color_palette("blue")
-        assert "primary_color" in blue
-        assert blue["primary_color"].startswith("#")
+        mock_resp = MagicMock()
+        mock_resp.text = json.dumps(SAMPLE_SLIDE_CONTENT)
 
-        purple = get_color_palette("purple")
-        assert purple["primary_color"] != blue["primary_color"]
+        with patch('backend.services.slide_generator.genai') as mock_genai:
+            mock_model = MagicMock()
+            mock_model.generate_content.return_value = mock_resp
+            mock_genai.GenerativeModel.return_value = mock_model
 
-    def test_unknown_name_returns_default(self):
-        """Should return default blue for unknown palette name."""
-        from backend.services.slide_generator import get_color_palette
+            generate_slide_content(
+                content="Test content", subject="Math", grade="7",
+                title="Test", api_key="fake", deck_format="detailed",
+            )
 
-        result = get_color_palette("rainbow_sparkle")
-        assert result["primary_color"] == "#1a56db"
+            call_args = mock_model.generate_content.call_args[0][0]
+            assert "DETAILED DECK" in call_args
 
-    def test_none_returns_default(self):
-        """Should return default when no color specified."""
-        from backend.services.slide_generator import get_color_palette
+    def test_presenter_format_includes_talking_points(self):
+        """Presenter format prompt should mention key talking points."""
+        from backend.services.slide_generator import generate_slide_content
 
-        result = get_color_palette(None)
-        assert "primary_color" in result
+        mock_resp = MagicMock()
+        mock_resp.text = json.dumps(SAMPLE_SLIDE_CONTENT)
+
+        with patch('backend.services.slide_generator.genai') as mock_genai:
+            mock_model = MagicMock()
+            mock_model.generate_content.return_value = mock_resp
+            mock_genai.GenerativeModel.return_value = mock_model
+
+            generate_slide_content(
+                content="Test content", subject="Math", grade="7",
+                title="Test", api_key="fake", deck_format="presenter",
+            )
+
+            call_args = mock_model.generate_content.call_args[0][0]
+            assert "PRESENTER SLIDES" in call_args
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -477,38 +494,29 @@ from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
-# ── Color palettes ──────────────────────────────────────────────────────
+# ── Default color fallback (used only if AI doesn't provide colors) ────
 
-COLOR_PRESETS = {
-    "blue": {"primary_color": "#1a56db", "secondary_color": "#60a5fa", "accent": "#dbeafe"},
-    "teal": {"primary_color": "#0d9488", "secondary_color": "#5eead4", "accent": "#ccfbf1"},
-    "purple": {"primary_color": "#7c3aed", "secondary_color": "#a78bfa", "accent": "#ede9fe"},
-    "amber": {"primary_color": "#b45309", "secondary_color": "#f59e0b", "accent": "#fef3c7"},
-    "green": {"primary_color": "#059669", "secondary_color": "#34d399", "accent": "#d1fae5"},
-    "red": {"primary_color": "#dc2626", "secondary_color": "#f87171", "accent": "#fee2e2"},
-    "sky": {"primary_color": "#0284c7", "secondary_color": "#38bdf8", "accent": "#e0f2fe"},
-    "slate": {"primary_color": "#334155", "secondary_color": "#94a3b8", "accent": "#f1f5f9"},
+DEFAULT_THEME = {
+    "primary_color": "#1a56db",
+    "secondary_color": "#60a5fa",
+    "accent": "#dbeafe",
 }
-
-DEFAULT_COLORS = COLOR_PRESETS["blue"]
-
-
-def get_color_palette(color_name=None):
-    """Get color palette by name. Defaults to blue."""
-    if not color_name:
-        return DEFAULT_COLORS.copy()
-    return COLOR_PRESETS.get(color_name.lower(), DEFAULT_COLORS).copy()
 
 
 # ── Phase 1: Content generation ─────────────────────────────────────────
 
 def generate_slide_content(content, subject, grade, title, api_key,
                            lesson_plan=None, global_ai_notes="", instructions="",
-                           slide_count=10, color_name=None):
+                           slide_count=10, deck_format="detailed"):
     """Generate structured slide content from source material.
 
+    The AI decides colors, layouts, and visual style based on the content.
+    Teachers optionally provide style instructions.
+
+    Args:
+        deck_format: "detailed" (full text, standalone) or "presenter" (key talking points only)
+
     Returns dict with: title, theme, slides[]
-    Each slide has: layout, title, bullets/content, image_prompt, speaker_notes
     """
     if not content and not lesson_plan:
         raise ValueError("Provide content or lesson_plan to generate slides.")
@@ -516,11 +524,17 @@ def generate_slide_content(content, subject, grade, title, api_key,
     import google.generativeai as genai
     from backend.retry import with_retry
 
-    colors = get_color_palette(color_name)
+    format_instruction = ""
+    if deck_format == "presenter":
+        format_instruction = "Create PRESENTER SLIDES: clean, visual slides with only key talking points (2-3 words per bullet). The speaker notes should contain the full detail. Slides should be visually clean with minimal text."
+    else:
+        format_instruction = "Create a DETAILED DECK: comprehensive slides with full text and details, suitable for emailing or reading standalone without a presenter."
 
     prompt_parts = []
     prompt_parts.append("You are an expert " + subject + " teacher creating a slide deck for grade " + grade + " students.")
     prompt_parts.append("Create exactly " + str(slide_count) + " slides.")
+    prompt_parts.append("")
+    prompt_parts.append(format_instruction)
 
     if global_ai_notes:
         prompt_parts.append("")
@@ -532,6 +546,12 @@ def generate_slide_content(content, subject, grade, title, api_key,
     prompt_parts.append("Return ONLY valid JSON with this structure:")
     prompt_parts.append('{')
     prompt_parts.append('  "title": "Deck Title",')
+    prompt_parts.append('  "theme": {')
+    prompt_parts.append('    "primary_color": "#hex (choose a color that fits the subject and mood)",')
+    prompt_parts.append('    "secondary_color": "#hex (complementary accent color)",')
+    prompt_parts.append('    "accent": "#hex (light tint for backgrounds)",')
+    prompt_parts.append('    "style_description": "brief description of the visual style you chose and why"')
+    prompt_parts.append('  },')
     prompt_parts.append('  "slides": [')
     prompt_parts.append('    {')
     prompt_parts.append('      "layout": "title|content|image_focus|two_column|key_concept|section_divider",')
@@ -614,10 +634,19 @@ def generate_slide_content(content, subject, grade, title, api_key,
         response_text = response_text[4:].strip()
 
     result = json.loads(response_text)
-    result["theme"] = colors
+
+    # Ensure theme exists with required fields (AI should have generated it)
+    theme = result.get("theme", {})
+    if not theme.get("primary_color"):
+        theme["primary_color"] = "#1a56db"
+        theme["secondary_color"] = "#60a5fa"
+        theme["accent"] = "#dbeafe"
+    result["theme"] = theme
+
+    # Build the image style prompt from the AI's chosen theme
     result["theme"]["style_prompt"] = (
         "flat vector illustration, clean minimal educational style, "
-        "soft color palette using " + colors["primary_color"] + " and " + colors["secondary_color"] + ", "
+        "soft color palette using " + theme["primary_color"] + " and " + theme["secondary_color"] + ", "
         "no text in the image, professional, suitable for a classroom presentation"
     )
 
@@ -1092,7 +1121,7 @@ def generate_slides():
     slide_count = min(data.get('slideCount', 10), 20)
     max_images = min(data.get('maxImages', 5), 10)
     generate_images = data.get('generateImages', True)
-    color_name = data.get('colorName', 'blue')
+    deck_format = data.get('deckFormat', 'detailed')
 
     if not content and not lesson_plan:
         return jsonify({"error": "Provide content or a lesson plan to generate slides."}), 400
@@ -1113,7 +1142,7 @@ def generate_slides():
             api_key=api_key, lesson_plan=lesson_plan,
             global_ai_notes=global_ai_notes, instructions=instructions,
             slide_count=slide_count,
-            color_name=color_name,
+            deck_format=deck_format,
         )
 
         # Phase 2: Generate images (optional)
@@ -1227,7 +1256,7 @@ Find the flashcard state variables (search for `const [flashcards`). Add immedia
   const [slideDeckInstructions, setSlideDeckInstructions] = useState('');
   const [slideCount, setSlideCount] = useState(10);
   const [slideImages, setSlideImages] = useState(true);
-  const [slideColor, setSlideColor] = useState('blue');
+  const [slideFormat, setSlideFormat] = useState('detailed');
 ```
 
 - [ ] **Step 2: Add Slide Deck Generator UI card below Flashcard section**
@@ -1263,16 +1292,10 @@ Find the closing `</div>` of the Flashcard Generator glass-card. Add IMMEDIATELY
                             </select>
                           </div>
                           <div>
-                            <label style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px", display: "block" }}>Color Theme</label>
-                            <select value={slideColor} onChange={function(e) { setSlideColor(e.target.value); }} className="input" style={{ maxWidth: "130px" }}>
-                              <option value="blue">Blue</option>
-                              <option value="teal">Teal</option>
-                              <option value="purple">Purple</option>
-                              <option value="amber">Amber</option>
-                              <option value="green">Green</option>
-                              <option value="red">Red</option>
-                              <option value="sky">Sky</option>
-                              <option value="slate">Slate</option>
+                            <label style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px", display: "block" }}>Format</label>
+                            <select value={slideFormat} onChange={function(e) { setSlideFormat(e.target.value); }} className="input" style={{ maxWidth: "180px" }}>
+                              <option value="detailed">Detailed Deck</option>
+                              <option value="presenter">Presenter Slides</option>
                             </select>
                           </div>
                           <div style={{ flex: 1, minWidth: "200px" }}>
@@ -1316,7 +1339,7 @@ Find the closing `</div>` of the Flashcard Generator glass-card. Add IMMEDIATELY
                                   slideCount: slideCount,
                                   generateImages: slideImages,
                                   maxImages: 5,
-                                  colorName: slideColor,
+                                  deckFormat: slideFormat,
                                 }),
                               });
                               var data = await resp.json();
@@ -1463,17 +1486,19 @@ git commit -m "docs: add slide deck dependencies and API endpoints"
 
 **Total: 1 new service module, 2 new endpoints, 11 tests, 1 UI card, 2 new dependencies.**
 
-**Quality features:**
-- Teacher-chosen color palette (8 presets: blue, teal, purple, amber, green, red, sky, slate)
-- Style-reference image generation (first image held in memory as PIL Image, passed to all subsequent calls)
+**Quality features (matching NotebookLM):**
+- AI decides all visual choices — colors, layouts, style — based on content (teacher just clicks "Generate")
+- Two format modes: Detailed Deck (full text, standalone) or Presenter Slides (key talking points)
+- Optional style prompt from teacher ("bold and playful", "Christmas-themed", "professional and minimal")
+- Style-reference image generation (first image held in memory, passed to all subsequent calls for consistency)
 - 6 layout types (title, content, key_concept, two_column, image_focus, section_divider)
 - All positioning via absolute coordinates (no layout masters)
 - Speaker notes on every slide
 - Accent bars, colored backgrounds, divider lines
 - 16:9 aspect ratio
 - "With graphics" vs "Text only" toggle (cost control)
-- Per-image error handling (failed images → text-only fallback, no full-deck retry)
-- No temp files — images held as bytes in memory, only final .pptx written to disk
+- Per-image error handling (failed images → text-only fallback)
+- No temp files — images as bytes in memory, only final .pptx to disk
 
 **Cost per deck:**
 - Text only: ~$0.001
