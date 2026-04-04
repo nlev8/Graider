@@ -188,7 +188,7 @@ class TestExportStudyGuide:
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-study-guide', json={
                     "study_guide": guide,
@@ -207,7 +207,7 @@ class TestExportStudyGuide:
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-study-guide', json={
                     "study_guide": guide,
@@ -226,7 +226,7 @@ class TestExportStudyGuide:
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-study-guide', json={
                     "study_guide": guide,
@@ -253,7 +253,7 @@ class TestExportStudyGuide:
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-study-guide', json={
                     "study_guide": guide,
@@ -271,7 +271,7 @@ class TestExportStudyGuide:
             {"heading": "No questions", "questions": []},
         ]}
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-study-guide', json={
                     "study_guide": guide,
@@ -285,7 +285,7 @@ class TestExportStudyGuide:
         app = _make_app()
         guide = json.loads(SAMPLE_STUDY_GUIDE)
         with app.test_client() as client:
-            with patch('backend.routes.planner_routes._get_study_guide_export_dir',
+            with patch('backend.routes.planner_routes._get_export_dir',
                        return_value=tempfile.mkdtemp()):
                 resp = client.post('/api/export-study-guide', json={
                     "study_guide": guide,
