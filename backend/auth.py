@@ -69,6 +69,7 @@ PUBLIC_PREFIXES = [
     '/api/classlink/',         # ClassLink OAuth flow (callback must be unauthenticated)
     '/api/lti/',               # LTI OIDC login, launch callback, JWKS (platform-initiated)
     '/api/district/',           # District admin setup (session-based auth, not JWT)
+    '/api/sync/',               # Periodic sync webhook (auth via PERIODIC_SYNC_SECRET header)
 ]
 
 PUBLIC_EXACT = [
