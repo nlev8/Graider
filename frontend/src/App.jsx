@@ -4475,9 +4475,10 @@ ${signature}`;
       addToast("No content to publish", "warning");
       return;
     }
-    // Auto-detect content type from the generated content
+    // Detect content type from which state variable holds the content
+    // generatedAssignment → assignment, generatedAssessment → assessment
     var detectedType = 'assessment';
-    if (content.type === 'assignment' || content.type === 'project' || content.type === 'essay') {
+    if (generatedAssignment || (lessonPlan && lessonPlan.sections && !lessonPlan.days)) {
       detectedType = 'assignment';
     }
     // Reset publish settings, pre-fill time limit from content
