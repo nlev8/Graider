@@ -10147,7 +10147,7 @@ ${signature}`;
                           <button
                             onClick={() => generateLessonPlan(false)}
                             disabled={
-                              plannerLoading || selectedStandards.length === 0
+                              plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                             }
                             className="btn btn-primary"
                             style={{
@@ -10155,7 +10155,7 @@ ${signature}`;
                               justifyContent: "center",
                               marginBottom: "10px",
                               opacity:
-                                plannerLoading || selectedStandards.length === 0
+                                plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                                   ? 0.5
                                   : 1,
                             }}
