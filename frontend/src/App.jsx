@@ -16232,7 +16232,8 @@ ${signature}`;
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#1a1a2e",
+              background: "var(--bg-primary, #1a1a2e)",
+              color: "var(--text-primary, #e2e8f0)",
               borderRadius: "16px",
               padding: "30px",
               maxWidth: "600px",
