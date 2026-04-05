@@ -86,7 +86,7 @@ export default function StudentPortal({
       if (data.error) {
         setError(data.error);
         setStage("join");
-      } else if (data.content_type && data.content_type !== "assessment") {
+      } else if (data.content_type && ["study_guide", "flashcards", "slide_deck", "mind_map", "audio_overview", "video_overview", "infographic", "data_table"].indexOf(data.content_type) !== -1) {
         setAssessment(data);
         setStage("material");
       } else {
@@ -358,7 +358,7 @@ export default function StudentPortal({
                   </>
                 ) : (
                   <>
-                    Join Assessment <Icon name="ArrowRight" />
+                    Join <Icon name="ArrowRight" />
                   </>
                 )}
               </button>
