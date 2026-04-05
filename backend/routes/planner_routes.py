@@ -4438,6 +4438,10 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 except Exception as e:
                     print(f"Warning: Could not embed visual for Q{q_number}: {e}")
 
+            # Inject True/False options if missing for TF questions
+            if not q_options and q_type in ('true_false', 'tf'):
+                q_options = ['True', 'False']
+
             if q_options:
                 # MC/TF: question + options with bubbles (no separate answer table)
                 is_tf = q_type in ('true_false', 'tf')
