@@ -16232,16 +16232,16 @@ ${signature}`;
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#ffffff",
-              color: "#1e293b",
+              background: "#1e293b",
+              color: "#e2e8f0",
               borderRadius: "16px",
               padding: "30px",
               maxWidth: "600px",
               width: "100%",
               maxHeight: "80vh",
               overflowY: "auto",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.3)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
             }}
           >
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
@@ -16249,43 +16249,7 @@ ${signature}`;
               {'Publish ' + (publishSettings.contentType === 'assessment' ? 'Assessment' : 'Assignment')}
             </h2>
 
-            {/* Content Type Toggle */}
-            <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-              <button
-                onClick={() => handleContentTypeChange('assessment')}
-                style={{
-                  flex: 1,
-                  padding: "12px 16px",
-                  borderRadius: "10px",
-                  border: publishSettings.contentType === 'assessment' ? "2px solid #8b5cf6" : "1px solid #e2e8f0",
-                  background: publishSettings.contentType === 'assessment' ? "rgba(139, 92, 246, 0.1)" : "#f8fafc",
-                  color: publishSettings.contentType === 'assessment' ? "#7c3aed" : "#64748b",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all 0.2s",
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: "0.95rem", marginBottom: "4px" }}>Assessment</div>
-                <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>Timed, single attempt, scores after review</div>
-              </button>
-              <button
-                onClick={() => handleContentTypeChange('assignment')}
-                style={{
-                  flex: 1,
-                  padding: "12px 16px",
-                  borderRadius: "10px",
-                  border: publishSettings.contentType === 'assignment' ? "2px solid #22c55e" : "1px solid #e2e8f0",
-                  background: publishSettings.contentType === 'assignment' ? "rgba(34, 197, 94, 0.1)" : "#f8fafc",
-                  color: publishSettings.contentType === 'assignment' ? "#16a34a" : "#64748b",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all 0.2s",
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: "0.95rem", marginBottom: "4px" }}>Assignment</div>
-                <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>Due date, retakes allowed, instant MC scores</div>
-              </button>
-            </div>
+            {/* Content type is auto-detected from the generated content — no toggle needed */}
 
             {/* Assessment Category Toggle — assessments only */}
             {publishSettings.contentType === 'assessment' && (
@@ -16296,9 +16260,9 @@ ${signature}`;
                   flex: 1,
                   padding: "10px 14px",
                   borderRadius: "8px",
-                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid #e2e8f0",
-                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.1)" : "#f8fafc",
-                  color: publishSettings.assessmentCategory === 'formative' ? "#16a34a" : "#64748b",
+                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.15)",
+                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.15)" : "rgba(255,255,255,0.05)",
+                  color: publishSettings.assessmentCategory === 'formative' ? "#86efac" : "#94a3b8",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16313,9 +16277,9 @@ ${signature}`;
                   flex: 1,
                   padding: "10px 14px",
                   borderRadius: "8px",
-                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid #e2e8f0",
-                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.1)" : "#f8fafc",
-                  color: publishSettings.assessmentCategory === 'summative' ? "#dc2626" : "#64748b",
+                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.15)",
+                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.15)" : "rgba(255,255,255,0.05)",
+                  color: publishSettings.assessmentCategory === 'summative' ? "#fca5a5" : "#94a3b8",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16330,7 +16294,7 @@ ${signature}`;
             {/* Class Selection */}
             <div style={{ marginBottom: "15px" }}>
               <label className="label" style={{ marginBottom: "6px" }}>Publish to Class (optional)</label>
-              <select className="input" value={publishClassId} onChange={(e) => setPublishClassId(e.target.value)} style={{ width: "100%" }}>
+              <select className="input" value={publishClassId} onChange={(e) => setPublishClassId(e.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.08)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "8px" }}>
                 <option value="">Join Code Only (no class)</option>
                 {teacherClasses.map((cls) => (
                   <option key={cls.id} value={cls.id}>{cls.name} ({cls.join_code})</option>
@@ -16363,9 +16327,9 @@ ${signature}`;
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: "8px",
-                  border: "1px solid #e2e8f0",
-                  background: "#ffffff",
-                  color: "#1e293b",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#e2e8f0",
                   fontSize: "0.95rem",
                 }}
               >
@@ -16386,8 +16350,8 @@ ${signature}`;
                   gap: "10px",
                   cursor: "pointer",
                   padding: "12px 15px",
-                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.1)" : "#f8fafc",
-                  border: publishSettings.isMakeup ? "1px solid #8b5cf6" : "1px solid #e2e8f0",
+                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.1)" : "rgba(255,255,255,0.05)",
+                  border: publishSettings.isMakeup ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.15)",
                   borderRadius: "8px",
                 }}
               >
@@ -16399,7 +16363,7 @@ ${signature}`;
                 />
                 <div>
                   <div style={{ fontWeight: 600 }}>Makeup Exam</div>
-                  <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                  <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
                     Restrict to selected students only
                   </div>
                 </div>
@@ -16414,12 +16378,12 @@ ${signature}`;
                   Select Students ({publishSettings.selectedStudents.length} selected)
                 </label>
                 {loadingPublishStudents ? (
-                  <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
+                  <div style={{ padding: "20px", textAlign: "center", color: "#94a3b8" }}>
                     <Icon name="Loader" size={24} className="spin" />
                     <div style={{ marginTop: "10px" }}>Loading students...</div>
                   </div>
                 ) : publishModalStudents.length === 0 ? (
-                  <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
+                  <div style={{ padding: "20px", textAlign: "center", color: "#94a3b8" }}>
                     No students in this period
                   </div>
                 ) : (
@@ -16427,9 +16391,9 @@ ${signature}`;
                     style={{
                       maxHeight: "200px",
                       overflowY: "auto",
-                      border: "1px solid #e2e8f0",
+                      border: "1px solid rgba(255,255,255,0.15)",
                       borderRadius: "8px",
-                      background: "#ffffff",
+                      background: "rgba(255,255,255,0.05)",
                     }}
                   >
                     {publishModalStudents.map((student, idx) => {
@@ -16445,7 +16409,7 @@ ${signature}`;
                             alignItems: "center",
                             gap: "10px",
                             padding: "10px 12px",
-                            borderBottom: idx < publishModalStudents.length - 1 ? "1px solid #e2e8f0" : "none",
+                            borderBottom: idx < publishModalStudents.length - 1 ? "1px solid rgba(255,255,255,0.15)" : "none",
                             cursor: "pointer",
                             background: isSelected ? "rgba(139, 92, 246, 0.1)" : "transparent",
                           }}
@@ -16513,8 +16477,8 @@ ${signature}`;
                     gap: "10px",
                     cursor: "pointer",
                     padding: "12px 15px",
-                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.1)" : "#f8fafc",
-                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid #e2e8f0",
+                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.1)" : "rgba(255,255,255,0.05)",
+                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid rgba(255,255,255,0.15)",
                     borderRadius: "8px",
                   }}
                 >
@@ -16526,7 +16490,7 @@ ${signature}`;
                   />
                   <div>
                     <div style={{ fontWeight: 600 }}>Apply IEP/504 Accommodations</div>
-                    <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
                       Students with accommodations will see modified instructions
                     </div>
                   </div>
@@ -16550,18 +16514,18 @@ ${signature}`;
                     width: "120px",
                     padding: "10px 12px",
                     borderRadius: "8px",
-                    border: "1px solid #e2e8f0",
-                    background: "#ffffff",
-                    color: "#1e293b",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#e2e8f0",
                     fontSize: "0.95rem",
                   }}
                 />
-                <span style={{ color: "#64748b" }}>minutes</span>
+                <span style={{ color: "#94a3b8" }}>minutes</span>
               </div>
               {publishSettings.contentType === 'assessment' ? (
                 <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#64748b" }}>Available From</label>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#94a3b8" }}>Available From</label>
                     <input
                       type="datetime-local"
                       value={publishSettings.availableFrom}
@@ -16570,15 +16534,15 @@ ${signature}`;
                         width: "100%",
                         padding: "8px 10px",
                         borderRadius: "8px",
-                        border: "1px solid #e2e8f0",
-                        background: "#ffffff",
-                        color: "#1e293b",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        background: "rgba(255,255,255,0.08)",
+                        color: "#e2e8f0",
                         fontSize: "0.85rem",
                       }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#64748b" }}>Available Until</label>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#94a3b8" }}>Available Until</label>
                     <input
                       type="datetime-local"
                       value={publishSettings.availableUntil}
@@ -16587,9 +16551,9 @@ ${signature}`;
                         width: "100%",
                         padding: "8px 10px",
                         borderRadius: "8px",
-                        border: "1px solid #e2e8f0",
-                        background: "#ffffff",
-                        color: "#1e293b",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        background: "rgba(255,255,255,0.08)",
+                        color: "#e2e8f0",
                         fontSize: "0.85rem",
                       }}
                     />
@@ -16597,7 +16561,7 @@ ${signature}`;
                 </div>
               ) : (
                 <div style={{ marginTop: "12px" }}>
-                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#64748b" }}>Due Date</label>
+                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#94a3b8" }}>Due Date</label>
                   <input
                     type="datetime-local"
                     value={publishSettings.dueDate}
@@ -16607,9 +16571,9 @@ ${signature}`;
                       maxWidth: "250px",
                       padding: "8px 10px",
                       borderRadius: "8px",
-                      border: "1px solid #e2e8f0",
-                      background: "#ffffff",
-                      color: "#1e293b",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.08)",
+                      color: "#e2e8f0",
                       fontSize: "0.85rem",
                     }}
                   />
