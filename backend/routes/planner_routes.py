@@ -4558,14 +4558,21 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 doc.add_paragraph()  # Space after table
 
             elif q_type in ('essay', 'extended_response'):
+                # Render question text as black paragraph ABOVE the response box
                 if not visual_dict:
-                    _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts)",
-                                       f"GRAIDER:QUESTION:{q_number}", q_points,
-                                       graider_style, 4320)  # 3 inches
-                else:
-                    _add_graider_table(doc, f"Response for Question {q_number}",
-                                       f"GRAIDER:QUESTION:{q_number}", q_points,
-                                       graider_style, 4320)
+                    q_para = doc.add_paragraph()
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
+                    if q_points:
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
+                _add_graider_table(doc, f"Response for Question {q_number}",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, 4320)  # 3 inches
 
             elif q_type == 'coordinates':
                 if not visual_dict:
@@ -4585,16 +4592,22 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                                    graider_style, 720)  # 0.5 inch
 
             else:
-                # Short answer / default
+                # Short answer / default — render question text as black paragraph
                 height = 2160  # 1.5 inches
-                if visual_dict:
-                    _add_graider_table(doc, f"Response for Question {q_number}",
-                                       f"GRAIDER:QUESTION:{q_number}", q_points,
-                                       graider_style, height)
-                else:
-                    _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts)",
-                                       f"GRAIDER:QUESTION:{q_number}", q_points,
-                                       graider_style, height)
+                if not visual_dict:
+                    q_para = doc.add_paragraph()
+                    _nr = q_para.add_run(f"{q_number}. ")
+                    _nr.bold = True
+                    _nr.font.color.rgb = RGBColor(0, 0, 0)
+                    _tr = q_para.add_run(q_text)
+                    _tr.font.color.rgb = RGBColor(0, 0, 0)
+                    if q_points:
+                        _pr = q_para.add_run(f" ({q_points} pts)")
+                        _pr.italic = True
+                        _pr.font.color.rgb = RGBColor(0, 0, 0)
+                _add_graider_table(doc, f"Response for Question {q_number}",
+                                   f"GRAIDER:QUESTION:{q_number}", q_points,
+                                   graider_style, height)
 
             question_num += 1
 
