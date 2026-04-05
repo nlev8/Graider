@@ -10115,7 +10115,7 @@ ${signature}`;
                             onClick={brainstormIdeasHandler}
                             disabled={
                               brainstormLoading ||
-                              selectedStandards.length === 0
+                              (selectedStandards.length === 0 && uploadedDocs.length === 0)
                             }
                             className="btn btn-secondary"
                             style={{
@@ -10124,7 +10124,7 @@ ${signature}`;
                               marginBottom: "10px",
                               opacity:
                                 brainstormLoading ||
-                                selectedStandards.length === 0
+                                (selectedStandards.length === 0 && uploadedDocs.length === 0)
                                   ? 0.5
                                   : 1,
                             }}
@@ -10180,14 +10180,14 @@ ${signature}`;
                           <button
                             onClick={() => generateLessonPlan(true)}
                             disabled={
-                              plannerLoading || selectedStandards.length === 0
+                              plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                             }
                             className="btn btn-secondary"
                             style={{
                               width: "100%",
                               justifyContent: "center",
                               opacity:
-                                plannerLoading || selectedStandards.length === 0
+                                plannerLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)
                                   ? 0.5
                                   : 1,
                               fontSize: "0.85rem",
@@ -12561,12 +12561,12 @@ ${signature}`;
                         {/* Generate Button */}
                         <button
                           onClick={generateAssessmentHandler}
-                          disabled={selectedStandards.length === 0 || assessmentLoading}
+                          disabled={(selectedStandards.length === 0 && uploadedDocs.length === 0) || assessmentLoading}
                           className="btn btn-primary"
                           style={{
                             padding: "14px 24px",
                             fontSize: "1rem",
-                            opacity: selectedStandards.length === 0 ? 0.5 : 1,
+                            opacity: (selectedStandards.length === 0 && uploadedDocs.length === 0) ? 0.5 : 1,
                           }}
                         >
                           {assessmentLoading ? (
