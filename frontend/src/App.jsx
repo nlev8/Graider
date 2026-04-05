@@ -1630,6 +1630,7 @@ function App() {
   // Reference document upload state
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [docUploading, setDocUploading] = useState(false);
+  const [contentOnly, setContentOnly] = useState(false);
   const [matchingInProgress, setMatchingInProgress] = useState(false);
   const [matchResults, setMatchResults] = useState(null);
 
@@ -4221,6 +4222,7 @@ ${signature}`;
           title: autoTitle,
           standardCodes: standardCodes,
           sectionCategories: unitConfig.type === "Assignment" ? assignmentSectionCategories : undefined,
+          contentOnly: contentOnly,
         },
         selectedIdea: selectedIdea,
         generateVariations: generateVariations,
@@ -4361,6 +4363,7 @@ ${signature}`;
           teacher_name: config.teacher_name,
           globalAINotes: globalAINotes,
           requirements: unitConfig.requirements || "",
+          contentOnly: contentOnly,
         },
         { ...assessmentConfig, title },
         allSources
@@ -4835,6 +4838,7 @@ ${signature}`;
           totalQuestions: unitConfig.totalQuestions,
           questionsPerSection: unitConfig.questionsPerSection,
           requirements: unitConfig.requirements || "",
+          contentOnly: contentOnly,
         },
         assignmentType,
       );
@@ -9977,6 +9981,21 @@ ${signature}`;
                               </div>
                             )}
                           </div>
+
+                          {uploadedDocs.length > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
+                            <input
+                              type="checkbox"
+                              id="content-only-toggle"
+                              checked={contentOnly}
+                              onChange={function(e) { setContentOnly(e.target.checked); }}
+                              style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                            />
+                            <label htmlFor="content-only-toggle" style={{ fontSize: "0.82rem", cursor: "pointer", color: "var(--text-secondary)" }}>
+                              Only create questions from uploaded content
+                            </label>
+                          </div>
+                          )}
 
                           <div>
                             <label className="label">
