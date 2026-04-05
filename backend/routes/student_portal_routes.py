@@ -452,7 +452,11 @@ def get_assessment_for_student(code):
 
         # Shared material content (NotebookLM) — return directly
         content_type = settings.get('content_type') or assessment.get('content_type')
-        if content_type and content_type != 'assessment':
+        # Only study materials get the material response format.
+        # Assignments and assessments both get the sections/questions format.
+        material_types = ('study_guide', 'flashcards', 'slide_deck', 'mind_map',
+                          'audio_overview', 'video_overview', 'infographic', 'data_table')
+        if content_type and content_type in material_types:
             resp = {
                 "content_type": content_type,
                 "title": assessment.get('title', data.get('title', content_type)),
@@ -506,6 +510,7 @@ def get_assessment_for_student(code):
             "time_estimate": assessment.get('time_estimate'),
             "sections": sanitized_sections,
             "settings": {
+                "content_type": content_type or 'assessment',
                 "time_limit_minutes": settings.get('time_limit_minutes'),
                 "require_name": settings.get('require_name', True),
                 "is_makeup": is_makeup,

@@ -431,7 +431,7 @@ export default function StudentPortal({
             )}
 
             <button onClick={handleStartAssessment} style={buttonStyle}>
-              {assessment?.sections ? "Start Assignment" : "Start Assessment"} <Icon name="ArrowRight" />
+              {(assessment?.settings?.content_type === 'assignment') ? "Start Assignment" : "Start Assessment"} <Icon name="ArrowRight" />
             </button>
           </div>
         </div>

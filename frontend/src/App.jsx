@@ -16232,16 +16232,16 @@ ${signature}`;
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "var(--bg-primary, #1a1a2e)",
-              color: "var(--text-primary, #e2e8f0)",
+              background: "#ffffff",
+              color: "#1e293b",
               borderRadius: "16px",
               padding: "30px",
               maxWidth: "600px",
               width: "100%",
               maxHeight: "80vh",
               overflowY: "auto",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.3)",
             }}
           >
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
@@ -16257,9 +16257,9 @@ ${signature}`;
                   flex: 1,
                   padding: "12px 16px",
                   borderRadius: "10px",
-                  border: publishSettings.contentType === 'assessment' ? "2px solid #8b5cf6" : "1px solid var(--glass-border)",
-                  background: publishSettings.contentType === 'assessment' ? "rgba(139, 92, 246, 0.2)" : "var(--glass-bg)",
-                  color: publishSettings.contentType === 'assessment' ? "#c4b5fd" : "var(--text-secondary)",
+                  border: publishSettings.contentType === 'assessment' ? "2px solid #8b5cf6" : "1px solid #e2e8f0",
+                  background: publishSettings.contentType === 'assessment' ? "rgba(139, 92, 246, 0.1)" : "#f8fafc",
+                  color: publishSettings.contentType === 'assessment' ? "#7c3aed" : "#64748b",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16274,9 +16274,9 @@ ${signature}`;
                   flex: 1,
                   padding: "12px 16px",
                   borderRadius: "10px",
-                  border: publishSettings.contentType === 'assignment' ? "2px solid #22c55e" : "1px solid var(--glass-border)",
-                  background: publishSettings.contentType === 'assignment' ? "rgba(34, 197, 94, 0.2)" : "var(--glass-bg)",
-                  color: publishSettings.contentType === 'assignment' ? "#86efac" : "var(--text-secondary)",
+                  border: publishSettings.contentType === 'assignment' ? "2px solid #22c55e" : "1px solid #e2e8f0",
+                  background: publishSettings.contentType === 'assignment' ? "rgba(34, 197, 94, 0.1)" : "#f8fafc",
+                  color: publishSettings.contentType === 'assignment' ? "#16a34a" : "#64748b",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16296,9 +16296,9 @@ ${signature}`;
                   flex: 1,
                   padding: "10px 14px",
                   borderRadius: "8px",
-                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid var(--glass-border)",
-                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.15)" : "var(--glass-bg)",
-                  color: publishSettings.assessmentCategory === 'formative' ? "#86efac" : "var(--text-secondary)",
+                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid #e2e8f0",
+                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.1)" : "#f8fafc",
+                  color: publishSettings.assessmentCategory === 'formative' ? "#16a34a" : "#64748b",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16313,9 +16313,9 @@ ${signature}`;
                   flex: 1,
                   padding: "10px 14px",
                   borderRadius: "8px",
-                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid var(--glass-border)",
-                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.15)" : "var(--glass-bg)",
-                  color: publishSettings.assessmentCategory === 'summative' ? "#fca5a5" : "var(--text-secondary)",
+                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid #e2e8f0",
+                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.1)" : "#f8fafc",
+                  color: publishSettings.assessmentCategory === 'summative' ? "#dc2626" : "#64748b",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16336,7 +16336,7 @@ ${signature}`;
                   <option key={cls.id} value={cls.id}>{cls.name} ({cls.join_code})</option>
                 ))}
               </select>
-              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
+              <p style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: "4px" }}>
                 {publishClassId ? "Students log in with email + class code to access this." : "Anyone with the join code can access this (anonymous)."}
               </p>
             </div>
@@ -16363,9 +16363,9 @@ ${signature}`;
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: "8px",
-                  border: "1px solid var(--glass-border)",
-                  background: "var(--surface)",
-                  color: "var(--text-primary)",
+                  border: "1px solid #e2e8f0",
+                  background: "#ffffff",
+                  color: "#1e293b",
                   fontSize: "0.95rem",
                 }}
               >
@@ -16386,8 +16386,8 @@ ${signature}`;
                   gap: "10px",
                   cursor: "pointer",
                   padding: "12px 15px",
-                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.2)" : "var(--glass-bg)",
-                  border: publishSettings.isMakeup ? "1px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.1)" : "#f8fafc",
+                  border: publishSettings.isMakeup ? "1px solid #8b5cf6" : "1px solid #e2e8f0",
                   borderRadius: "8px",
                 }}
               >
@@ -16399,7 +16399,7 @@ ${signature}`;
                 />
                 <div>
                   <div style={{ fontWeight: 600 }}>Makeup Exam</div>
-                  <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
                     Restrict to selected students only
                   </div>
                 </div>
@@ -16414,12 +16414,12 @@ ${signature}`;
                   Select Students ({publishSettings.selectedStudents.length} selected)
                 </label>
                 {loadingPublishStudents ? (
-                  <div style={{ padding: "20px", textAlign: "center", color: "var(--text-secondary)" }}>
+                  <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
                     <Icon name="Loader" size={24} className="spin" />
                     <div style={{ marginTop: "10px" }}>Loading students...</div>
                   </div>
                 ) : publishModalStudents.length === 0 ? (
-                  <div style={{ padding: "20px", textAlign: "center", color: "var(--text-secondary)" }}>
+                  <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
                     No students in this period
                   </div>
                 ) : (
@@ -16427,9 +16427,9 @@ ${signature}`;
                     style={{
                       maxHeight: "200px",
                       overflowY: "auto",
-                      border: "1px solid var(--glass-border)",
+                      border: "1px solid #e2e8f0",
                       borderRadius: "8px",
-                      background: "var(--surface)",
+                      background: "#ffffff",
                     }}
                   >
                     {publishModalStudents.map((student, idx) => {
@@ -16445,7 +16445,7 @@ ${signature}`;
                             alignItems: "center",
                             gap: "10px",
                             padding: "10px 12px",
-                            borderBottom: idx < publishModalStudents.length - 1 ? "1px solid var(--glass-border)" : "none",
+                            borderBottom: idx < publishModalStudents.length - 1 ? "1px solid #e2e8f0" : "none",
                             cursor: "pointer",
                             background: isSelected ? "rgba(139, 92, 246, 0.1)" : "transparent",
                           }}
@@ -16513,8 +16513,8 @@ ${signature}`;
                     gap: "10px",
                     cursor: "pointer",
                     padding: "12px 15px",
-                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.2)" : "var(--glass-bg)",
-                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid var(--glass-border)",
+                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.1)" : "#f8fafc",
+                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid #e2e8f0",
                     borderRadius: "8px",
                   }}
                 >
@@ -16526,7 +16526,7 @@ ${signature}`;
                   />
                   <div>
                     <div style={{ fontWeight: 600 }}>Apply IEP/504 Accommodations</div>
-                    <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
                       Students with accommodations will see modified instructions
                     </div>
                   </div>
@@ -16550,18 +16550,18 @@ ${signature}`;
                     width: "120px",
                     padding: "10px 12px",
                     borderRadius: "8px",
-                    border: "1px solid var(--glass-border)",
-                    background: "var(--surface)",
-                    color: "var(--text-primary)",
+                    border: "1px solid #e2e8f0",
+                    background: "#ffffff",
+                    color: "#1e293b",
                     fontSize: "0.95rem",
                   }}
                 />
-                <span style={{ color: "var(--text-secondary)" }}>minutes</span>
+                <span style={{ color: "#64748b" }}>minutes</span>
               </div>
               {publishSettings.contentType === 'assessment' ? (
                 <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Available From</label>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#64748b" }}>Available From</label>
                     <input
                       type="datetime-local"
                       value={publishSettings.availableFrom}
@@ -16570,15 +16570,15 @@ ${signature}`;
                         width: "100%",
                         padding: "8px 10px",
                         borderRadius: "8px",
-                        border: "1px solid var(--glass-border)",
-                        background: "var(--surface)",
-                        color: "var(--text-primary)",
+                        border: "1px solid #e2e8f0",
+                        background: "#ffffff",
+                        color: "#1e293b",
                         fontSize: "0.85rem",
                       }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Available Until</label>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#64748b" }}>Available Until</label>
                     <input
                       type="datetime-local"
                       value={publishSettings.availableUntil}
@@ -16587,9 +16587,9 @@ ${signature}`;
                         width: "100%",
                         padding: "8px 10px",
                         borderRadius: "8px",
-                        border: "1px solid var(--glass-border)",
-                        background: "var(--surface)",
-                        color: "var(--text-primary)",
+                        border: "1px solid #e2e8f0",
+                        background: "#ffffff",
+                        color: "#1e293b",
                         fontSize: "0.85rem",
                       }}
                     />
@@ -16597,7 +16597,7 @@ ${signature}`;
                 </div>
               ) : (
                 <div style={{ marginTop: "12px" }}>
-                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Due Date</label>
+                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "#64748b" }}>Due Date</label>
                   <input
                     type="datetime-local"
                     value={publishSettings.dueDate}
@@ -16607,9 +16607,9 @@ ${signature}`;
                       maxWidth: "250px",
                       padding: "8px 10px",
                       borderRadius: "8px",
-                      border: "1px solid var(--glass-border)",
-                      background: "var(--surface)",
-                      color: "var(--text-primary)",
+                      border: "1px solid #e2e8f0",
+                      background: "#ffffff",
+                      color: "#1e293b",
                       fontSize: "0.85rem",
                     }}
                   />
