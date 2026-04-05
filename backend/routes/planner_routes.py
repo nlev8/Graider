@@ -2597,8 +2597,8 @@ def brainstorm_lesson_ideas():
     selected_standards = data.get('standards', [])
     config = data.get('config', {})
 
-    if not selected_standards:
-        return jsonify({"error": "No standards selected"})
+    if not selected_standards and not data.get('referenceDocs'):
+        return jsonify({"error": "Please select standards or upload reference documents"})
 
     _subject = config.get('subject', '').strip()
     _grade = config.get('grade', '').strip()
@@ -2777,8 +2777,8 @@ def generate_lesson_plan():
     generate_variations = data.get('generateVariations', False)  # Generate multiple variations
     reference_docs = data.get('referenceDocs', [])  # Uploaded reference documents
 
-    if not selected_standards:
-        return jsonify({"error": "No standards selected"})
+    if not selected_standards and not data.get('referenceDocs'):
+        return jsonify({"error": "Please select standards or upload reference documents"})
 
     _subject = config.get('subject', '').strip()
     _grade = config.get('grade', '').strip()
