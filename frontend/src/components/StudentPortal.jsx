@@ -385,9 +385,9 @@ export default function StudentPortal({
                 By {assessment?.teacher}
               </p>
               <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "15px", fontSize: "0.9rem", color: "rgba(255,255,255,0.6)" }}>
-                <span>{assessment?.total_points} points</span>
-                <span>•</span>
-                <span>{assessment?.time_estimate || "~15 min"}</span>
+                {assessment?.total_points ? <span>{assessment.total_points} points</span> : null}
+                {assessment?.total_points && assessment?.settings?.content_type !== 'assignment' && assessment?.time_estimate ? <span>{String.fromCharCode(8226)}</span> : null}
+                {assessment?.settings?.content_type !== 'assignment' && assessment?.time_estimate ? <span>{assessment.time_estimate}</span> : null}
               </div>
             </div>
 
@@ -431,7 +431,7 @@ export default function StudentPortal({
             )}
 
             <button onClick={handleStartAssessment} style={buttonStyle}>
-              {(assessment?.settings?.content_type === 'assignment') ? "Start Assignment" : "Start Assessment"} <Icon name="ArrowRight" />
+              {(assessment?.settings?.content_type === 'assignment' || assessment?.type === 'assignment' || assessment?.type === 'project' || assessment?.type === 'essay') ? "Start Assignment" : "Start Assessment"} <Icon name="ArrowRight" />
             </button>
           </div>
         </div>

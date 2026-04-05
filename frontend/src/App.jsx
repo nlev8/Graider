@@ -4475,14 +4475,21 @@ ${signature}`;
       addToast("No content to publish", "warning");
       return;
     }
+    // Auto-detect content type from the generated content
+    var detectedType = 'assessment';
+    if (content.type === 'assignment' || content.type === 'project' || content.type === 'essay') {
+      detectedType = 'assignment';
+    }
     // Reset publish settings, pre-fill time limit from content
     setPublishSettings({
       period: '',
       periodFilename: '',
       isMakeup: false,
       selectedStudents: [],
-      timeLimit: content.time_limit || null,
+      timeLimit: detectedType === 'assignment' ? null : (content.time_limit || null),
       applyAccommodations: true,
+      contentType: detectedType,
+      assessmentCategory: 'formative',
     });
     setPublishModalStudents([]);
     setPublishClassId('');
