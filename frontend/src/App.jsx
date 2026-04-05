@@ -10941,45 +10941,7 @@ ${signature}`;
                                   {publishingAssessment ? "Publishing..." : "Publish to Portal"}
                                 </button>
                               )}
-                              {/* Create assignment/project/essay from this lesson plan */}
-                              {(!lessonPlan.sections || lessonPlan.days) && !lessonPlan.phases && (
-                              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                <select
-                                  value={assignmentType}
-                                  onChange={function(e) { setAssignmentType(e.target.value); }}
-                                  className="input"
-                                  style={{
-                                    padding: "8px 12px",
-                                    minWidth: "120px",
-                                  }}
-                                >
-                                  <option value="assignment">Assignment</option>
-                                  <option value="project">Project</option>
-                                  <option value="essay">Essay</option>
-                                </select>
-                                <button
-                                  onClick={generateAssignmentFromLessonHandler}
-                                  className="btn btn-primary"
-                                  disabled={assignmentLoading}
-                                >
-                                  {assignmentLoading ? (
-                                    <>
-                                      <Icon
-                                        name="Loader"
-                                        size={16}
-                                        className="spinning"
-                                      />{" "}
-                                      Generating...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Icon name="FileText" size={16} />{" "}
-                                      {"Create " + (assignmentType === "essay" ? "Essay" : assignmentType === "project" ? "Project" : "Assignment") + " from Lesson"}
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                              )}
+                              {/* Assignment/Essay/Project creation is handled via the Details sidebar Content Type selector */}
                               <div style={{ flex: 1 }} />
                               <button
                                 onClick={() => {
