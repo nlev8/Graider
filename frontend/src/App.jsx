@@ -4125,8 +4125,8 @@ ${signature}`;
       addToast("Please select a grade level in Settings before generating", "warning");
       return;
     }
-    if (selectedStandards.length === 0) {
-      addToast("Please select at least one standard", "warning");
+    if (selectedStandards.length === 0 && uploadedDocs.length === 0) {
+      addToast("Please select at least one standard or upload reference documents", "warning");
       return;
     }
     const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
@@ -4181,8 +4181,8 @@ ${signature}`;
       addToast("Please select a grade level in Settings before generating", "warning");
       return;
     }
-    if (selectedStandards.length === 0) {
-      addToast("Please select at least one standard", "warning");
+    if (selectedStandards.length === 0 && uploadedDocs.length === 0) {
+      addToast("Please select at least one standard or upload reference documents", "warning");
       return;
     }
     const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
@@ -4331,8 +4331,8 @@ ${signature}`;
       addToast("Please select a grade level in Settings before generating", "warning");
       return;
     }
-    if (selectedStandards.length === 0) {
-      addToast("Please select at least one standard", "warning");
+    if (selectedStandards.length === 0 && uploadedDocs.length === 0) {
+      addToast("Please select at least one standard or upload reference documents", "warning");
       return;
     }
     const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
