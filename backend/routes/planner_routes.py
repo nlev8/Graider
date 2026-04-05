@@ -4445,6 +4445,8 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
             if q_options:
                 # MC/TF: question + options with bubbles (no separate answer table)
                 is_tf = q_type in ('true_false', 'tf')
+                # Filter out metadata fields that AI sometimes includes as options
+                q_options = [opt for opt in q_options if not str(opt).startswith('answer_key_field')]
                 if not visual_dict:
                     q_para = doc.add_paragraph()
                     _nr = q_para.add_run(f"{q_number}. ")
@@ -4459,6 +4461,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
 
                 # Options with empty bubbles — bubbles ARE the answer
                 _add_options_with_bubbles(doc, q_options, is_tf=is_tf)
+                doc.add_paragraph()  # Space after MC/TF question
 
                 # Track for separate answer key file
                 answer_key_questions.append({
@@ -4507,11 +4510,13 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 _add_graider_table(doc, f"Data Analysis for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 2160)  # 1.5 inch
+                doc.add_paragraph()  # Space after question
 
             elif q_type == 'math_equation':
                 _add_graider_table(doc, f"{q_number}. {q_text} ({q_points} pts) — Show your work",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 3600)  # 2.5 inches
+                doc.add_paragraph()  # Space after question
 
             elif q.get('terms') and q.get('definitions'):
                 # Matching: two-column layout with draw-a-line instruction
@@ -4577,6 +4582,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 _add_graider_table(doc, f"Response for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 4320)  # 3 inches
+                doc.add_paragraph()  # Space after question
 
             elif q_type == 'coordinates':
                 if not visual_dict:
@@ -4594,6 +4600,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 _add_graider_table(doc, f"Coordinates for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, 720)  # 0.5 inch
+                doc.add_paragraph()  # Space after question
 
             else:
                 # Short answer / default — render question text as black paragraph
@@ -4612,6 +4619,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                 _add_graider_table(doc, f"Response for Question {q_number}",
                                    f"GRAIDER:QUESTION:{q_number}", q_points,
                                    graider_style, height)
+                doc.add_paragraph()  # Space after question
 
             question_num += 1
 
