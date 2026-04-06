@@ -1580,7 +1580,18 @@ def assistant_chat():
                     # Inject teacher_id for tools that need per-teacher context
                     # Uses teacher_id captured at top of assistant_chat() (line ~1145)
                     tool_input["teacher_id"] = teacher_id
-                    result = execute_tool(tb["name"], tool_input)
+
+                    # Block confirmation tools from executing in the same turn as their preview tool
+                    from backend.services.assistant_tool_guards import GUARDED_ACTIONS
+                    _confirmation_tools = {entry["confirm_tool"] for entry in GUARDED_ACTIONS.values() if entry.get("type") == "preview_confirm"}
+                    _preview_tools_this_turn = [e["name"] for e in executed_tools_this_turn if GUARDED_ACTIONS.get(e["name"], {}).get("type") == "preview_confirm"]
+                    if tb["name"] in _confirmation_tools and _preview_tools_this_turn:
+                        result = {
+                            "error": "Cannot confirm in the same turn as the preview. "
+                            "Show the preview to the teacher and wait for their confirmation before calling " + tb["name"] + "."
+                        }
+                    else:
+                        result = execute_tool(tb["name"], tool_input)
 
                     # Record execution for post-response claim checking
                     executed_tools_this_turn.append({"name": tb["name"], "result": result})

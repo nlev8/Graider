@@ -2514,7 +2514,7 @@ def confirm_and_send(teacher_id='local-dev'):
 
     if not pending:
         # Check keyed storage entries (send_behavior_email etc. save under action-specific keys)
-        for action_key in ('send_behavior_email', 'send_focus_comms', 'send_parent_emails', 'remove_student'):
+        for action_key in ('send_behavior_email', 'send_focus_comms', 'send_parent_emails'):
             keyed = storage_load('pending_send:' + action_key, teacher_id) if storage_load else None
             if keyed:
                 pending = keyed
