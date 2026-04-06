@@ -82,8 +82,8 @@ For `type: "verify_result"`:
 `check_false_claims(response_text, tool_calls_this_turn, tool_results_this_turn)` — scans the AI's final response text for claim phrases. Returns a correction string if a false claim is detected, or None if clean.
 
 Logic:
-1. For each guarded action with `claim_phrases`, check if any phrase appears in `response_text` (case-insensitive).
-2. If a claim phrase is found, check if the corresponding tool was called this turn AND returned the expected success result.
+1. For each guarded action with `claim_phrases`, check if any phrase matches in `response_text` using word-boundary regex (`re.compile(r'\b' + re.escape(phrase) + r'\b', re.IGNORECASE)`). This prevents false positives like "I plan to send" matching a phrase meant to catch "has been sent".
+2. If a claim phrase matches, check if the corresponding tool was called this turn AND returned the expected success result.
 3. If the tool was not called, or it returned an error, return a correction message.
 
 ## Tool Result Injection Point
@@ -148,15 +148,27 @@ Register `confirm_student_removal` in the tool definitions and handler map.
 
 ## Tracking Executed Tools
 
-The tool loop in `assistant_routes.py` needs to track which tools were called and their results across all rounds. Add:
+The tool loop in `assistant_routes.py` needs to track which tools were called and their results across all rounds. Initialize `executed_tools_this_turn` once before the tool loop begins, and accumulate across all rounds (up to `MAX_TOOL_ROUNDS`). It must NOT reset between rounds.
 
 ```python
-executed_tools_this_turn = []  # populated in tool loop
-# After each tool execution:
+executed_tools_this_turn = []  # initialized ONCE before tool loop, persists across rounds
+# After each tool execution (inside the per-round loop):
 executed_tools_this_turn.append({"name": tb["name"], "result": result})
 ```
 
 This list is passed to `check_false_claims` after the final response.
+
+## Pending Payload Keying
+
+To prevent concurrent actions from overwriting each other (e.g., teacher has a behavior email preview pending and then starts a focus comms preview), key pending payloads by action type:
+
+- `pending_send:send_behavior_email` instead of `pending_send`
+- `pending_send:send_focus_comms` instead of `pending_send`
+- `pending_send:remove_student` instead of `pending_send`
+
+Storage is already scoped per `teacher_id`, so concurrent teachers are safe. This change applies to the storage calls in `send_behavior_email`, `remove_student_from_roster`, and `confirm_and_send` (which must check all `pending_send:*` keys or accept the action type as a parameter).
+
+For backward compatibility, `confirm_and_send` should also check the legacy `pending_send` key (no suffix) as a fallback.
 
 ## What This Does NOT Include
 
