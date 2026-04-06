@@ -71,6 +71,14 @@ STUDENT_TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "confirm_student_removal",
+        "description": "Execute a pending student removal after the teacher has confirmed. Call ONLY after remove_student_from_roster has shown a preview and the teacher has approved. Takes no parameters.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
         "name": "export_student_data",
         "description": "Export all stored data for a specific student (grades, history, accommodations, etc.) as JSON and PDF files. Use for parent data requests, student transfers, or FERPA compliance.",
         "input_schema": {
@@ -423,7 +431,7 @@ def _delete_student_supabase(student_name):
         return ""
 
 
-def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
+def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
     """Remove a student from ALL records: rosters, results, history, accommodations, contacts, ELL, master CSV, Supabase."""
     require_teacher_id(teacher_id)
     if not student_name:
@@ -618,6 +626,138 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
         "errors": errors if errors else None,
         "message": msg,
     }
+
+
+def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
+    """Preview student removal — saves a pending payload and returns a confirmation prompt."""
+    require_teacher_id(teacher_id)
+    if not student_name:
+        return {"error": "student_name is required."}
+
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
+    if not teacher_id or teacher_id == 'local-dev':
+        try:
+            from flask import g
+            teacher_id = getattr(g, 'user_id', 'local-dev')
+        except Exception:
+            teacher_id = 'local-dev'
+
+    # Look up student in roster
+    roster = _load_roster(teacher_id)
+    matched_name = None
+    for entry in roster:
+        rname = entry.get("student_name", "") or entry.get("name", "")
+        if _fuzzy_name_match(student_name, rname):
+            matched_name = rname
+            break
+
+    # Fall back to file-based roster search
+    if not matched_name:
+        search_dirs = [
+            (PERIODS_DIR, "periods"),
+            (ROSTERS_DIR, "rosters"),
+        ]
+        matches = _find_all_student_files(student_name, search_dirs)
+        if matches:
+            matched_name = matches[0][0]
+
+    if not matched_name:
+        return {"error": f"No student found matching '{student_name}' in any roster."}
+
+    # Count grading results for this student
+    results_count = 0
+    try:
+        from backend.app import _get_state
+        grading_state = _get_state(teacher_id)
+        results_count = sum(
+            1 for r in grading_state.get("results", [])
+            if _fuzzy_name_match(student_name, r.get("student_name", ""))
+        )
+    except Exception:
+        pass
+
+    # Build and save pending payload
+    pending = {"action": "remove_student", "student_name": matched_name, "teacher_id": teacher_id}
+    try:
+        from backend.storage import save as storage_save
+        storage_save("pending_send:remove_student", pending, teacher_id)
+    except Exception:
+        pass
+    try:
+        pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
+        os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+        with open(pending_path, "w") as f:
+            json.dump(pending, f)
+    except Exception:
+        pass
+
+    return {
+        "PENDING_CONFIRMATION": True,
+        "student_name": matched_name,
+        "results_count": results_count,
+        "message": (
+            f"About to permanently delete ALL data for {matched_name}: "
+            f"roster entries, {results_count} grading result(s), student history, "
+            "accommodations, parent contacts, ELL data, master grades CSV, and Supabase records."
+        ),
+        "instruction": "Show this summary to the teacher. Call confirm_student_removal ONLY after teacher confirms.",
+    }
+
+
+def confirm_student_removal(teacher_id='local-dev', **kwargs):
+    """Execute a pending student removal after teacher confirmation."""
+    require_teacher_id(teacher_id)
+
+    teacher_id = teacher_id or kwargs.get('teacher_id', 'local-dev')
+    if not teacher_id or teacher_id == 'local-dev':
+        try:
+            from flask import g
+            teacher_id = getattr(g, 'user_id', 'local-dev')
+        except Exception:
+            teacher_id = 'local-dev'
+
+    # Load pending payload from storage
+    pending = None
+    try:
+        from backend.storage import load as storage_load, save as storage_save
+        pending = storage_load("pending_send:remove_student", teacher_id)
+    except Exception:
+        pass
+
+    # Filesystem fallback
+    if not pending:
+        try:
+            pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
+            if os.path.exists(pending_path):
+                with open(pending_path, "r") as f:
+                    pending = json.load(f)
+        except Exception:
+            pass
+
+    if not pending or pending.get("action") != "remove_student":
+        return {"error": "No pending student removal found. Run remove_student_from_roster first to preview."}
+
+    student_name = pending.get("student_name", "")
+    pending_teacher_id = pending.get("teacher_id", teacher_id)
+
+    # Execute the actual removal
+    result = _execute_student_removal(student_name, teacher_id=pending_teacher_id)
+
+    # Clear pending storage
+    try:
+        storage_save("pending_send:remove_student", None, pending_teacher_id)
+    except Exception:
+        pass
+    try:
+        pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
+        if os.path.exists(pending_path):
+            os.remove(pending_path)
+    except Exception:
+        pass
+
+    if isinstance(result, dict):
+        result["status"] = "removed"
+    return result
 
 
 def export_student_data(student_name, teacher_id='local-dev', **kwargs):
@@ -915,6 +1055,7 @@ STUDENT_TOOL_HANDLERS = {
     "get_student_accommodations": get_student_accommodations,
     "get_student_streak": get_student_streak,
     "remove_student_from_roster": remove_student_from_roster,
+    "confirm_student_removal": confirm_student_removal,
     "export_student_data": export_student_data,
     "import_student_data": import_student_data,
 }
