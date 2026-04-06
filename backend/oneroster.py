@@ -83,7 +83,7 @@ class OneRosterClient:
             response=resp,
         )
 
-    async def _post_with_retry(self, client, url, payload, label=""):
+    async def _post_with_retry(self, client, url, json_body, label=""):
         """POST with exponential backoff on 429/5xx, token refresh on 401.
 
         Accepts HTTP 200 and 201 as success. Returns parsed JSON body.
@@ -91,7 +91,7 @@ class OneRosterClient:
         for attempt in range(MAX_RETRIES):
             await self._ensure_token(client)
             headers = {"Authorization": f"Bearer {self._token}"}
-            resp = await client.post(url, json=payload, headers=headers)
+            resp = await client.post(url, json=json_body, headers=headers)
 
             if resp.status_code in (200, 201):
                 return resp.json()
@@ -225,22 +225,24 @@ class OneRosterClient:
             The lineItem dict from the SIS response.
         """
         sourced_id = str(uuid.uuid4())
+        today = due_date if due_date is not None else date.today().isoformat()
         payload_item = {
             "sourcedId": sourced_id,
             "status": "active",
             "title": title,
-            "class": {"sourcedId": class_sourced_id},
+            "assignDate": today,
+            "dueDate": today,
+            "class": {"sourcedId": class_sourced_id, "type": "class"},
             "resultValueMin": 0.0,
             "resultValueMax": float(max_score),
+            "category": {"sourcedId": "graider-auto", "title": "Graider"},
         }
-        if due_date is not None:
-            payload_item["dueDate"] = due_date
 
-        payload = {"lineItem": payload_item}
+        json_body = {"lineItem": payload_item}
         url = f"{self.base_url}/lineItems"
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            data = await self._post_with_retry(client, url, payload, label="create_line_item")
+            data = await self._post_with_retry(client, url, json_body, label="create_line_item")
             return data.get("lineItem", data)
 
     async def get_line_items(self, class_sourced_id):
@@ -274,7 +276,7 @@ class OneRosterClient:
         sourced_id = str(uuid.uuid4())
         score_date = date.today().isoformat()
 
-        payload = {
+        json_body = {
             "result": {
                 "sourcedId": sourced_id,
                 "status": "active",
@@ -289,7 +291,7 @@ class OneRosterClient:
         url = f"{self.base_url}/lineItems/{line_item_id}/results"
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            data = await self._post_with_retry(client, url, payload, label="create_result")
+            data = await self._post_with_retry(client, url, json_body, label="create_result")
             return data.get("result", data)
 
 

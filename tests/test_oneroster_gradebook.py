@@ -197,6 +197,41 @@ class TestCreateLineItem:
         assert result is not None
         assert result["sourcedId"] == "li-noduedate"
 
+    def test_assign_date_present_in_payload(self):
+        """create_line_item should always include assignDate in the posted payload."""
+        client = make_client()
+        client._token = "fake-token"
+        client._token_expires = 9999999999
+
+        line_item_body = {"lineItem": {"sourcedId": "li-assigndate", "title": "Quiz"}}
+        post_resp = mock_post_response(201, line_item_body)
+        captured_payloads = []
+
+        async def run():
+            with patch("httpx.AsyncClient") as MockClient:
+                mock_http = AsyncMock()
+                MockClient.return_value.__aenter__.return_value = mock_http
+
+                async def capture_post(url, **kwargs):
+                    captured_payloads.append(kwargs)
+                    return post_resp
+
+                mock_http.post.side_effect = capture_post
+                return await client.create_line_item(
+                    title="Quiz",
+                    class_sourced_id="cls-10",
+                    max_score=20.0,
+                    due_date="2026-05-01",
+                )
+
+        asyncio.run(run())
+        assert len(captured_payloads) == 1
+        body = captured_payloads[0].get("json", {})
+        line_item = body.get("lineItem", {})
+        assert "assignDate" in line_item
+        assert line_item["assignDate"] == "2026-05-01"
+        assert line_item["dueDate"] == "2026-05-01"
+
     def test_raises_on_non_200_201(self):
         """create_line_item should raise on 400 or other non-success codes."""
         client = make_client()
@@ -541,7 +576,7 @@ class TestPostWithRetry:
             return await client._post_with_retry(
                 mock_http,
                 "https://sis.example.com/ims/oneroster/v1p1/lineItems",
-                payload={"lineItem": {"sourcedId": "li-retry-1"}},
+                json_body={"lineItem": {"sourcedId": "li-retry-1"}},
                 label="test-post",
             )
 
@@ -562,7 +597,7 @@ class TestPostWithRetry:
             return await client._post_with_retry(
                 mock_http,
                 "https://sis.example.com/ims/oneroster/v1p1/lineItems/li-1/results",
-                payload={"result": {}},
+                json_body={"result": {}},
                 label="test-post-200",
             )
 
@@ -596,7 +631,7 @@ class TestPostWithRetry:
                 return await client._post_with_retry(
                     mock_http,
                     "https://sis.example.com/ims/oneroster/v1p1/lineItems",
-                    payload={"lineItem": {}},
+                    json_body={"lineItem": {}},
                     label="test-429",
                 )
 
@@ -640,7 +675,7 @@ class TestPostWithRetry:
             result = await client._post_with_retry(
                 mock_http,
                 "https://sis.example.com/ims/oneroster/v1p1/lineItems",
-                payload={"lineItem": {}},
+                json_body={"lineItem": {}},
                 label="test-401",
             )
             client._ensure_token = original_ensure_token
