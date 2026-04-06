@@ -1291,6 +1291,7 @@ def assistant_chat():
         active_provider = active_model_info["provider"]
         system_prompt = _build_system_prompt()
         max_rounds = MAX_TOOL_ROUNDS
+        executed_tools_this_turn = []  # Track all tool calls across rounds for claim checking
         for _round_idx in range(max_rounds):
             try:
                 # Per-round cost check — warn and stop if getting expensive
@@ -1519,6 +1520,13 @@ def assistant_chat():
                     break
 
                 if not tool_use_blocks:
+                    # Post-response claim check: detect if AI claims actions it didn't perform
+                    from backend.services.assistant_tool_guards import check_false_claims
+                    _claim_correction = check_false_claims(full_response_text, executed_tools_this_turn)
+                    if _claim_correction:
+                        logger.warning("False claim detected in assistant response, appending correction")
+                        yield f"data: {json.dumps({'type': 'text', 'content': _claim_correction})}\n\n"
+                        full_response_text += _claim_correction
                     conv["messages"].append({"role": "assistant", "content": full_response_text})
                     break
 
@@ -1573,6 +1581,13 @@ def assistant_chat():
                     tool_input["teacher_id"] = teacher_id
                     result = execute_tool(tb["name"], tool_input)
 
+                    # Record execution for post-response claim checking
+                    executed_tools_this_turn.append({"name": tb["name"], "result": result})
+
+                    # Inject verification message for guarded tools
+                    from backend.services.assistant_tool_guards import get_verification_message
+                    _verification_msg = get_verification_message(tb["name"], result)
+
                     # Cross-tool guardrail: track students from lookup calls
                     if tb["name"] == "lookup_student_info" and isinstance(result, dict):
                         students = result.get("students", [])
@@ -1608,6 +1623,8 @@ def assistant_chat():
                                         f"Please call lookup_student_info for '{sn}' first to verify the correct student."
                                     }
                     result_str = json.dumps(result)
+                    if _verification_msg:
+                        result_str = result_str + "\n\n" + _verification_msg
                     if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
                         result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'
 
