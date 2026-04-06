@@ -2600,8 +2600,9 @@ def brainstorm_lesson_ideas():
     data = request.json
     selected_standards = data.get('standards', [])
     config = data.get('config', {})
+    reference_docs = data.get('referenceDocs', [])
 
-    if not selected_standards and not data.get('referenceDocs'):
+    if not selected_standards and not reference_docs:
         return jsonify({"error": "Please select standards or upload reference documents"})
 
     _subject = config.get('subject', '').strip()
@@ -2691,14 +2692,34 @@ NO TECHNOLOGY TOOLS SELECTED: Focus entirely on non-digital activities using sta
         subject_boundary = _build_subject_boundary_prompt(
             config.get('subject', ''), config.get('grade', ''))
 
-        prompt = f"""You are an expert curriculum developer brainstorming lesson plan ideas for a {config.get('grade', '7')}th grade {config.get('subject', 'Social Studies')} class.
-{subject_boundary}
-{support_docs}
+        # Build reference documents block
+        ref_docs_block = ''
+        if reference_docs:
+            ref_docs_block = "\n=== REFERENCE DOCUMENTS (use this content to inform your ideas) ===\n"
+            for doc in reference_docs:
+                doc_name = doc.get('filename', 'Document')
+                doc_text = doc.get('text', '')[:6000]
+                ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
+            ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when brainstorming ideas.\n"
 
+        if selected_standards:
+            standards_section = f"""
 STANDARDS TO COVER (every idea MUST directly address these specific standards):
 {standards_text}
 
-IMPORTANT: Read the benchmark text, vocabulary, and learning targets above carefully. Every lesson idea must be DIRECTLY about the specific topic described in the standard(s). Do NOT generate ideas about other topics, time periods, or standards — ONLY the ones listed above.
+IMPORTANT: Read the benchmark text, vocabulary, and learning targets above carefully. Every lesson idea must be DIRECTLY about the specific topic described in the standard(s). Do NOT generate ideas about other topics, time periods, or standards — ONLY the ones listed above."""
+        elif reference_docs:
+            standards_section = """
+No specific standards selected. Use the uploaded reference documents as the primary content source. Generate ideas that teach the key concepts, vocabulary, and skills found in those documents."""
+        else:
+            standards_section = """
+No specific standards selected. Generate ideas appropriate for the grade level and subject area. Focus on key topics and skills typical for this subject and grade."""
+
+        prompt = f"""You are an expert curriculum developer brainstorming lesson plan ideas for a {config.get('grade', '7')}th grade {config.get('subject', 'Social Studies')} class.
+{subject_boundary}
+{support_docs}
+{ref_docs_block}
+{standards_section}
 
 TEACHER'S ADDITIONAL REQUIREMENTS:
 {config.get('requirements', '').strip() or 'None specified'}

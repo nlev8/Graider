@@ -4132,7 +4132,7 @@ ${signature}`;
       return;
     }
     if (selectedStandards.length === 0 && uploadedDocs.length === 0) {
-      addToast("Please select at least one standard or upload reference documents", "warning");
+      addToast("Please select standards or upload reference documents", "warning");
       return;
     }
     const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
@@ -4156,8 +4156,10 @@ ${signature}`;
         }
         return text;
       });
+      const referenceDocs = uploadedDocs.map(function(doc) { return { filename: doc.filename, text: doc.text }; });
       const data = await api.brainstormLessonIdeas({
         standards: fullStandards,
+        referenceDocs: referenceDocs,
         config: {
           state: config.state || "FL",
           grade: config.grade_level,
@@ -10128,20 +10130,13 @@ ${signature}`;
                           {/* Brainstorm Button */}
                           <button
                             onClick={brainstormIdeasHandler}
-                            disabled={
-                              brainstormLoading ||
-                              (selectedStandards.length === 0 && uploadedDocs.length === 0)
-                            }
+                            disabled={brainstormLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0)}
                             className="btn btn-secondary"
                             style={{
                               width: "100%",
                               justifyContent: "center",
                               marginBottom: "10px",
-                              opacity:
-                                brainstormLoading ||
-                                (selectedStandards.length === 0 && uploadedDocs.length === 0)
-                                  ? 0.5
-                                  : 1,
+                              opacity: brainstormLoading || (selectedStandards.length === 0 && uploadedDocs.length === 0) ? 0.5 : 1,
                             }}
                           >
                             {brainstormLoading ? (
