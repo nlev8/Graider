@@ -4369,6 +4369,21 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
     sections = assignment.get('sections', [])
     total_points = assignment.get('total_points', 100)
 
+    # Teacher name and subject header
+    _teacher = assignment.get('teacher_name', '')
+    _subject = assignment.get('subject', '')
+    if _teacher or _subject:
+        header_para = doc.add_paragraph()
+        header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        header_parts = []
+        if _teacher:
+            header_parts.append(_teacher)
+        if _subject:
+            header_parts.append(_subject)
+        header_run = header_para.add_run("  |  ".join(header_parts))
+        header_run.font.size = Pt(11)
+        header_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
     # Title — 24pt, centered
     heading = doc.add_heading(title, 0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -4660,6 +4675,14 @@ def export_generated_assignment():
     sections = assignment.get('sections', [])
     total_points = assignment.get('total_points', 100)
     time_estimate = assignment.get('time_estimate', '')
+    teacher_name = data.get('teacher_name', '')
+    subject_name = data.get('subject', '')
+
+    # Inject teacher/subject into assignment for export functions
+    if teacher_name:
+        assignment['teacher_name'] = teacher_name
+    if subject_name:
+        assignment['subject'] = subject_name
 
     # DOCX with Graider tables for student worksheets
     if format_type == 'docx' and not include_answers:
@@ -4769,6 +4792,23 @@ def export_generated_assignment():
         )
 
         story = []
+
+        # Teacher name / subject header
+        _teacher = assignment.get('teacher_name', '')
+        _subject = assignment.get('subject', '')
+        if _teacher or _subject:
+            header_parts = []
+            if _teacher:
+                header_parts.append(_teacher)
+            if _subject:
+                header_parts.append(_subject)
+            header_text = "  |  ".join(header_parts)
+            header_style = ParagraphStyle(
+                'TeacherHeader', parent=styles['Normal'],
+                alignment=TA_CENTER, fontSize=11, textColor=gray
+            )
+            story.append(Paragraph(header_text, header_style))
+            story.append(Spacer(1, 0.05*inch))
 
         # Title
         story.append(Paragraph(title, title_style))

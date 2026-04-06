@@ -363,11 +363,11 @@ export async function generateAssignmentFromLesson(lessonPlan, config, assignmen
   })
 }
 
-export async function exportGeneratedAssignment(assignment, format = 'docx', includeAnswers = false) {
+export async function exportGeneratedAssignment(assignment, format = 'docx', includeAnswers = false, opts = {}) {
   track('content_exported', { type: 'generated_assignment', format, include_answers: includeAnswers })
   return fetchApi('/api/export-generated-assignment', {
     method: 'POST',
-    body: JSON.stringify({ assignment, format, include_answers: includeAnswers }),
+    body: JSON.stringify({ assignment, format, include_answers: includeAnswers, teacher_name: opts.teacher_name || '', subject: opts.subject || '' }),
   })
 }
 
