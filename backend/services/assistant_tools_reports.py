@@ -2513,6 +2513,9 @@ def confirm_and_send(teacher_id='local-dev'):
 
     Reads the pending payload saved by send_focus_comms or send_parent_emails,
     then triggers the actual Playwright automation.
+
+    NOTE: This tool is called by the AI assistant. The frontend "Send Now" button
+    calls /api/confirm-send directly (email_routes.py) instead.
     """
     require_teacher_id(teacher_id)
     # Load pending payload from storage (preferred) or filesystem fallback

@@ -1435,8 +1435,22 @@ def confirm_send():
 
     # Try POST body first (sent by frontend Send Now button)
     body = request.get_json(silent=True) or {}
-    if body.get("action"):
+    if body.get("action") and (body.get("messages") or body.get("emails") or body.get("student_name")):
         pending = body
+
+    # Try Supabase storage
+    if not pending:
+        try:
+            from backend.storage import load as _storage_load
+            _teacher_id = getattr(g, 'user_id', 'local-dev')
+            pending = _storage_load('pending_send', _teacher_id)
+            if not pending:
+                for _key in ('send_focus_comms', 'send_behavior_email', 'send_parent_emails'):
+                    pending = _storage_load('pending_send:' + _key, _teacher_id)
+                    if pending:
+                        break
+        except Exception:
+            pass
 
     # Fall back to pending file
     if not pending and os.path.exists(pending_path):

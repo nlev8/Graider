@@ -970,7 +970,7 @@ export default function AssistantChat({ addToast, subject }) {
                         const resp = await fetch('/api/confirm-send', {
                           method: 'POST',
                           headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                          body: JSON.stringify(msg.pendingPayload || {}),
+                          body: JSON.stringify(msg.pendingPayload || {action: 'send_focus_comms'}),
                         })
                         const data = await resp.json()
                         if (data.error) {

@@ -1523,7 +1523,9 @@ def assistant_chat():
                 if not tool_use_blocks:
                     # Post-response claim check: detect if AI claims actions it didn't perform
                     from backend.services.assistant_tool_guards import check_false_claims
+                    logger.info("CLAIM CHECK: response=%r, tools=%s", full_response_text[:200], [t["name"] for t in executed_tools_this_turn])
                     _claim_correction = check_false_claims(full_response_text, executed_tools_this_turn)
+                    logger.info("CLAIM CHECK RESULT: %r", _claim_correction)
                     if _claim_correction:
                         logger.warning("False claim detected in assistant response, appending correction")
                         yield f"data: {json.dumps({'type': 'text', 'content': _claim_correction})}\n\n"
@@ -1577,6 +1579,7 @@ def assistant_chat():
                     yield from _flush_audio_queue()
 
                     _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
+                    logger.info("TOOL DISPATCH: name=%s, round=%d", tb["name"], _round_idx)
                     # Inject teacher_id for tools that need per-teacher context
                     # Uses teacher_id captured at top of assistant_chat() (line ~1145)
                     tool_input["teacher_id"] = teacher_id
@@ -1636,6 +1639,7 @@ def assistant_chat():
                                     }
                     result_str = json.dumps(result)
                     if _verification_msg:
+                        logger.info("VERIFICATION INJECTED for %s: %s", tb["name"], _verification_msg[:100])
                         result_str = result_str + "\n\n" + _verification_msg
                     if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
                         result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'
