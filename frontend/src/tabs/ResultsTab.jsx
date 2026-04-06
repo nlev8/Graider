@@ -97,7 +97,7 @@ import * as api from "../services/api";
 function ExportGradesDropdown({
   gradesApproved, batchExportLoading, setBatchExportLoading,
   editedResults, status, resultsAssignmentFilter, resultsPeriodFilter,
-  setFocusExportModal, addToast,
+  setFocusExportModal, addToast, config,
 }) {
   var _open = useState(false)
   var open = _open[0]
@@ -1046,6 +1046,7 @@ export default React.memo(function ResultsTab({
                             resultsPeriodFilter={resultsPeriodFilter}
                             setFocusExportModal={setFocusExportModal}
                             addToast={addToast}
+                            config={config}
                           />
                           <button
                             onClick={async () => {
