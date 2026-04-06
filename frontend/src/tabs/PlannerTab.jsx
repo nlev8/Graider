@@ -3161,7 +3161,7 @@ export default React.memo(function PlannerTab({
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const result = await api.exportGeneratedAssignment(lessonPlan, "docx", false);
+                                        const result = await api.exportGeneratedAssignment(lessonPlan, "docx", false, { teacher_name: config.teacher_name, subject: config.subject });
                                         if (result.error) {
                                           addToast("Error: " + result.error, "error");
                                         } else {
@@ -3180,7 +3180,7 @@ export default React.memo(function PlannerTab({
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", false);
+                                        const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", false, { teacher_name: config.teacher_name, subject: config.subject });
                                         if (result.error) {
                                           addToast("Error: " + result.error, "error");
                                         } else {
@@ -3199,7 +3199,7 @@ export default React.memo(function PlannerTab({
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", true);
+                                        const result = await api.exportGeneratedAssignment(lessonPlan, "pdf", true, { teacher_name: config.teacher_name, subject: config.subject });
                                         if (result.error) {
                                           addToast("Error: " + result.error, "error");
                                         } else {
@@ -3278,7 +3278,7 @@ export default React.memo(function PlannerTab({
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "docx", false);
+                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "docx", false, { teacher_name: config.teacher_name, subject: config.subject });
                                         if (result.error) addToast("Error: " + result.error, "error");
                                         else addToast("Assignment exported as DOCX!", "success");
                                       } catch (e) {
@@ -3294,7 +3294,7 @@ export default React.memo(function PlannerTab({
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", false);
+                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", false, { teacher_name: config.teacher_name, subject: config.subject });
                                         if (result.error) addToast("Error: " + result.error, "error");
                                         else addToast("Assignment exported as PDF!", "success");
                                       } catch (e) {
@@ -3310,7 +3310,7 @@ export default React.memo(function PlannerTab({
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", true);
+                                        const result = await api.exportGeneratedAssignment(generatedAssignment, "pdf", true, { teacher_name: config.teacher_name, subject: config.subject });
                                         if (result.error) addToast("Error: " + result.error, "error");
                                         else addToast("Answer key exported as PDF!", "success");
                                       } catch (e) {
@@ -3913,6 +3913,7 @@ export default React.memo(function PlannerTab({
                                             generatedAssignment,
                                             "docx",
                                             false,
+                                            { teacher_name: config.teacher_name, subject: config.subject },
                                           );
                                         if (result.error) {
                                           addToast(
@@ -3947,6 +3948,7 @@ export default React.memo(function PlannerTab({
                                             generatedAssignment,
                                             "pdf",
                                             false,
+                                            { teacher_name: config.teacher_name, subject: config.subject },
                                           );
                                         if (result.error) {
                                           addToast(
@@ -3981,6 +3983,7 @@ export default React.memo(function PlannerTab({
                                             generatedAssignment,
                                             "pdf",
                                             true,
+                                            { teacher_name: config.teacher_name, subject: config.subject },
                                           );
                                         if (result.error) {
                                           addToast(
