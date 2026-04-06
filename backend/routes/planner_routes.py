@@ -5026,7 +5026,7 @@ def export_generated_assignment():
                         for _ in range(3):
                             story.append(Paragraph("_" * 85, normal_style))
                     elif section_type in ['multiple_choice', 'true_false']:
-                        story.append(Paragraph("<b>Answer:</b> _____", normal_style))
+                        pass  # Bubbles are the answer — no separate answer line needed
                     else:
                         for _ in range(2):
                             story.append(Paragraph("_" * 85, normal_style))
