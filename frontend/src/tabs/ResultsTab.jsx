@@ -161,6 +161,52 @@ function ExportGradesDropdown({
     }
   }
 
+  var _sisLoading = useState(false)
+  var sisLoading = _sisLoading[0]
+  var setSisLoading = _sisLoading[1]
+
+  async function handleOneRosterSync() {
+    setOpen(false)
+    setSisLoading(true)
+    try {
+      var resultsToSync = getFilteredResults()
+      var assignment = getAssignment()
+      var scores = resultsToSync.map(function(r) {
+        var sid = r.student_id_number || ''
+        if (sid.startsWith('oneroster:')) {
+          sid = sid.substring('oneroster:'.length)
+        } else {
+          sid = ''
+        }
+        return {
+          student_sourced_id: sid,
+          score: r.score || 0,
+          max_score: r.total_points || 100,
+          comment: r.feedback_summary || r.feedback || '',
+        }
+      })
+      var res = await api.syncOneRosterGrades({
+        assessment_id: resultsAssignmentFilter || assignment,
+        title: assignment,
+        total_points: (resultsToSync[0] && resultsToSync[0].total_points) || 100,
+        class_sourced_id: (resultsToSync[0] && resultsToSync[0].class_sourced_id) || '',
+        scores: scores,
+      })
+      if (res.error) {
+        addToast(res.error, "error")
+      } else {
+        var msg = "Synced " + res.synced + " grade" + (res.synced !== 1 ? "s" : "") + " to SIS"
+        if (res.skipped > 0) msg += ", " + res.skipped + " skipped (no SIS match)"
+        if (res.failed > 0) msg += ", " + res.failed + " failed"
+        addToast(msg, res.failed > 0 ? "warning" : "success")
+      }
+    } catch (err) {
+      addToast("SIS sync error: " + err.message, "error")
+    } finally {
+      setSisLoading(false)
+    }
+  }
+
   async function handleLmsExport(format) {
     setOpen(false)
     setLmsLoading(true)
@@ -182,7 +228,7 @@ function ExportGradesDropdown({
   }
 
   var disabled = !gradesApproved || status.results.length === 0
-  var loading = batchExportLoading || lmsLoading
+  var loading = batchExportLoading || lmsLoading || sisLoading
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "inline-block" }}>
@@ -211,6 +257,10 @@ function ExportGradesDropdown({
           {config.sis_type === 'focus' && (<>
           <DropdownItem onClick={handleFocusSIS} icon="Upload" label="Focus SIS" />
           <DropdownItem onClick={handleFocusBatch} icon="FolderDown" label="Focus Batch" />
+          <div style={{ height: "1px", background: "var(--glass-border)", margin: "2px 0" }} />
+          </>)}
+          {(config || {}).sis_type === 'oneroster' && (<>
+          <DropdownItem onClick={handleOneRosterSync} icon="RefreshCw" label="Sync to SIS" />
           <div style={{ height: "1px", background: "var(--glass-border)", margin: "2px 0" }} />
           </>)}
           <DropdownItem onClick={() => handleLmsExport('canvas')} icon="GraduationCap" label="Canvas LMS" />
@@ -492,6 +542,42 @@ export default React.memo(function ResultsTab({
                                     onClick: function() { setExpandedAssessmentId(isExpanded ? null : assessment.id); },
                                     style: {color: "#8b5cf6", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500},
                                   }, isExpanded ? 'Hide' : 'View Details'),
+                                  (config || {}).sis_type === 'oneroster' && React.createElement('button', {
+                                    key: 'sis',
+                                    className: "btn btn-secondary",
+                                    style: {padding: "4px 10px", fontSize: "0.78rem"},
+                                    title: "Push grades and comments to SIS gradebook",
+                                    onClick: function() {
+                                      var scores = (assessment.submissions || []).map(function(s) {
+                                        var sid = s.student_id_number || ''
+                                        if (sid.startsWith('oneroster:')) sid = sid.substring('oneroster:'.length)
+                                        else sid = ''
+                                        return {
+                                          student_sourced_id: sid,
+                                          score: s.score || 0,
+                                          max_score: s.total_points || (assessment.stats && assessment.stats.total_points) || 100,
+                                          comment: s.feedback_summary || '',
+                                        }
+                                      })
+                                      api.syncOneRosterGrades({
+                                        assessment_id: assessment.id,
+                                        title: assessment.title,
+                                        total_points: (assessment.stats && assessment.stats.total_points) || 100,
+                                        class_sourced_id: assessment.class_sourced_id || '',
+                                        scores: scores,
+                                      }).then(function(res) {
+                                        if (res.error) {
+                                          addToast(res.error, "error")
+                                        } else {
+                                          var msg = "Synced " + res.synced + " grade" + (res.synced !== 1 ? "s" : "") + " to SIS"
+                                          if (res.skipped > 0) msg += ", " + res.skipped + " skipped"
+                                          addToast(msg, res.failed > 0 ? "warning" : "success")
+                                        }
+                                      }).catch(function(err) {
+                                        addToast("SIS sync error: " + err.message, "error")
+                                      })
+                                    },
+                                  }, [React.createElement(Icon, {key: 'ic', name: "RefreshCw", size: 14}), ' Sync to SIS']),
                                   React.createElement('span', {
                                     key: 'delete',
                                     onClick: function() {
