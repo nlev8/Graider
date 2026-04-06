@@ -2325,13 +2325,17 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
                 "student_name": e["student_name"],
             })
         # Store pending payload for confirm_and_send tool
+        pending_data = {"action": "send_parent_emails", "emails": emails}
         if storage_save:
-            storage_save('pending_send', {"action": "send_parent_emails", "emails": emails}, teacher_id)
-        else:
-            pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
-            os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+            storage_save('pending_send', pending_data, teacher_id)
+        # Always write filesystem fallback (SSE event builder reads from here)
+        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+        os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+        try:
             with open(pending_path, 'w') as pf:
-                json.dump({"action": "send_parent_emails", "emails": emails}, pf)
+                json.dump(pending_data, pf)
+        except Exception:
+            pass
 
         audit_tool_action(teacher_id, 'send_parent_emails', 'SEND_EMAIL')
 
@@ -2468,13 +2472,17 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
                 "sms_body": m["sms_body"][:200] if m["sms_body"] else "(no SMS)",
             })
         # Store pending payload for confirm_and_send tool
+        pending_data = {"action": "send_focus_comms", "messages": messages}
         if storage_save:
-            storage_save('pending_send', {"action": "send_focus_comms", "messages": messages}, teacher_id)
-        else:
-            pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
-            os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+            storage_save('pending_send', pending_data, teacher_id)
+        # Always write filesystem fallback (SSE event builder reads from here)
+        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+        os.makedirs(os.path.dirname(pending_path), exist_ok=True)
+        try:
             with open(pending_path, 'w') as pf:
-                json.dump({"action": "send_focus_comms", "messages": messages}, pf)
+                json.dump(pending_data, pf)
+        except Exception:
+            pass
 
         audit_tool_action(teacher_id, 'send_focus_comms', 'SEND_EMAIL')
 

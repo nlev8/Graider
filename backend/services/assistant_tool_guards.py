@@ -42,6 +42,8 @@ GUARDED_ACTIONS = {
             "email has been delivered",
             "messages were sent",
             "has been delivered",
+            "sending via",
+            "sending to",
         ],
     },
     "remove_student_from_roster": {
