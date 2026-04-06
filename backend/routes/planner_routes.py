@@ -119,7 +119,7 @@ This content is EXCLUSIVELY for {subject} at grade {grade} level.
 """
 
 
-def _build_section_categories_prompt(categories, subject=''):
+def _build_section_categories_prompt(categories, subject='', question_type_counts=None):
     """Build AI prompt section describing which assessment sections to generate."""
     if not categories or not any(categories.values()):
         return "Generate standard sections: Multiple Choice and Short Answer."
@@ -168,10 +168,14 @@ def _build_section_categories_prompt(categories, subject=''):
     }
 
     enabled = [k for k, v in categories.items() if v]
-    lines = [f"ALLOWED section types (use ONLY the ones relevant to the topic/standards):"]
+    lines = ["ALLOWED section types (use ONLY the ones relevant to the topic/standards):"]
     for i, key in enumerate(enabled, 1):
         info = section_map.get(key, {})
-        lines.append(f"  - {info.get('name', key)}: {info.get('instruction', '')}")
+        count = (question_type_counts or {}).get(key, 0)
+        if count and count > 0:
+            lines.append("  - " + info.get('name', key) + " (EXACTLY " + str(count) + " questions): " + info.get('instruction', ''))
+        else:
+            lines.append("  - " + info.get('name', key) + ": " + info.get('instruction', ''))
 
     disabled = [k for k, v in categories.items() if not v]
     if disabled:
@@ -2922,7 +2926,7 @@ TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
         assignment_section_cats = config.get('sectionCategories', {})
         assignment_sections_block = ''
         if assignment_section_cats and any(assignment_section_cats.values()):
-            assignment_sections_block = '\n' + _build_section_categories_prompt(assignment_section_cats, config.get('subject', '')) + '\n'
+            assignment_sections_block = '\n' + _build_section_categories_prompt(assignment_section_cats, config.get('subject', ''), question_type_counts=config.get('questionTypeCounts')) + '\n'
 
         if content_type == 'Assignment':
             total_q = config.get('totalQuestions', 10)
@@ -3557,7 +3561,7 @@ def generate_assignment_from_lesson():
         # Apply section category constraints from the UI
         section_categories = config.get('sectionCategories', {})
         if section_categories and any(section_categories.values()):
-            section_prompt = _build_section_categories_prompt(section_categories, config.get('subject', ''))
+            section_prompt = _build_section_categories_prompt(section_categories, config.get('subject', ''), question_type_counts=config.get('questionTypeCounts'))
             type_instruction += "\n\n" + section_prompt
 
         # Build available tools instruction
@@ -6064,7 +6068,7 @@ CRITICAL REQUIREMENTS:
 17. For science questions: Use ONE consistent unit system (metric or imperial) per question — do NOT mix systems unless the question is explicitly about unit conversion. All values must be physically plausible (no negative mass, no temperatures below absolute zero, no pH outside 0-14, no percentages above 100% for concentrations/efficiency). If referencing a figure, diagram, or lab setup, include the data in structured fields — never reference a visual that doesn't exist.
 
 SECTION CATEGORIES TO INCLUDE:
-{_build_section_categories_prompt(section_categories, config.get('subject', ''))}
+{_build_section_categories_prompt(section_categories, config.get('subject', ''), question_type_counts=config.get('questionTypeCounts'))}
 
 {f"TEACHER'S ADDITIONAL REQUIREMENTS (MUST FOLLOW — every question must reflect these):" + chr(10) + config.get('requirements', '').strip() + chr(10) if config.get('requirements', '').strip() else ''}
 {f"TEACHER'S GLOBAL INSTRUCTIONS (MUST FOLLOW):" + chr(10) + global_ai_notes + chr(10) if global_ai_notes else ''}
