@@ -1122,10 +1122,6 @@ export default React.memo(function PlannerTab({
       addToast("Please select a grade level in Settings before generating", "warning");
       return;
     }
-    if (selectedStandards.length === 0) {
-      addToast("Please select at least one standard", "warning");
-      return;
-    }
     const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
     if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
     setBrainstormLoading(true);
