@@ -684,3 +684,168 @@ class TestPostWithRetry:
         result = asyncio.run(run())
         assert call_count == 2
         assert result.get("lineItem", {}).get("sourcedId") == "li-after-401"
+
+
+# ── ensure_line_item ───────────────────────────────────────────────────────────
+
+
+class TestEnsureLineItem:
+    def test_creates_new_line_item_when_no_mapping(self):
+        """ensure_line_item should call create_line_item and save() when no mapping exists."""
+        from backend.services.oneroster_gradebook import ensure_line_item
+
+        mock_client = MagicMock()
+        mock_client.create_line_item = AsyncMock(return_value={"sourcedId": "li-new-1"})
+
+        async def run():
+            with patch("backend.services.oneroster_gradebook.load", return_value=None) as mock_load, \
+                 patch("backend.services.oneroster_gradebook.save") as mock_save:
+                result = await ensure_line_item(
+                    client=mock_client,
+                    teacher_id="teacher-uuid-1",
+                    assessment_id="assess-abc",
+                    title="Chapter 5 Quiz",
+                    total_points=50.0,
+                    class_sourced_id="cls-100",
+                )
+                # create_line_item must be called once
+                mock_client.create_line_item.assert_called_once_with(
+                    title="Chapter 5 Quiz",
+                    class_sourced_id="cls-100",
+                    max_score=50.0,
+                )
+                # save() must be called with the new mapping
+                assert mock_save.called
+                call_args = mock_save.call_args
+                saved_data_key = call_args[0][0]
+                saved_mapping = call_args[0][1]
+                saved_teacher_id = call_args[0][2]
+                assert saved_data_key == "oneroster_line_items"
+                assert saved_teacher_id == "teacher-uuid-1"
+                assert "assess-abc" in saved_mapping
+                assert saved_mapping["assess-abc"]["line_item_id"] == "li-new-1"
+                assert saved_mapping["assess-abc"]["class_sourced_id"] == "cls-100"
+                assert saved_mapping["assess-abc"]["title"] == "Chapter 5 Quiz"
+                return result
+
+        line_item_id = asyncio.run(run())
+        assert line_item_id == "li-new-1"
+
+    def test_returns_existing_line_item_from_mapping(self):
+        """ensure_line_item should return cached line_item_id without calling create_line_item."""
+        from backend.services.oneroster_gradebook import ensure_line_item
+
+        mock_client = MagicMock()
+        mock_client.create_line_item = AsyncMock()
+
+        existing_mapping = {
+            "assess-xyz": {
+                "line_item_id": "li-cached-99",
+                "class_sourced_id": "cls-200",
+                "title": "Final Exam",
+                "created_at": "2026-04-01T00:00:00+00:00",
+            }
+        }
+
+        async def run():
+            with patch("backend.services.oneroster_gradebook.load", return_value=existing_mapping), \
+                 patch("backend.services.oneroster_gradebook.save") as mock_save:
+                result = await ensure_line_item(
+                    client=mock_client,
+                    teacher_id="teacher-uuid-2",
+                    assessment_id="assess-xyz",
+                    title="Final Exam",
+                    total_points=100.0,
+                    class_sourced_id="cls-200",
+                )
+                # create_line_item must NOT be called — mapping already exists
+                mock_client.create_line_item.assert_not_called()
+                # save must NOT be called — nothing changed
+                mock_save.assert_not_called()
+                return result
+
+        line_item_id = asyncio.run(run())
+        assert line_item_id == "li-cached-99"
+
+
+# ── post_results ───────────────────────────────────────────────────────────────
+
+
+class TestPostResults:
+    def test_posts_scores_and_collects_results(self):
+        """post_results with 2 valid scores should return synced=2, failed=0, skipped=0."""
+        from backend.services.oneroster_gradebook import post_results
+
+        mock_client = MagicMock()
+        mock_client.create_result = AsyncMock(return_value={"sourcedId": "res-ok"})
+
+        scores = [
+            {"student_sourced_id": "stu-1", "score": 88.0, "max_score": 100.0, "comment": "Good"},
+            {"student_sourced_id": "stu-2", "score": 72.0, "max_score": 100.0, "comment": ""},
+        ]
+
+        async def run():
+            return await post_results(mock_client, "li-abc", scores)
+
+        result = asyncio.run(run())
+        assert result["synced"] == 2
+        assert result["failed"] == 0
+        assert result["skipped"] == 0
+        assert result["errors"] == []
+        assert mock_client.create_result.call_count == 2
+
+    def test_skips_students_without_sourced_id(self):
+        """post_results should skip entries with empty or None student_sourced_id."""
+        from backend.services.oneroster_gradebook import post_results
+
+        mock_client = MagicMock()
+        mock_client.create_result = AsyncMock(return_value={"sourcedId": "res-ok"})
+
+        scores = [
+            {"student_sourced_id": "stu-valid", "score": 90.0, "max_score": 100.0, "comment": ""},
+            {"student_sourced_id": "", "score": 50.0, "max_score": 100.0, "comment": ""},
+            {"student_sourced_id": None, "score": 60.0, "max_score": 100.0, "comment": ""},
+        ]
+
+        async def run():
+            return await post_results(mock_client, "li-def", scores)
+
+        result = asyncio.run(run())
+        assert result["synced"] == 1
+        assert result["skipped"] == 2
+        assert result["failed"] == 0
+        assert result["errors"] == []
+        # create_result called only for the valid student
+        assert mock_client.create_result.call_count == 1
+
+    def test_collects_errors_without_stopping(self):
+        """post_results should continue processing when a student's create_result raises."""
+        from backend.services.oneroster_gradebook import post_results
+
+        call_count = 0
+
+        async def create_result_side_effect(line_item_id, student_sourced_id, score, max_score, comment=""):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise RuntimeError("SIS timeout for student stu-2")
+            return {"sourcedId": f"res-{student_sourced_id}"}
+
+        mock_client = MagicMock()
+        mock_client.create_result = AsyncMock(side_effect=create_result_side_effect)
+
+        scores = [
+            {"student_sourced_id": "stu-1", "score": 85.0, "max_score": 100.0, "comment": ""},
+            {"student_sourced_id": "stu-2", "score": 70.0, "max_score": 100.0, "comment": ""},
+            {"student_sourced_id": "stu-3", "score": 95.0, "max_score": 100.0, "comment": ""},
+        ]
+
+        async def run():
+            return await post_results(mock_client, "li-ghi", scores)
+
+        result = asyncio.run(run())
+        assert result["synced"] == 2
+        assert result["failed"] == 1
+        assert result["skipped"] == 0
+        assert len(result["errors"]) == 1
+        assert "SIS timeout" in result["errors"][0]
