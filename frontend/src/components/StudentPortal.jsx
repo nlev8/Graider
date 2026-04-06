@@ -626,7 +626,7 @@ export default function StudentPortal({
               onClick={() => onBack ? onBack() : (window.location.href = "/join")}
               style={{ ...buttonStyle, maxWidth: "300px", margin: "0 auto" }}
             >
-              {onBack ? "Back to Dashboard" : "Take Another Assessment"}
+              {onBack ? "Back to Dashboard" : (assessment?.settings?.content_type === 'assignment' ? "Take Another Assignment" : "Take Another Assessment")}
             </button>
           </div>
         </div>
