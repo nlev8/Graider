@@ -2513,6 +2513,14 @@ def confirm_and_send(teacher_id='local-dev'):
         pending = storage_load('pending_send', teacher_id)
 
     if not pending:
+        # Check keyed storage entries (send_behavior_email etc. save under action-specific keys)
+        for action_key in ('send_behavior_email', 'send_focus_comms', 'send_parent_emails', 'remove_student'):
+            keyed = storage_load('pending_send:' + action_key, teacher_id) if storage_load else None
+            if keyed:
+                pending = keyed
+                break
+
+    if not pending:
         pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
         if not os.path.exists(pending_path):
             return {"error": "No pending send action. Generate a preview first using send_focus_comms or send_parent_emails."}
@@ -2564,6 +2572,61 @@ def confirm_and_send(teacher_id='local-dev'):
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_emails"] = len(emails)
             return result
+        elif action == "send_behavior_email":
+            student_name = pending.get("student_name", "")
+            subject = pending.get("subject", "")
+            body = pending.get("body", "")
+            method = pending.get("method", "focus")
+
+            def _clear_behavior_pending():
+                if storage_save:
+                    storage_save('pending_send', None, teacher_id)
+                    storage_save('pending_send:send_behavior_email', None, teacher_id)
+                try:
+                    os.remove(os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json"))
+                except OSError:
+                    pass
+
+            if method == "focus":
+                from backend.routes.email_routes import launch_focus_comms
+                message = {
+                    "student_name": student_name,
+                    "subject": subject,
+                    "email_body": body,
+                    "sms_body": "",
+                    "cc_emails": [],
+                }
+                result = launch_focus_comms([message], teacher_id=teacher_id)
+                if result.get("error"):
+                    return result
+                _clear_behavior_pending()
+                audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
+                return {
+                    "status": "started",
+                    "method": "focus",
+                    "message": "Focus Communications sending to " + student_name + "'s parents. Check the automation progress — a browser window will open for 2FA if needed.",
+                }
+            else:
+                from backend.services.email_service import EmailService
+                email_svc = EmailService()
+                parent_email = pending.get("parent_email", "")
+                if not parent_email:
+                    return {"error": "No parent email in pending payload."}
+                success = email_svc.send_email(
+                    to_email=parent_email,
+                    student_name=student_name,
+                    subject=subject,
+                    body=body,
+                )
+                if not success:
+                    return {"error": "Failed to send email. Check Resend configuration."}
+                _clear_behavior_pending()
+                audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
+                return {
+                    "status": "started",
+                    "method": "email",
+                    "message": "Email sent to " + parent_email,
+                }
         else:
             return {"error": f"Unknown pending action: {action}"}
     except Exception as e:

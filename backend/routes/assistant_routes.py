@@ -886,7 +886,8 @@ COMMUNICATION & REPORTING:
 STUDENT INFO:
 - get_student_accommodations: Pull specific IEP/504 presets, notes, and grading impact for a student. Use when asked about a student's accommodations.
 - get_student_streak: Show consecutive improvement/decline streaks with assignment-by-assignment history and direction indicators.
-- remove_student_from_roster: Remove a student from ALL records (roster, grades, history, accommodations, contacts, ELL, master CSV, Supabase). Use when a teacher says to remove a student or their data completely.
+- remove_student_from_roster: Preview removing a student from ALL records. Returns a PREVIEW of what will be deleted, does NOT delete anything. After showing the preview and the teacher confirms, call confirm_student_removal to execute. NEVER claim a student was removed without a successful confirm_student_removal response.
+- confirm_student_removal: Execute a pending student removal after teacher confirmation. Takes no parameters. Call ONLY after remove_student_from_roster has shown a preview and the teacher has approved.
 - export_student_data: Export all data for a student (grades, history, accommodations) as JSON + PDF. Use for parent requests, transfers, FERPA compliance.
 - import_student_data: Import a student's exported data file (JSON) into Graider. Use when a student transfers in from another Graider teacher.
 
@@ -919,7 +920,7 @@ BEHAVIOR TRACKING:
   - use_behavior_data=true: Fetches companion app data (corrections, praise, dates, notes) from Supabase and includes it in the email.
   - use_behavior_data=false: Drafts the email using ONLY the information the teacher provided in the chat (passed via custom_note). No companion app data is fetched.
   IMPORTANT: When the teacher asks you to draft an email about a student, you MUST first ask: "Would you like me to include behavior data from the Companion app, or should I draft using just the information you've shared here?" Then set use_behavior_data accordingly. If they choose no companion data, pass all the context from the conversation into custom_note.
-- send_behavior_email: Send a reviewed behavior email via Resend (direct email) or Focus portal automation. Always show the draft first and get teacher approval before sending.
+- send_behavior_email: Preview a behavior email via Resend or Focus portal. Returns a PREVIEW, does NOT send. After showing the preview and the teacher confirms, call confirm_and_send to actually send. NEVER claim the email was sent until confirm_and_send returns status "started".
 - debug_behavior: Diagnostic tool — shows teacher_id, total session/event counts, and stored student names. Use this FIRST if behavior data retrieval fails, to diagnose why.
 CRITICAL: If behavior tools return errors about missing data, call debug_behavior to diagnose, then report findings to the teacher. NEVER fabricate a behavior email without real data from the tools — the email MUST reference actual tracked incidents, not placeholders."""
 
@@ -1291,6 +1292,7 @@ def assistant_chat():
         active_provider = active_model_info["provider"]
         system_prompt = _build_system_prompt()
         max_rounds = MAX_TOOL_ROUNDS
+        executed_tools_this_turn = []  # Track all tool calls across rounds for claim checking
         for _round_idx in range(max_rounds):
             try:
                 # Per-round cost check — warn and stop if getting expensive
@@ -1519,6 +1521,13 @@ def assistant_chat():
                     break
 
                 if not tool_use_blocks:
+                    # Post-response claim check: detect if AI claims actions it didn't perform
+                    from backend.services.assistant_tool_guards import check_false_claims
+                    _claim_correction = check_false_claims(full_response_text, executed_tools_this_turn)
+                    if _claim_correction:
+                        logger.warning("False claim detected in assistant response, appending correction")
+                        yield f"data: {json.dumps({'type': 'text', 'content': _claim_correction})}\n\n"
+                        full_response_text += _claim_correction
                     conv["messages"].append({"role": "assistant", "content": full_response_text})
                     break
 
@@ -1573,6 +1582,13 @@ def assistant_chat():
                     tool_input["teacher_id"] = teacher_id
                     result = execute_tool(tb["name"], tool_input)
 
+                    # Record execution for post-response claim checking
+                    executed_tools_this_turn.append({"name": tb["name"], "result": result})
+
+                    # Inject verification message for guarded tools
+                    from backend.services.assistant_tool_guards import get_verification_message
+                    _verification_msg = get_verification_message(tb["name"], result)
+
                     # Cross-tool guardrail: track students from lookup calls
                     if tb["name"] == "lookup_student_info" and isinstance(result, dict):
                         students = result.get("students", [])
@@ -1608,6 +1624,8 @@ def assistant_chat():
                                         f"Please call lookup_student_info for '{sn}' first to verify the correct student."
                                     }
                     result_str = json.dumps(result)
+                    if _verification_msg:
+                        result_str = result_str + "\n\n" + _verification_msg
                     if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
                         result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'
 

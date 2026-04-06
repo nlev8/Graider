@@ -6,6 +6,8 @@ import asyncio
 import logging
 import os
 import time
+import uuid
+from datetime import date
 
 import httpx
 
@@ -56,6 +58,42 @@ class OneRosterClient:
             resp = await client.get(url, headers=headers)
 
             if resp.status_code == 200:
+                return resp.json()
+
+            if resp.status_code == 401 and attempt < MAX_RETRIES - 1:
+                logger.warning("401 on %s, refreshing token (attempt %d)", label or url, attempt + 1)
+                self._token = None
+                self._token_expires = 0
+                continue
+
+            if resp.status_code == 429 or resp.status_code >= 500:
+                delay = min(2 ** attempt, 30)
+                logger.warning(
+                    "%d on %s, retrying in %ds (attempt %d/%d)",
+                    resp.status_code, label or url, delay, attempt + 1, MAX_RETRIES,
+                )
+                await asyncio.sleep(delay)
+                continue
+
+            resp.raise_for_status()
+
+        raise httpx.HTTPStatusError(
+            f"Max retries exceeded for {label or url}",
+            request=resp.request,
+            response=resp,
+        )
+
+    async def _post_with_retry(self, client, url, json_body, label=""):
+        """POST with exponential backoff on 429/5xx, token refresh on 401.
+
+        Accepts HTTP 200 and 201 as success. Returns parsed JSON body.
+        """
+        for attempt in range(MAX_RETRIES):
+            await self._ensure_token(client)
+            headers = {"Authorization": f"Bearer {self._token}"}
+            resp = await client.post(url, json=json_body, headers=headers)
+
+            if resp.status_code in (200, 201):
                 return resp.json()
 
             if resp.status_code == 401 and attempt < MAX_RETRIES - 1:
@@ -172,6 +210,89 @@ class OneRosterClient:
                 "enrollments": enrollments,
                 "demographics": demographics,
             }
+
+
+    async def create_line_item(self, title, class_sourced_id, max_score, due_date=None):
+        """Create a gradebook line item (assignment) in the OneRoster SIS.
+
+        Args:
+            title: Human-readable name for the assignment.
+            class_sourced_id: The OneRoster sourcedId of the class.
+            max_score: Maximum possible score (resultValueMax).
+            due_date: Optional ISO 8601 date string (e.g. '2026-04-10').
+
+        Returns:
+            The lineItem dict from the SIS response.
+        """
+        sourced_id = str(uuid.uuid4())
+        today = due_date if due_date is not None else date.today().isoformat()
+        payload_item = {
+            "sourcedId": sourced_id,
+            "status": "active",
+            "title": title,
+            "assignDate": today,
+            "dueDate": today,
+            "class": {"sourcedId": class_sourced_id, "type": "class"},
+            "resultValueMin": 0.0,
+            "resultValueMax": float(max_score),
+            "category": {"sourcedId": "graider-auto", "title": "Graider"},
+        }
+
+        json_body = {"lineItem": payload_item}
+        url = f"{self.base_url}/lineItems"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            data = await self._post_with_retry(client, url, json_body, label="create_line_item")
+            return data.get("lineItem", data)
+
+    async def get_line_items(self, class_sourced_id):
+        """Fetch all line items for a class from the OneRoster SIS.
+
+        Args:
+            class_sourced_id: The OneRoster sourcedId of the class.
+
+        Returns:
+            List of lineItem dicts (may be empty).
+        """
+        url = f"{self.base_url}/lineItems?filter=classSourcedId='{class_sourced_id}'"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            data = await self._get_with_retry(client, url, label="get_line_items")
+            return data.get("lineItems", [])
+
+    async def create_result(self, line_item_id, student_sourced_id, score, max_score, comment=""):
+        """Post a student score result to the OneRoster SIS.
+
+        Args:
+            line_item_id: The OneRoster sourcedId of the line item.
+            student_sourced_id: The OneRoster sourcedId of the student.
+            score: The student's raw score.
+            max_score: The maximum possible score (used for scoreScale context).
+            comment: Optional feedback comment (defaults to "").
+
+        Returns:
+            The result dict from the SIS response.
+        """
+        sourced_id = str(uuid.uuid4())
+        score_date = date.today().isoformat()
+
+        json_body = {
+            "result": {
+                "sourcedId": sourced_id,
+                "status": "active",
+                "lineItem": {"sourcedId": line_item_id},
+                "student": {"sourcedId": student_sourced_id},
+                "score": float(score),
+                "scoreDate": score_date,
+                "scoreStatus": "fully graded",
+                "comment": comment,
+            }
+        }
+        url = f"{self.base_url}/lineItems/{line_item_id}/results"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            data = await self._post_with_retry(client, url, json_body, label="create_result")
+            return data.get("result", data)
 
 
 def normalize_roster(raw):

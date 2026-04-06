@@ -11,6 +11,7 @@ from flask import Blueprint, request, jsonify, g
 
 from backend.oneroster import OneRosterClient, normalize_roster, get_oneroster_config
 from backend.roster_sync import sync_roster_to_db
+from backend.services.oneroster_gradebook import ensure_line_item, post_results
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 
@@ -316,3 +317,64 @@ def delete_data():
     )
 
     return jsonify({"status": "deleted", "counts": deleted})
+
+
+# ── POST /api/oneroster/sync-grades ───────────────────────────────────────
+
+@oneroster_bp.route("/api/oneroster/sync-grades", methods=["POST"])
+@require_teacher
+@handle_route_errors
+def sync_grades():
+    """Push graded scores + comments to SIS via OneRoster Gradebook API."""
+    teacher_id = g.teacher_id
+    cfg = get_oneroster_config(teacher_id)
+    if not cfg or not cfg.get("base_url"):
+        return jsonify({"error": "OneRoster not configured. Set up SIS connection in District Portal first."}), 400
+
+    data = request.json or {}
+    assessment_id = data.get("assessment_id")
+    title = data.get("title")
+    total_points = data.get("total_points")
+    class_sourced_id = data.get("class_sourced_id")
+    scores = data.get("scores", [])
+
+    if not assessment_id or not title or not total_points or not class_sourced_id:
+        return jsonify({"error": "Missing required fields: assessment_id, title, total_points, class_sourced_id"}), 400
+
+    if not scores:
+        return jsonify({"error": "No scores to sync"}), 400
+
+    client = OneRosterClient(
+        base_url=cfg["base_url"],
+        client_id=cfg["client_id"],
+        client_secret=cfg["client_secret"],
+        token_url=cfg.get("token_url"),
+    )
+
+    try:
+        line_item_id = _run_async(ensure_line_item(
+            client=client,
+            teacher_id=teacher_id,
+            assessment_id=assessment_id,
+            title=title,
+            total_points=float(total_points),
+            class_sourced_id=class_sourced_id,
+        ))
+    except Exception as e:
+        logger.error("Failed to create/find lineItem: %s", e)
+        return jsonify({"error": f"Failed to create assignment in SIS: {str(e)}"}), 500
+
+    try:
+        result = _run_async(post_results(client, line_item_id, scores))
+    except Exception as e:
+        logger.error("Failed to post results: %s", e)
+        return jsonify({"error": f"Failed to post scores: {str(e)}"}), 500
+
+    return jsonify({
+        "status": "success",
+        "line_item_id": line_item_id,
+        "synced": result["synced"],
+        "skipped": result["skipped"],
+        "failed": result["failed"],
+        "errors": result["errors"],
+    })

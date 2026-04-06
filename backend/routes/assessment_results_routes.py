@@ -216,6 +216,8 @@ def get_assessment_results():
                 'submissions': [
                     {
                         'student_name': s.get('student_name', 'Anonymous'),
+                        'student_id': s.get('student_id', ''),
+                        'student_id_number': s.get('student_id_number', ''),
                         'score': s.get('score'),
                         'percentage': s.get('percentage'),
                         'letter_grade': _compute_letter_grade(s.get('percentage')),
@@ -240,16 +242,24 @@ def get_assessment_results():
             assessment_data = pc.get('content', {}) or {}
 
             # Fetch submissions
-            subs_result = db.table('student_submissions').select('*').eq('content_id', content_id).order('submitted_at', desc=True).execute()
+            subs_result = db.table('student_submissions').select('*, students(student_id_number)').eq('content_id', content_id).order('submitted_at', desc=True).execute()
             subs = subs_result.data or []
 
-            # Expected count from class enrollment
+            # Look up class sourced ID for grade sync
             expected = None
             class_id = pc.get('class_id')
+            class_sourced_id = ''
             if class_id:
                 try:
                     enrolled = db.table('class_students').select('id', count='exact').eq('class_id', class_id).execute()
                     expected = enrolled.count
+                except Exception:
+                    pass
+                try:
+                    cls_row = db.table('classes').select('clever_section_id').eq('id', class_id).single().execute()
+                    ext_id = (cls_row.data or {}).get('clever_section_id', '')
+                    if ext_id and ext_id.startswith('oneroster:'):
+                        class_sourced_id = ext_id[len('oneroster:'):]
                 except Exception:
                     pass
 
@@ -264,6 +274,7 @@ def get_assessment_results():
                 'content_type': 'assessment',
                 'source': 'class_based',
                 'join_code': pc.get('join_code', ''),
+                'class_sourced_id': class_sourced_id,
                 'period': settings.get('period', '') or pc.get('period', ''),
                 'published_at': pc.get('created_at'),
                 'is_active': pc.get('is_active', True),
@@ -280,6 +291,8 @@ def get_assessment_results():
                 'submissions': [
                     {
                         'student_name': s.get('student_name', 'Anonymous'),
+                        'student_id': s.get('student_id', ''),
+                        'student_id_number': (s.get('students') or {}).get('student_id_number', '') if isinstance(s.get('students'), dict) else s.get('student_id_number', ''),
                         'score': s.get('score'),
                         'percentage': s.get('percentage'),
                         'letter_grade': _compute_letter_grade(s.get('percentage')),

@@ -1090,6 +1090,16 @@ export async function exportLmsCsv(results, assignment, totalPoints, format) {
   })
 }
 
+// ============ OneRoster Gradebook Sync ============
+
+export async function syncOneRosterGrades(data) {
+  track('grades_synced', { type: 'oneroster', score_count: data.scores ? data.scores.length : 0 })
+  return fetchApi('/api/oneroster/sync-grades', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 // ============ Cost Tracking ============
 
 export async function getPlannerCosts() {
@@ -1609,6 +1619,7 @@ export default {
   extractTextFromFile,
   adjustReadingLevel,
   exportLmsCsv,
+  syncOneRosterGrades,
   // Cost Tracking
   getPlannerCosts,
   getAssistantCosts,

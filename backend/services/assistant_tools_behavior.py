@@ -805,54 +805,23 @@ def generate_behavior_email(student_name, tone=None, custom_note=None, use_behav
 
 
 def send_behavior_email(student_name, subject, body, method="focus", teacher_id='local-dev', **kwargs):
-    """Send a behavior email via Resend or Focus Communications automation."""
+    """Preview a behavior email and save pending payload — does NOT send. Call confirm_and_send after teacher approval."""
     require_teacher_id(teacher_id)
     if not teacher_id or teacher_id == 'local-dev':
         teacher_id = _get_teacher_id() or 'local-dev'
 
-    if method == "focus":
-        # Send via Focus Communications Playwright automation
-        try:
-            from backend.routes.email_routes import launch_focus_comms
+    if not student_name:
+        return {"error": "student_name is required."}
+    if not subject:
+        return {"error": "subject is required."}
+    if not body:
+        return {"error": "body is required."}
 
-            message = {
-                "student_name": student_name,
-                "subject": subject,
-                "email_body": body,
-                "sms_body": "",
-                "cc_emails": [],
-            }
-
-            result = launch_focus_comms([message], teacher_id=teacher_id)
-            if result.get("error"):
-                return {"error": result["error"]}
-
-            audit_tool_action(teacher_id, 'send_behavior_email', 'SEND_EMAIL')
-
-            return {
-                "status": "success",
-                "data": {
-                    "method": "focus",
-                    "message": f"Focus Communications sending to {student_name}'s parents. Check the automation progress — a browser window will open for 2FA if needed.",
-                    "subject": subject,
-                    "student_name": student_name,
-                }
-            }
-        except Exception as e:
-            return {"error": f"Focus Communications error: {str(e)}"}
-
-    # Email method via Resend
-    try:
-        from backend.services.email_service import EmailService
-        email_svc = EmailService()
-
-        if not email_svc.resend_available:
-            return {"error": "Email not configured. Add RESEND_API_KEY to .env file."}
-
-        # Find parent email
+    parent_email = ""
+    if method == "email":
+        # Look up parent email from contacts then roster
         contacts_raw = _load_parent_contacts()
         contacts_list = contacts_raw.values() if isinstance(contacts_raw, dict) else contacts_raw
-        parent_email = ""
         for contact in contacts_list:
             if not isinstance(contact, dict):
                 continue
@@ -869,31 +838,49 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
                     break
 
         if not parent_email:
-            return {"error": f"No parent email found for '{student_name}'. Add parent contacts in the student roster or parent contacts file."}
+            return {"error": "No parent email found for '" + student_name + "'. Add parent contacts in the student roster or parent contacts file."}
 
-        success = email_svc.send_email(
-            to_email=parent_email,
-            student_name=student_name,
-            subject=subject,
-            body=body,
-        )
+    # Build pending payload
+    pending = {
+        "action": "send_behavior_email",
+        "student_name": student_name,
+        "subject": subject,
+        "body": body,
+        "method": method,
+        "parent_email": parent_email,
+    }
 
-        if success:
-            audit_tool_action(teacher_id, 'send_behavior_email', 'SEND_EMAIL')
+    # Save to storage (preferred)
+    try:
+        from backend.storage import save as storage_save
+        storage_save("pending_send:send_behavior_email", pending, teacher_id)
+        storage_save("pending_send", pending, teacher_id)
+    except Exception:
+        pass
 
-            return {
-                "status": "success",
-                "data": {
-                    "message": f"Email sent to {parent_email}",
-                    "to": parent_email,
-                    "subject": subject,
-                }
-            }
-        else:
-            return {"error": "Failed to send email. Check Resend configuration."}
+    # Filesystem fallback
+    try:
+        data_dir = os.path.expanduser("~/.graider_data")
+        os.makedirs(data_dir, exist_ok=True)
+        pending_path = os.path.join(data_dir, "pending_send.json")
+        with open(pending_path, 'w') as f:
+            json.dump(pending, f)
+    except Exception:
+        pass
 
-    except Exception as e:
-        return {"error": f"Email send error: {str(e)}"}
+    to_preview = parent_email if method == "email" else "Focus Communications portal"
+
+    return {
+        "NOT_SENT": True,
+        "PREVIEW_ONLY": True,
+        "action": "send_behavior_email",
+        "student_name": student_name,
+        "subject": subject,
+        "body_preview": body,
+        "method": method,
+        "to": to_preview,
+        "message": "PREVIEW — NOT YET SENT. Call confirm_and_send after teacher approval.",
+    }
 
 
 # ═══════════════════════════════════════════════════════
