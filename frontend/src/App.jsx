@@ -1745,16 +1745,16 @@ function App() {
     // FL FAST-aligned defaults: MC, short answer, math computation, geometry, graphing, data analysis ON
     // Vocabulary and extended writing OFF by default
     sectionCategories: {
-      multiple_choice: true,      // Part: Multiple Choice
-      short_answer: true,         // Part: Short Answer / Gridded Response
-      math_computation: true,     // Part: Math Computation (equations, solve for x)
-      geometry_visual: true,      // Part: Geometry & Measurement (interactive shapes, protractor, transformations)
-      graphing: true,             // Part: Graphing & Coordinate Plane (number lines, function graphs)
-      data_analysis: true,        // Part: Data Analysis (tables, box plots, dot plots, stem-and-leaf)
-      extended_writing: false,    // Part: Extended Writing / Essay
-      vocabulary: false,          // Part: Vocabulary / Matching
-      true_false: false,          // Part: True/False
-      florida_fast: false,        // Part: FL FAST Item Types (multiselect, multi-part, grid match, inline dropdown)
+      multiple_choice: 6,         // Part: Multiple Choice
+      short_answer: 4,            // Part: Short Answer / Gridded Response
+      math_computation: 3,        // Part: Math Computation (equations, solve for x)
+      geometry_visual: 2,         // Part: Geometry & Measurement (interactive shapes, protractor, transformations)
+      graphing: 2,                // Part: Graphing & Coordinate Plane (number lines, function graphs)
+      data_analysis: 2,           // Part: Data Analysis (tables, box plots, dot plots, stem-and-leaf)
+      extended_writing: 0,        // Part: Extended Writing / Essay
+      vocabulary: 0,              // Part: Vocabulary / Matching
+      true_false: 0,              // Part: True/False
+      florida_fast: 0,            // Part: FL FAST Item Types (multiselect, multi-part, grid match, inline dropdown)
     },
     questionTypes: {
       multiple_choice: 10,
@@ -1918,17 +1918,23 @@ function App() {
   // Update section categories when subject changes (both assessment and assignment)
   useEffect(() => {
     if (config.subject) {
-      const newCats = getSubjectSectionDefaults(config.subject);
-      const total = assessmentConfig.totalQuestions || 20;
-      const newTypes = distributeQuestions(total, newCats);
-      const newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
+      var newCats = getSubjectSectionDefaults(config.subject);
+      var total = assessmentConfig.totalQuestions || 20;
+      var newTypes = distributeQuestions(total, newCats);
+      var newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
+      // Convert booleans to numbers for assessment sectionCategories
+      var numericCats = Object.fromEntries(Object.entries(newCats).map(function(e) { return [e[0], e[1] ? Math.max(1, Math.round(total / Object.values(newCats).filter(Boolean).length)) : 0]; }));
       setAssessmentConfig(prev => ({
         ...prev,
-        sectionCategories: newCats,
+        sectionCategories: numericCats,
         questionTypes: newTypes,
         pointsPerType: newPointsPerType,
       }));
-      setAssignmentSectionCategories(newCats);
+      // Convert booleans to counts for assignment question counts
+      var assignTotal = 10;
+      var enabledCount = Object.values(newCats).filter(Boolean).length || 1;
+      var assignNumeric = Object.fromEntries(Object.entries(newCats).map(function(e) { return [e[0], e[1] ? Math.max(1, Math.round(assignTotal / enabledCount)) : 0]; }));
+      setAssignmentQuestionCounts(assignNumeric);
     }
   }, [config.subject]);
 
@@ -4366,7 +4372,7 @@ ${signature}`;
           requirements: unitConfig.requirements || "",
           contentOnly: contentOnly,
         },
-        { ...assessmentConfig, title },
+        { ...assessmentConfig, title, sectionCategories: Object.fromEntries(Object.entries(assessmentConfig.sectionCategories).map(function(e) { return [e[0], e[1] > 0]; })), questionTypeCounts: Object.fromEntries(Object.entries(assessmentConfig.sectionCategories).filter(function(e) { return e[1] > 0; })) },
         allSources
       );
 
@@ -12172,98 +12178,86 @@ ${signature}`;
                                 color: "var(--text-muted)",
                                 marginLeft: "4px",
                               }}>
-                                ({Object.values(assessmentConfig.sectionCategories || {}).filter(Boolean).length} active)
+                                ({Object.values(assessmentConfig.sectionCategories || {}).filter(function(v) { return v > 0; }).length} types)
                               </span>
                             </h3>
                             <Icon name={sectionsDropdownOpen ? "ChevronUp" : "ChevronDown"} size={18} />
                           </button>
 
                           {sectionsDropdownOpen && (
-                            <div style={{ marginTop: "15px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "4px" }}>
-                                Select which sections to include. FL FAST-aligned defaults are pre-selected.
-                              </p>
-
-                              {[
-                                { key: "multiple_choice", label: "Multiple Choice", desc: "Standard MC questions", icon: "CheckCircle", group: "core" },
-                                { key: "short_answer", label: "Short Answer / Gridded Response", desc: "Text & numeric input", icon: "AlignLeft", group: "core" },
-                                { key: "math_computation", label: "Math Computation", desc: "Equations, solve for x, expressions", icon: "Calculator", group: "stem" },
-                                { key: "geometry_visual", label: "Geometry & Measurement", desc: "Interactive shapes, protractor, transformations", icon: "Triangle", group: "stem" },
-                                { key: "graphing", label: "Graphing & Coordinate Plane", desc: "Number lines, function graphs, plotting", icon: "LineChart", group: "stem" },
-                                { key: "data_analysis", label: "Data Analysis", desc: "Data tables, box plots, dot plots, stem-and-leaf", icon: "BarChart3", group: "stem" },
-                                { key: "extended_writing", label: "Extended Writing / Essay", desc: "Paragraph responses with analysis", icon: "FileText", group: "optional" },
-                                { key: "vocabulary", label: "Vocabulary / Matching", desc: "Term-definition matching", icon: "BookOpen", group: "optional" },
-                                { key: "true_false", label: "True / False", desc: "Statement evaluation", icon: "ToggleLeft", group: "optional" },
-                                { key: "florida_fast", label: "FL FAST Item Types", desc: "Multiselect, multi-part, grid match, inline dropdown", icon: "ListChecks", group: "optional" },
-                              ].map((cat, idx, arr) => {
-                                const prevGroup = idx > 0 ? arr[idx - 1].group : null;
-                                const showDivider = cat.group !== prevGroup;
-                                const groupLabels = { core: "FL FAST Core", stem: "STEM Visuals", optional: "Optional" };
+                            <div style={{ marginTop: "15px" }}>
+                              {(function() {
+                                var totalAssigned = Object.values(assessmentConfig.sectionCategories || {}).reduce(function(a, b) { return a + b; }, 0);
+                                var totalTarget = assessmentConfig.totalQuestions || 20;
+                                var statusColor = totalAssigned === totalTarget ? "#22c55e" : totalAssigned > totalTarget ? "#ef4444" : "#f59e0b";
                                 return (
-                                  <div key={cat.key}>
-                                    {showDivider && (
-                                      <div style={{
-                                        fontSize: "0.7rem",
-                                        fontWeight: 700,
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.05em",
-                                        color: cat.group === "stem" ? "#6366f1" : cat.group === "optional" ? "var(--text-muted)" : "#22c55e",
-                                        marginTop: idx > 0 ? "8px" : 0,
-                                        marginBottom: "4px",
-                                      }}>
-                                        {groupLabels[cat.group]}
-                                      </div>
-                                    )}
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "10px",
-                                        padding: "8px 10px",
-                                        borderRadius: "8px",
-                                        cursor: "pointer",
-                                        background: assessmentConfig.sectionCategories?.[cat.key]
-                                          ? "rgba(99, 102, 241, 0.1)"
-                                          : "transparent",
-                                        border: "1px solid " + (assessmentConfig.sectionCategories?.[cat.key]
-                                          ? "rgba(99, 102, 241, 0.3)"
-                                          : "rgba(255,255,255,0.05)"),
-                                        transition: "all 0.2s",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!assessmentConfig.sectionCategories?.[cat.key]}
-                                        onChange={(e) => {
-                                          const newCats = {
-                                            ...assessmentConfig.sectionCategories,
-                                            [cat.key]: e.target.checked,
-                                          };
-                                          // Redistribute questions based on new categories
-                                          const newTypes = distributeQuestions(
-                                            assessmentConfig.totalQuestions || 20,
-                                            newCats
-                                          );
-                                          const newPointsPerType = distributePoints(
-                                            assessmentConfig.totalPoints || 30,
-                                            newTypes
-                                          );
-                                          setAssessmentConfig({
-                                            ...assessmentConfig,
+                                  React.createElement('div', {
+                                    style: { fontSize: "0.8rem", fontWeight: 600, marginBottom: "8px", color: statusColor }
+                                  },
+                                    totalAssigned + "/" + totalTarget + " assigned" +
+                                    (totalAssigned < totalTarget ? " — AI will distribute " + (totalTarget - totalAssigned) + " remaining" : "") +
+                                    (totalAssigned > totalTarget ? " — exceeds total by " + (totalAssigned - totalTarget) : "")
+                                  )
+                                );
+                              })()}
+                              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "8px" }}>
+                                Set question counts per section. FL FAST-aligned defaults are pre-set.
+                              </p>
+                              {[
+                                { key: "multiple_choice", label: "Multiple Choice", group: "core" },
+                                { key: "short_answer", label: "Short Answer", group: "core" },
+                                { key: "math_computation", label: "Math Computation", group: "stem" },
+                                { key: "geometry_visual", label: "Geometry", group: "stem" },
+                                { key: "graphing", label: "Graphing", group: "stem" },
+                                { key: "data_analysis", label: "Data Analysis", group: "stem" },
+                                { key: "extended_writing", label: "Extended Writing", group: "optional" },
+                                { key: "vocabulary", label: "Vocabulary", group: "optional" },
+                                { key: "true_false", label: "True / False", group: "optional" },
+                                { key: "florida_fast", label: "FL FAST Items", group: "optional" },
+                              ].map(function(cat, idx, arr) {
+                                var prevGroup = idx > 0 ? arr[idx - 1].group : null;
+                                var showDivider = cat.group !== prevGroup;
+                                var groupLabels = { core: "FL FAST Core", stem: "STEM Visuals", optional: "Optional" };
+                                var groupColors = { core: "#22c55e", stem: "#6366f1", optional: "var(--text-muted)" };
+                                var count = (assessmentConfig.sectionCategories || {})[cat.key] || 0;
+                                return (
+                                  React.createElement('div', { key: cat.key },
+                                    showDivider ? React.createElement('div', {
+                                      style: { fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
+                                        letterSpacing: "0.05em", color: groupColors[cat.group],
+                                        marginTop: idx > 0 ? "8px" : 0, marginBottom: "4px" }
+                                    }, groupLabels[cat.group]) : null,
+                                    React.createElement('div', {
+                                      style: { display: "flex", alignItems: "center", justifyContent: "space-between",
+                                        padding: "6px 10px", borderRadius: "8px", fontSize: "0.9rem",
+                                        background: count > 0 ? "rgba(99,102,241,0.1)" : "transparent",
+                                        border: "1px solid " + (count > 0 ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.05)"),
+                                        transition: "all 0.2s" }
+                                    },
+                                      React.createElement('span', { style: { color: count > 0 ? "var(--text-primary)" : "var(--text-muted)", fontWeight: 500 } }, cat.label),
+                                      React.createElement('input', {
+                                        type: "number",
+                                        min: 0,
+                                        max: assessmentConfig.totalQuestions || 50,
+                                        value: count,
+                                        onChange: function(e) {
+                                          var val = parseInt(e.target.value) || 0;
+                                          var newCats = Object.assign({}, assessmentConfig.sectionCategories);
+                                          newCats[cat.key] = Math.max(0, val);
+                                          var newTypes = distributeQuestions(assessmentConfig.totalQuestions || 20, newCats);
+                                          var newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
+                                          setAssessmentConfig(Object.assign({}, assessmentConfig, {
                                             sectionCategories: newCats,
                                             questionTypes: newTypes,
                                             pointsPerType: newPointsPerType,
-                                          });
-                                        }}
-                                        style={{ accentColor: "#6366f1" }}
-                                      />
-                                      <Icon name={cat.icon} size={16} />
-                                      <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: "0.9rem", fontWeight: 500 }}>{cat.label}</div>
-                                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{cat.desc}</div>
-                                      </div>
-                                    </label>
-                                  </div>
+                                          }));
+                                        },
+                                        style: { width: "55px", padding: "4px 6px", borderRadius: "6px",
+                                          border: "1px solid var(--glass-border)", background: "var(--input-bg)",
+                                          color: "var(--text-primary)", fontSize: "0.9rem", textAlign: "center" }
+                                      })
+                                    )
+                                  )
                                 );
                               })}
                             </div>
