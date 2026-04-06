@@ -919,7 +919,7 @@ BEHAVIOR TRACKING:
   - use_behavior_data=true: Fetches companion app data (corrections, praise, dates, notes) from Supabase and includes it in the email.
   - use_behavior_data=false: Drafts the email using ONLY the information the teacher provided in the chat (passed via custom_note). No companion app data is fetched.
   IMPORTANT: When the teacher asks you to draft an email about a student, you MUST first ask: "Would you like me to include behavior data from the Companion app, or should I draft using just the information you've shared here?" Then set use_behavior_data accordingly. If they choose no companion data, pass all the context from the conversation into custom_note.
-- send_behavior_email: Send a reviewed behavior email via Resend (direct email) or Focus portal automation. Always show the draft first and get teacher approval before sending.
+- send_behavior_email: Send a reviewed behavior email via Resend (direct email) or Focus portal automation. Always show the draft first and get teacher approval before sending. When the teacher confirms (e.g., "yes", "send it"), you MUST call send_behavior_email with the draft content. NEVER claim the email was sent without calling this tool and receiving a success response. The tool performs the actual send — your text response alone does nothing.
 - debug_behavior: Diagnostic tool — shows teacher_id, total session/event counts, and stored student names. Use this FIRST if behavior data retrieval fails, to diagnose why.
 CRITICAL: If behavior tools return errors about missing data, call debug_behavior to diagnose, then report findings to the teacher. NEVER fabricate a behavior email without real data from the tools — the email MUST reference actual tracked incidents, not placeholders."""
 
