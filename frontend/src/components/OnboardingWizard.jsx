@@ -143,8 +143,10 @@ export default function OnboardingWizard({
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
-  // Detect Clever login (set once, used across all steps)
+  // Detect SSO login (set once, used across all steps)
   const isCleverUser = !!(window.__graiderUser && window.__graiderUser.id && window.__graiderUser.id.startsWith('clever:'));
+  const isClassLinkUser = !!(window.__graiderUser && window.__graiderUser.id && window.__graiderUser.id.startsWith('classlink:'));
+  const isSSOUser = isCleverUser || isClassLinkUser;
 
   // Pre-populate from existing config and Clever session on mount
   useEffect(() => {
@@ -845,12 +847,13 @@ export default function OnboardingWizard({
   };
 
   const renderStep6 = () => {
-    if (isCleverUser) {
+    if (isSSOUser) {
+      var ssoProvider = isCleverUser ? "Clever" : "ClassLink";
       return (
         <div style={{ padding: "10px 0" }}>
           <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>Your Roster is Ready</h2>
           <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.95rem" }}>
-            Since you logged in with Clever, your class roster syncs automatically from your district's SIS.
+            {"Since you logged in with " + ssoProvider + ", your class roster syncs automatically from your district's SIS."}
           </p>
 
           <div style={{
@@ -859,12 +862,12 @@ export default function OnboardingWizard({
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <Icon name="CheckCircle" size={20} style={{ color: "#22c55e" }} />
-              <span style={{ fontWeight: 600, fontSize: "1rem" }}>Connected via Clever</span>
+              <span style={{ fontWeight: 600, fontSize: "1rem" }}>{"Connected via " + ssoProvider}</span>
             </div>
             <div style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
               <p style={{ margin: "0 0 8px" }}>Your roster was synced when you logged in. Graider will automatically:</p>
               {[
-                { icon: "Users", text: "Import students and class sections from Clever" },
+                { icon: "Users", text: "Import students and class sections from " + ssoProvider },
                 { icon: "RefreshCw", text: "Keep your roster up to date on each login" },
                 { icon: "Shield", text: "Detect IEP and ELL flags for accommodation suggestions" },
               ].map(function(item, i) {
@@ -897,7 +900,7 @@ export default function OnboardingWizard({
       <div style={{ padding: "10px 0" }}>
         <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>Import Your Class Roster</h2>
         <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.95rem" }}>
-          Export your class roster from Focus SIS so Graider can match students to their submissions.
+          Upload a CSV or Excel file with your students so Graider can match them to their submissions.
         </p>
 
         <div style={{
@@ -905,14 +908,12 @@ export default function OnboardingWizard({
           borderRadius: 12, padding: 16, marginBottom: 20,
         }}>
           <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--accent-primary)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Export from Focus SIS
+            How to upload
           </div>
           {[
-            { num: "1", icon: "Monitor", text: "In Focus, go to Reports > Student Listings > Class Roster (or Grades > Export)" },
-            { num: "2", icon: "Users", text: "Select the class or period you want to export" },
-            { num: "3", icon: "FileSpreadsheet", text: "Include columns: Student ID, First Name, Last Name, Email" },
-            { num: "4", icon: "Download", text: "Export as CSV and save to your computer" },
-            { num: "5", icon: "Upload", text: "Upload to Graider in Settings > Classroom > Upload CSV/Excel" },
+            { num: "1", icon: "Download", text: "Export your class roster as CSV from your SIS (Student Information System)" },
+            { num: "2", icon: "FileSpreadsheet", text: "Make sure it includes: Student ID, First Name, Last Name, Email" },
+            { num: "3", icon: "Upload", text: "Upload to Graider in Settings > Classroom > Upload CSV/Excel" },
           ].map(function(s) {
             return (
               <div key={s.num} style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
@@ -973,7 +974,7 @@ export default function OnboardingWizard({
       { icon: "ClipboardCheck", label: "Style", value: GRADING_STYLES.find((s) => s.value === wizardData.gradingStyle)?.label || wizardData.gradingStyle },
       { icon: "ClipboardList", label: "Rubric", value: selectedPreset ? selectedPreset.name : "Custom (unchanged)" },
       { icon: "Cpu", label: "AI Provider", value: hasAnyApiKey ? "Connected" : "Not configured" },
-      { icon: "Users", label: "Roster", value: isCleverUser ? "Clever (auto-sync)" : "Manual upload" },
+      { icon: "Users", label: "Roster", value: isSSOUser ? (isCleverUser ? "Clever" : "ClassLink") + " (auto-sync)" : "Manual upload" },
     ];
 
     return (
