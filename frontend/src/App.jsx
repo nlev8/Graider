@@ -5479,6 +5479,7 @@ ${signature}`;
           setRubric={setRubric}
           apiKeys={apiKeys}
           setApiKeys={setApiKeys}
+          user={user}
           onComplete={(navigateTo) => {
             setShowOnboardingWizard(false);
             if (navigateTo === "builder") setActiveTab("builder");

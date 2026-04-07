@@ -122,6 +122,7 @@ export default function OnboardingWizard({
   addToast,
   theme,
   toggleTheme,
+  user,
 }) {
   const [step, setStep] = useState(0);
   const [wizardData, setWizardData] = useState({
@@ -143,9 +144,10 @@ export default function OnboardingWizard({
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
-  // Detect SSO login (set once, used across all steps)
-  const isCleverUser = !!(window.__graiderUser && window.__graiderUser.id && window.__graiderUser.id.startsWith('clever:'));
-  const isClassLinkUser = !!(window.__graiderUser && window.__graiderUser.id && window.__graiderUser.id.startsWith('classlink:'));
+  // Detect SSO login from user prop (reliable) or window fallback
+  var _userId = (user && user.id) || (window.__graiderUser && window.__graiderUser.id) || '';
+  const isCleverUser = _userId.startsWith('clever:');
+  const isClassLinkUser = _userId.startsWith('classlink:');
   const isSSOUser = isCleverUser || isClassLinkUser;
 
   // Pre-populate from existing config and Clever session on mount
