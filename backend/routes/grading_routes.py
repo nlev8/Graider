@@ -319,6 +319,18 @@ def update_result():
         if result_index is None:
             return None, ("Result not found", 404)
 
+        # Preserve original AI values on first edit
+        result = grading_state["results"][result_index]
+        if ('score' in data or 'feedback' in data) and not result.get('teacher_edited'):
+            if 'ai_score' not in result:
+                result['ai_score'] = result.get('score')
+            if 'ai_feedback' not in result:
+                result['ai_feedback'] = result.get('feedback', '')
+            result['teacher_edited'] = True
+        if 'score' in data or 'feedback' in data:
+            from datetime import datetime, timezone
+            result['edit_timestamp'] = datetime.now(timezone.utc).isoformat()
+
         # Update allowed fields
         allowed_fields = ['score', 'letter_grade', 'feedback', 'verified']
         for field in allowed_fields:
@@ -361,6 +373,28 @@ def update_result():
 
     # Sync updated fields to master_grades.csv so the Assistant sees fresh data
     _sync_result_to_master_csv(updated_result)
+
+    # Record correction pattern if score was edited
+    if 'score' in data and updated_result.get('ai_score') is not None:
+        ai_score = updated_result['ai_score']
+        teacher_score = int(data['score'])
+        if ai_score != teacher_score:
+            try:
+                from backend.services.correction_patterns import record_correction
+                record_correction(
+                    teacher_id=teacher_id,
+                    ai_score=ai_score,
+                    teacher_score=teacher_score,
+                    max_points=100,
+                    question_type=updated_result.get('question_type', 'unknown'),
+                    subject=updated_result.get('subject', ''),
+                    grade_level=updated_result.get('grade_level', ''),
+                    assignment=updated_result.get('assignment', ''),
+                    student_answer_snippet='',
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Failed to record correction: %s", e)
 
     return jsonify({
         "status": "updated",
