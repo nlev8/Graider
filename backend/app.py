@@ -1324,6 +1324,24 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                     file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
                     print(f"  ✓ Applying Assignment-Specific Notes ({len(file_notes)} chars)")
 
+                # Inject correction patterns (learn from teacher edits)
+                try:
+                    from backend.services.correction_patterns import build_correction_context
+                    _question_types = []
+                    if matched_config:
+                        _section_cats = matched_config.get('sectionCategories', {})
+                        _question_types = [k for k, v in _section_cats.items() if v]
+                    if not _question_types:
+                        _question_types = ['short_answer', 'multiple_choice', 'extended_writing']
+                    _correction_ctx = build_correction_context(
+                        teacher_id, config.get('subject', ''), _question_types
+                    )
+                    if _correction_ctx:
+                        file_ai_notes += "\n\n" + _correction_ctx
+                        print(f"  ✓ Applying Correction Patterns ({len(_correction_ctx)} chars)")
+                except Exception as e:
+                    print(f"  ! Correction patterns skipped: {e}")
+
                 # Inject model answers from config (if generated)
                 model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
                 if model_answers:
