@@ -4857,9 +4857,14 @@ def export_generated_assignment():
                 q_text = _fix_sub_sup(q.get('question', ''))
                 q_points = q.get('points', 0)
                 q_options = [_fix_sub_sup(o) for o in q.get('options', [])]
+                # Filter out metadata options (answer_key_field_*)
+                q_options = [o for o in q_options if not str(o).startswith('answer_key_field')]
                 q_answer = q.get('answer', '')
                 q_type = q.get('question_type', section_type)
                 q_visual = q.get('visual_type', None)  # number_line, coordinate_plane, etc.
+                # Inject True/False options if missing for TF questions
+                if not q_options and q_type in ('true_false', 'tf'):
+                    q_options = ['True', 'False']
 
                 # Question text — detect and render inline markdown tables
                 pts_text = f" ({q_points} pts)" if q_points else ""
