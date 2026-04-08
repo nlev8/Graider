@@ -1654,39 +1654,85 @@ function App() {
   const [slideImages, setSlideImages] = useState(true);
   const [slideFormat, setSlideFormat] = useState('detailed');
 
-  async function shareWithClass(content, contentType, title) {
-    if (!teacherClasses || teacherClasses.length === 0) {
-      addToast('No classes found. Sync your roster first.', 'warning');
-      return;
-    }
-    var targetClass = teacherClasses[0];
-    if (teacherClasses.length > 1) {
-      var classNames = teacherClasses.map(function(c, i) { return (i + 1) + '. ' + c.name; }).join(String.fromCharCode(10));
-      var choice = prompt('Which class?' + String.fromCharCode(10) + classNames + String.fromCharCode(10) + 'Enter number:');
-      if (!choice) return;
-      var idx = parseInt(choice) - 1;
-      if (idx < 0 || idx >= teacherClasses.length) { addToast('Invalid choice', 'error'); return; }
-      targetClass = teacherClasses[idx];
-    }
+  var _shareModalState = useState(null);
+  var shareModalData = _shareModalState[0];
+  var setShareModalData = _shareModalState[1];
+  var _shareClassId = useState('');
+  var shareClassId = _shareClassId[0];
+  var setShareClassId = _shareClassId[1];
+  var _sharePublishing = useState(false);
+  var sharePublishing = _sharePublishing[0];
+  var setSharePublishing = _sharePublishing[1];
+
+  function shareWithClass(content, contentType, title) {
+    setShareClassId(teacherClasses && teacherClasses.length > 0 ? 'all' : 'join_code');
+    setShareModalData({ content: content, contentType: contentType, title: title });
+  }
+
+  async function confirmShareWithClass() {
+    if (!shareModalData) return;
+    setSharePublishing(true);
     try {
-      var resp = await fetch('/api/publish-to-class', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          class_id: targetClass.id,
-          content: content,
-          content_type: contentType,
-          title: title,
-        }),
-      });
-      var data = await resp.json();
-      if (data.error) {
-        addToast(data.error, 'error');
+      var authHeaders = await getAuthHeaders();
+
+      if (shareClassId === 'join_code') {
+        // Publish as join-code-only (no class) via the assessment publish endpoint
+        var resp = await fetch('/api/publish-assessment', {
+          method: 'POST',
+          headers: Object.assign({}, authHeaders, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            assessment: shareModalData.content,
+            title: shareModalData.title,
+            settings: { content_type: shareModalData.contentType },
+          }),
+        });
+        var data = await resp.json();
+        if (data.error) {
+          addToast(data.error, 'error');
+        } else {
+          addToast('Published "' + shareModalData.title + '" with join code: ' + (data.join_code || ''), 'success');
+          setShareModalData(null);
+        }
       } else {
-        addToast('Shared "' + title + '" with ' + targetClass.name, 'success');
+        var classIds = shareClassId === 'all'
+          ? teacherClasses.map(function(c) { return c.id; })
+          : [shareClassId];
+        var published = 0;
+        var errors = [];
+        for (var i = 0; i < classIds.length; i++) {
+          try {
+            var cResp = await fetch('/api/publish-to-class', {
+              method: 'POST',
+              headers: Object.assign({}, authHeaders, { 'Content-Type': 'application/json' }),
+              body: JSON.stringify({
+                class_id: classIds[i],
+                content: shareModalData.content,
+                content_type: shareModalData.contentType,
+                title: shareModalData.title,
+              }),
+            });
+            var cData = await cResp.json();
+            if (cData.error) {
+              errors.push(cData.error);
+            } else {
+              published++;
+            }
+          } catch (err) {
+            errors.push(err.message);
+          }
+        }
+        if (published > 0) {
+          var msg = 'Published "' + shareModalData.title + '" to ' + published + ' class' + (published !== 1 ? 'es' : '');
+          addToast(msg, errors.length > 0 ? 'warning' : 'success');
+          setShareModalData(null);
+        } else {
+          addToast('Failed to publish: ' + errors[0], 'error');
+        }
       }
     } catch (err) {
-      addToast('Failed to share: ' + err.message, 'error');
+      addToast('Failed to publish: ' + err.message, 'error');
+    } finally {
+      setSharePublishing(false);
     }
   }
 
@@ -15152,7 +15198,7 @@ ${signature}`;
                                 className="btn btn-secondary"
                                 style={{ padding: "8px 16px" }}
                               >
-                                <Icon name="Share2" size={16} /> Share with Class
+                                <Icon name="Share2" size={16} /> Publish to Portal
                               </button>
                             </div>
                           </div>
@@ -15333,7 +15379,7 @@ ${signature}`;
                                 className="btn btn-secondary"
                                 style={{ padding: "8px 16px" }}
                               >
-                                <Icon name="Share2" size={16} /> Share with Class
+                                <Icon name="Share2" size={16} /> Publish to Portal
                               </button>
                             </div>
                           </div>
@@ -15565,7 +15611,7 @@ ${signature}`;
                               className="btn btn-secondary"
                               style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px" }}
                             >
-                              <Icon name="Share2" size={16} /> Share with Class
+                              <Icon name="Share2" size={16} /> Publish to Portal
                             </button>
                           </div>
                         )}
@@ -16221,6 +16267,71 @@ ${signature}`;
         </div>
       )}
 
+      {/* Publish to Portal Modal — class selection for study materials */}
+      {shareModalData && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999, padding: "20px",
+          }}
+          onClick={function() { setShareModalData(null); }}
+        >
+          <div
+            onClick={function(e) { e.stopPropagation(); }}
+            style={{
+              background: "var(--glass-bg)", color: "var(--text-primary)",
+              borderRadius: "16px", padding: "30px", maxWidth: "450px", width: "100%",
+              border: "1px solid var(--glass-border)",
+              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)",
+            }}
+          >
+            <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <Icon name="Share2" size={22} style={{ color: "var(--accent-primary)" }} />
+              Publish to Portal
+            </h2>
+            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+              {'Publish "' + (shareModalData.title || 'Untitled') + '" to a class for students to access.'}
+            </p>
+            <label className="label" style={{ marginBottom: "6px" }}>Select Class</label>
+            <select
+              className="input"
+              value={shareClassId}
+              onChange={function(e) { setShareClassId(e.target.value); }}
+              style={{
+                width: "100%", padding: "10px 12px", borderRadius: "8px",
+                background: "var(--input-bg)", color: "var(--text-primary)",
+                border: "1px solid var(--glass-border)", marginBottom: "20px",
+              }}
+            >
+              {React.createElement('option', { value: 'join_code' }, 'Join Code Only (no class)')}
+              {teacherClasses.length > 0 && React.createElement('option', { value: 'all' }, 'All Classes (' + teacherClasses.length + ')')}
+              {teacherClasses.map(function(cls) {
+                return React.createElement('option', { key: cls.id, value: cls.id }, cls.name);
+              })}
+            </select>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={function() { setShareModalData(null); }}
+                className="btn btn-secondary"
+                style={{ padding: "10px 20px" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmShareWithClass}
+                disabled={sharePublishing}
+                className="btn btn-primary"
+                style={{ padding: "10px 24px", background: "linear-gradient(135deg, #8b5cf6, #6366f1)" }}
+              >
+                <Icon name={sharePublishing ? "Loader" : "Share2"} size={16} />
+                {sharePublishing ? "Publishing..." : "Publish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Publish Settings Modal - Period, Makeup, Student Selection */}
       {showPublishModal && (
         <div
@@ -16239,15 +16350,15 @@ ${signature}`;
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#1e293b",
-              color: "#e2e8f0",
+              background: "var(--glass-bg)",
+              color: "var(--text-primary)",
               borderRadius: "16px",
               padding: "30px",
               maxWidth: "600px",
               width: "100%",
               maxHeight: "80vh",
               overflowY: "auto",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
+              border: "1px solid var(--glass-border)",
               boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
             }}
           >
@@ -16267,9 +16378,9 @@ ${signature}`;
                   flex: 1,
                   padding: "10px 14px",
                   borderRadius: "8px",
-                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.15)",
-                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.15)" : "rgba(255,255,255,0.05)",
-                  color: publishSettings.assessmentCategory === 'formative' ? "#86efac" : "#94a3b8",
+                  border: publishSettings.assessmentCategory === 'formative' ? "2px solid #22c55e" : "1px solid var(--glass-border)",
+                  background: publishSettings.assessmentCategory === 'formative' ? "rgba(34, 197, 94, 0.15)" : "var(--input-bg)",
+                  color: publishSettings.assessmentCategory === 'formative' ? "#86efac" : "var(--text-muted)",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16284,9 +16395,9 @@ ${signature}`;
                   flex: 1,
                   padding: "10px 14px",
                   borderRadius: "8px",
-                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.15)",
-                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.15)" : "rgba(255,255,255,0.05)",
-                  color: publishSettings.assessmentCategory === 'summative' ? "#fca5a5" : "#94a3b8",
+                  border: publishSettings.assessmentCategory === 'summative' ? "2px solid #ef4444" : "1px solid var(--glass-border)",
+                  background: publishSettings.assessmentCategory === 'summative' ? "rgba(239, 68, 68, 0.15)" : "var(--input-bg)",
+                  color: publishSettings.assessmentCategory === 'summative' ? "#fca5a5" : "var(--text-muted)",
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
@@ -16301,13 +16412,13 @@ ${signature}`;
             {/* Class Selection */}
             <div style={{ marginBottom: "15px" }}>
               <label className="label" style={{ marginBottom: "6px" }}>Publish to Class (optional)</label>
-              <select className="input" value={publishClassId} onChange={(e) => setPublishClassId(e.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.08)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "8px" }}>
+              <select className="input" value={publishClassId} onChange={(e) => setPublishClassId(e.target.value)} style={{ width: "100%", background: "var(--input-bg)", color: "var(--text-primary)", border: "1px solid var(--glass-border)", borderRadius: "8px" }}>
                 <option value="">Join Code Only (no class)</option>
                 {teacherClasses.map((cls) => (
                   <option key={cls.id} value={cls.id}>{cls.name} ({cls.join_code})</option>
                 ))}
               </select>
-              <p style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: "4px" }}>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
                 {publishClassId ? "Students log in with email + class code to access this." : "Anyone with the join code can access this (anonymous)."}
               </p>
             </div>
@@ -16334,9 +16445,9 @@ ${signature}`;
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: "8px",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#e2e8f0",
+                  border: "1px solid var(--glass-border)",
+                  background: "var(--input-bg)",
+                  color: "var(--text-primary)",
                   fontSize: "0.95rem",
                 }}
               >
@@ -16357,8 +16468,8 @@ ${signature}`;
                   gap: "10px",
                   cursor: "pointer",
                   padding: "12px 15px",
-                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.1)" : "rgba(255,255,255,0.05)",
-                  border: publishSettings.isMakeup ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.15)",
+                  background: publishSettings.isMakeup ? "rgba(139, 92, 246, 0.1)" : "var(--input-bg)",
+                  border: publishSettings.isMakeup ? "1px solid #8b5cf6" : "1px solid var(--glass-border)",
                   borderRadius: "8px",
                 }}
               >
@@ -16484,8 +16595,8 @@ ${signature}`;
                     gap: "10px",
                     cursor: "pointer",
                     padding: "12px 15px",
-                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.1)" : "rgba(255,255,255,0.05)",
-                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid rgba(255,255,255,0.15)",
+                    background: publishSettings.applyAccommodations ? "rgba(59, 130, 246, 0.1)" : "var(--input-bg)",
+                    border: publishSettings.applyAccommodations ? "1px solid #3b82f6" : "1px solid var(--glass-border)",
                     borderRadius: "8px",
                   }}
                 >
@@ -16521,9 +16632,9 @@ ${signature}`;
                     width: "120px",
                     padding: "10px 12px",
                     borderRadius: "8px",
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    background: "rgba(255,255,255,0.08)",
-                    color: "#e2e8f0",
+                    border: "1px solid var(--glass-border)",
+                    background: "var(--input-bg)",
+                    color: "var(--text-primary)",
                     fontSize: "0.95rem",
                   }}
                 />
@@ -16541,9 +16652,9 @@ ${signature}`;
                         width: "100%",
                         padding: "8px 10px",
                         borderRadius: "8px",
-                        border: "1px solid rgba(255,255,255,0.2)",
-                        background: "rgba(255,255,255,0.08)",
-                        color: "#e2e8f0",
+                        border: "1px solid var(--glass-border)",
+                        background: "var(--input-bg)",
+                        color: "var(--text-primary)",
                         fontSize: "0.85rem",
                       }}
                     />
@@ -16558,9 +16669,9 @@ ${signature}`;
                         width: "100%",
                         padding: "8px 10px",
                         borderRadius: "8px",
-                        border: "1px solid rgba(255,255,255,0.2)",
-                        background: "rgba(255,255,255,0.08)",
-                        color: "#e2e8f0",
+                        border: "1px solid var(--glass-border)",
+                        background: "var(--input-bg)",
+                        color: "var(--text-primary)",
                         fontSize: "0.85rem",
                       }}
                     />
