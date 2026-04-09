@@ -1215,6 +1215,63 @@ def _student_name_in_message(student_name, user_message):
     return any(sw in message_names for sw in student_words)
 
 
+_SEND_TOOL_NAMES = frozenset(["send_focus_comms", "send_behavior_email", "send_parent_emails"])
+
+
+def _check_send_tool_guard(tool_name, tool_input, resolved_students, last_user_text):
+    """Pre-execution guard for send tools. Returns None to proceed or an error dict to block.
+
+    Three layers:
+      1. Require lookup_student_info before sending to specific students
+      2. Tool's student name must appear in the user's current message
+      3. Tool's student name must match the most recent lookup result
+    """
+    if tool_name not in _SEND_TOOL_NAMES:
+        return None
+
+    # Normalize student names from both parameter formats
+    student_names = tool_input.get("student_names") or []
+    if isinstance(student_names, str):
+        student_names = [student_names]
+    single_name = tool_input.get("student_name", "")
+    if single_name:
+        student_names.append(single_name)
+
+    if not student_names:
+        return None
+
+    # Layer 1: Require lookup
+    if not resolved_students:
+        return {
+            "error": "You must call lookup_student_info before sending messages. "
+            "Call lookup_student_info for '" + student_names[0] + "' first to verify the correct student, "
+            "then call " + tool_name + " again."
+        }
+
+    # Layer 2: User-message name match
+    if last_user_text:
+        for sn in student_names:
+            if not _student_name_in_message(sn, last_user_text):
+                return {
+                    "error": "Student name mismatch: you are trying to send to '" + sn + "' but the user's message "
+                    "does not mention this student. Re-read the user's CURRENT message, extract the correct student name, "
+                    "call lookup_student_info with that name, then try again."
+                }
+
+    # Layer 3: Cross-tool mismatch
+    resolved_names = [s["name"].lower().strip() for s in resolved_students]
+    for sn in student_names:
+        sn_lower = sn.lower().strip()
+        match_found = any(sn_lower in rn or rn in sn_lower for rn in resolved_names)
+        if not match_found and resolved_names:
+            return {
+                "error": "Student name mismatch: you are trying to send to '" + sn + "' but the most recent lookup resolved '" + resolved_students[0]["name"] + "'. "
+                "Please call lookup_student_info for '" + sn + "' first to verify the correct student."
+            }
+
+    return None
+
+
 # ═══════════════════════════════════════════════════════
 # CHAT ENDPOINT (SSE STREAMING)
 # ═══════════════════════════════════════════════════════
@@ -1685,56 +1742,10 @@ def assistant_chat():
                         }
 
                     # Send-tool guards: require lookup + user-message name match
-                    if result is None and tb["name"] in ("send_focus_comms", "send_behavior_email", "send_parent_emails"):
-                        _send_student_names = tool_input.get("student_names") or []
-                        if isinstance(_send_student_names, str):
-                            _send_student_names = [_send_student_names]
-                        _send_student_name = tool_input.get("student_name", "")
-                        if _send_student_name:
-                            _send_student_names.append(_send_student_name)
-                        if _send_student_names and not _resolved_students:
-                            result = {
-                                "error": "You must call lookup_student_info before sending messages. "
-                                "Call lookup_student_info for '" + _send_student_names[0] + "' first to verify the correct student, "
-                                "then call " + tb["name"] + " again."
-                            }
-                        if result is None and _send_student_names and _last_user_text:
-                            for _sn in _send_student_names:
-                                if not _student_name_in_message(_sn, _last_user_text):
-                                    logger.warning(
-                                        "User-message name mismatch: %s targets '%s' but user message doesn't mention this student",
-                                        tb["name"], _sn
-                                    )
-                                    result = {
-                                        "error": "Student name mismatch: you are trying to send to '" + _sn + "' but the user's message "
-                                        "does not mention this student. Re-read the user's CURRENT message, extract the correct student name, "
-                                        "call lookup_student_info with that name, then try again."
-                                    }
-                                    break
-                        if result is None and _send_student_names and _resolved_students:
-                            tool_student_names = tool_input.get("student_names") or []
-                            if isinstance(tool_student_names, str):
-                                tool_student_names = [tool_student_names]
-                            tool_student_name = tool_input.get("student_name", "")
-                            if tool_student_name:
-                                tool_student_names.append(tool_student_name)
-                            if tool_student_names:
-                                resolved_names = [s["name"].lower().strip() for s in _resolved_students]
-                                for sn in tool_student_names:
-                                    sn_lower = sn.lower().strip()
-                                    match_found = any(
-                                        sn_lower in rn or rn in sn_lower
-                                        for rn in resolved_names
-                                    )
-                                    if not match_found and resolved_names:
-                                        logger.warning(
-                                            "Cross-tool mismatch: %s called with student '%s' but lookup_student_info resolved: %s",
-                                            tb["name"], sn, [s["name"] for s in _resolved_students]
-                                        )
-                                        result = {
-                                            "error": f"Student name mismatch: you are trying to send to '{sn}' but the most recent lookup resolved '{_resolved_students[0]['name']}'. "
-                                            f"Please call lookup_student_info for '{sn}' first to verify the correct student."
-                                        }
+                    if result is None:
+                        result = _check_send_tool_guard(
+                            tb["name"], tool_input, _resolved_students, _last_user_text
+                        )
 
                     # ── Execute tool (only if no guard blocked it) ──
                     if result is None:

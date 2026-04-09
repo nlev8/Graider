@@ -118,3 +118,92 @@ class TestNameOverlapCheck:
     def test_unicode_name_blocks_mismatch(self):
         from backend.routes.assistant_routes import _student_name_in_message
         assert _student_name_in_message("Ángela Ñoño", "email Charles Cavanaugh's parents") is False
+
+
+class TestSendToolGuard:
+    """Dispatch-level tests for _check_send_tool_guard — proves execute_tool would not run."""
+
+    def test_blocks_when_no_lookup(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[],
+            last_user_text="email Troy Mikell's parents",
+        )
+        assert result is not None
+        assert "lookup_student_info" in result["error"]
+
+    def test_blocks_when_user_message_mismatch(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[{"name": "Troy Mikell", "student_id": "123"}],
+            last_user_text="email Charles Cavanaugh's parents about defiance",
+        )
+        assert result is not None
+        assert "does not mention this student" in result["error"]
+
+    def test_blocks_when_cross_tool_mismatch(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[{"name": "Charles Cavanaugh", "student_id": "456"}],
+            last_user_text="email Troy Mikell's parents",
+        )
+        assert result is not None
+        assert "most recent lookup resolved" in result["error"]
+
+    def test_passes_when_all_checks_match(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Charles Cavanaugh"]},
+            resolved_students=[{"name": "Charles Cavanaugh", "student_id": "456"}],
+            last_user_text="email Charles Cavanaugh's parents about defiance",
+        )
+        assert result is None
+
+    def test_passes_for_non_send_tool(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="query_grades",
+            tool_input={"student_name": "Troy Mikell"},
+            resolved_students=[],
+            last_user_text="show Troy's grades",
+        )
+        assert result is None
+
+    def test_passes_for_period_send_without_student_names(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"period": "3"},
+            resolved_students=[],
+            last_user_text="email all parents in period 3",
+        )
+        assert result is None
+
+    def test_passes_for_confirmation_message(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[{"name": "Troy Mikell", "student_id": "123"}],
+            last_user_text="yes send it",
+        )
+        assert result is None
+
+    def test_handles_student_name_param(self):
+        """Tools use either student_names (list) or student_name (string)."""
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_behavior_email",
+            tool_input={"student_name": "Troy Mikell"},
+            resolved_students=[],
+            last_user_text="email Troy Mikell's parents about behavior",
+        )
+        assert result is not None
+        assert "lookup_student_info" in result["error"]
