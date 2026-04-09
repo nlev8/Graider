@@ -47,6 +47,24 @@ class TestExtractUserMessageNames:
         assert any("charles" in n for n in names)
         assert any("london" in n for n in names)
 
+    def test_extracts_lowercase_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("email charles cavanaugh's parents about his behavior")
+        assert "charles" in names
+        assert "cavanaugh" in names
+
+    def test_extracts_allcaps_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("EMAIL CHARLES CAVANAUGH'S PARENTS")
+        assert "charles" in names
+        assert "cavanaugh" in names
+
+    def test_extracts_unicode_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("email José Ángela's parents")
+        assert any("jos" in n for n in names)
+        assert any("ngela" in n for n in names)
+
 
 class TestNameOverlapCheck:
     """Tests for _student_name_in_message — checking if a tool's student name overlaps with user message names."""
@@ -81,3 +99,12 @@ class TestNameOverlapCheck:
         from backend.routes.assistant_routes import _student_name_in_message
         # User says "Troy Mikell", tool uses full "Troy Jaxson Mikell"
         assert _student_name_in_message("Troy Jaxson Mikell", "email Troy Mikell's parents") is True
+
+    def test_lowercase_message_blocks_wrong_student(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # Previously this returned True (bypass) because lowercase names weren't extracted
+        assert _student_name_in_message("Troy Mikell", "email charles cavanaugh's parents") is False
+
+    def test_lowercase_message_allows_correct_student(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Charles Cavanaugh", "email charles cavanaugh's parents") is True
