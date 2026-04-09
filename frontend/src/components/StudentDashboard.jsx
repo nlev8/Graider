@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import StudentPortal from "./StudentPortal";
+import FlashcardView from "./FlashcardView";
+
+var RESOURCE_TYPES = ['study_guide', 'flashcards', 'slide_deck'];
 
 export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
   const [items, setItems] = useState([]);
@@ -10,6 +13,14 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
   const [selectedResource, setSelectedResource] = useState(null);
   const [flippedCards, setFlippedCards] = useState({});
   const token = localStorage.getItem("student_token");
+
+  // Split dashboard items into assignments vs resources
+  var assignmentItems = items.filter(function(i) { return RESOURCE_TYPES.indexOf(i.content_type) === -1; });
+  var dashboardResources = items.filter(function(i) { return RESOURCE_TYPES.indexOf(i.content_type) !== -1; }).map(function(i) {
+    return { id: i.content_id, title: i.title, content_type: i.content_type, _fromDashboard: true, content_id: i.content_id };
+  });
+  var resourceIds = resources.map(function(r) { return r.id; });
+  var allResources = resources.concat(dashboardResources.filter(function(dr) { return resourceIds.indexOf(dr.id) === -1; }));
 
   useEffect(() => {
     loadDashboard();
@@ -121,7 +132,7 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
 
         {loading ? (
           <p style={{ color: "#64748b" }}>Loading...</p>
-        ) : items.length === 0 ? (
+        ) : assignmentItems.length === 0 ? (
           <div style={{
             textAlign: "center", padding: "60px 20px",
             background: "rgba(30,41,59,0.5)", borderRadius: "12px",
@@ -134,7 +145,7 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {items.map((item) => {
+            {assignmentItems.map((item) => {
               const st = statusColors[item.status] || statusColors.not_started;
               const isClickable = item.status !== "graded";
               return (
@@ -179,14 +190,14 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
         )}
 
         {/* Resources Section */}
-        {resources.length > 0 && (
+        {allResources.length > 0 && (
           <div style={{ marginTop: "24px" }}>
             <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "1.2rem" }}>{String.fromCharCode(128218)}</span>
               Study Materials
             </h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px" }}>
-              {resources.map(function(res) {
+              {allResources.map(function(res) {
                 var icon = res.content_type === 'study_guide' ? String.fromCharCode(128214)
                   : res.content_type === 'flashcards' ? String.fromCharCode(128196)
                   : res.content_type === 'slide_deck' ? String.fromCharCode(128253)
@@ -199,17 +210,31 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
                   <div
                     key={res.id}
                     onClick={function() {
-                      fetch('/api/student/resource/' + res.id, {
-                        headers: { 'X-Student-Token': token }
-                      })
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                          if (data.resource) {
-                            setSelectedResource(data.resource);
-                            setFlippedCards({});
-                          }
+                      if (res._fromDashboard) {
+                        fetch('/api/student/content/' + res.content_id, {
+                          headers: { 'X-Student-Token': token }
                         })
-                        .catch(function() {});
+                          .then(function(r) { return r.json(); })
+                          .then(function(data) {
+                            if (data.content) {
+                              setSelectedResource({ id: res.content_id, title: res.title, content_type: res.content_type, content: data.content });
+                              setFlippedCards({});
+                            }
+                          })
+                          .catch(function() {});
+                      } else {
+                        fetch('/api/student/resource/' + res.id, {
+                          headers: { 'X-Student-Token': token }
+                        })
+                          .then(function(r) { return r.json(); })
+                          .then(function(data) {
+                            if (data.resource) {
+                              setSelectedResource(data.resource);
+                              setFlippedCards({});
+                            }
+                          })
+                          .catch(function() {});
+                      }
                     }}
                     style={{
                       padding: "16px",
@@ -277,72 +302,7 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
               )}
 
               {selectedResource.content_type === 'flashcards' && selectedResource.content && (
-                <div>
-                  <p style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "12px", textAlign: "center" }}>
-                    Click a card to flip it
-                  </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px" }}>
-                    {(selectedResource.content.cards || []).map(function(card, ci) {
-                      var isFlipped = flippedCards[ci] || false;
-                      return (
-                        <div
-                          key={ci}
-                          onClick={function() {
-                            setFlippedCards(function(prev) {
-                              var next = Object.assign({}, prev);
-                              next[ci] = !prev[ci];
-                              return next;
-                            });
-                          }}
-                          style={{
-                            perspective: "800px",
-                            cursor: "pointer",
-                            height: "160px",
-                          }}
-                        >
-                          <div style={{
-                            position: "relative",
-                            width: "100%",
-                            height: "100%",
-                            transition: "transform 0.5s",
-                            transformStyle: "preserve-3d",
-                            transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
-                          }}>
-                            {/* Front — Term */}
-                            <div style={{
-                              position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
-                              backfaceVisibility: "hidden",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              padding: "20px", borderRadius: "12px",
-                              border: "1px solid rgba(99,102,241,0.25)",
-                              background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))",
-                              textAlign: "center",
-                            }}>
-                              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#e2e8f0" }}>
-                                {card.term}
-                              </div>
-                            </div>
-                            {/* Back — Definition */}
-                            <div style={{
-                              position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
-                              backfaceVisibility: "hidden",
-                              transform: "rotateY(180deg)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              padding: "20px", borderRadius: "12px",
-                              border: "1px solid rgba(34,197,94,0.25)",
-                              background: "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.08))",
-                              textAlign: "center",
-                            }}>
-                              <div style={{ fontSize: "0.9rem", color: "#cbd5e1", lineHeight: 1.5 }}>
-                                {card.definition}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <FlashcardView data={selectedResource.content} />
               )}
 
               {selectedResource.content_type === 'slide_deck' && (
