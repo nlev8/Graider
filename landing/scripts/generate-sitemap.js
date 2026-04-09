@@ -18,10 +18,7 @@ const BASE_URL = 'https://graider.live';
 const LANDING_DIR = path.resolve(__dirname, '..');
 
 // ── External entries to always preserve ────────────────────────────────
-const EXTERNAL_ENTRIES = [
-  { loc: 'https://app.graider.live/', changefreq: 'weekly', priority: '0.9' },
-  { loc: 'https://app.graider.live/User_Manual.md', changefreq: 'monthly', priority: '0.7' },
-];
+const EXTERNAL_ENTRIES = [];
 
 // ── Non-HTML entries within graider.live ────────────────────────────────
 const EXTRA_ENTRIES = [
@@ -38,7 +35,6 @@ function getPriority(relPath) {
     if (relPath.includes('best-ai-grading-tools')) return '0.9';
     return '0.8';
   }
-  if (relPath === 'download.html') return '0.8';
   if (relPath === 'ferpa.html') return '0.5';
   if (relPath === 'privacy.html' || relPath === 'terms.html') return '0.4';
   return '0.6'; // default for any new pages
@@ -48,7 +44,6 @@ function getChangefreq(relPath) {
   if (relPath === 'index.html') return 'weekly';
   if (relPath === 'blog/index.html') return 'weekly';
   if (relPath.startsWith('blog/')) return 'monthly';
-  if (relPath === 'download.html') return 'monthly';
   if (['privacy.html', 'terms.html', 'ferpa.html'].includes(relPath)) return 'yearly';
   return 'monthly';
 }
