@@ -108,3 +108,13 @@ class TestNameOverlapCheck:
     def test_lowercase_message_allows_correct_student(self):
         from backend.routes.assistant_routes import _student_name_in_message
         assert _student_name_in_message("Charles Cavanaugh", "email charles cavanaugh's parents") is True
+
+    def test_unicode_name_matches(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # "Ángela" starts with a non-ASCII char; old [A-Za-z]+ strips it to "ngela"
+        # which doesn't match the Unicode-extracted "ángela" from the message
+        assert _student_name_in_message("Ángela Ñoño", "email Ángela Ñoño's parents about her grades") is True
+
+    def test_unicode_name_blocks_mismatch(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Ángela Ñoño", "email Charles Cavanaugh's parents") is False

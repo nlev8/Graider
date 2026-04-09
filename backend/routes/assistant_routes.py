@@ -1208,7 +1208,7 @@ def _student_name_in_message(student_name, user_message):
         return True
 
     import re
-    student_words = [w.lower() for w in re.findall(r"[A-Za-z]+", student_name) if len(w) >= 2]
+    student_words = [w.lower() for w in re.findall(r"[A-Za-z\u00C0-\u024F]+", student_name) if len(w) >= 2]
     if not student_words:
         return True
 
