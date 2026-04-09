@@ -16669,6 +16669,138 @@ ${signature}`;
         </div>
       )}
 
+      {/* Share with Class Modal */}
+      {showShareModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => { if (!shareModalSharing) setShowShareModal(false); }}
+        >
+          <div
+            className="glass-card"
+            style={{
+              width: "100%",
+              maxWidth: "440px",
+              padding: "28px",
+              borderRadius: "16px",
+            }}
+            onClick={function(e) { e.stopPropagation(); }}
+          >
+            <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: "6px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <Icon name="Share2" size={22} />
+              Share with Class
+            </h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
+              {shareModalContent ? '"' + shareModalContent.title + '"' : ''}
+            </p>
+
+            {/* Select All */}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: "var(--hover-bg)",
+                cursor: "pointer",
+                marginBottom: "8px",
+                fontWeight: 600,
+                fontSize: "0.9rem",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={shareModalSelected.length === teacherClasses.length && teacherClasses.length > 0}
+                onChange={function(e) {
+                  if (e.target.checked) {
+                    setShareModalSelected(teacherClasses.map(function(c) { return c.id; }));
+                  } else {
+                    setShareModalSelected([]);
+                  }
+                }}
+                style={{ width: "18px", height: "18px", accentColor: "var(--primary-500)" }}
+              />
+              Select All ({teacherClasses.length} classes)
+            </label>
+
+            {/* Class list */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "300px", overflowY: "auto", marginBottom: "20px" }}>
+              {teacherClasses.map(function(cls) {
+                var isChecked = shareModalSelected.indexOf(cls.id) !== -1;
+                var studentCount = cls.class_students && cls.class_students[0] ? cls.class_students[0].count : 0;
+                return (
+                  <label
+                    key={cls.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      background: isChecked ? "rgba(99, 102, 241, 0.1)" : "transparent",
+                      cursor: "pointer",
+                      transition: "background 0.15s",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={function() {
+                        if (isChecked) {
+                          setShareModalSelected(shareModalSelected.filter(function(id) { return id !== cls.id; }));
+                        } else {
+                          setShareModalSelected(shareModalSelected.concat([cls.id]));
+                        }
+                      }}
+                      style={{ width: "18px", height: "18px", accentColor: "var(--primary-500)" }}
+                    />
+                    <span style={{ flex: 1 }}>{cls.name}</span>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{studentCount} students</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={function() { setShowShareModal(false); }}
+                className="btn btn-secondary"
+                style={{ padding: "10px 20px" }}
+                disabled={shareModalSharing}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeShareWithClasses}
+                className="btn btn-primary"
+                style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px" }}
+                disabled={shareModalSelected.length === 0 || shareModalSharing}
+              >
+                {shareModalSharing ? (
+                  React.createElement(React.Fragment, null,
+                    React.createElement(Icon, { name: "Loader", size: 16, className: "spinning" }), " Sharing...")
+                ) : (
+                  React.createElement(React.Fragment, null,
+                    React.createElement(Icon, { name: "Share2", size: 16 }),
+                    " Share with " + shareModalSelected.length + " class" + (shareModalSelected.length === 1 ? "" : "es"))
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Published Assessment Modal - Shows join code and link */}
       {publishedAssessmentModal.show && (
         <div
