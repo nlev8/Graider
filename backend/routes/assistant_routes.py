@@ -1143,6 +1143,68 @@ def _cleanup_stale_sessions():
         del conversations[sid]
 
 
+# ── Send-tool user-message name guard ──────────────────────
+
+# Words that are commonly capitalized but are NOT student names.
+_IGNORE_WORDS = frozenset([
+    "dear", "please", "hello", "hi", "hey", "good", "morning", "afternoon",
+    "evening", "send", "email", "message", "text", "draft", "write", "contact",
+    "parents", "parent", "mother", "father", "mom", "dad", "guardian",
+    "about", "regarding", "concerning", "class", "period", "grade", "school",
+    "behavior", "assignment", "homework", "classwork", "test", "quiz",
+    "mr", "mrs", "ms", "miss", "dr", "teacher", "student", "focus",
+    "the", "and", "his", "her", "their", "from", "with", "for", "that",
+    "this", "have", "has", "been", "was", "are", "will", "can", "would",
+    "should", "could", "also", "still", "just", "now", "today", "tomorrow",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "during", "after", "before", "since", "into", "like", "not", "but",
+    "insistence", "constant", "refusal", "talking", "back", "silent", "remain",
+    "defiance", "disrespect", "loud", "rowdy", "playing", "games",
+])
+
+
+def _extract_message_names(text):
+    """Extract potential student name words from a user message.
+
+    Returns a list of lowercased words that look like name parts
+    (capitalized words not in the ignore list). Returns [] if none found.
+    """
+    import re
+    # Strip possessives and punctuation, split into words
+    cleaned = re.sub(r"'s\b", "", text)
+    words = re.findall(r"[A-Za-z]+", cleaned)
+
+    name_words = []
+    for w in words:
+        low = w.lower()
+        if len(w) >= 2 and low not in _IGNORE_WORDS:
+            if w[0].isupper():
+                name_words.append(low)
+    return name_words
+
+
+def _student_name_in_message(student_name, user_message):
+    """Check if a student name from a tool call has word overlap with the user message.
+
+    Returns True if:
+      - The user message contains no extractable names (confirmation like "yes", "send it")
+      - At least one word from student_name appears in the extracted message names
+
+    Returns False if:
+      - The user message has extractable names but NONE overlap with student_name
+    """
+    message_names = _extract_message_names(user_message)
+    if not message_names:
+        return True
+
+    import re
+    student_words = [w.lower() for w in re.findall(r"[A-Za-z]+", student_name) if len(w) >= 2]
+    if not student_words:
+        return True
+
+    return any(sw in message_names for sw in student_words)
+
+
 # ═══════════════════════════════════════════════════════
 # CHAT ENDPOINT (SSE STREAMING)
 # ═══════════════════════════════════════════════════════
@@ -1609,8 +1671,21 @@ def assistant_chat():
                         if isinstance(students, list) and students:
                             _resolved_students = [{"name": s.get("name", ""), "student_id": s.get("student_id", "")} for s in students]
 
-                    # Cross-tool guardrail: warn if send tools reference students
-                    # that weren't in the most recent lookup result
+                    # Cross-tool guardrail: require lookup before sending to specific students
+                    if tb["name"] in ("send_focus_comms", "send_behavior_email", "send_parent_emails"):
+                        _send_student_names = tool_input.get("student_names") or []
+                        if isinstance(_send_student_names, str):
+                            _send_student_names = [_send_student_names]
+                        _send_student_name = tool_input.get("student_name", "")
+                        if _send_student_name:
+                            _send_student_names.append(_send_student_name)
+                        if _send_student_names and not _resolved_students:
+                            # LLM skipped lookup_student_info — block and force lookup first
+                            result = {
+                                "error": "You must call lookup_student_info before sending messages. "
+                                "Call lookup_student_info for '" + _send_student_names[0] + "' first to verify the correct student, "
+                                "then call " + tb["name"] + " again."
+                            }
                     if tb["name"] in ("send_focus_comms", "send_behavior_email", "send_parent_emails") and _resolved_students:
                         tool_student_names = tool_input.get("student_names") or []
                         if isinstance(tool_student_names, str):
