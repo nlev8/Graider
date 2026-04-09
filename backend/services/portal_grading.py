@@ -62,7 +62,8 @@ def has_written_questions(assessment):
 def build_portal_ai_notes(global_ai_notes="", assignment_title="",
                           grade_level="", subject="", grading_style="standard",
                           rubric=None, accommodation_prompt="",
-                          student_history="", class_period=""):
+                          student_history="", class_period="",
+                          correction_context=""):
     """Build the AI instruction string for portal grading.
 
     Mirrors the file_ai_notes accumulation logic in app.py but for portal context.
@@ -97,6 +98,9 @@ def build_portal_ai_notes(global_ai_notes="", assignment_title="",
 
     if class_period:
         notes += f"\nCLASS PERIOD: {class_period}"
+
+    if correction_context:
+        notes += "\n\n" + correction_context
 
     return notes
 
@@ -267,6 +271,17 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         except Exception:
             pass
 
+        # Build correction context from teacher edit history
+        _correction_ctx = ""
+        try:
+            from backend.services.correction_patterns import build_correction_context
+            _q_types = list(set(q.get("question_type", "short_answer") for q in questions if q.get("question_type")))
+            if not _q_types:
+                _q_types = ["short_answer", "multiple_choice"]
+            _correction_ctx = build_correction_context(teacher_id, teacher_config.get("subject", ""), _q_types)
+        except Exception:
+            pass
+
         ai_notes = build_portal_ai_notes(
             global_ai_notes=teacher_config.get("global_ai_notes", ""),
             assignment_title=assessment.get("title", ""),
@@ -277,6 +292,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             accommodation_prompt=accommodation_prompt,
             student_history=history_context,
             class_period=teacher_config.get("period", ""),
+            correction_context=_correction_ctx,
         )
 
         # Add rubric prompt if available

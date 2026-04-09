@@ -1,0 +1,209 @@
+"""Tests for send-tool user-message name guard."""
+
+import pytest
+
+
+class TestExtractUserMessageNames:
+    """Tests for _extract_message_names — pulling potential student names from user text."""
+
+    def test_extracts_full_name(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("draft an email to Charles Cavanaugh's parents about his behavior")
+        assert any("charles" in n for n in names)
+        assert any("cavanaugh" in n for n in names)
+
+    def test_extracts_name_with_possessive(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("email Troy Mikell's mother")
+        assert any("troy" in n for n in names)
+        assert any("mikell" in n for n in names)
+
+    def test_returns_empty_for_no_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("yes send it")
+        assert names == []
+
+    def test_returns_empty_for_generic_confirmation(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("looks good, send now")
+        assert names == []
+
+    def test_ignores_common_words(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        # "Dear" and "Please" are capitalized but not student names
+        names = _extract_message_names("Dear teacher, Please send the email")
+        assert "dear" not in names
+        assert "please" not in names
+
+    def test_extracts_name_after_preposition(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("send a message to London Samuel about missing work")
+        assert any("london" in n for n in names)
+        assert any("samuel" in n for n in names)
+
+    def test_handles_multiple_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("email Charles Cavanaugh and London Samuel's parents")
+        assert any("charles" in n for n in names)
+        assert any("london" in n for n in names)
+
+    def test_extracts_lowercase_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("email charles cavanaugh's parents about his behavior")
+        assert "charles" in names
+        assert "cavanaugh" in names
+
+    def test_extracts_allcaps_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("EMAIL CHARLES CAVANAUGH'S PARENTS")
+        assert "charles" in names
+        assert "cavanaugh" in names
+
+    def test_extracts_unicode_names(self):
+        from backend.routes.assistant_routes import _extract_message_names
+        names = _extract_message_names("email José Ángela's parents")
+        assert any("jos" in n for n in names)
+        assert any("ngela" in n for n in names)
+
+
+class TestNameOverlapCheck:
+    """Tests for _student_name_in_message — checking if a tool's student name overlaps with user message names."""
+
+    def test_matching_name_returns_true(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Charles Cavanaugh", "email Charles Cavanaugh's parents about defiance") is True
+
+    def test_mismatched_name_returns_false(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Troy Jaxson Mikell", "email Charles Cavanaugh's parents about defiance") is False
+
+    def test_partial_name_match(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # User says "Charles" only, tool has full name
+        assert _student_name_in_message("Charles Cavanaugh", "email Charles about his behavior") is True
+
+    def test_skips_check_for_confirmations(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # "yes" / "send it" — no names in message, should return True (skip check)
+        assert _student_name_in_message("Troy Mikell", "yes send it") is True
+
+    def test_skips_check_for_short_messages(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Troy Mikell", "looks good") is True
+
+    def test_case_insensitive(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("charles cavanaugh", "Email CHARLES CAVANAUGH's parents") is True
+
+    def test_name_with_middle_name(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # User says "Troy Mikell", tool uses full "Troy Jaxson Mikell"
+        assert _student_name_in_message("Troy Jaxson Mikell", "email Troy Mikell's parents") is True
+
+    def test_lowercase_message_blocks_wrong_student(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # Previously this returned True (bypass) because lowercase names weren't extracted
+        assert _student_name_in_message("Troy Mikell", "email charles cavanaugh's parents") is False
+
+    def test_lowercase_message_allows_correct_student(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Charles Cavanaugh", "email charles cavanaugh's parents") is True
+
+    def test_unicode_name_matches(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        # "Ángela" starts with a non-ASCII char; old [A-Za-z]+ strips it to "ngela"
+        # which doesn't match the Unicode-extracted "ángela" from the message
+        assert _student_name_in_message("Ángela Ñoño", "email Ángela Ñoño's parents about her grades") is True
+
+    def test_unicode_name_blocks_mismatch(self):
+        from backend.routes.assistant_routes import _student_name_in_message
+        assert _student_name_in_message("Ángela Ñoño", "email Charles Cavanaugh's parents") is False
+
+
+class TestSendToolGuard:
+    """Dispatch-level tests for _check_send_tool_guard — proves execute_tool would not run."""
+
+    def test_blocks_when_no_lookup(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[],
+            last_user_text="email Troy Mikell's parents",
+        )
+        assert result is not None
+        assert "lookup_student_info" in result["error"]
+
+    def test_blocks_when_user_message_mismatch(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[{"name": "Troy Mikell", "student_id": "123"}],
+            last_user_text="email Charles Cavanaugh's parents about defiance",
+        )
+        assert result is not None
+        assert "does not mention this student" in result["error"]
+
+    def test_blocks_when_cross_tool_mismatch(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[{"name": "Charles Cavanaugh", "student_id": "456"}],
+            last_user_text="email Troy Mikell's parents",
+        )
+        assert result is not None
+        assert "most recent lookup resolved" in result["error"]
+
+    def test_passes_when_all_checks_match(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Charles Cavanaugh"]},
+            resolved_students=[{"name": "Charles Cavanaugh", "student_id": "456"}],
+            last_user_text="email Charles Cavanaugh's parents about defiance",
+        )
+        assert result is None
+
+    def test_passes_for_non_send_tool(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="query_grades",
+            tool_input={"student_name": "Troy Mikell"},
+            resolved_students=[],
+            last_user_text="show Troy's grades",
+        )
+        assert result is None
+
+    def test_passes_for_period_send_without_student_names(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"period": "3"},
+            resolved_students=[],
+            last_user_text="email all parents in period 3",
+        )
+        assert result is None
+
+    def test_passes_for_confirmation_message(self):
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_focus_comms",
+            tool_input={"student_names": ["Troy Mikell"]},
+            resolved_students=[{"name": "Troy Mikell", "student_id": "123"}],
+            last_user_text="yes send it",
+        )
+        assert result is None
+
+    def test_handles_student_name_param(self):
+        """Tools use either student_names (list) or student_name (string)."""
+        from backend.routes.assistant_routes import _check_send_tool_guard
+        result = _check_send_tool_guard(
+            tool_name="send_behavior_email",
+            tool_input={"student_name": "Troy Mikell"},
+            resolved_students=[],
+            last_user_text="email Troy Mikell's parents about behavior",
+        )
+        assert result is not None
+        assert "lookup_student_info" in result["error"]
