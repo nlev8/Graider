@@ -1655,38 +1655,85 @@ function App() {
   const [slideFormat, setSlideFormat] = useState('detailed');
 
   async function shareWithClass(content, contentType, title) {
-    if (!teacherClasses || teacherClasses.length === 0) {
+    var classes = teacherClasses;
+    if (!classes || classes.length === 0) {
+      try {
+        var data = await api.listClasses();
+        if (data.classes && data.classes.length > 0) {
+          classes = data.classes;
+          setTeacherClasses(classes);
+        }
+      } catch (e) { /* fall through to check below */ }
+    }
+    if (!classes || classes.length === 0) {
       addToast('No classes found. Sync your roster first.', 'warning');
       return;
     }
-    var targetClass = teacherClasses[0];
-    if (teacherClasses.length > 1) {
-      var classNames = teacherClasses.map(function(c, i) { return (i + 1) + '. ' + c.name; }).join(String.fromCharCode(10));
-      var choice = prompt('Which class?' + String.fromCharCode(10) + classNames + String.fromCharCode(10) + 'Enter number:');
-      if (!choice) return;
-      var idx = parseInt(choice) - 1;
-      if (idx < 0 || idx >= teacherClasses.length) { addToast('Invalid choice', 'error'); return; }
-      targetClass = teacherClasses[idx];
-    }
-    try {
-      var resp = await fetch('/api/publish-to-class', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          class_id: targetClass.id,
-          content: content,
-          content_type: contentType,
-          title: title,
-        }),
-      });
-      var data = await resp.json();
-      if (data.error) {
-        addToast(data.error, 'error');
-      } else {
-        addToast('Shared "' + title + '" with ' + targetClass.name, 'success');
+    // Single class: publish directly, no modal needed
+    if (classes.length === 1) {
+      try {
+        var resp = await fetch('/api/publish-to-class', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            class_id: classes[0].id,
+            content: content,
+            content_type: contentType,
+            title: title,
+          }),
+        });
+        var result = await resp.json();
+        if (result.error) {
+          addToast(result.error, 'error');
+        } else {
+          addToast('Shared "' + title + '" with ' + classes[0].name, 'success');
+        }
+      } catch (err) {
+        addToast('Failed to share: ' + err.message, 'error');
       }
-    } catch (err) {
-      addToast('Failed to share: ' + err.message, 'error');
+      return;
+    }
+    // Multiple classes: open modal
+    setShareModalContent({ content: content, contentType: contentType, title: title });
+    setShareModalSelected([]);
+    setShowShareModal(true);
+  }
+
+  async function executeShareWithClasses() {
+    if (!shareModalContent || shareModalSelected.length === 0) return;
+    setShareModalSharing(true);
+    var successes = 0;
+    var failures = 0;
+    for (var i = 0; i < shareModalSelected.length; i++) {
+      try {
+        var resp = await fetch('/api/publish-to-class', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            class_id: shareModalSelected[i],
+            content: shareModalContent.content,
+            content_type: shareModalContent.contentType,
+            title: shareModalContent.title,
+          }),
+        });
+        var result = await resp.json();
+        if (result.error) {
+          failures++;
+        } else {
+          successes++;
+        }
+      } catch (err) {
+        failures++;
+      }
+    }
+    setShareModalSharing(false);
+    setShowShareModal(false);
+    if (failures === 0) {
+      addToast('Shared "' + shareModalContent.title + '" with ' + successes + ' class' + (successes === 1 ? '' : 'es'), 'success');
+    } else if (successes > 0) {
+      addToast('Shared with ' + successes + ' class' + (successes === 1 ? '' : 'es') + ', ' + failures + ' failed', 'warning');
+    } else {
+      addToast('Failed to share with any classes', 'error');
     }
   }
 
@@ -2061,6 +2108,11 @@ function App() {
   const [teacherClasses, setTeacherClasses] = useState([]);
   const [publishClassId, setPublishClassId] = useState('');
   const [publishedAssessmentModal, setPublishedAssessmentModal] = useState({ show: false, joinCode: "", joinLink: "" });
+  // Share-with-class modal state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareModalContent, setShareModalContent] = useState(null); // { content, contentType, title }
+  const [shareModalSelected, setShareModalSelected] = useState([]); // array of class IDs
+  const [shareModalSharing, setShareModalSharing] = useState(false);
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [showPlatformExport, setShowPlatformExport] = useState(false);
@@ -15217,8 +15269,11 @@ ${signature}`;
                                   return s.question || '';
                                 }).join(String.fromCharCode(10));
                               }
+                              if (!content.trim() && uploadedDocs.length > 0) {
+                                content = uploadedDocs.map(function(doc) { return doc.filename + ':' + String.fromCharCode(10) + doc.text; }).join(String.fromCharCode(10) + String.fromCharCode(10));
+                              }
                               if (!content.trim()) {
-                                addToast('Generate a lesson plan or assessment first.', 'warning');
+                                addToast('Generate a lesson plan, assessment, or upload resources first.', 'warning');
                                 setFlashcardsGenerating(false);
                                 return;
                               }
@@ -15249,7 +15304,7 @@ ${signature}`;
                             }
                             setFlashcardsGenerating(false);
                           }}
-                          disabled={flashcardsGenerating || (!lessonPlan && !generatedAssignment)}
+                          disabled={flashcardsGenerating || (!lessonPlan && !generatedAssignment && uploadedDocs.length === 0)}
                           className="btn btn-primary"
                           style={{ padding: "10px 24px", background: "linear-gradient(135deg, #f59e0b, #d97706)", display: "flex", alignItems: "center", gap: "8px" }}
                         >
