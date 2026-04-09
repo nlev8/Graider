@@ -37,6 +37,7 @@ export default function FlashcardView({ data }) {
   var [index, setIndex] = useState(0);
   var [flipped, setFlipped] = useState(false);
   var [reviewed, setReviewed] = useState({});
+  var [reversed, setReversed] = useState(false);
 
   // Reset when data changes
   useEffect(function() {
@@ -97,8 +98,10 @@ export default function FlashcardView({ data }) {
     );
   }
 
-  var front = getFront(card);
-  var back = getBack(card);
+  var front = reversed ? getBack(card) : getFront(card);
+  var back = reversed ? getFront(card) : getBack(card);
+  var frontLabel = reversed ? "Answer" : "Question";
+  var backLabel = reversed ? "Question" : "Answer";
   var progressPct = total > 0 ? (reviewedCount / total) * 100 : 0;
 
   var btnStyle = {
@@ -117,6 +120,9 @@ export default function FlashcardView({ data }) {
         </span>
         <button onClick={handleShuffle} style={btnStyle} title="Shuffle cards">
           {String.fromCharCode(8645)} Shuffle
+        </button>
+        <button onClick={function() { setReversed(function(r) { return !r; }); setFlipped(false); }} style={btnStyle} title="Swap front and back">
+          {String.fromCharCode(8644)} {reversed ? "Show Terms First" : "Show Answers First"}
         </button>
       </div>
 
@@ -151,7 +157,7 @@ export default function FlashcardView({ data }) {
             textAlign: "center", minHeight: "220px",
           }}>
             <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Question
+              {frontLabel}
             </div>
             <div style={{ fontSize: "1.05rem", fontWeight: 500, lineHeight: 1.5, color: "var(--text-primary)" }}>
               {front}
@@ -172,7 +178,7 @@ export default function FlashcardView({ data }) {
             textAlign: "center", minHeight: "220px",
           }}>
             <div style={{ fontSize: "0.75rem", color: "var(--success, #22c55e)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Answer
+              {backLabel}
             </div>
             <div style={{ fontSize: "1.05rem", fontWeight: 500, lineHeight: 1.5, color: "var(--text-primary)" }}>
               {back}
