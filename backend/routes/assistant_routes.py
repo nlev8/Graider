@@ -1293,6 +1293,20 @@ def assistant_chat():
 
         messages = list(conv["messages"])
 
+        # Extract the last user message text for send-tool name guard
+        _last_user_text = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, dict) and _msg.get("role") == "user":
+                _content = _msg.get("content", "")
+                if isinstance(_content, str):
+                    _last_user_text = _content
+                elif isinstance(_content, list):
+                    for _block in _content:
+                        if isinstance(_block, dict) and _block.get("type") == "text":
+                            _last_user_text = _block.get("text", "")
+                            break
+                break
+
         # Voice mode: set up TTS streaming
         tts_stream = None
         sentence_buffer = None
@@ -1686,6 +1700,20 @@ def assistant_chat():
                                 "Call lookup_student_info for '" + _send_student_names[0] + "' first to verify the correct student, "
                                 "then call " + tb["name"] + " again."
                             }
+                        # User-message name guard: check if tool's student matches the user's request
+                        if _send_student_names and _last_user_text and not result.get("error"):
+                            for _sn in _send_student_names:
+                                if not _student_name_in_message(_sn, _last_user_text):
+                                    logger.warning(
+                                        "User-message name mismatch: %s targets '%s' but user message doesn't mention this student",
+                                        tb["name"], _sn
+                                    )
+                                    result = {
+                                        "error": "Student name mismatch: you are trying to send to '" + _sn + "' but the user's message "
+                                        "does not mention this student. Re-read the user's CURRENT message, extract the correct student name, "
+                                        "call lookup_student_info with that name, then try again."
+                                    }
+                                    break
                     if tb["name"] in ("send_focus_comms", "send_behavior_email", "send_parent_emails") and _resolved_students:
                         tool_student_names = tool_input.get("student_names") or []
                         if isinstance(tool_student_names, str):
