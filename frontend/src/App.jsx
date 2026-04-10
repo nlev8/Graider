@@ -2125,6 +2125,8 @@ function App() {
   const [selectedAssessmentResults, setSelectedAssessmentResults] = useState(null);
   const [inProgressDrafts, setInProgressDrafts] = useState([]);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [attemptDrawerStudent, setAttemptDrawerStudent] = useState(null);
+  const [contentSubmissionsGroups, setContentSubmissionsGroups] = useState([]);
   const [sharedResources, setSharedResources] = useState([]);
   const [loadingSharedResources, setLoadingSharedResources] = useState(false);
 
@@ -4871,6 +4873,20 @@ ${signature}`;
   };
 
   // Fetch results for a specific assessment
+  const fetchContentSubmissions = async (contentId) => {
+    try {
+      var data = await api.getContentSubmissions(contentId);
+      if (data && data.students) {
+        setContentSubmissionsGroups(data.students);
+      } else {
+        setContentSubmissionsGroups([]);
+      }
+    } catch (e) {
+      console.error("Error loading content submissions:", e);
+      setContentSubmissionsGroups([]);
+    }
+  };
+
   const fetchAssessmentResults = async (joinCode) => {
     setLoadingResults(true);
     try {
@@ -4884,6 +4900,11 @@ ${signature}`;
           submissions: data.submissions || [],
           stats: data.stats || {},
         });
+        if (joinCode && joinCode.length > 10) {
+          fetchContentSubmissions(joinCode);
+        } else {
+          setContentSubmissionsGroups([]);
+        }
       }
       // Try to fetch in-progress drafts — only works for class-based content (UUID)
       if (joinCode && joinCode.length > 10) {
@@ -14120,6 +14141,48 @@ ${signature}`;
                               </div>
                             )}
 
+                            {/* Standards Summary Card */}
+                            {selectedAssessmentResults && selectedAssessmentResults.submissions && selectedAssessmentResults.submissions.length > 0 && (() => {
+                              var byStandard = {};
+                              selectedAssessmentResults.submissions.forEach(function(sub) {
+                                var mastery = sub.results && sub.results.standards_mastery;
+                                if (!mastery) return;
+                                Object.keys(mastery).forEach(function(code) {
+                                  var m = mastery[code];
+                                  if (!byStandard[code]) byStandard[code] = { earned: 0, possible: 0, question_count: m.question_count };
+                                  byStandard[code].earned += m.points_earned || 0;
+                                  byStandard[code].possible += m.points_possible || 0;
+                                });
+                              });
+                              var codes = Object.keys(byStandard);
+                              if (codes.length === 0) return null;
+                              return (
+                                <div className="glass-card" style={{ padding: "16px", marginBottom: "16px" }}>
+                                  <h4 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <Icon name="Target" size={16} />
+                                    Standards in this Assessment ({codes.length})
+                                  </h4>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                    {codes.map(function(code) {
+                                      var s = byStandard[code];
+                                      var pct = s.possible > 0 ? Math.round((s.earned / s.possible) * 100) : 0;
+                                      var barColor = pct >= 80 ? "var(--success)" : pct >= 60 ? "var(--warning)" : "var(--danger)";
+                                      return (
+                                        <div key={code} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 12px", borderRadius: "8px", background: "var(--glass-bg)" }}>
+                                          <div style={{ fontSize: "0.8rem", fontWeight: 600, fontFamily: "monospace", minWidth: "100px" }}>{code}</div>
+                                          <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", minWidth: "70px" }}>{s.question_count} Q{s.question_count === 1 ? '' : 's'}</div>
+                                          <div style={{ flex: 1, height: "6px", background: "var(--glass-bg)", borderRadius: "3px", overflow: "hidden", border: "1px solid var(--glass-border)" }}>
+                                            <div style={{ width: pct + "%", height: "100%", background: barColor, transition: "width 0.3s" }} />
+                                          </div>
+                                          <div style={{ fontSize: "0.8rem", fontWeight: 600, minWidth: "50px", textAlign: "right" }}>{pct}%</div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {/* Student Submissions List */}
                             {loadingResults ? (
                               <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
@@ -14149,7 +14212,23 @@ ${signature}`;
                                     }}
                                   >
                                     <div>
-                                      <div style={{ fontWeight: 600 }}>{submission.student_name}</div>
+                                      <div style={{ fontWeight: 600, display: "flex", alignItems: "center" }}>
+                                        {submission.student_name}
+                                        {(() => {
+                                          var group = contentSubmissionsGroups.find(function(g) { return g.student_id === submission.student_id || g.student_name === submission.student_name; });
+                                          if (!group || group.attempts.length <= 1) return null;
+                                          var curAttempt = (submission.results && submission.results.attempt_number) || submission.attempt_number || 1;
+                                          return (
+                                            <button
+                                              onClick={function(e) { e.stopPropagation(); setAttemptDrawerStudent(group); }}
+                                              style={{ fontSize: "0.7rem", padding: "3px 8px", borderRadius: "10px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)", color: "var(--text-secondary)", cursor: "pointer", marginLeft: "8px" }}
+                                              title="View all attempts"
+                                            >
+                                              Attempt {curAttempt} of {group.attempts.length}
+                                            </button>
+                                          );
+                                        })()}
+                                      </div>
                                       <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                                         {new Date(submission.submitted_at).toLocaleString()}
                                         {submission.time_taken_seconds && (
@@ -17173,6 +17252,62 @@ ${signature}`;
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Attempt History Drawer */}
+      {attemptDrawerStudent && (
+        <div
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "var(--modal-bg)", display: "flex", alignItems: "center",
+            justifyContent: "flex-end", zIndex: 9998, padding: "20px",
+          }}
+          onClick={function() { setAttemptDrawerStudent(null); }}
+        >
+          <div
+            className="glass-card"
+            style={{ width: "100%", maxWidth: "500px", maxHeight: "90vh", overflowY: "auto", padding: "24px", borderRadius: "16px" }}
+            onClick={function(e) { e.stopPropagation(); }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                {attemptDrawerStudent.student_name}
+              </h3>
+              <button
+                onClick={function() { setAttemptDrawerStudent(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: "1.2rem" }}
+              >
+                {String.fromCharCode(10005)}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
+              {attemptDrawerStudent.attempts.length} attempts
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {attemptDrawerStudent.attempts.map(function(a) {
+                var submittedDate = a.submitted_at ? new Date(a.submitted_at).toLocaleString() : String.fromCharCode(8212);
+                var timeMin = a.time_taken_seconds ? Math.floor(a.time_taken_seconds / 60) + 'm ' + (a.time_taken_seconds % 60) + 's' : String.fromCharCode(8212);
+                var pct = a.percentage != null ? Math.round(a.percentage) + '%' : String.fromCharCode(8212);
+                return (
+                  <div key={a.submission_id} style={{ padding: "12px 14px", borderRadius: "10px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>Attempt {a.attempt_number}</div>
+                      <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{pct}</div>
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                      Submitted {submittedDate} {String.fromCharCode(8226)} {timeMin}
+                    </div>
+                    {a.score != null && (
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                        Score: {a.score} / {a.total_points}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
