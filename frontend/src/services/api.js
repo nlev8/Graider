@@ -1722,7 +1722,7 @@ export default {
   searchTeachers,
 }
 
-export async function saveDraft(contentId, answers, markedForReview, studentToken) {
+export async function saveDraft(contentId, answers, markedForReview, questionTimes, studentToken) {
   return fetch('/api/student/submission/' + contentId + '/draft', {
     method: 'POST',
     headers: {
@@ -1732,6 +1732,7 @@ export async function saveDraft(contentId, answers, markedForReview, studentToke
     body: JSON.stringify({
       answers: answers,
       marked_for_review: markedForReview,
+      question_times: questionTimes || {},
     }),
   }).then(function(r) { return r.json(); })
 }
@@ -1750,4 +1751,8 @@ export async function endStudentAttempt(submissionId) {
 
 export async function getInProgressDrafts(contentId) {
   return fetchApi('/api/teacher/content/' + contentId + '/in-progress')
+}
+
+export async function getContentSubmissions(contentId) {
+  return fetchApi('/api/teacher/content/' + contentId + '/submissions')
 }
