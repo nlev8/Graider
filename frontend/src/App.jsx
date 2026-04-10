@@ -1680,6 +1680,7 @@ function App() {
             content: content,
             content_type: contentType,
             title: title,
+            settings: { unit_name: unitConfig.title || '' },
           }),
         });
         var result = await resp.json();
@@ -1694,7 +1695,7 @@ function App() {
       return;
     }
     // Multiple classes: open modal
-    setShareModalContent({ content: content, contentType: contentType, title: title });
+    setShareModalContent({ content: content, contentType: contentType, title: title, unitName: unitConfig.title || '' });
     setShareModalSelected([]);
     setShowShareModal(true);
   }
@@ -1714,6 +1715,7 @@ function App() {
             content: shareModalContent.content,
             content_type: shareModalContent.contentType,
             title: shareModalContent.title,
+            settings: { unit_name: shareModalContent.unitName || '' },
           }),
         });
         var result = await resp.json();
@@ -13955,7 +13957,37 @@ ${signature}`;
                                       </div>
                                       <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
                                         {typeLabel} {String.fromCharCode(8226)} {res.class_name} {String.fromCharCode(8226)} {new Date(res.created_at).toLocaleDateString()}
+                                        {res.unit_name ? (' ' + String.fromCharCode(8226) + ' ' + res.unit_name) : ''}
                                       </div>
+                                      {!res.unit_name && (
+                                        <select
+                                          onChange={async function(e) {
+                                            var val = e.target.value;
+                                            if (val === '__new__') {
+                                              val = prompt('Enter unit name:');
+                                              if (!val) { e.target.value = ''; return; }
+                                            }
+                                            if (!val) return;
+                                            try {
+                                              var data = await api.updateSharedResourceUnit(res.id, val);
+                                              if (data.success) {
+                                                setSharedResources(function(prev) {
+                                                  return prev.map(function(r) { return r.id === res.id ? Object.assign({}, r, { unit_name: val }) : r; });
+                                                });
+                                                addToast('Assigned to ' + val, 'success');
+                                              }
+                                            } catch (err) { addToast('Failed to assign unit', 'error'); }
+                                          }}
+                                          style={{ padding: "3px 8px", borderRadius: "6px", background: "var(--input-bg)", border: "1px solid var(--warning-border)", color: "var(--text-primary)", fontSize: "0.7rem", cursor: "pointer", marginTop: "4px" }}
+                                          defaultValue=""
+                                        >
+                                          <option value="" disabled>Assign unit...</option>
+                                          {Array.from(new Set(sharedResources.filter(function(r) { return r.unit_name; }).map(function(r) { return r.unit_name; }))).map(function(u) {
+                                            return <option key={u} value={u}>{u}</option>;
+                                          })}
+                                          <option value="__new__">+ New unit</option>
+                                        </select>
+                                      )}
                                     </div>
                                     <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                                       {isFirst && sameTitle.length > 1 && (
@@ -16814,6 +16846,26 @@ ${signature}`;
             <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
               {shareModalContent ? '"' + shareModalContent.title + '"' : ''}
             </p>
+
+            {/* Unit field */}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
+                Unit
+              </label>
+              <input
+                type="text"
+                value={shareModalContent ? (shareModalContent.unitName || '') : ''}
+                onChange={function(e) {
+                  var val = e.target.value;
+                  setShareModalContent(function(prev) {
+                    return prev ? Object.assign({}, prev, { unitName: val }) : prev;
+                  });
+                }}
+                placeholder="e.g. Unit 4: The Road to the Civil War"
+                className="input"
+                style={{ width: "100%", padding: "8px 12px", fontSize: "0.9rem" }}
+              />
+            </div>
 
             {/* Select All */}
             <label

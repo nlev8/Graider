@@ -736,6 +736,13 @@ export async function deleteSharedResourcesBulk(title) {
   })
 }
 
+export async function updateSharedResourceUnit(id, unitName) {
+  return fetchApi('/api/teacher/shared-resource/' + id + '/unit', {
+    method: 'POST',
+    body: JSON.stringify({ unit_name: unitName }),
+  })
+}
+
 // Student-facing endpoints
 export async function getStudentAssessment(joinCode) {
   return fetchApi(`/api/student/join/${joinCode}`)
