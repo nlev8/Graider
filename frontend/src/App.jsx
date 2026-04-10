@@ -2129,6 +2129,7 @@ function App() {
   const [contentSubmissionsGroups, setContentSubmissionsGroups] = useState([]);
   const [sharedResources, setSharedResources] = useState([]);
   const [loadingSharedResources, setLoadingSharedResources] = useState(false);
+  const [newUnitModal, setNewUnitModal] = useState(null); // { resourceId, value } or null
 
   // Saved Assessments state
   const [savedAssessments, setSavedAssessments] = useState([]);
@@ -14008,8 +14009,9 @@ ${signature}`;
                                           onChange={async function(e) {
                                             var val = e.target.value;
                                             if (val === '__new__') {
-                                              val = prompt('Enter unit name:');
-                                              if (!val) { e.target.value = ''; return; }
+                                              setNewUnitModal({ resourceId: res.id, value: '' });
+                                              e.target.value = '';
+                                              return;
                                             }
                                             if (!val) return;
                                             try {
@@ -16959,6 +16961,90 @@ ${signature}`;
               >
                 <Icon name={publishingAssessment ? "Loader" : "Share2"} size={16} />
                 {publishingAssessment ? "Publishing..." : 'Publish ' + (publishSettings.contentType === 'assessment' ? 'Assessment' : 'Assignment')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Unit Name Modal */}
+      {newUnitModal && (
+        <div
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "var(--modal-bg)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 9999, padding: "20px",
+          }}
+          onClick={function() { setNewUnitModal(null); }}
+        >
+          <div
+            className="glass-card"
+            style={{ maxWidth: "440px", width: "100%", padding: "28px", borderRadius: "16px" }}
+            onClick={function(e) { e.stopPropagation(); }}
+          >
+            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "6px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <Icon name="FolderPlus" size={20} />
+              New Unit
+            </h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "18px" }}>
+              Enter a name for the new unit
+            </p>
+            <input
+              type="text"
+              value={newUnitModal.value}
+              onChange={function(e) { setNewUnitModal(Object.assign({}, newUnitModal, { value: e.target.value })); }}
+              onKeyDown={async function(e) {
+                if (e.key === 'Enter' && newUnitModal.value.trim()) {
+                  var val = newUnitModal.value.trim();
+                  var rid = newUnitModal.resourceId;
+                  setNewUnitModal(null);
+                  try {
+                    var data = await api.updateSharedResourceUnit(rid, val);
+                    if (data.success) {
+                      setSharedResources(function(prev) {
+                        return prev.map(function(r) { return r.id === rid ? Object.assign({}, r, { unit_name: val }) : r; });
+                      });
+                      addToast('Assigned to ' + val, 'success');
+                    }
+                  } catch (err) { addToast('Failed to assign unit', 'error'); }
+                } else if (e.key === 'Escape') {
+                  setNewUnitModal(null);
+                }
+              }}
+              placeholder="e.g. Unit 4: The Road to the Civil War"
+              autoFocus
+              className="input"
+              style={{ width: "100%", padding: "10px 14px", fontSize: "0.95rem", marginBottom: "20px" }}
+            />
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={function() { setNewUnitModal(null); }}
+                className="btn btn-secondary"
+                style={{ padding: "10px 20px" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async function() {
+                  if (!newUnitModal.value.trim()) return;
+                  var val = newUnitModal.value.trim();
+                  var rid = newUnitModal.resourceId;
+                  setNewUnitModal(null);
+                  try {
+                    var data = await api.updateSharedResourceUnit(rid, val);
+                    if (data.success) {
+                      setSharedResources(function(prev) {
+                        return prev.map(function(r) { return r.id === rid ? Object.assign({}, r, { unit_name: val }) : r; });
+                      });
+                      addToast('Assigned to ' + val, 'success');
+                    }
+                  } catch (err) { addToast('Failed to assign unit', 'error'); }
+                }}
+                className="btn btn-primary"
+                style={{ padding: "10px 20px" }}
+                disabled={!newUnitModal.value.trim()}
+              >
+                Create Unit
               </button>
             </div>
           </div>
