@@ -40,6 +40,8 @@ try:
 except ImportError:
     grade_per_question = None
 
+from backend.services.grading_service import _build_standards_mastery
+
 # Written question types that need AI grading
 WRITTEN_TYPES = {"short_answer", "extended_response", "essay", "written"}
 # Instant question types (deterministic grading)
@@ -363,6 +365,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                         "reasoning": grade.get("reasoning", ""),
                         "quality": grade.get("quality", ""),
                         "student_answer": student_answer,
+                        "standard": q.get("standard"),
                     })
                     written_idx += 1
                 else:
@@ -373,6 +376,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                         "points_possible": points,
                         "reasoning": "Grading error",
                         "student_answer": student_answer,
+                        "standard": q.get("standard"),
                     })
             else:
                 # Instant grading (MC/TF/matching) — re-score deterministically
@@ -428,6 +432,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                     "student_answer": student_answer,
                     "correct_answer": correct_answer,
                     "is_correct": is_correct,
+                    "standard": q.get("standard"),
                 })
 
         # Generate overall feedback via Pass 3
@@ -492,6 +497,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             logger.error("Failed to save result to teacher storage: %s", str(e))
 
         # Update Supabase submission record with full grading
+        standards_mastery = _build_standards_mastery(per_question_scores)
         try:
             from backend.supabase_client import get_supabase
             sb = get_supabase()
@@ -505,6 +511,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                         "feedback_summary": feedback_text,
                         "breakdown": breakdown,
                         "grading_source": "multipass",
+                        "standards_mastery": standards_mastery,
                     },
                     "score": total_score,
                     "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
