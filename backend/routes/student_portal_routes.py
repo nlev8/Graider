@@ -44,6 +44,33 @@ def _parse_ts(ts):
         return datetime.min
 
 
+def _find_content_row(db, content_id, teacher_id):
+    """Locate a published content row by ID in either published_assessments
+    or published_content, verifying teacher ownership.
+
+    Returns (table_name, row_dict) or (None, None) if not found.
+    """
+    pa = db.table('published_assessments').select('id, settings, teacher_id').eq(
+        'id', content_id
+    ).execute()
+    if pa.data:
+        row = pa.data[0]
+        if row.get('teacher_id') != teacher_id:
+            return (None, None)
+        return ('published_assessments', row)
+
+    pc = db.table('published_content').select('id, settings, teacher_id').eq(
+        'id', content_id
+    ).execute()
+    if pc.data:
+        row = pc.data[0]
+        if row.get('teacher_id') != teacher_id:
+            return (None, None)
+        return ('published_content', row)
+
+    return (None, None)
+
+
 def _select_submissions_by_mode(submissions_by_content, attempt_mode):
     """Given a dict of content_id -> list of submissions, return one selected
     submission per content based on attempt_mode.
@@ -432,6 +459,8 @@ def list_published_assessments():
             "period": a.get('settings', {}).get('period', ''),
             "is_makeup": a.get('settings', {}).get('is_makeup', False),
             "restricted_students": a.get('settings', {}).get('restricted_students', []),
+            "unit_name": a.get('settings', {}).get('unit_name', ''),
+            "tags": a.get('settings', {}).get('tags', []),
         } for a in result.data]
 
         return jsonify({"assessments": assessments})
@@ -864,6 +893,7 @@ def list_shared_resources():
             "created_at": r.get('created_at'),
             "is_active": r.get('is_active', True),
             "unit_name": r.get('settings', {}).get('unit_name', ''),
+            "tags": r.get('settings', {}).get('tags', []),
         } for r in result.data]
 
         return jsonify({"resources": resources})
@@ -927,31 +957,29 @@ def delete_shared_resources_bulk():
 @require_teacher
 @handle_route_errors
 def update_shared_resource_unit(resource_id):
-    """Update the unit_name in a shared resource's settings."""
+    """Update the unit_name in a published content row's settings.
+    Works for both published_assessments and published_content tables.
+    """
     try:
         db = get_supabase()
         data = request.json
         unit_name = data.get('unit_name', '').strip()
 
-        # Verify ownership
-        check = db.table('published_content').select('id, settings').eq(
-            'id', resource_id
-        ).eq('teacher_id', g.teacher_id).execute()
-        if not check.data:
+        table_name, row = _find_content_row(db, resource_id, g.teacher_id)
+        if not row:
             return jsonify({"error": "Resource not found"}), 404
 
-        # Merge unit_name into existing settings
-        existing_settings = check.data[0].get('settings') or {}
+        existing_settings = row.get('settings') or {}
         existing_settings['unit_name'] = unit_name
 
-        db.table('published_content').update({
+        db.table(table_name).update({
             'settings': existing_settings
         }).eq('id', resource_id).execute()
 
         return jsonify({"success": True})
 
     except Exception as e:
-        _logger.exception("Update shared resource unit error")
+        _logger.exception("Update unit error")
         return jsonify({"error": "An internal error occurred"}), 500
 
 
@@ -1207,5 +1235,91 @@ def get_class_progress_rank(class_id):
         })
     except Exception as e:
         _logger.exception("Progress rank error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/tags', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def list_teacher_tags():
+    """Return all unique tags across the teacher's published content (both tables),
+    including unit_name values and tags array values.
+    """
+    try:
+        db = get_supabase()
+        teacher_id = g.teacher_id
+
+        tag_set = set()
+
+        pa = db.table('published_assessments').select('settings').eq(
+            'teacher_id', teacher_id
+        ).execute()
+        for row in pa.data or []:
+            s = row.get('settings') or {}
+            unit = s.get('unit_name')
+            if unit and isinstance(unit, str) and unit.strip():
+                tag_set.add(unit.strip())
+            for t in (s.get('tags') or []):
+                if isinstance(t, str) and t.strip():
+                    tag_set.add(t.strip())
+
+        pc = db.table('published_content').select('settings').eq(
+            'teacher_id', teacher_id
+        ).execute()
+        for row in pc.data or []:
+            s = row.get('settings') or {}
+            unit = s.get('unit_name')
+            if unit and isinstance(unit, str) and unit.strip():
+                tag_set.add(unit.strip())
+            for t in (s.get('tags') or []):
+                if isinstance(t, str) and t.strip():
+                    tag_set.add(t.strip())
+
+        return jsonify({"tags": sorted(tag_set)})
+    except Exception as e:
+        _logger.exception("List teacher tags error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/published-content/<content_id>/tags', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def set_content_tags(content_id):
+    """Replace the tags array on a published content row (either table).
+
+    Request: { "tags": [str, ...] }
+    Preserves all other settings fields.
+    """
+    try:
+        db = get_supabase()
+        data = request.json or {}
+        raw_tags = data.get('tags')
+        if not isinstance(raw_tags, list):
+            return jsonify({"error": "tags must be an array"}), 400
+
+        seen = set()
+        clean_tags = []
+        for t in raw_tags:
+            if not isinstance(t, str):
+                continue
+            s = t.strip()
+            if not s or s in seen:
+                continue
+            if len(s) > 100:
+                s = s[:100]
+            seen.add(s)
+            clean_tags.append(s)
+
+        table_name, row = _find_content_row(db, content_id, g.teacher_id)
+        if not row:
+            return jsonify({"error": "Content not found"}), 404
+
+        existing_settings = row.get('settings') or {}
+        existing_settings['tags'] = clean_tags
+
+        db.table(table_name).update({'settings': existing_settings}).eq('id', content_id).execute()
+        return jsonify({"success": True, "tags": clean_tags})
+    except Exception as e:
+        _logger.exception("Set content tags error")
         return jsonify({"error": "An internal error occurred"}), 500
 
