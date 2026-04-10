@@ -1208,3 +1208,142 @@ def student_resource_content(content_id):
     except Exception as e:
         _logger.exception("Student resource content error")
         return jsonify({"error": "Failed to load resource"}), 500
+
+
+@student_account_bp.route('/api/student/submission/<content_id>/draft', methods=['POST'])
+@handle_route_errors
+def save_submission_draft(content_id):
+    """Save or update a draft submission for the authenticated student."""
+    session_info = _validate_student_session()
+    if not session_info:
+        return jsonify({"error": "Invalid session"}), 401
+    student_id, class_id = session_info
+
+    try:
+        db = _get_supabase()
+        data = request.json or {}
+        draft_answers = data.get('answers') or {}
+        marked_for_review = data.get('marked_for_review') or []
+
+        # Verify content belongs to this class
+        content = db.table('published_content').select('id, settings').eq(
+            'id', content_id
+        ).eq('class_id', class_id).execute()
+        if not content.data:
+            return jsonify({"error": "Content not found"}), 404
+
+        settings = content.data[0].get('settings') or {}
+        time_limit_minutes = settings.get('time_limit_minutes')
+        time_limit_seconds = int(time_limit_minutes) * 60 if time_limit_minutes else None
+
+        # Check for existing submission
+        existing = db.table('student_submissions').select('*').eq(
+            'student_id', student_id
+        ).eq('content_id', content_id).execute()
+
+        if existing.data:
+            row = existing.data[0]
+            if row.get('status') in ('submitted', 'graded', 'grading', 'partial'):
+                return jsonify({"error": "Already submitted"}), 409
+            # Update existing draft
+            db.table('student_submissions').update({
+                'draft_answers': draft_answers,
+                'marked_for_review': marked_for_review,
+                'status': 'draft',
+            }).eq('id', row['id']).execute()
+            time_started_at = row.get('time_started_at')
+            if not time_started_at:
+                # Backfill if missing
+                time_started_at = datetime.now(timezone.utc).isoformat()
+                db.table('student_submissions').update({
+                    'time_started_at': time_started_at
+                }).eq('id', row['id']).execute()
+        else:
+            # Create new draft row
+            now_iso = datetime.now(timezone.utc).isoformat()
+            student_row = db.table('students').select(
+                'first_name, last_name, student_id_number, period'
+            ).eq('id', student_id).execute()
+            sdata = student_row.data[0] if student_row.data else {}
+            db.table('student_submissions').insert({
+                'student_id': student_id,
+                'content_id': content_id,
+                'student_name': (sdata.get('first_name', '') + ' ' + sdata.get('last_name', '')).strip(),
+                'student_id_number': sdata.get('student_id_number'),
+                'period': sdata.get('period'),
+                'status': 'draft',
+                'draft_answers': draft_answers,
+                'marked_for_review': marked_for_review,
+                'time_started_at': now_iso,
+            }).execute()
+            time_started_at = now_iso
+
+        # Calculate remaining time
+        remaining_seconds = None
+        if time_limit_seconds and time_started_at:
+            started = datetime.fromisoformat(time_started_at.replace('Z', '+00:00'))
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            remaining_seconds = max(0, int(time_limit_seconds - elapsed))
+
+        return jsonify({
+            "success": True,
+            "time_started_at": time_started_at,
+            "remaining_seconds": remaining_seconds,
+            "time_limit_seconds": time_limit_seconds,
+        })
+    except Exception as e:
+        _logger.exception("Save draft error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_account_bp.route('/api/student/submission/<content_id>/draft', methods=['GET'])
+@handle_route_errors
+def get_submission_draft(content_id):
+    """Fetch an existing draft for resume."""
+    session_info = _validate_student_session()
+    if not session_info:
+        return jsonify({"error": "Invalid session"}), 401
+    student_id, class_id = session_info
+
+    try:
+        db = _get_supabase()
+
+        # Verify content belongs to class
+        content = db.table('published_content').select('id, settings').eq(
+            'id', content_id
+        ).eq('class_id', class_id).execute()
+        if not content.data:
+            return jsonify({"error": "Content not found"}), 404
+
+        settings = content.data[0].get('settings') or {}
+        time_limit_minutes = settings.get('time_limit_minutes')
+        time_limit_seconds = int(time_limit_minutes) * 60 if time_limit_minutes else None
+
+        # Find existing draft
+        existing = db.table('student_submissions').select('*').eq(
+            'student_id', student_id
+        ).eq('content_id', content_id).eq('status', 'draft').execute()
+
+        if not existing.data:
+            return jsonify({"draft": None})
+
+        row = existing.data[0]
+        time_started_at = row.get('time_started_at')
+        remaining_seconds = None
+        if time_limit_seconds and time_started_at:
+            started = datetime.fromisoformat(time_started_at.replace('Z', '+00:00'))
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            remaining_seconds = max(0, int(time_limit_seconds - elapsed))
+
+        return jsonify({
+            "draft": {
+                "answers": row.get('draft_answers') or {},
+                "marked_for_review": row.get('marked_for_review') or [],
+                "time_started_at": time_started_at,
+                "remaining_seconds": remaining_seconds,
+                "time_limit_seconds": time_limit_seconds,
+            }
+        })
+    except Exception as e:
+        _logger.exception("Get draft error")
+        return jsonify({"error": "An internal error occurred"}), 500
