@@ -18,10 +18,42 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
   // Split dashboard items into assignments vs resources
   var assignmentItems = items.filter(function(i) { return RESOURCE_TYPES.indexOf(i.content_type) === -1; });
   var dashboardResources = items.filter(function(i) { return RESOURCE_TYPES.indexOf(i.content_type) !== -1; }).map(function(i) {
-    return { id: i.content_id, title: i.title, content_type: i.content_type, _fromDashboard: true, content_id: i.content_id };
+    return { id: i.content_id, title: i.title, content_type: i.content_type, _fromDashboard: true, content_id: i.content_id, unit_name: i.unit_name || '', created_at: i.created_at || '' };
   });
   var resourceIds = resources.map(function(r) { return r.id; });
   var allResources = resources.concat(dashboardResources.filter(function(dr) { return resourceIds.indexOf(dr.id) === -1; }));
+
+  var [expandedUnits, setExpandedUnits] = useState({});
+
+  // Group all content by unit_name
+  var unitGroups = {};
+  assignmentItems.forEach(function(item) {
+    var unit = item.unit_name || '';
+    if (!unitGroups[unit]) unitGroups[unit] = { assignments: [], resources: [], newestDate: '' };
+    unitGroups[unit].assignments.push(item);
+    if (item.created_at && item.created_at > unitGroups[unit].newestDate) unitGroups[unit].newestDate = item.created_at;
+  });
+  allResources.forEach(function(res) {
+    var unit = res.unit_name || '';
+    if (!unitGroups[unit]) unitGroups[unit] = { assignments: [], resources: [], newestDate: '' };
+    unitGroups[unit].resources.push(res);
+    if (res.created_at && res.created_at > unitGroups[unit].newestDate) unitGroups[unit].newestDate = res.created_at;
+  });
+
+  // Sort units: most recent first, "General" (empty unit) always last
+  var sortedUnits = Object.keys(unitGroups).sort(function(a, b) {
+    if (!a) return 1;
+    if (!b) return -1;
+    return unitGroups[b].newestDate.localeCompare(unitGroups[a].newestDate);
+  });
+
+  // Auto-expand most recent unit on first render
+  React.useEffect(function() {
+    if (sortedUnits.length > 0 && Object.keys(expandedUnits).length === 0) {
+      var first = sortedUnits[0];
+      setExpandedUnits(function(prev) { var next = Object.assign({}, prev); next[first] = true; return next; });
+    }
+  }, [sortedUnits.length]);
 
   // Theme toggle
   var [lightMode, setLightMode] = useState(function() {
@@ -155,132 +187,184 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
       </div>
 
       <div style={{ maxWidth: "800px", margin: "0 auto", padding: "24px" }}>
-        <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "16px", color: "var(--text-primary)" }}>
-          Your Assignments
-        </h2>
-
         {loading ? (
           <p style={{ color: "var(--text-secondary)" }}>Loading...</p>
-        ) : assignmentItems.length === 0 ? (
+        ) : sortedUnits.length === 0 ? (
           <div style={{
             textAlign: "center", padding: "60px 20px",
             background: "var(--card-bg-light)", borderRadius: "12px",
             border: "1px solid var(--glass-border)",
           }}>
-            <p style={{ color: "var(--text-secondary)", fontSize: "1.1rem" }}>No assignments yet</p>
+            <p style={{ color: "var(--text-secondary)", fontSize: "1.1rem" }}>No content yet</p>
             <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Your teacher will publish assignments here
+              Your teacher will publish assignments and study materials here
             </p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {assignmentItems.map((item) => {
-              const st = statusColors[item.status] || statusColors.not_started;
-              const isClickable = item.status !== "graded";
+            {sortedUnits.map(function(unitName, unitIdx) {
+              var group = unitGroups[unitName];
+              var isExpanded = expandedUnits[unitName] || false;
+              var displayName = unitName || 'General';
+              var assignmentCount = group.assignments.length;
+              var resourceCount = group.resources.length;
+              var allGraded = assignmentCount > 0 && group.assignments.every(function(a) { return a.status === 'graded'; });
+              var isMostRecent = unitIdx === 0 && unitName;
+
               return (
-                <div
-                  key={item.content_id}
-                  onClick={() => isClickable && openContent(item)}
-                  style={{
-                    background: "var(--card-bg)", borderRadius: "12px",
-                    border: "1px solid var(--glass-border)", padding: "16px 20px",
-                    cursor: isClickable ? "pointer" : "default",
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    transition: "border-color 0.2s",
-                  }}
-                >
-                  <div>
-                    <h3 style={{ fontSize: "1rem", fontWeight: 600, margin: "0 0 4px" }}>
-                      {item.title}
-                    </h3>
-                    <p style={{ color: "var(--text-secondary)", fontSize: "0.8rem", margin: 0 }}>
-                      {item.content_type === "assessment" ? "Assessment" : "Assignment"}
-                      {item.due_date ? " \u2022 Due " + new Date(item.due_date).toLocaleDateString() : ""}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <span style={{
-                      padding: "4px 12px", borderRadius: "20px", fontSize: "0.75rem",
-                      fontWeight: 600, background: st.bg, color: st.text,
-                    }}>
-                      {st.label}
-                    </span>
-                    {item.score != null && (
-                      <p style={{ color: "var(--text-primary)", fontSize: "0.9rem", fontWeight: 600, margin: "6px 0 0" }}>
-                        {item.percentage != null ? Math.round(item.percentage) + "%" : item.score}
-                        {item.letter_grade ? " (" + item.letter_grade + ")" : ""}
-                      </p>
+                <div key={unitName || '__general__'} style={{ borderRadius: "12px", border: "1px solid var(--glass-border)", overflow: "hidden" }}>
+                  <div
+                    onClick={function() {
+                      setExpandedUnits(function(prev) {
+                        var next = Object.assign({}, prev);
+                        next[unitName] = !prev[unitName];
+                        return next;
+                      });
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "14px 18px", cursor: "pointer",
+                      background: isExpanded ? "rgba(99,102,241,0.06)" : "var(--card-bg)",
+                      transition: "background 0.15s",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <span style={{ fontSize: "1rem", transition: "transform 0.2s", display: "inline-block", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                        {String.fromCharCode(9654)}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: "1rem", fontWeight: 700 }}>{displayName}</div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                          {assignmentCount > 0 ? assignmentCount + ' assignment' + (assignmentCount === 1 ? '' : 's') : ''}
+                          {assignmentCount > 0 && resourceCount > 0 ? ' ' + String.fromCharCode(183) + ' ' : ''}
+                          {resourceCount > 0 ? resourceCount + ' study material' + (resourceCount === 1 ? '' : 's') : ''}
+                          {allGraded ? ' ' + String.fromCharCode(183) + ' All graded ' + String.fromCharCode(10003) : ''}
+                        </div>
+                      </div>
+                    </div>
+                    {isMostRecent && (
+                      <span style={{ fontSize: "0.7rem", padding: "3px 10px", background: "rgba(99,102,241,0.12)", borderRadius: "10px", color: "var(--accent-primary)", fontWeight: 600 }}>
+                        Current
+                      </span>
                     )}
                   </div>
+
+                  {isExpanded && (
+                    <div style={{ padding: "16px 18px", background: "var(--card-bg-light)" }}>
+                      {assignmentCount > 0 && (
+                        <div style={{ marginBottom: resourceCount > 0 ? "16px" : "0" }}>
+                          <div style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "8px" }}>
+                            Assignments
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            {group.assignments.map(function(item) {
+                              var st = statusColors[item.status] || statusColors.not_started;
+                              var isClickable = item.status !== 'graded';
+                              return (
+                                <div
+                                  key={item.content_id}
+                                  onClick={function() { if (isClickable) openContent(item); }}
+                                  style={{
+                                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    padding: "10px 14px", borderRadius: "8px",
+                                    background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+                                    cursor: isClickable ? "pointer" : "default",
+                                    transition: "border-color 0.2s",
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{item.title}</div>
+                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                                      {item.content_type === 'assessment' ? 'Assessment' : 'Assignment'}
+                                      {item.due_date ? ' ' + String.fromCharCode(8226) + ' Due ' + new Date(item.due_date).toLocaleDateString() : ''}
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "right" }}>
+                                    <span style={{
+                                      padding: "3px 10px", borderRadius: "16px", fontSize: "0.7rem",
+                                      fontWeight: 600, background: st.bg, color: st.text,
+                                    }}>
+                                      {st.label}
+                                    </span>
+                                    {item.score != null && (
+                                      <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "4px" }}>
+                                        {item.percentage != null ? Math.round(item.percentage) + '%' : item.score}
+                                        {item.letter_grade ? ' (' + item.letter_grade + ')' : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {resourceCount > 0 && (
+                        <div>
+                          <div style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "8px" }}>
+                            Study Materials
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "8px" }}>
+                            {group.resources.map(function(res) {
+                              var icon = res.content_type === 'study_guide' ? String.fromCharCode(128214)
+                                : res.content_type === 'flashcards' ? String.fromCharCode(128196)
+                                : res.content_type === 'slide_deck' ? String.fromCharCode(128253)
+                                : String.fromCharCode(128196);
+                              var typeLabel = res.content_type === 'study_guide' ? 'Study Guide'
+                                : res.content_type === 'flashcards' ? 'Flashcards'
+                                : res.content_type === 'slide_deck' ? 'Slide Deck'
+                                : res.content_type;
+                              return (
+                                <div
+                                  key={res.id}
+                                  onClick={function() {
+                                    if (res._fromDashboard) {
+                                      fetch('/api/student/content/' + res.content_id, {
+                                        headers: { 'X-Student-Token': token }
+                                      })
+                                        .then(function(r) { return r.json(); })
+                                        .then(function(data) {
+                                          if (data.content) {
+                                            setSelectedResource({ id: res.content_id, title: res.title, content_type: res.content_type, content: data.content });
+                                            setFlippedCards({});
+                                          }
+                                        })
+                                        .catch(function() {});
+                                    } else {
+                                      fetch('/api/student/resource/' + res.id, {
+                                        headers: { 'X-Student-Token': token }
+                                      })
+                                        .then(function(r) { return r.json(); })
+                                        .then(function(data) {
+                                          if (data.resource) {
+                                            setSelectedResource(data.resource);
+                                            setFlippedCards({});
+                                          }
+                                        })
+                                        .catch(function() {});
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "12px 14px", borderRadius: "8px",
+                                    background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
+                                    cursor: "pointer", transition: "transform 0.1s",
+                                  }}
+                                >
+                                  <div style={{ fontSize: "1.3rem", marginBottom: "4px" }}>{icon}</div>
+                                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>{res.title}</div>
+                                  <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginTop: "2px" }}>{typeLabel}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
-          </div>
-        )}
-
-        {/* Resources Section */}
-        {allResources.length > 0 && (
-          <div style={{ marginTop: "24px" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "1.2rem" }}>{String.fromCharCode(128218)}</span>
-              Study Materials
-            </h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px" }}>
-              {allResources.map(function(res) {
-                var icon = res.content_type === 'study_guide' ? String.fromCharCode(128214)
-                  : res.content_type === 'flashcards' ? String.fromCharCode(128196)
-                  : res.content_type === 'slide_deck' ? String.fromCharCode(128253)
-                  : String.fromCharCode(128196);
-                var typeLabel = res.content_type === 'study_guide' ? 'Study Guide'
-                  : res.content_type === 'flashcards' ? 'Flashcards'
-                  : res.content_type === 'slide_deck' ? 'Slide Deck'
-                  : res.content_type;
-                return (
-                  <div
-                    key={res.id}
-                    onClick={function() {
-                      if (res._fromDashboard) {
-                        fetch('/api/student/content/' + res.content_id, {
-                          headers: { 'X-Student-Token': token }
-                        })
-                          .then(function(r) { return r.json(); })
-                          .then(function(data) {
-                            if (data.content) {
-                              setSelectedResource({ id: res.content_id, title: res.title, content_type: res.content_type, content: data.content });
-                              setFlippedCards({});
-                            }
-                          })
-                          .catch(function() {});
-                      } else {
-                        fetch('/api/student/resource/' + res.id, {
-                          headers: { 'X-Student-Token': token }
-                        })
-                          .then(function(r) { return r.json(); })
-                          .then(function(data) {
-                            if (data.resource) {
-                              setSelectedResource(data.resource);
-                              setFlippedCards({});
-                            }
-                          })
-                          .catch(function() {});
-                      }
-                    }}
-                    style={{
-                      padding: "16px",
-                      borderRadius: "12px",
-                      border: "1px solid var(--glass-border)",
-                      background: "var(--card-bg)",
-                      cursor: "pointer",
-                      transition: "transform 0.1s",
-                    }}
-                  >
-                    <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>{icon}</div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{res.title}</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px" }}>{typeLabel}</div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         )}
 
