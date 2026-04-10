@@ -659,6 +659,7 @@ def student_dashboard():
                 'content_id': c['id'],
                 'title': c['title'],
                 'content_type': c['content_type'],
+                'unit_name': c.get('settings', {}).get('unit_name', ''),
                 'due_date': c.get('due_date'),
                 'status': sub['status'] if sub else 'not_started',
                 'score': sub.get('score') if sub else None,

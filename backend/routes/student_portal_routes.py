@@ -709,7 +709,7 @@ def list_shared_resources():
         db = get_supabase()
 
         result = db.table('published_content').select(
-            'id, title, content_type, class_id, created_at, is_active'
+            'id, title, content_type, class_id, created_at, is_active, settings'
         ).eq('teacher_id', g.teacher_id).in_(
             'content_type', list(RESOURCE_CONTENT_TYPES)
         ).order('created_at', desc=True).execute()
@@ -729,6 +729,7 @@ def list_shared_resources():
             "class_name": class_names.get(r.get('class_id'), 'Unknown'),
             "created_at": r.get('created_at'),
             "is_active": r.get('is_active', True),
+            "unit_name": r.get('settings', {}).get('unit_name', ''),
         } for r in result.data]
 
         return jsonify({"resources": resources})
@@ -787,4 +788,35 @@ def delete_shared_resources_bulk():
         _logger.exception("Bulk delete shared resources error")
         return jsonify({"error": "An internal error occurred"}), 500
 
+
+@student_portal_bp.route('/api/teacher/shared-resource/<resource_id>/unit', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def update_shared_resource_unit(resource_id):
+    """Update the unit_name in a shared resource's settings."""
+    try:
+        db = get_supabase()
+        data = request.json
+        unit_name = data.get('unit_name', '').strip()
+
+        # Verify ownership
+        check = db.table('published_content').select('id, settings').eq(
+            'id', resource_id
+        ).eq('teacher_id', g.teacher_id).execute()
+        if not check.data:
+            return jsonify({"error": "Resource not found"}), 404
+
+        # Merge unit_name into existing settings
+        existing_settings = check.data[0].get('settings') or {}
+        existing_settings['unit_name'] = unit_name
+
+        db.table('published_content').update({
+            'settings': existing_settings
+        }).eq('id', resource_id).execute()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        _logger.exception("Update shared resource unit error")
+        return jsonify({"error": "An internal error occurred"}), 500
 
