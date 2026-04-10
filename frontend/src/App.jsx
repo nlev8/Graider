@@ -14038,7 +14038,6 @@ ${signature}`;
                               </div>
                           )}
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: selectedAssessmentResults ? "1fr 1fr" : "1fr", gap: "25px" }}>
                       {/* Global tag filter — Content Tagging */}
                       <div className="glass-card" style={{ padding: "12px 16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "10px" }}>
                         <Icon name="Tag" size={16} style={{ color: "var(--text-secondary)" }} />
@@ -14064,6 +14063,7 @@ ${signature}`;
                           </button>
                         )}
                       </div>
+                      <div style={{ display: "grid", gridTemplateColumns: selectedAssessmentResults ? "1fr 1fr" : "1fr", gap: "25px" }}>
                         {/* Published Content Lists — separated by content type */}
                         {[
                           { type: "assessment", label: "Published Assessments", icon: "ClipboardList", emptyText: "No published assessments yet.", emptyHint: "Generate an assessment and click \"Publish to Portal\" to get started." },
