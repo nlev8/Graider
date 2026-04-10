@@ -8,7 +8,7 @@ import logging
 import os
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as get_supabase
 
@@ -560,7 +560,6 @@ def submit_assessment(code):
         available_from = settings.get('available_from')
         available_until = settings.get('available_until')
         if available_from or available_until:
-            from datetime import timezone
             now = datetime.now(timezone.utc).isoformat()
             if available_from and now < available_from:
                 return jsonify({"error": "This assessment is not yet available."}), 403
@@ -818,5 +817,89 @@ def update_shared_resource_unit(resource_id):
 
     except Exception as e:
         _logger.exception("Update shared resource unit error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/end-attempt/<submission_id>', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def end_student_attempt(submission_id):
+    """Force-end a student's in-progress draft, converting it to a submitted row."""
+    try:
+        db = get_supabase()
+
+        # Fetch the draft
+        sub = db.table('student_submissions').select('*').eq('id', submission_id).execute()
+        if not sub.data:
+            return jsonify({"error": "Submission not found"}), 404
+        row = sub.data[0]
+
+        if row.get('status') != 'draft':
+            return jsonify({"error": "Not an in-progress draft"}), 400
+
+        # Verify teacher owns the class this content belongs to
+        content_id = row.get('content_id')
+        content = db.table('published_content').select('teacher_id').eq('id', content_id).execute()
+        if not content.data or content.data[0].get('teacher_id') != g.teacher_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        # Convert draft to submission
+        db.table('student_submissions').update({
+            'status': 'submitted',
+            'answers': row.get('draft_answers') or {},
+            'submitted_at': datetime.now(timezone.utc).isoformat(),
+            'results': {'force_ended_by_teacher': True},
+        }).eq('id', submission_id).execute()
+
+        return jsonify({"success": True})
+    except Exception as e:
+        _logger.exception("End attempt error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/content/<content_id>/in-progress', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def list_in_progress_drafts(content_id):
+    """List students currently drafting a specific piece of class-based content."""
+    try:
+        db = get_supabase()
+
+        # Verify teacher owns this content
+        content = db.table('published_content').select('teacher_id, settings').eq('id', content_id).execute()
+        if not content.data or content.data[0].get('teacher_id') != g.teacher_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        settings = content.data[0].get('settings') or {}
+        time_limit_minutes = settings.get('time_limit_minutes')
+        time_limit_seconds = int(time_limit_minutes) * 60 if time_limit_minutes else None
+
+        drafts = db.table('student_submissions').select(
+            'id, student_name, draft_answers, marked_for_review, time_started_at'
+        ).eq('content_id', content_id).eq('status', 'draft').execute()
+
+        now = datetime.now(timezone.utc)
+        rows = []
+        for d in drafts.data:
+            answers = d.get('draft_answers') or {}
+            answered_count = sum(1 for v in answers.values() if v not in (None, '', []))
+            elapsed_seconds = 0
+            remaining_seconds = None
+            if d.get('time_started_at'):
+                started = datetime.fromisoformat(d['time_started_at'].replace('Z', '+00:00'))
+                elapsed_seconds = int((now - started).total_seconds())
+                if time_limit_seconds:
+                    remaining_seconds = max(0, time_limit_seconds - elapsed_seconds)
+            rows.append({
+                "submission_id": d['id'],
+                "student_name": d.get('student_name'),
+                "answered_count": answered_count,
+                "elapsed_seconds": elapsed_seconds,
+                "remaining_seconds": remaining_seconds,
+            })
+
+        return jsonify({"drafts": rows})
+    except Exception as e:
+        _logger.exception("List in-progress error")
         return jsonify({"error": "An internal error occurred"}), 500
 
