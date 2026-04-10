@@ -35,6 +35,9 @@ export default function StudentPortal({
     student_accommodations: (preloadedSettings || {}).student_accommodations || {},
   } : null);
   const [answers, setAnswers] = useState({});
+  var [questionTimes, setQuestionTimes] = useState({});
+  var [activeQuestionKey, setActiveQuestionKey] = useState(null);
+  var [activeQuestionStartedAt, setActiveQuestionStartedAt] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [startTime, setStartTime] = useState(null);
@@ -96,6 +99,9 @@ export default function StudentPortal({
       if (data && data.draft) {
         setAnswers(data.draft.answers || {});
         setMarkedForReview(data.draft.marked_for_review || []);
+        if (data.draft.question_times) {
+          setQuestionTimes(data.draft.question_times);
+        }
         setResumedFromDraft(true);
       }
       setDraftLoaded(true);
@@ -107,7 +113,7 @@ export default function StudentPortal({
     if (Object.keys(answers).length === 0 && markedForReview.length === 0) return;
     var timer = setTimeout(function() {
       setSavingDraft(true);
-      api.saveDraft(contentId, answers, markedForReview, studentToken).then(function(data) {
+      api.saveDraft(contentId, answers, markedForReview, questionTimes, studentToken).then(function(data) {
         if (data && data.success) {
           setLastSavedAt(Date.now());
         }
@@ -200,6 +206,12 @@ export default function StudentPortal({
     try {
       var data;
       if (isPreloaded && contentId && studentToken) {
+        // Finalize current question time before submit
+        var finalTimes = Object.assign({}, questionTimes);
+        if (activeQuestionKey && activeQuestionStartedAt) {
+          var finalElapsed = Math.round((Date.now() - activeQuestionStartedAt) / 1000);
+          finalTimes[activeQuestionKey] = (finalTimes[activeQuestionKey] || 0) + finalElapsed;
+        }
         // Class-based submission (Clever/authenticated student)
         var response = await fetch("/api/student/submit/" + contentId, {
           method: "POST",
@@ -207,7 +219,7 @@ export default function StudentPortal({
             "Content-Type": "application/json",
             "X-Student-Token": studentToken,
           },
-          body: JSON.stringify({ answers: answers, time_taken_seconds: timeTaken }),
+          body: JSON.stringify({ answers: answers, time_taken_seconds: timeTaken, question_times: finalTimes }),
         });
         data = await response.json();
       } else {
@@ -262,6 +274,21 @@ export default function StudentPortal({
   };
 
   const setAnswer = (key, value) => {
+    var now = Date.now();
+    if (activeQuestionKey && activeQuestionKey !== key && activeQuestionStartedAt) {
+      var elapsed = Math.round((now - activeQuestionStartedAt) / 1000);
+      setQuestionTimes(function(prev) {
+        var next = Object.assign({}, prev);
+        next[activeQuestionKey] = (next[activeQuestionKey] || 0) + elapsed;
+        return next;
+      });
+    }
+    if (activeQuestionKey !== key) {
+      setActiveQuestionKey(key);
+      setActiveQuestionStartedAt(now);
+    } else if (!activeQuestionStartedAt) {
+      setActiveQuestionStartedAt(now);
+    }
     setAnswers((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -269,7 +296,7 @@ export default function StudentPortal({
     if (!contentId || !studentToken) return;
     setSavingDraft(true);
     try {
-      var data = await api.saveDraft(contentId, answers, markedForReview, studentToken);
+      var data = await api.saveDraft(contentId, answers, markedForReview, questionTimes, studentToken);
       if (data && data.success) {
         setLastSavedAt(Date.now());
         alert('Draft saved. You can close this tab and come back later.');
