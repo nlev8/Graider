@@ -1000,6 +1000,72 @@ def _hydrate_question(q):
         _hydrate_grid_match(q)
     elif qt == 'inline_dropdown':
         _hydrate_inline_dropdown(q)
+    elif qt == 'matching':
+        _hydrate_matching(q)
+
+
+def _hydrate_matching(q):
+    """Normalize matching question's correct_answer into canonical dict format.
+
+    Frontend MatchingCards.jsx accepts: dict {term: definition}, array of "term - def" strings,
+    or integer index array [0,1,2,3]. We normalize everything to the dict format so grading
+    and frontend rendering share one canonical shape.
+    """
+    terms = q.get('terms') or []
+    definitions = q.get('definitions') or []
+    if not terms or not definitions:
+        return
+
+    # Check both 'correct_answer' and 'answer' keys — some generator paths use one or the other
+    raw = q.get('correct_answer')
+    if raw is None:
+        raw = q.get('answer')
+
+    # Already dict format — leave as-is
+    if isinstance(raw, dict):
+        q['correct_answer'] = raw
+        q.setdefault('answer', raw)
+        return
+
+    # Integer index array [0, 1, 2, 3] — terms[i] matches definitions[raw[i]]
+    if isinstance(raw, list) and raw and all(isinstance(x, (int, float)) for x in raw):
+        normalized = {}
+        for i, def_idx in enumerate(raw):
+            if i >= len(terms):
+                break
+            idx = int(def_idx)
+            if 0 <= idx < len(definitions):
+                normalized[terms[i]] = definitions[idx]
+        q['correct_answer'] = normalized
+        q['answer'] = normalized
+        return
+
+    # String array ["Term - definition", "Term: definition"] — parse each entry
+    if isinstance(raw, list):
+        normalized = {}
+        for entry in raw:
+            if not isinstance(entry, str):
+                continue
+            sep_idx = -1
+            for sep in (': ', ' - ', ':', '-'):
+                sep_idx = entry.find(sep)
+                if sep_idx != -1:
+                    sep_len = len(sep)
+                    break
+            if sep_idx == -1:
+                continue
+            term_part = entry[:sep_idx].strip()
+            def_part = entry[sep_idx + sep_len:].strip()
+            if term_part and def_part:
+                normalized[term_part] = def_part
+        if normalized:
+            q['correct_answer'] = normalized
+            q['answer'] = normalized
+            return
+
+    # Fallback: no valid answer found — assume terms[i] maps to definitions[i] in order
+    q['correct_answer'] = {terms[i]: definitions[i] for i in range(min(len(terms), len(definitions)))}
+    q['answer'] = q['correct_answer']
 
 
 def _hydrate_geometry(q, qt):

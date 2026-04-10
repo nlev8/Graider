@@ -122,6 +122,13 @@ export default function MatchingCards({
           });
         }
       });
+    } else if (Array.isArray(correctAnswer) && correctAnswer.length > 0 && typeof correctAnswer[0] === 'number') {
+      // Integer array format: [0, 1, 2, 3] — terms[i] matches definitions[correctAnswer[i]]
+      correctAnswer.forEach(function(defIdx, tIdx) {
+        if (typeof defIdx === 'number' && defIdx >= 0 && defIdx < definitions.length) {
+          lookup[tIdx] = defIdx;
+        }
+      });
     } else if (Array.isArray(correctAnswer)) {
       // Array format: ["Term: definition", "Term - definition"]
       correctAnswer.forEach(function(entry) {
