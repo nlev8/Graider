@@ -10,6 +10,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _build_standards_mastery(question_results):
+    """Roll up per-question scores into a standards_mastery dict.
+
+    Input: list of question result dicts (each may have a 'standard' key).
+    Output: { standard_code: { points_earned, points_possible, question_count } }
+    Questions without a 'standard' field are skipped.
+    """
+    mastery = {}
+    for qr in question_results:
+        code = qr.get('standard')
+        if not code:
+            continue
+        bucket = mastery.setdefault(code, {
+            'points_earned': 0,
+            'points_possible': 0,
+            'question_count': 0,
+        })
+        bucket['points_earned'] += qr.get('points_earned') or 0
+        bucket['points_possible'] += qr.get('points_possible') or 0
+        bucket['question_count'] += 1
+    return mastery
+
+
 def grade_deterministic_question(question, student_answer, answer_key, answers):
     """Grade a single MC/TF/matching question deterministically.
 
@@ -139,6 +162,7 @@ def grade_student_submission(assessment, answers):
                 "number": question.get('number', qIdx + 1),
                 "question": question.get('question', ''),
                 "type": q_type,
+                "standard": question.get('standard'),
                 "student_answer": student_answer,
                 "correct_answer": correct_answer,
                 "points_possible": points,
@@ -252,6 +276,8 @@ Respond in JSON format:
 
     results["feedback_summary"] = f"{grade_comment} You scored {results['score']}/{results['total_points']} points ({results['percentage']}%), answering {correct_count} out of {total_questions} questions correctly."
 
+    results['standards_mastery'] = _build_standards_mastery(results.get('questions', []))
+
     return results
 
 
@@ -283,6 +309,7 @@ def grade_instant_only(assessment, answers):
                 "number": question.get('number', qIdx + 1),
                 "question": question.get('question', ''),
                 "type": q_type,
+                "standard": question.get('standard'),
                 "student_answer": student_answer,
                 "correct_answer": correct_answer,
                 "points_possible": points,
@@ -322,5 +349,7 @@ def grade_instant_only(assessment, answers):
     # Only calculate percentage from instant-graded questions
     instant_possible = sum(q["points_possible"] for q in results["questions"] if q.get("status") != "pending_review")
     results["percentage"] = round((results["score"] / instant_possible * 100) if instant_possible > 0 else 0)
+
+    results['standards_mastery'] = _build_standards_mastery(results.get('questions', []))
 
     return results
