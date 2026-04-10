@@ -1093,3 +1093,119 @@ def list_content_submissions(content_id):
         _logger.exception("List content submissions error")
         return jsonify({"error": "An internal error occurred"}), 500
 
+
+@student_portal_bp.route('/api/teacher/class/<class_id>/progress-rank', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_class_progress_rank(class_id):
+    """Return a class-scoped progress rank grid aggregating standards_mastery
+    across all graded submissions for students in the class.
+
+    Query params:
+      attempt_mode: 'latest' (default) | 'best' | 'average'
+    """
+    try:
+        db = get_supabase()
+
+        attempt_mode = request.args.get('attempt_mode', 'latest')
+        if attempt_mode not in ('latest', 'best', 'average'):
+            attempt_mode = 'latest'
+
+        # Verify class ownership
+        cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+        if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+            return jsonify({"error": "Not authorized"}), 403
+        class_name = cls.data[0].get('name')
+
+        # Fetch class roster — query students directly by joining via class_students
+        # Two-step query avoids Supabase foreign-table alias ambiguity
+        enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
+        student_ids = [row['student_id'] for row in (enrollments.data or []) if row.get('student_id')]
+
+        student_records = []
+        if student_ids:
+            students_rows = db.table('students').select(
+                'id, first_name, last_name'
+            ).in_('id', student_ids).execute()
+            for sdata in students_rows.data or []:
+                student_records.append({
+                    'student_id': sdata.get('id'),
+                    'student_name': ((sdata.get('first_name') or '') + ' ' + (sdata.get('last_name') or '')).strip(),
+                })
+            # Sort alphabetically by name for stable grid order
+            student_records.sort(key=lambda s: s['student_name'].lower())
+
+        if not student_records:
+            return jsonify({
+                "class_id": class_id,
+                "class_name": class_name,
+                "attempt_mode": attempt_mode,
+                "standards": [],
+                "students": [],
+            })
+
+        # Fetch all published_content for this class (assessments/assignments only)
+        content = db.table('published_content').select(
+            'id, title, content_type'
+        ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
+
+        content_ids = [c['id'] for c in content.data or []]
+        content_titles = {c['id']: c.get('title', '') for c in content.data or []}
+
+        if not content_ids:
+            return jsonify({
+                "class_id": class_id,
+                "class_name": class_name,
+                "attempt_mode": attempt_mode,
+                "standards": [],
+                "students": [{'student_id': s['student_id'], 'student_name': s['student_name'], 'mastery': {}} for s in student_records],
+            })
+
+        # Fetch all non-draft submissions for those contents, ordered for deterministic selection
+        # Select only columns we need to keep payload bounded
+        subs = db.table('student_submissions').select(
+            'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+        ).in_('content_id', content_ids).neq('status', 'draft').order(
+            'submitted_at', desc=True
+        ).execute()
+
+        # Group submissions by (student_id, content_id)
+        from collections import defaultdict
+        subs_by_student_content = defaultdict(lambda: defaultdict(list))
+        all_standards_in_class = set()  # Union across the whole class — used for columns
+        for s in subs.data or []:
+            sid = s.get('student_id')
+            cid = s.get('content_id')
+            if sid and cid:
+                subs_by_student_content[sid][cid].append(s)
+                # Track every standard seen anywhere in the class for column union
+                results = s.get('results') or {}
+                mastery = results.get('standards_mastery') or {}
+                for code in mastery.keys():
+                    if code:
+                        all_standards_in_class.add(code)
+
+        # Build per-student mastery
+        students_output = []
+        for student in student_records:
+            sid = student['student_id']
+            by_content = subs_by_student_content.get(sid, {})
+            selected = _select_submissions_by_mode(by_content, attempt_mode)
+            mastery = _aggregate_mastery_for_student(selected, content_titles, attempt_mode)
+            students_output.append({
+                'student_id': sid,
+                'student_name': student['student_name'],
+                'mastery': mastery,
+            })
+
+        return jsonify({
+            "class_id": class_id,
+            "class_name": class_name,
+            "attempt_mode": attempt_mode,
+            "standards": sorted(all_standards_in_class),
+            "students": students_output,
+        })
+    except Exception as e:
+        _logger.exception("Progress rank error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
