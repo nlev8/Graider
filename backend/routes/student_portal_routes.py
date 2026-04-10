@@ -903,3 +903,58 @@ def list_in_progress_drafts(content_id):
         _logger.exception("List in-progress error")
         return jsonify({"error": "An internal error occurred"}), 500
 
+
+@student_portal_bp.route('/api/teacher/content/<content_id>/submissions', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def list_content_submissions(content_id):
+    """List all submissions (all attempts per student) for a class-based assessment."""
+    try:
+        db = get_supabase()
+
+        # Verify teacher owns this content
+        content = db.table('published_content').select('teacher_id, title, content, settings').eq('id', content_id).execute()
+        if not content.data or content.data[0].get('teacher_id') != g.teacher_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        # Fetch all submissions for this content (excluding drafts)
+        submissions = db.table('student_submissions').select('*').eq(
+            'content_id', content_id
+        ).neq('status', 'draft').order('student_id', desc=False).order('attempt_number', desc=False).execute()
+
+        # Group by student
+        groups = {}
+        for s in submissions.data:
+            sid = s.get('student_id') or s.get('student_name')
+            if sid not in groups:
+                groups[sid] = {
+                    'student_id': s.get('student_id'),
+                    'student_name': s.get('student_name'),
+                    'student_id_number': s.get('student_id_number'),
+                    'period': s.get('period'),
+                    'attempts': [],
+                }
+            groups[sid]['attempts'].append({
+                'submission_id': s.get('id'),
+                'attempt_number': s.get('attempt_number', 1),
+                'score': s.get('score'),
+                'total_points': s.get('total_points'),
+                'percentage': s.get('percentage'),
+                'letter_grade': s.get('letter_grade'),
+                'status': s.get('status'),
+                'time_taken_seconds': s.get('time_taken_seconds'),
+                'question_times': s.get('question_times'),
+                'submitted_at': s.get('submitted_at'),
+                'results': s.get('results'),
+            })
+
+        return jsonify({
+            "content_id": content_id,
+            "title": content.data[0].get('title'),
+            "content": content.data[0].get('content'),
+            "students": list(groups.values()),
+        })
+    except Exception as e:
+        _logger.exception("List content submissions error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
