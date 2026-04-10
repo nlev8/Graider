@@ -697,3 +697,94 @@ def submit_assessment(code):
         return jsonify({"error": "An internal error occurred"}), 500
 
 
+RESOURCE_CONTENT_TYPES = ('study_guide', 'flashcards', 'slide_deck')
+
+
+@student_portal_bp.route('/api/teacher/shared-resources', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def list_shared_resources():
+    """List all shared resources (flashcards, study guides, slide decks) for the teacher."""
+    try:
+        db = get_supabase()
+
+        result = db.table('published_content').select(
+            'id, title, content_type, class_id, created_at, is_active'
+        ).eq('teacher_id', g.teacher_id).in_(
+            'content_type', list(RESOURCE_CONTENT_TYPES)
+        ).order('created_at', desc=True).execute()
+
+        # Fetch class names for display
+        class_ids = list(set(r.get('class_id') for r in result.data if r.get('class_id')))
+        class_names = {}
+        if class_ids:
+            classes_result = db.table('classes').select('id, name').in_('id', class_ids).execute()
+            class_names = {c['id']: c['name'] for c in classes_result.data}
+
+        resources = [{
+            "id": r.get('id'),
+            "title": r.get('title'),
+            "content_type": r.get('content_type'),
+            "class_id": r.get('class_id'),
+            "class_name": class_names.get(r.get('class_id'), 'Unknown'),
+            "created_at": r.get('created_at'),
+            "is_active": r.get('is_active', True),
+        } for r in result.data]
+
+        return jsonify({"resources": resources})
+
+    except Exception as e:
+        _logger.exception("List shared resources error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/shared-resource/<resource_id>', methods=['DELETE'])
+@require_teacher
+@handle_route_errors
+def delete_shared_resource(resource_id):
+    """Delete a single shared resource."""
+    try:
+        db = get_supabase()
+
+        # Verify ownership
+        check = db.table('published_content').select('id').eq(
+            'id', resource_id
+        ).eq('teacher_id', g.teacher_id).execute()
+        if not check.data:
+            return jsonify({"error": "Resource not found"}), 404
+
+        db.table('published_content').delete().eq('id', resource_id).execute()
+        return jsonify({"success": True})
+
+    except Exception as e:
+        _logger.exception("Delete shared resource error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/delete-shared-resources-bulk', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def delete_shared_resources_bulk():
+    """Delete all shared resources matching a title for this teacher."""
+    try:
+        db = get_supabase()
+        data = request.json
+        title = data.get('title', '').strip()
+
+        if not title:
+            return jsonify({"error": "Title is required"}), 400
+
+        result = db.table('published_content').delete().eq(
+            'teacher_id', g.teacher_id
+        ).eq('title', title).in_(
+            'content_type', list(RESOURCE_CONTENT_TYPES)
+        ).execute()
+
+        deleted = len(result.data) if result.data else 0
+        return jsonify({"success": True, "deleted": deleted})
+
+    except Exception as e:
+        _logger.exception("Bulk delete shared resources error")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
