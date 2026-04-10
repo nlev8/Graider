@@ -1410,6 +1410,135 @@ A: On Graider's hosted server (Railway). Data is never shared with third-party v
 
 ---
 
+# What's New — April 2026
+
+## The Biggest Release in Graider's History
+
+A full month of teacher-first improvements, from standards-level mastery tracking to student portal upgrades — all shipped without touching a single SSO or roster integration.
+
+---
+
+## Standards Mastery Tracking
+
+Every question Graider grades is now tied to the standard it measures, so teachers can see exactly which standards each student has mastered.
+
+- **Per-standard scores on every assessment.** When a teacher opens the results for any assessment, a new Standards Summary Card shows class average mastery for each standard on the test — color-coded green (mastered), yellow (approaching), and red (needs support).
+- **Student attempt history.** When a student retakes an assessment, teachers see "Attempt 2 of 3" next to the student's name. Click it to open a drawer with every past attempt — scores, dates, and time taken.
+- **Per-question time tracking.** Graider now measures how long each student spends on each question, so teachers will soon be able to identify questions that take too long and students who rush through.
+
+---
+
+## Progress Rank Grid — See Every Student's Mastery at a Glance
+
+Graider now includes a students-by-standards mastery grid, inspired by Progress Learning's most-used report — but powered by AI-graded open-ended responses, not just multiple choice.
+
+- **Pick a class, see the grid.** From the Analytics tab, choose a class period and instantly see every student's mastery on every standard they've been assessed on.
+- **Color-coded cells.** Green for mastered (85%+), yellow for approaching (70–84%), red for needs support (below 70%), gray for no data yet.
+- **Latest, Best, or Average.** Toggle how mastery is calculated — show each student's latest attempt, their best attempt, or the average across attempts.
+- **Struggling Only filter.** One click hides students who are doing fine, leaving only the students who need intervention visible.
+- **Drill into any cell.** Click a cell to see exactly which assessments contributed to that mastery score.
+
+---
+
+## Content Tagging — Organize by Unit
+
+Teachers can now tag any published assessment, assignment, or study material with unit labels like "Unit 4: The Civil War" and filter their entire content library by tag.
+
+- **Global tag filter.** A single filter at the top of the Student Portal tab narrows every list to the selected tag at once.
+- **Tag any item inline.** Click the "+ Tag" button on any row to set a unit, add additional tags, or create a new tag on the fly.
+- **One tag library across all classes.** The tags a teacher uses in Period 1 are the same tags available in Period 7. No duplicate tagging.
+- **Works for everything.** Assessments, assignments, flashcards, study guides, and slide decks all share the same tag system.
+
+---
+
+## Save and Resume — Students Can Pause Mid-Assessment
+
+Students can now start an assessment, close the tab, and come back later to finish — without losing any of their work.
+
+- **Automatic save every 15 seconds.** Answers are saved in the background as students work.
+- **"Save for later" button.** For students who want to save explicitly before closing.
+- **Welcome-back banner.** When students reopen an assessment, a banner confirms "Resumed from draft — 8 questions answered."
+- **Timer keeps running for timed tests.** If a teacher sets a 45-minute limit, the timer counts from the moment the student started — even if they close the tab. This prevents the "close the tab to stop the clock" trick.
+- **Teachers see who's working right now.** The assessment results panel has a new "In Progress" section showing which students are currently drafting, how much they've answered, and how long they've been working.
+- **End Attempt button.** If a student gets stuck or needs more time cut off, teachers can end the attempt and submit whatever work exists.
+
+---
+
+## Unit-Based Student Dashboard
+
+Students now see their assignments and study materials organized by unit instead of a single flat list.
+
+- **Collapsible unit cards.** Each unit shows its assignments and study materials together in one expandable card.
+- **Current unit expanded by default.** Students land on their most recent unit, with older units collapsed below.
+- **At-a-glance summaries.** Collapsed units show counts like "3 assignments, 2 study materials, all graded" so students can see their progress without clicking.
+- **"Current" badge** highlights the unit they're actively working on.
+
+---
+
+## Student Portal Dark / Light Mode
+
+Students now get full light and dark mode across every screen — login, dashboard, assessments, and study materials. Their choice is remembered automatically, so their preference carries across sessions.
+
+---
+
+## Assistant Safety: The Wrong-Student Guard
+
+Graider's AI Assistant now has a three-layer safety check to prevent one of the most dangerous AI mistakes — sending a message about the wrong student.
+
+- **Layer 1:** The assistant must look up a student before it can email about them.
+- **Layer 2:** The student mentioned in the teacher's request must match the student the assistant is emailing about.
+- **Layer 3:** The student name the assistant uses must match the student the assistant just looked up.
+
+All three checks run before any message is drafted or sent, so the assistant cannot accidentally email Mrs. Jones' parents about a behavior report that was actually about Mr. Smith.
+
+This matters because AI assistants in education frequently carry context from earlier in a conversation. Without guards, a teacher asking about Student A after discussing Student B can easily get an email drafted about the wrong student. Graider catches it every time.
+
+---
+
+## AI That Learns From Every Teacher Correction
+
+**Graider's strongest differentiator.** When a teacher edits a grade — bumping a 7/10 to a 9/10, or changing a B to an A — Graider captures the correction and learns from it.
+
+- **Per-teacher calibration.** After a teacher has made 3+ corrections on a given question type (short answer, essay, vocabulary, etc.), Graider's grading prompts automatically include a calibration note that says "This teacher tends to score short answers about 1.5 points higher than the AI's first instinct." The AI grades accordingly from that point forward.
+- **Platform-wide accuracy learning.** When 3+ teachers across the platform independently adjust the same question type in the same direction, Graider treats that as a signal of systemic grading drift and applies a correction for everyone.
+- **Your grading style, automated.** Within a few weeks of corrections, the AI grades the way each teacher grades — not the way a generic AI thinks it should.
+
+No competing platform offers this. Progress Learning doesn't grade open-ended work at all. Wayground doesn't learn from corrections. Khan and MagicSchool don't have a feedback loop. Every teacher's corrections make Graider's AI permanently better at grading the way that teacher grades.
+
+---
+
+## Quality-of-Life Improvements
+
+**Share with Class Modal.** The old "which class?" picker was a browser prompt. It's now a proper modal with checkboxes, "Select All", auto-populated unit field, and the ability to publish to multiple classes at once.
+
+**Shared Resources Management.** Teachers can now see every flashcard set, study guide, and slide deck they've shared with students, delete them individually, or delete them from every class at once.
+
+**Flashcards in the Student Portal.** Flashcards shared via "Share with Class" now show up in a dedicated Study Materials section and open in an interactive flip-card viewer — not in the assignments list as broken entries.
+
+**Flashcard Front/Back Toggle.** Students can choose whether to see the term or the definition first, helping them study in whichever direction they need practice.
+
+**Generate Flashcards From Uploaded Documents.** Teachers can now generate flashcards directly from PDFs, Word docs, or curriculum materials they've uploaded to the Planner — without needing to generate a lesson plan first.
+
+**Matching Question Fix.** A bug that caused matching questions to shake and clear when students clicked terms has been fixed. Matching now works reliably across every assessment format.
+
+---
+
+## FERPA & SSO Compliance
+
+Every feature shipped in April 2026 is fully compliant with Clever, ClassLink, OneRoster, and FERPA. No new student data leaves the system. No changes to roster sync, SSO login, or gradebook export. Every new feature reads only internal school data with standard teacher ownership checks.
+
+---
+
+## April 2026 By the Numbers
+
+- **3 phases** of progress-tracking parity with Progress Learning shipped
+- **10+ teacher-facing features** launched
+- **1000+ automated tests** still passing
+- **Zero SSO, roster, or FERPA changes** required
+- **Zero downtime** deployments
+
+---
+
 # Thank You
 
 ## Graider: Give Teachers Their Time Back
