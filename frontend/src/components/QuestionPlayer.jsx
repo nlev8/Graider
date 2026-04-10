@@ -650,11 +650,11 @@ export default function QuestionPlayer({
                     padding: "12px 24px",
                     fontSize: "1rem",
                     fontWeight: 600,
-                    border: "2px solid " + navBtnBorder,
+                    border: "2px solid var(--glass-border)",
                     borderRadius: "10px",
                     cursor: "pointer",
-                    background: "transparent",
-                    color: "white",
+                    background: "var(--glass-bg)",
+                    color: "var(--text-primary)",
                   }}
                 >
                   Go Back
