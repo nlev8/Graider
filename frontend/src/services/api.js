@@ -1721,3 +1721,33 @@ export default {
   revokeAdmin,
   searchTeachers,
 }
+
+export async function saveDraft(contentId, answers, markedForReview, studentToken) {
+  return fetch('/api/student/submission/' + contentId + '/draft', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Student-Token': studentToken,
+    },
+    body: JSON.stringify({
+      answers: answers,
+      marked_for_review: markedForReview,
+    }),
+  }).then(function(r) { return r.json(); })
+}
+
+export async function getDraft(contentId, studentToken) {
+  return fetch('/api/student/submission/' + contentId + '/draft', {
+    headers: { 'X-Student-Token': studentToken },
+  }).then(function(r) { return r.json(); })
+}
+
+export async function endStudentAttempt(submissionId) {
+  return fetchApi('/api/teacher/end-attempt/' + submissionId, {
+    method: 'POST',
+  })
+}
+
+export async function getInProgressDrafts(contentId) {
+  return fetchApi('/api/teacher/content/' + contentId + '/in-progress')
+}
