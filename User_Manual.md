@@ -2299,4 +2299,125 @@ Each student's file contains:
 - **Report Bug Button**: Submit issues via Google Form from Settings > Help
 - **Dark/Light Theme**: Toggle between dark and light modes with the sun/moon icon in the header
 
-*Last updated: February 28, 2026*
+## Recent Updates (April 2026)
+
+### Progress Tracking Foundation (Phase 1)
+
+Standards-level mastery tracking now flows through the entire grading pipeline.
+
+- **Per-Question Standards Tagging**: Every graded question preserves its standard code (e.g. `SS.8.A.1.1`) in the submission results. All three grading paths (`grade_instant_only`, `grade_student_submission`, multipass portal grading) embed the standard from the source question.
+- **Standards Mastery Rollups**: Each graded submission carries a `standards_mastery` dict summarizing points earned vs possible per standard. Used by reports across the app.
+- **Per-Question Time Tracking**: StudentPortal captures seconds spent on each question via a new `question_times` JSONB column on `student_submissions`. Feeds future engagement reports.
+- **Standards Summary Card**: When viewing an assessment's results, teachers see a card listing every standard on the assessment with class average mastery, color-coded (green ≥85%, yellow 70–84%, red <70%).
+- **Attempt History Drawer**: Student rows with multiple attempts show an "Attempt X of Y" badge. Click to open a drawer listing every past attempt with score, date, and time taken.
+
+### Progress Rank Grid (Phase 2)
+
+A students × standards mastery grid for any class, modeled on Progress Learning's Progress Rank report.
+
+- **Class Selector in Analytics Tab**: Default "All Classes" shows the existing cross-class analytics. Pick a specific class to reveal the Progress Rank grid.
+- **Grid Layout**: Rows are students, columns are every standard assessed in that class. Cells are color-coded by mastery percentage with sticky headers for scrolling through many standards.
+- **Attempt Mode Toggle**: `Latest` / `Best` / `Average` — pick which attempt counts toward the mastery calculation. Best breaks ties on newer timestamp.
+- **Struggling Only Filter**: One click hides students who have no red standards, so teachers can focus on students who need intervention.
+- **Cell Click Popover**: Click any cell to see which specific submissions contributed to that mastery score, with per-submission point breakdowns and attempt numbers.
+- **Compliance**: Endpoint reads only internal Supabase tables. No Clever, ClassLink, OneRoster, or roster sync changes.
+
+### Content Tagging System (Phase 2.5)
+
+Progress Learning-style tag-based organization for all published content.
+
+- **Global Tag Filter**: A filter bar at the top of the Student Portal tab narrows all 3 lists (Published Assessments, Published Assignments, Shared Resources) to a selected tag.
+- **Per-Row Tag Pills**: Every published content row shows its unit as a folder-icon pill plus additional tag pills. Click a pill to remove it from that item.
+- **"+ Tag" Dropdown**: Each row has a "+ Tag" button that opens a dropdown with "Set as unit" (if no unit yet), existing tags to add, and a "Create new tag..." option.
+- **Styled New Tag Modal**: Replaces the browser's native `prompt()`. Used for both new units and new tags with mode-aware labels and placeholders.
+- **Teacher-Global Tags**: One tag list across all of a teacher's classes. Tag "Unit 4" in Period 1 is the same as "Unit 4" in Period 2.
+- **Works Across Both Tables**: Tags work for both join-code assessments (`published_assessments`) and class-based content (`published_content`) via a unified backend endpoint.
+
+### Share with Class Modal
+
+Replaced the browser `prompt()` class picker with a proper multi-select modal.
+
+- **Checkbox List**: Pick one or many classes with "Select All" toggle.
+- **Unit Field**: Auto-populates from the Planner's current unit when you share directly after generating.
+- **Multi-Class Publish**: Shares content to every selected class in one action, with per-class success/failure toasts.
+
+### Save-and-Resume Drafts
+
+Students can now pause mid-assessment and come back later.
+
+- **Auto-Save Every 15 Seconds**: Answers and "mark for review" flags persist to `student_submissions` with `status='draft'` on the backend.
+- **Manual "Save for Later" Button**: Next to the submit button; shows an alert confirming the draft saved.
+- **Resume Banner**: On reopen, students see "Resumed from draft — X questions answered" and pick up where they left off.
+- **Server-Side Timer**: Time-limited assessments keep counting from `time_started_at` even if the student closes the tab. Client clock is validated against server on each save.
+- **In-Progress Section for Teachers**: In the assessment results panel, teachers see which students are currently drafting, how many questions they've answered, and how long they've been working.
+- **End Attempt Button**: Teachers can force-end a draft, converting it into a submitted row with whatever answers existed.
+
+### Unit-Based Student Dashboard
+
+Students now see published content grouped by unit in collapsible sections.
+
+- **Collapsible Unit Cards**: Each unit's assignments + study materials appear together. The most recent unit is expanded by default; older units are collapsed.
+- **Unit Summaries**: Collapsed unit headers show counts (e.g. "3 assignments · 2 study materials · All graded ✓").
+- **"Current" Badge**: The most recent unit is highlighted.
+- **General Section**: Content without a unit falls into a "General" section at the bottom.
+- **Shared Between Content Types**: Assignments and resources for the same unit are grouped together in that unit's expanded body.
+
+### Student Portal Dark/Light Mode
+
+Full theme support across every student-facing screen.
+
+- **Theme Toggle**: Sun/moon button in both `StudentLogin` and `StudentDashboard` (already in `StudentPortal`).
+- **Persistent Theme**: Selection stored in `localStorage` as `portal-theme` and restored on mount.
+- **CSS Variables Throughout**: All 3 student components now use `var(--bg-gradient-start)`, `var(--text-primary)`, etc. instead of hardcoded colors. New `--danger-light`, `--danger-bg`, `--warning-bg`, etc. added to `globals.css` for consistency.
+
+### Study Materials Routing Fix
+
+Flashcards, study guides, and slide decks published via "Share with Class" now appear in the **Study Materials** section of the student dashboard instead of being rendered as broken "assignments".
+
+- **Correct Content-Type Filtering**: The dashboard now routes `study_guide`, `flashcards`, and `slide_deck` content types into the resources bucket, not the assignment bucket.
+- **Interactive Flashcard View**: Click a flashcard resource to open the full `FlashcardView` component with flip animations and navigation, not the static card grid.
+- **Front/Back Toggle**: Students can toggle which side of a flashcard shows first (term or definition) using the existing FlashcardView toggle.
+
+### Shared Resources Management
+
+Teachers can now view and delete shared flashcards/study guides/slide decks from the Student Portal tab.
+
+- **Shared Resources Section**: Listed below Published Assessments and Assignments, showing every class-based resource the teacher has shared.
+- **Per-Row Delete**: Delete a resource from a specific class.
+- **Delete from All Classes**: When the same title is shared to multiple classes, one button deletes all copies at once.
+- **Unit Assignment**: Teachers can assign or change the unit on any shared resource inline.
+
+### Flashcard Generation Improvements
+
+- **Generate from Uploaded Resources**: Flashcards can now be generated directly from uploaded reference documents in the Planner (PDFs, Word docs). Previously required a lesson plan or assessment first.
+
+### AI Assistant: Student Name Guard
+
+Three-layer defense prevents the AI assistant from emailing the wrong student when users ask about one student but the assistant has another in context from earlier.
+
+- **Lookup-Required Guard**: Send tools (`send_focus_comms`, `send_behavior_email`, `send_parent_emails`) must be preceded by `lookup_student_info` for the correct student, or the call is blocked.
+- **User-Message Name Match**: The tool's target student must appear in the user's current message (case-insensitive, Unicode-aware). If not, the tool is blocked.
+- **Cross-Tool Match**: The tool's target must also match what `lookup_student_info` resolved. Mismatch = blocked.
+- **Pre-Execution**: All three checks run **before** `execute_tool` is called, so a blocked tool never reaches the send path.
+
+### Learn-From-Edits Feedback Loop
+
+AI grading now calibrates to each teacher's corrections over time.
+
+- **Correction Capture**: When a teacher edits a grade in the Results tab, the original AI score and feedback are preserved and the delta is recorded.
+- **Per-Teacher Patterns**: Aggregated patterns (avg delta per question type) are computed per teacher and per-global (anonymized) across all teachers.
+- **Prompt Injection at Grading Time**: When the teacher has 3+ corrections on a question type, the grading prompt includes a "GRADING CALIBRATION" note with the teacher's average adjustment direction and an example.
+- **Global Accuracy Note**: When 3+ teachers independently adjust the same question type in the same direction, the prompt adds a systemic accuracy note. The AI gets better over time per teacher AND across the platform.
+
+### Matching Question Fixes
+
+- **Integer-Array `correct_answer` Support**: Matching questions generated with `correct_answer: [0, 1, 2, 3]` (raw definition indices) now parse correctly. The frontend `MatchingCards.jsx` handles the integer format and the backend `_hydrate_matching` normalizes all formats (dict, string array, integer array) into the canonical `{term: definition}` dict during post-processing.
+- **No More Vanishing Terms**: Previously, broken `correct_answer` formats caused every match attempt to "shake" and clear, making terms appear to vanish. Fixed.
+
+### Sharing Landing Page SEO
+
+- **`/download` Removed**: The landing page's download route was dead (Graider is a web app, not a desktop download). Deleted and removed from the sitemap.
+- **Sitemap Cleanup**: Only `graider.live` URLs remain — removed `app.graider.live` entries since the app is behind auth and shouldn't be indexed.
+- **`www` → `graider.live` 301**: Added in Vercel domain settings to fix the "duplicate without canonical" issue Google Search Console flagged.
+
+*Last updated: April 10, 2026*
