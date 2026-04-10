@@ -745,6 +745,7 @@ def submit_student_work(content_id):
         db = _get_supabase()
         data = request.json
         answers = data.get('answers', {})
+        question_times = data.get('question_times') or {}
         time_taken = data.get('time_taken_seconds', 0)
 
         student = db.table('students').select(
@@ -799,6 +800,7 @@ def submit_student_work(content_id):
             'student_id_number': s['student_id_number'],
             'period': s.get('period', ''),
             'answers': answers,
+            'question_times': question_times,
             'results': instant_results,
             'time_taken_seconds': time_taken,
             'attempt_number': attempt,
@@ -1223,6 +1225,7 @@ def save_submission_draft(content_id):
         db = _get_supabase()
         data = request.json or {}
         draft_answers = data.get('answers') or {}
+        question_times = data.get('question_times') or {}
         marked_for_review = data.get('marked_for_review') or []
 
         # Verify content belongs to this class
@@ -1248,6 +1251,7 @@ def save_submission_draft(content_id):
             # Update existing draft
             db.table('student_submissions').update({
                 'draft_answers': draft_answers,
+                'question_times': question_times,
                 'marked_for_review': marked_for_review,
                 'status': 'draft',
             }).eq('id', row['id']).execute()
@@ -1273,6 +1277,7 @@ def save_submission_draft(content_id):
                 'period': sdata.get('period'),
                 'status': 'draft',
                 'draft_answers': draft_answers,
+                'question_times': question_times,
                 'marked_for_review': marked_for_review,
                 'time_started_at': now_iso,
             }).execute()
@@ -1338,6 +1343,7 @@ def get_submission_draft(content_id):
         return jsonify({
             "draft": {
                 "answers": row.get('draft_answers') or {},
+                "question_times": row.get('question_times') or {},
                 "marked_for_review": row.get('marked_for_review') or [],
                 "time_started_at": time_started_at,
                 "remaining_seconds": remaining_seconds,
