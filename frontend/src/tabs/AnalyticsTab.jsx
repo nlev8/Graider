@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
+import ProgressRankGrid from "./ProgressRankGrid";
 
 /**
  * AnalyticsTab - Extracted from App.jsx
@@ -2366,6 +2367,7 @@ export default React.memo(function AnalyticsTab({
   savedAssignmentData,
   addToast,
   assessmentResults,
+  teacherClasses,
 }) {
   // --- Analytics-specific state ---
   const [analytics, setAnalytics] = useState(null);
@@ -2379,6 +2381,8 @@ export default React.memo(function AnalyticsTab({
   const [analyticsSource, setAnalyticsSource] = useState('all');
   const [selectedItemAnalysis, setSelectedItemAnalysis] = useState(null);
   const [itemAnalysisOpen, setItemAnalysisOpen] = useState(false);
+  // Phase 2: Progress Rank grid class selector
+  var [selectedClassForGrid, setSelectedClassForGrid] = useState('all');
 
 
   // --- Effects ---
@@ -2534,7 +2538,25 @@ export default React.memo(function AnalyticsTab({
   // --- Render ---
   return (
                 <div data-tutorial="analytics-card" className="fade-in">
-                  {analyticsLoading ? (
+                  {/* Class selector — Phase 2 Progress Rank grid entry point */}
+                  <div className="glass-card" style={{ padding: "14px 20px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>Class:</label>
+                    <select
+                      value={selectedClassForGrid}
+                      onChange={function(e) { setSelectedClassForGrid(e.target.value); }}
+                      className="input"
+                      style={{ padding: "6px 12px", fontSize: "0.9rem", minWidth: "200px" }}
+                    >
+                      <option value="all">All Classes</option>
+                      {(teacherClasses || []).map(function(c) {
+                        return <option key={c.id} value={c.id}>{c.name}</option>;
+                      })}
+                    </select>
+                  </div>
+
+                  {selectedClassForGrid !== 'all' ? (
+                    <ProgressRankGrid classId={selectedClassForGrid} />
+                  ) : analyticsLoading ? (
                     <div
                       className="glass-card"
                       style={{ padding: "80px", textAlign: "center" }}

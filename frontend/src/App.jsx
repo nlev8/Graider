@@ -2649,6 +2649,12 @@ function App() {
     }
   }, [plannerMode]);
 
+  useEffect(function() {
+    if (activeTab === "analytics" && teacherClasses.length === 0) {
+      fetchTeacherClasses();
+    }
+  }, [activeTab]);
+
   // Load calendar data when calendar mode is active
   useEffect(() => {
     if (activeTab === 'planner' && plannerMode === 'calendar') {
@@ -9758,6 +9764,7 @@ ${signature}`;
                     savedAssignmentData={savedAssignmentData}
                     addToast={addToast}
                     assessmentResults={assessmentResults}
+                    teacherClasses={teacherClasses}
                   />
                 </Suspense>
               )}
