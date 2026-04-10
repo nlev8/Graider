@@ -2130,6 +2130,8 @@ function App() {
   const [sharedResources, setSharedResources] = useState([]);
   const [loadingSharedResources, setLoadingSharedResources] = useState(false);
   const [newUnitModal, setNewUnitModal] = useState(null); // { resourceId, value } or null
+  const [allTeacherTags, setAllTeacherTags] = useState([]);
+  const [selectedTagFilter, setSelectedTagFilter] = useState('all');
 
   // Saved Assessments state
   const [savedAssessments, setSavedAssessments] = useState([]);
@@ -4697,6 +4699,7 @@ ${signature}`;
         // Refresh published assessments list
         fetchPublishedAssessments();
         fetchSharedResources();
+        fetchTeacherTags();
       }
     } catch (e) {
       addToast("Error publishing: " + e.message, "error");
@@ -4851,6 +4854,22 @@ ${signature}`;
     }
   };
 
+  const fetchTeacherTags = async () => {
+    try {
+      const data = await api.getTeacherTags();
+      if (data && data.tags) setAllTeacherTags(data.tags);
+    } catch (e) {
+      console.error('Error loading teacher tags:', e);
+    }
+  };
+
+  var itemMatchesTagFilter = function(item) {
+    if (selectedTagFilter === 'all') return true;
+    if (item.unit_name && item.unit_name === selectedTagFilter) return true;
+    var tags = item.tags || [];
+    return tags.indexOf(selectedTagFilter) !== -1;
+  };
+
   const handleDeleteSharedResource = async (id, title) => {
     try {
       var data = await api.deleteSharedResource(id);
@@ -4943,6 +4962,7 @@ ${signature}`;
         addToast(data.is_active ? "Assessment activated" : "Assessment deactivated", "success");
         fetchPublishedAssessments();
         fetchSharedResources();
+        fetchTeacherTags();
       }
     } catch (e) {
       addToast("Error: " + e.message, "error");
@@ -9848,6 +9868,7 @@ ${signature}`;
                         setPlannerMode("dashboard");
                         fetchPublishedAssessments();
                         fetchSharedResources();
+                        fetchTeacherTags();
                         fetchSavedAssessments();
                       }}
                       className="btn"
@@ -13848,7 +13869,7 @@ ${signature}`;
                             </h3>
                             {section.type === "assessment" && (
                             <button
-                              onClick={function() { fetchPublishedAssessments(); fetchSharedResources(); }}
+                              onClick={function() { fetchPublishedAssessments(); fetchSharedResources(); fetchTeacherTags(); }}
                               className="btn btn-secondary"
                               style={{ padding: "8px 12px", fontSize: "0.85rem" }}
                               disabled={loadingPublished}
