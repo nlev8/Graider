@@ -13853,12 +13853,39 @@ ${signature}`;
                           )}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: selectedAssessmentResults ? "1fr 1fr" : "1fr", gap: "25px" }}>
+                      {/* Global tag filter — Content Tagging */}
+                      <div className="glass-card" style={{ padding: "12px 16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Icon name="Tag" size={16} style={{ color: "var(--text-secondary)" }} />
+                        <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>Filter by tag:</label>
+                        <select
+                          value={selectedTagFilter}
+                          onChange={function(e) { setSelectedTagFilter(e.target.value); }}
+                          className="input"
+                          style={{ padding: "6px 12px", fontSize: "0.85rem", minWidth: "220px" }}
+                        >
+                          <option value="all">All content ({allTeacherTags.length} tags)</option>
+                          {allTeacherTags.map(function(t) {
+                            return <option key={t} value={t}>{t}</option>;
+                          })}
+                        </select>
+                        {selectedTagFilter !== 'all' && (
+                          <button
+                            onClick={function() { setSelectedTagFilter('all'); }}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
                         {/* Published Content Lists — separated by content type */}
                         {[
                           { type: "assessment", label: "Published Assessments", icon: "ClipboardList", emptyText: "No published assessments yet.", emptyHint: "Generate an assessment and click \"Publish to Portal\" to get started." },
                           { type: "assignment", label: "Published Assignments", icon: "FileText", emptyText: "No published assignments yet.", emptyHint: "Generate an assignment and click \"Publish to Portal\" to get started." },
                         ].map((section) => {
-                          var sectionItems = publishedAssessments.filter(function(a) { return (a.content_type || "assessment") === section.type; });
+                          var sectionItems = publishedAssessments.filter(function(a) {
+                            return (a.content_type || "assessment") === section.type && itemMatchesTagFilter(a);
+                          });
                           return (
                         <div key={section.type} className="glass-card" style={{ padding: "20px", marginBottom: "16px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
@@ -13999,7 +14026,7 @@ ${signature}`;
                             </p>
                           ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                              {sharedResources.map(function(res) {
+                              {sharedResources.filter(itemMatchesTagFilter).map(function(res) {
                                 var typeIcon = res.content_type === 'flashcards' ? 'Layers'
                                   : res.content_type === 'study_guide' ? 'FileText'
                                   : res.content_type === 'slide_deck' ? 'Monitor'
