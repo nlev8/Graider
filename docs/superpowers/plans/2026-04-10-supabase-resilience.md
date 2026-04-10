@@ -49,7 +49,10 @@ Verified before writing this plan:
 |------|--------|----------------|
 | `backend/supabase_resilient.py` | **Create** | New file. Defines `ResilientClient` proxy wrapping the singleton client with operation-aware retry. |
 | `backend/supabase_client.py` | **Modify** | `get_supabase()` now returns the `ResilientClient` wrapper instead of the raw client. One-line change inside the existing function; callers don't change. |
-| `tests/test_supabase_resilient.py` | **Create** | Unit tests for the proxy: operation classification, retry policy selection, preflight-only mode for inserts, error propagation for non-retryable failures. |
+| `tests/test_supabase_resilient.py` | **Create** | Unit tests for the proxy: operation classification, retry policy selection, preflight-only mode for inserts, error propagation for non-retryable failures, rpc() and schema() wrapping. |
+| `backend/routes/behavior_routes.py` | **Modify** | Drop the local `_get_supabase()` that calls `create_client()` directly; delegate to the canonical singleton so behavior writes run through the resilient wrapper. |
+| `backend/services/assistant_tools_behavior.py` | **Modify** | Same migration as above — route through `get_supabase()`. |
+| `tests/test_no_direct_create_client.py` | **Create** | Regression guard. Fails the suite if any module outside `backend/supabase_client.py` re-introduces a direct `create_client()` call and silently bypasses the wrapper. |
 | `backend/routes/student_account_routes.py` | **Modify** | Migrate the 2 critical insert paths (`submit_student_work`, `save_submission_draft`) to pass caller-generated UUIDs so retry is safe. |
 | `backend/routes/student_portal_routes.py` | **Modify** | Migrate the 2 critical insert paths (`submit_assessment` join-code path, `publish_assessment`) to pass caller-generated UUIDs. |
 | `backend/services/portal_grading.py` | **Modify** | Wrap the existing `student_submissions` update inside `run_portal_grading_thread` so transient failures during grading don't orphan the submission. No new logic — just runs through the resilient client. |
@@ -258,15 +261,74 @@ class TestProxyBehavior:
         # The chain should have been forwarded through to the raw client
         mock_raw.table.assert_called_once_with("classes")
 
-    def test_non_table_attrs_passthrough(self):
+    def test_non_postgrest_attrs_passthrough(self):
+        """auth, storage, realtime, functions pass through untouched."""
         from backend.supabase_resilient import ResilientClient
 
         mock_raw = MagicMock()
         mock_raw.auth = "auth_obj"
-        mock_raw.rpc = MagicMock()
+        mock_raw.storage = "storage_obj"
+        mock_raw.realtime = "realtime_obj"
+        mock_raw.functions = "functions_obj"
         wrapper = ResilientClient(mock_raw)
         assert wrapper.auth == "auth_obj"
-        assert wrapper.rpc is mock_raw.rpc
+        assert wrapper.storage == "storage_obj"
+        assert wrapper.realtime == "realtime_obj"
+        assert wrapper.functions == "functions_obj"
+
+    def test_rpc_returns_wrapped_builder(self):
+        """rpc() results have .execute() — they must be wrapped."""
+        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
+
+        # Raw rpc builder exposes .execute
+        raw_builder = MagicMock()
+        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
+
+        mock_raw = MagicMock()
+        mock_raw.rpc = MagicMock(return_value=raw_builder)
+
+        wrapper = ResilientClient(mock_raw)
+        result = wrapper.rpc("some_function", {"arg": 1})
+        assert isinstance(result, _ExecuteProxy)
+        mock_raw.rpc.assert_called_once_with("some_function", {"arg": 1})
+
+    def test_rpc_without_params(self):
+        """rpc() can be called with just the function name."""
+        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
+
+        raw_builder = MagicMock()
+        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
+
+        mock_raw = MagicMock()
+        mock_raw.rpc = MagicMock(return_value=raw_builder)
+
+        wrapper = ResilientClient(mock_raw)
+        result = wrapper.rpc("no_args_fn")
+        assert isinstance(result, _ExecuteProxy)
+        mock_raw.rpc.assert_called_once_with("no_args_fn")
+
+    def test_schema_returns_wrapped_sub_client(self):
+        """schema() returns a sub-client whose .from_()/.table()/.rpc() must also be wrapped."""
+        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
+
+        # Raw schema sub-client has table/from_/rpc
+        raw_builder = MagicMock()
+        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
+
+        sub_client = MagicMock(spec=["table", "from_", "rpc"])
+        sub_client.table = MagicMock(return_value=raw_builder)
+        sub_client.from_ = MagicMock(return_value=raw_builder)
+        sub_client.rpc = MagicMock(return_value=raw_builder)
+
+        mock_raw = MagicMock()
+        mock_raw.schema = MagicMock(return_value=sub_client)
+
+        wrapper = ResilientClient(mock_raw)
+        sub_wrapper = wrapper.schema("analytics")
+        # Sub-client should itself be a ResilientClient
+        assert isinstance(sub_wrapper, ResilientClient)
+        # Calls through the sub-wrapper should produce wrapped builders
+        assert isinstance(sub_wrapper.table("events"), _ExecuteProxy)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -460,8 +522,32 @@ class _ExecuteProxy:
         return result
 
 
+def _wrap_if_builder(obj):
+    """Wrap any object that looks like a postgrest query builder.
+
+    A builder is anything that exposes `.execute()` — direct table/from_ chains,
+    rpc() results, and schema() sub-clients all satisfy this shape. Non-builder
+    objects (auth, storage, realtime) are returned unchanged so their own
+    APIs remain untouched.
+    """
+    if obj is None:
+        return obj
+    if hasattr(obj, "execute"):
+        return _ExecuteProxy(obj)
+    # schema() returns a SyncPostgrestClient whose .from_/.table/.rpc each
+    # return builders — wrap the sub-client so those chains are proxied too.
+    if hasattr(obj, "from_") or hasattr(obj, "table"):
+        return ResilientClient(obj)
+    return obj
+
+
 class ResilientClient:
-    """Proxies a Supabase client so all .table() chains go through retry."""
+    """Proxies a Supabase client so every .execute() call goes through retry.
+
+    Covers .table(), .from_(), .rpc(), and .schema() so that no entry point
+    can reach `.execute()` without the retry wrapper. Non-postgrest attributes
+    (auth, storage, realtime, functions) pass through unchanged.
+    """
 
     def __init__(self, raw_client):
         self._raw = raw_client
@@ -470,11 +556,22 @@ class ResilientClient:
         return _ExecuteProxy(self._raw.table(name))
 
     def from_(self, name: str):
-        # Alias sometimes used
         return _ExecuteProxy(self._raw.from_(name))
 
+    def rpc(self, fn: str, params=None):
+        # supabase-py signature: rpc(fn, params=None)
+        builder = self._raw.rpc(fn, params) if params is not None else self._raw.rpc(fn)
+        return _wrap_if_builder(builder)
+
+    def schema(self, name: str):
+        sub_client = self._raw.schema(name)
+        return _wrap_if_builder(sub_client)
+
     def __getattr__(self, name):
-        # Pass through everything else (auth, rpc, storage, etc.)
+        # Pass through non-postgrest attributes (auth, storage, realtime, functions).
+        # We deliberately do NOT auto-wrap here — these subsystems have their own
+        # APIs and don't expose `.execute()`, so wrapping would be a no-op at best
+        # and break their interfaces at worst.
         return getattr(self._raw, name)
 ```
 
@@ -484,7 +581,7 @@ class ResilientClient:
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_supabase_resilient.py -v 2>&1 | tail -30
 ```
 
-Expected: All 16 tests PASS.
+Expected: All 19 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -591,6 +688,138 @@ Expected: prints `Wrapper type: ResilientClient`, a row count, and `SUCCESS`.
 ```bash
 git add backend/supabase_client.py
 git commit -m "feat: wire get_supabase() through ResilientClient wrapper"
+```
+
+---
+
+## Task 2.5: Eliminate direct `create_client()` call sites
+
+**Context:** Wrapping `get_supabase()` only protects modules that actually call it. Several helper modules bypass the singleton and build their own raw Supabase client via `supabase.create_client(...)`. Those paths still get zero retry coverage, silently defeating the wrapper for entire feature areas (behavior tracking, assistant tools, etc.). This task finds and fixes every offender.
+
+**Files:**
+- Modify: `backend/routes/behavior_routes.py` (and any other offenders found by the audit grep)
+- Modify: `backend/services/assistant_tools_behavior.py` (and any other offenders found)
+- Create: `tests/test_no_direct_create_client.py` — regression guard
+
+- [ ] **Step 1: Run the audit grep to list every direct `create_client()` call outside `supabase_client.py`**
+
+```bash
+cd /Users/alexc/Downloads/Graider && grep -rn "from supabase import create_client\|supabase.create_client\|create_client(" backend/ --include='*.py' | grep -v "backend/supabase_client.py" | grep -v "^Binary"
+```
+
+Expected: Zero results at the end of this task. At the start, this lists (as of 2026-04-10):
+- `backend/routes/behavior_routes.py` (around lines 30-39)
+- `backend/services/assistant_tools_behavior.py` (around lines 33-42)
+- Any additional offenders surfaced by the grep
+
+Record the full list before making changes — each one must be migrated.
+
+- [ ] **Step 2: Migrate each offender to `get_supabase_or_raise()`**
+
+For each file surfaced by the grep, replace the pattern:
+
+```python
+# BEFORE
+from supabase import create_client
+import os
+
+def _get_supabase():
+    url = os.getenv('SUPABASE_URL')
+    key = os.getenv('SUPABASE_SERVICE_KEY')
+    if not url or not key:
+        return None
+    return create_client(url, key)
+```
+
+with:
+
+```python
+# AFTER
+from backend.supabase_client import get_supabase
+
+def _get_supabase():
+    # Delegates to the canonical singleton so calls run through ResilientClient.
+    return get_supabase()
+```
+
+If the module requires a valid client and raises on missing creds, use `get_supabase_or_raise` instead:
+
+```python
+from backend.supabase_client import get_supabase_or_raise
+
+def _get_supabase():
+    return get_supabase_or_raise()
+```
+
+Apply to every file in the list from Step 1. Remove the now-unused `from supabase import create_client` and `import os` lines if they were only used for this purpose.
+
+- [ ] **Step 3: Add a regression test that fails if anyone re-introduces `create_client()`**
+
+Create `tests/test_no_direct_create_client.py`:
+
+```python
+"""Regression guard: no module outside backend/supabase_client.py may call
+supabase.create_client directly. All Supabase access must route through the
+canonical get_supabase()/get_supabase_or_raise() helpers so the ResilientClient
+wrapper is applied.
+"""
+
+from pathlib import Path
+
+import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+BACKEND = REPO_ROOT / "backend"
+ALLOWED = {BACKEND / "supabase_client.py"}
+
+
+def _python_files():
+    for path in BACKEND.rglob("*.py"):
+        if path in ALLOWED:
+            continue
+        yield path
+
+
+def test_no_direct_create_client_calls():
+    offenders = []
+    for path in _python_files():
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "create_client(" in text and "from supabase import" in text:
+            offenders.append(str(path.relative_to(REPO_ROOT)))
+        # Catch the aliased form too
+        elif "supabase.create_client(" in text:
+            offenders.append(str(path.relative_to(REPO_ROOT)))
+
+    assert not offenders, (
+        "Direct supabase.create_client() calls found outside "
+        "backend/supabase_client.py. These bypass the ResilientClient "
+        "wrapper and lose retry protection. Migrate them to "
+        "backend.supabase_client.get_supabase() or get_supabase_or_raise():\n  - "
+        + "\n  - ".join(offenders)
+    )
+```
+
+- [ ] **Step 4: Run the regression test and the full suite**
+
+```bash
+cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_no_direct_create_client.py -v 2>&1 | tail -10
+```
+
+Expected: PASS (offender list is empty after Step 2).
+
+```bash
+cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/load --ignore=tests/stress 2>&1 | tail -15
+```
+
+Expected: Full suite still green. The migrated modules should work identically because they now delegate to the same underlying Supabase client, just with retry on top.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/routes/behavior_routes.py backend/services/assistant_tools_behavior.py tests/test_no_direct_create_client.py
+# Include any additional files the audit grep surfaced
+git commit -m "refactor: route all Supabase access through resilient singleton"
 ```
 
 ---
