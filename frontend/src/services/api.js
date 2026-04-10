@@ -1761,3 +1761,14 @@ export async function getClassProgressRank(classId, attemptMode) {
   var mode = attemptMode || 'latest';
   return fetchApi('/api/teacher/class/' + classId + '/progress-rank?attempt_mode=' + mode);
 }
+
+export async function getTeacherTags() {
+  return fetchApi('/api/teacher/tags');
+}
+
+export async function setContentTags(contentId, tags) {
+  return fetchApi('/api/teacher/published-content/' + contentId + '/tags', {
+    method: 'POST',
+    body: JSON.stringify({ tags: tags }),
+  });
+}
