@@ -719,6 +719,23 @@ export async function deletePublishedAssessment(joinCode) {
   })
 }
 
+export async function getSharedResources() {
+  return fetchApi('/api/teacher/shared-resources')
+}
+
+export async function deleteSharedResource(id) {
+  return fetchApi('/api/teacher/shared-resource/' + id, {
+    method: 'DELETE',
+  })
+}
+
+export async function deleteSharedResourcesBulk(title) {
+  return fetchApi('/api/teacher/delete-shared-resources-bulk', {
+    method: 'POST',
+    body: JSON.stringify({ title: title }),
+  })
+}
+
 // Student-facing endpoints
 export async function getStudentAssessment(joinCode) {
   return fetchApi(`/api/student/join/${joinCode}`)
