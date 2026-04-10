@@ -32,6 +32,141 @@ def generate_join_code():
             return code
 
 
+def _parse_ts(ts):
+    """Parse an ISO timestamp string to a datetime for safe comparison.
+    Returns datetime.min if parsing fails so unparseable timestamps sort last.
+    """
+    if not ts:
+        return datetime.min
+    try:
+        return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+    except (ValueError, AttributeError):
+        return datetime.min
+
+
+def _select_submissions_by_mode(submissions_by_content, attempt_mode):
+    """Given a dict of content_id -> list of submissions, return one selected
+    submission per content based on attempt_mode.
+
+    attempt_mode: 'latest' | 'best' | 'average'
+    For 'average', returns all submissions; caller handles averaging.
+
+    Tie-breaking:
+    - 'latest': prefers higher attempt_number, then newer submitted_at (parsed)
+    - 'best': prefers higher percentage, then newer submitted_at (parsed) on ties
+    - 'average': no selection; all submissions used
+    """
+    selected = {}
+    for content_id, subs in submissions_by_content.items():
+        if not subs:
+            continue
+        if attempt_mode == 'best':
+            best = max(subs, key=lambda s: (
+                s.get('percentage') or 0,
+                _parse_ts(s.get('submitted_at')),
+                s.get('attempt_number') or 0,
+            ))
+            selected[content_id] = [best]
+        elif attempt_mode == 'average':
+            selected[content_id] = subs
+        else:  # 'latest' (default)
+            latest = max(subs, key=lambda s: (
+                s.get('attempt_number') or 0,
+                _parse_ts(s.get('submitted_at')),
+            ))
+            selected[content_id] = [latest]
+    return selected
+
+
+def _aggregate_mastery_for_student(selected_submissions_by_content, content_titles, attempt_mode):
+    """Aggregate standards_mastery across submissions into a per-standard dict.
+
+    Input: { content_id: [submission, ...] } (one per content unless attempt_mode=='average')
+    Output: { standard_code: { percentage, points_earned, points_possible, question_count, contributing_submissions } }
+    """
+    from collections import defaultdict
+    totals = defaultdict(lambda: {
+        'points_earned': 0.0,
+        'points_possible': 0.0,
+        'question_count': 0,
+        'contributing_submissions': [],
+    })
+
+    for content_id, subs in selected_submissions_by_content.items():
+        if not subs:
+            continue
+        if attempt_mode == 'average' and len(subs) > 1:
+            # Average each standard's percentage across attempts, then scale
+            per_standard_avg = defaultdict(lambda: {'pct_sum': 0.0, 'count': 0, 'pts_poss': 0, 'q_count': 0, 'attempts': []})
+            for sub in subs:
+                results = sub.get('results') or {}
+                mastery = results.get('standards_mastery') or {}
+                for code, m in mastery.items():
+                    if not m or not m.get('points_possible'):
+                        continue
+                    pct = (m.get('points_earned', 0) / m['points_possible']) * 100
+                    per_standard_avg[code]['pct_sum'] += pct
+                    per_standard_avg[code]['count'] += 1
+                    per_standard_avg[code]['pts_poss'] = m.get('points_possible', 0)
+                    per_standard_avg[code]['q_count'] = m.get('question_count', 0)
+                    per_standard_avg[code]['attempts'].append({
+                        'submission_id': sub.get('id'),
+                        'attempt_number': sub.get('attempt_number', 1),
+                        'points_earned': m.get('points_earned', 0),
+                        'points_possible': m['points_possible'],
+                    })
+            for code, agg in per_standard_avg.items():
+                avg_pct = agg['pct_sum'] / agg['count']
+                totals[code]['points_earned'] += (avg_pct / 100.0) * agg['pts_poss']
+                totals[code]['points_possible'] += agg['pts_poss']
+                totals[code]['question_count'] += agg['q_count']
+                # In average mode, record each contributing attempt individually
+                for a in agg['attempts']:
+                    totals[code]['contributing_submissions'].append({
+                        'submission_id': a['submission_id'],
+                        'title': content_titles.get(content_id, ''),
+                        'points_earned': a['points_earned'],
+                        'points_possible': a['points_possible'],
+                        'attempt_number': a['attempt_number'],
+                    })
+        else:
+            for sub in subs:
+                results = sub.get('results') or {}
+                mastery = results.get('standards_mastery') or {}
+                for code, m in mastery.items():
+                    if not m or not m.get('points_possible'):
+                        continue
+                    totals[code]['points_earned'] += m.get('points_earned', 0)
+                    totals[code]['points_possible'] += m['points_possible']
+                    totals[code]['question_count'] += m.get('question_count', 0)
+                    totals[code]['contributing_submissions'].append({
+                        'submission_id': sub.get('id'),
+                        'title': content_titles.get(content_id, ''),
+                        'points_earned': m.get('points_earned', 0),
+                        'points_possible': m['points_possible'],
+                        'attempt_number': sub.get('attempt_number', 1),
+                    })
+
+    # Compute final percentages and cap contributing_submissions at 10 (most recent first)
+    result = {}
+    for code, t in totals.items():
+        pct = round((t['points_earned'] / t['points_possible']) * 100, 1) if t['points_possible'] > 0 else 0
+        # Sort contributing submissions by attempt_number desc before capping
+        contributing = sorted(
+            t['contributing_submissions'],
+            key=lambda c: c.get('attempt_number') or 0,
+            reverse=True,
+        )[:10]
+        result[code] = {
+            'percentage': pct,
+            'points_earned': round(t['points_earned'], 2),
+            'points_possible': t['points_possible'],
+            'question_count': t['question_count'],
+            'contributing_submissions': contributing,
+        }
+    return result
+
+
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
