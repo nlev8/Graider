@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Icon from "./Icon";
 
 export default function StudentLogin({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -6,11 +7,15 @@ export default function StudentLogin({ onLogin }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Apply stored student portal theme on mount
-  React.useEffect(function() {
+  // Theme toggle
+  var [lightMode, setLightMode] = useState(function() {
     var saved = localStorage.getItem("portal-theme");
-    if (saved) document.body.setAttribute("data-theme", saved);
-  }, []);
+    if (saved) {
+      document.body.setAttribute("data-theme", saved);
+      return saved === "light";
+    }
+    return false;
+  });
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -54,6 +59,24 @@ export default function StudentLogin({ onLogin }) {
       justifyContent: "center", background: "linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end))",
       fontFamily: "Inter, sans-serif",
     }}>
+      <button
+        onClick={function() {
+          var next = !lightMode;
+          setLightMode(next);
+          var theme = next ? "light" : "dark";
+          document.body.setAttribute("data-theme", theme);
+          localStorage.setItem("portal-theme", theme);
+        }}
+        style={{
+          position: "fixed", top: "12px", right: "12px", zIndex: 200,
+          background: "var(--btn-secondary-bg)",
+          border: "none", borderRadius: "8px", padding: "8px",
+          cursor: "pointer", color: "var(--text-secondary)",
+        }}
+        title={lightMode ? "Switch to dark mode" : "Switch to light mode"}
+      >
+        <Icon name={lightMode ? "Moon" : "Sun"} size={18} />
+      </button>
       <div style={{
         background: "var(--header-bg)", borderRadius: "16px",
         padding: "40px", maxWidth: "400px", width: "90%",

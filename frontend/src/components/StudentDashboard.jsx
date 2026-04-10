@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import StudentPortal from "./StudentPortal";
 import FlashcardView from "./FlashcardView";
+import Icon from "./Icon";
 
 var RESOURCE_TYPES = ['study_guide', 'flashcards', 'slide_deck'];
 
@@ -22,11 +23,15 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
   var resourceIds = resources.map(function(r) { return r.id; });
   var allResources = resources.concat(dashboardResources.filter(function(dr) { return resourceIds.indexOf(dr.id) === -1; }));
 
-  // Apply stored student portal theme on mount
-  React.useEffect(function() {
+  // Theme toggle
+  var [lightMode, setLightMode] = useState(function() {
     var saved = localStorage.getItem("portal-theme");
-    if (saved) document.body.setAttribute("data-theme", saved);
-  }, []);
+    if (saved) {
+      document.body.setAttribute("data-theme", saved);
+      return saved === "light";
+    }
+    return false;
+  });
 
   useEffect(() => {
     loadDashboard();
@@ -122,13 +127,31 @@ export default function StudentDashboard({ studentInfo, classInfo, onLogout }) {
             {classInfo.name}{classInfo.subject ? " \u2022 " + classInfo.subject : ""}
           </p>
         </div>
-        <button onClick={handleLogout} style={{
-          padding: "8px 16px", borderRadius: "8px", background: "var(--danger-bg)",
-          border: "1px solid var(--danger-border)", color: "var(--danger-light)", cursor: "pointer",
-          fontSize: "0.85rem",
-        }}>
-          Log Out
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            onClick={function() {
+              var next = !lightMode;
+              setLightMode(next);
+              var theme = next ? "light" : "dark";
+              document.body.setAttribute("data-theme", theme);
+              localStorage.setItem("portal-theme", theme);
+            }}
+            style={{
+              padding: "8px", borderRadius: "8px", background: "var(--btn-secondary-bg)",
+              border: "none", cursor: "pointer", color: "var(--text-secondary)",
+            }}
+            title={lightMode ? "Switch to dark mode" : "Switch to light mode"}
+          >
+            <Icon name={lightMode ? "Moon" : "Sun"} size={18} />
+          </button>
+          <button onClick={handleLogout} style={{
+            padding: "8px 16px", borderRadius: "8px", background: "var(--danger-bg)",
+            border: "1px solid var(--danger-border)", color: "var(--danger-light)", cursor: "pointer",
+            fontSize: "0.85rem",
+          }}>
+            Log Out
+          </button>
+        </div>
       </div>
 
       <div style={{ maxWidth: "800px", margin: "0 auto", padding: "24px" }}>
