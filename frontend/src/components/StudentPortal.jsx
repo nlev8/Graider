@@ -49,6 +49,11 @@ export default function StudentPortal({
     }
     return false;
   });
+  var [markedForReview, setMarkedForReview] = useState([]);
+  var [lastSavedAt, setLastSavedAt] = useState(null);
+  var [draftLoaded, setDraftLoaded] = useState(false);
+  var [resumedFromDraft, setResumedFromDraft] = useState(false);
+  var [savingDraft, setSavingDraft] = useState(false);
 
   // Delivery accommodation preset IDs for conditional checks
   var DELIVERY_PRESET_IDS = ["extended_time_1_5x", "extended_time_2x", "extended_time_unlimited",
@@ -84,6 +89,33 @@ export default function StudentPortal({
       }
     }
   }, [isPreloaded]);
+
+  useEffect(function() {
+    if (!contentId || !studentToken || draftLoaded) return;
+    api.getDraft(contentId, studentToken).then(function(data) {
+      if (data && data.draft) {
+        setAnswers(data.draft.answers || {});
+        setMarkedForReview(data.draft.marked_for_review || []);
+        setResumedFromDraft(true);
+      }
+      setDraftLoaded(true);
+    }).catch(function() { setDraftLoaded(true); });
+  }, [contentId, studentToken]);
+
+  useEffect(function() {
+    if (!contentId || !studentToken || !draftLoaded) return;
+    if (Object.keys(answers).length === 0 && markedForReview.length === 0) return;
+    var timer = setTimeout(function() {
+      setSavingDraft(true);
+      api.saveDraft(contentId, answers, markedForReview, studentToken).then(function(data) {
+        if (data && data.success) {
+          setLastSavedAt(Date.now());
+        }
+      }).catch(function() { /* silent retry on next change */ })
+        .finally(function() { setSavingDraft(false); });
+    }, 15000);
+    return function() { clearTimeout(timer); };
+  }, [answers, markedForReview, contentId, studentToken, draftLoaded]);
 
   const loadAssessment = async (code) => {
     setLoading(true);
@@ -231,6 +263,22 @@ export default function StudentPortal({
 
   const setAnswer = (key, value) => {
     setAnswers((prev) => ({ ...prev, [key]: value }));
+  };
+
+  var saveDraftNow = async function() {
+    if (!contentId || !studentToken) return;
+    setSavingDraft(true);
+    try {
+      var data = await api.saveDraft(contentId, answers, markedForReview, studentToken);
+      if (data && data.success) {
+        setLastSavedAt(Date.now());
+        alert('Draft saved. You can close this tab and come back later.');
+      }
+    } catch (e) {
+      alert('Failed to save draft: ' + e.message);
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   // Styles — light/dark mode
@@ -454,6 +502,16 @@ export default function StudentPortal({
     return (
       <div style={containerStyle}>
         {themeToggle}
+        {resumedFromDraft && (
+          <div style={{
+            padding: "10px 16px", marginBottom: "0",
+            background: "var(--success-bg)", border: "1px solid var(--success-border)",
+            borderRadius: "0", fontSize: "0.85rem", color: "var(--text-primary)",
+            textAlign: "center",
+          }}>
+            Resumed from draft {String.fromCharCode(8212)} {Object.keys(answers).length} questions answered. Your progress auto-saves every 15 seconds.
+          </div>
+        )}
         <QuestionPlayer
           sections={assessment?.sections}
           contentType={assessment?.settings?.content_type || "assessment"}
@@ -470,6 +528,18 @@ export default function StudentPortal({
           studentAccommodation={studentAccommodation}
           lightMode={lightMode}
         />
+        {contentId && (
+          <div style={{ textAlign: "center", padding: "16px 20px 24px" }}>
+            <button
+              type="button"
+              onClick={saveDraftNow}
+              disabled={savingDraft}
+              style={{ padding: "12px 24px", borderRadius: "10px", background: "var(--btn-secondary-bg)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", fontSize: "1rem", cursor: "pointer" }}
+            >
+              {savingDraft ? 'Saving...' : 'Save for later'}
+            </button>
+          </div>
+        )}
       </div>
     );
   }
