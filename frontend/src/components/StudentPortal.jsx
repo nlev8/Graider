@@ -41,7 +41,14 @@ export default function StudentPortal({
   const [results, setResults] = useState(null);
   const [studentAccommodation, setStudentAccommodation] = useState(null);
   const [deliveryAccommodations, setDeliveryAccommodations] = useState([]);
-  const [lightMode, setLightMode] = useState(false);
+  const [lightMode, setLightMode] = useState(function() {
+    var saved = localStorage.getItem("portal-theme");
+    if (saved) {
+      document.body.setAttribute("data-theme", saved);
+      return saved === "light";
+    }
+    return false;
+  });
 
   // Delivery accommodation preset IDs for conditional checks
   var DELIVERY_PRESET_IDS = ["extended_time_1_5x", "extended_time_2x", "extended_time_unlimited",
@@ -227,31 +234,16 @@ export default function StudentPortal({
   };
 
   // Styles — light/dark mode
-  const containerStyle = lightMode ? {
+  const containerStyle = {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)",
-    color: "#1e293b",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  } : {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%)",
-    color: "white",
+    background: "linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%)",
+    color: "var(--text-primary)",
     fontFamily: "system-ui, -apple-system, sans-serif",
   };
 
-  const cardStyle = lightMode ? {
-    background: "white",
-    border: "1px solid #e2e8f0",
-    borderRadius: "16px",
-    padding: "30px",
-    maxWidth: "600px",
-    width: "100%",
-    margin: "0 auto",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  } : {
-    background: "rgba(255, 255, 255, 0.05)",
-    backdropFilter: "blur(10px)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
+  const cardStyle = {
+    background: "var(--modal-content-bg)",
+    border: "1px solid var(--glass-border)",
     borderRadius: "16px",
     padding: "30px",
     maxWidth: "600px",
@@ -259,13 +251,13 @@ export default function StudentPortal({
     margin: "0 auto",
   };
 
-  var subtextColor = lightMode ? "#64748b" : "rgba(255,255,255,0.7)";
-  var borderColor = lightMode ? "#e2e8f0" : "rgba(255,255,255,0.2)";
-  var errorBg = lightMode ? "rgba(239, 68, 68, 0.1)" : "rgba(239, 68, 68, 0.2)";
-  var errorBorder = lightMode ? "#fca5a5" : "#ef4444";
-  var errorText = lightMode ? "#dc2626" : "#fca5a5";
-  var inputBg = lightMode ? "white" : "rgba(0, 0, 0, 0.3)";
-  var inputColor = lightMode ? "#1e293b" : "white";
+  var subtextColor = "var(--text-secondary)";
+  var borderColor = "var(--glass-border)";
+  var errorBg = "var(--danger-bg)";
+  var errorBorder = "var(--danger-border)";
+  var errorText = "var(--danger-light)";
+  var inputBg = "var(--input-bg)";
+  var inputColor = "var(--text-primary)";
 
   const inputStyle = {
     width: "100%",
@@ -293,19 +285,25 @@ export default function StudentPortal({
     justifyContent: "center",
     gap: "10px",
     width: "100%",
-    background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+    background: "linear-gradient(135deg, var(--accent-secondary), var(--accent-primary))",
     color: "white",
   };
 
   // Theme toggle button
   var themeToggle = (
     <button
-      onClick={function() { setLightMode(!lightMode); }}
+      onClick={function() {
+        var next = !lightMode;
+        setLightMode(next);
+        var theme = next ? "light" : "dark";
+        document.body.setAttribute("data-theme", theme);
+        localStorage.setItem("portal-theme", theme);
+      }}
       style={{
         position: "fixed", top: "12px", right: "12px", zIndex: 200,
-        background: lightMode ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.1)",
+        background: "var(--btn-secondary-bg)",
         border: "none", borderRadius: "8px", padding: "8px",
-        cursor: "pointer", color: lightMode ? "#64748b" : "rgba(255,255,255,0.6)",
+        cursor: "pointer", color: "var(--text-secondary)",
       }}
       title={lightMode ? "Switch to dark mode" : "Switch to light mode"}
     >
@@ -346,7 +344,7 @@ export default function StudentPortal({
               </div>
 
               {error && (
-                <div style={{ background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "#fca5a5" }}>
+                <div style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "var(--danger-light)" }}>
                   <Icon name="AlertCircle" size={16} /> {error}
                 </div>
               )}
@@ -381,10 +379,10 @@ export default function StudentPortal({
               <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "15px", marginBottom: "10px" }}>
                 {assessment?.title}
               </h2>
-              <p style={{ color: "rgba(255,255,255,0.7)" }}>
+              <p style={{ color: "var(--text-secondary)" }}>
                 By {assessment?.teacher}
               </p>
-              <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "15px", fontSize: "0.9rem", color: "rgba(255,255,255,0.6)" }}>
+              <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "15px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
                 {assessment?.total_points ? <span>{assessment.total_points} points</span> : null}
                 {assessment?.total_points && assessment?.settings?.content_type !== 'assignment' && assessment?.time_estimate ? <span>{String.fromCharCode(8226)}</span> : null}
                 {assessment?.settings?.content_type !== 'assignment' && assessment?.time_estimate ? <span>{assessment.time_estimate}</span> : null}
@@ -393,19 +391,19 @@ export default function StudentPortal({
 
             {/* Restricted Assessment Notice */}
             {assessment?.settings?.is_makeup && (
-              <div style={{ background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.5)", borderRadius: "8px", padding: "12px 15px", marginBottom: "20px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#fbbf24" }}>
+              <div style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", borderRadius: "8px", padding: "12px 15px", marginBottom: "20px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--warning)" }}>
                   <Icon name="AlertCircle" size={18} />
                   <strong>Makeup Exam</strong>
                 </div>
-                <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)", marginTop: "5px" }}>
+                <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: "5px" }}>
                   This assessment is only available to specific students. Please enter your full name exactly as it appears on your roster.
                 </p>
               </div>
             )}
 
             {assessment?.instructions && (
-              <div style={{ background: "rgba(99, 102, 241, 0.1)", border: "1px solid rgba(99, 102, 241, 0.3)", borderRadius: "8px", padding: "15px", marginBottom: "25px" }}>
+              <div style={{ background: "var(--glass-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", padding: "15px", marginBottom: "25px" }}>
                 <strong>Instructions:</strong> {assessment.instructions}
               </div>
             )}
@@ -425,7 +423,7 @@ export default function StudentPortal({
             </div>
 
             {error && (
-              <div style={{ background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "#fca5a5" }}>
+              <div style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: "8px", padding: "12px", marginBottom: "20px", color: "var(--danger-light)" }}>
                 <Icon name="AlertCircle" size={16} /> {error}
               </div>
             )}
@@ -481,7 +479,7 @@ export default function StudentPortal({
     var isPendingReview = results && results.grading_status === "pending_review";
     var isPartial = results && results.grading_status === "partial";
     var percentage = results?.percentage || 0;
-    var gradeColor = percentage >= 90 ? "#22c55e" : percentage >= 70 ? "#f59e0b" : "#ef4444";
+    var gradeColor = percentage >= 90 ? "var(--success)" : percentage >= 70 ? "var(--warning)" : "var(--danger)";
 
     return (
       <div style={containerStyle}>
@@ -491,8 +489,8 @@ export default function StudentPortal({
           {results?.is_late && (
             <div style={{
               padding: "10px 16px", borderRadius: "10px", marginBottom: "20px",
-              background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)",
-              color: "#fca5a5", fontSize: "0.9rem", textAlign: "center",
+              background: "var(--danger-bg)", border: "1px solid var(--danger-border)",
+              color: "var(--danger-light)", fontSize: "0.9rem", textAlign: "center",
             }}>
               <Icon name="AlertCircle" size={16} style={{ marginRight: "6px", verticalAlign: "middle" }} />
               Submitted after due date
@@ -505,36 +503,36 @@ export default function StudentPortal({
             <h2 style={{ fontSize: "1.8rem", fontWeight: 700, marginTop: "15px", marginBottom: "10px" }}>
               {isPendingReview ? "Submitted!" : isPartial ? "Submitted!" : (assessment?.sections ? "Assignment Complete!" : "Assessment Complete!")}
             </h2>
-            <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "25px" }}>{studentName}</p>
+            <p style={{ color: "var(--text-secondary)", marginBottom: "25px" }}>{studentName}</p>
 
             {isPendingReview ? (
               <div>
                 <div style={{
                   padding: "16px 20px", borderRadius: "10px",
-                  background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
-                  color: "#a5b4fc", fontSize: "1rem",
+                  background: "var(--glass-bg)", border: "1px solid var(--input-border)",
+                  color: "var(--accent-light)", fontSize: "1rem",
                 }}>
                   <Icon name="Clock" size={20} style={{ marginRight: "8px", verticalAlign: "middle" }} />
                   {results.message || "Your teacher will review and share your results."}
                 </div>
-                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginTop: "15px" }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "15px" }}>
                   You will see your score once your teacher has reviewed your submission.
                 </p>
               </div>
             ) : isPartial ? (
               <div>
-                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#6366f1", marginBottom: "10px" }}>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--accent-primary)", marginBottom: "10px" }}>
                   {results.mc_correct}/{results.mc_total} multiple choice correct
                 </div>
                 <div style={{
                   padding: "12px 16px", borderRadius: "10px",
-                  background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)",
-                  color: "#f59e0b", fontSize: "0.95rem", marginTop: "15px",
+                  background: "var(--warning-bg)", border: "1px solid var(--warning-border)",
+                  color: "var(--warning)", fontSize: "0.95rem", marginTop: "15px",
                 }}>
                   <Icon name="Clock" size={16} style={{ marginRight: "8px", verticalAlign: "middle" }} />
                   {results.written_pending} written response{results.written_pending !== 1 ? "s" : ""} pending teacher review
                 </div>
-                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginTop: "12px" }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "12px" }}>
                   Your teacher will review your written responses and you'll see your full score soon.
                 </p>
               </div>
@@ -543,13 +541,13 @@ export default function StudentPortal({
                 <div style={{ fontSize: "4rem", fontWeight: 800, color: gradeColor, marginBottom: "10px" }}>
                   {percentage}%
                 </div>
-                <div style={{ fontSize: "1.2rem", color: "rgba(255,255,255,0.7)" }}>
+                <div style={{ fontSize: "1.2rem", color: "var(--text-secondary)" }}>
                   {results?.score}/{results?.total_points} points
                 </div>
                 {results?.feedback_summary && (
                   <div style={{
                     marginTop: "25px", padding: "15px",
-                    background: "rgba(255,255,255,0.05)", borderRadius: "10px", fontStyle: "italic",
+                    background: "var(--glass-bg)", borderRadius: "10px", fontStyle: "italic",
                   }}>
                     {results.feedback_summary}
                   </div>
@@ -570,7 +568,7 @@ export default function StudentPortal({
                   style={{
                     ...cardStyle,
                     marginBottom: "15px",
-                    borderLeft: `4px solid ${q.is_correct ? "#22c55e" : "#ef4444"}`,
+                    borderLeft: "4px solid " + (q.is_correct ? "var(--success)" : "var(--danger)"),
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
@@ -583,21 +581,21 @@ export default function StudentPortal({
                         borderRadius: "12px",
                         fontSize: "0.85rem",
                         fontWeight: 600,
-                        background: q.is_correct ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)",
-                        color: q.is_correct ? "#22c55e" : "#ef4444",
+                        background: q.is_correct ? "var(--success-bg)" : "var(--danger-bg)",
+                        color: q.is_correct ? "var(--success)" : "var(--danger)",
                       }}
                     >
                       {q.points_earned}/{q.points_possible} pts
                     </span>
                   </div>
 
-                  <div style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)", marginBottom: "8px" }}>
+                  <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
                     <strong>Your answer:</strong>{" "}
                     {q.student_answer_display || q.student_answer || "(no answer)"}
                   </div>
 
                   {!q.is_correct && q.correct_answer && (
-                    <div style={{ fontSize: "0.9rem", color: "#22c55e", marginBottom: "8px" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--success)", marginBottom: "8px" }}>
                       <strong>Correct answer:</strong> {q.correct_answer}
                     </div>
                   )}
@@ -607,7 +605,7 @@ export default function StudentPortal({
                       style={{
                         marginTop: "10px",
                         padding: "10px",
-                        background: "rgba(255,255,255,0.05)",
+                        background: "var(--glass-bg)",
                         borderRadius: "6px",
                         fontSize: "0.9rem",
                       }}
@@ -644,13 +642,6 @@ export default function StudentPortal({
 
     var cssVarStyle = {
       padding: "40px 20px", maxWidth: isWide ? "900px" : "600px", margin: "0 auto",
-      "--bg-secondary": "rgba(255,255,255,0.05)",
-      "--bg-primary": "rgba(0,0,0,0.3)",
-      "--border": "rgba(255,255,255,0.15)",
-      "--text-primary": "white",
-      "--text-secondary": "rgba(255,255,255,0.6)",
-      "--primary": "#8b5cf6",
-      "--success": "#22c55e",
     };
 
     return (
@@ -660,7 +651,7 @@ export default function StudentPortal({
             <h1 style={{ fontSize: "1.8rem", fontWeight: 700, marginBottom: "8px" }}>
               {assessment?.title || "Study Material"}
             </h1>
-            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.95rem" }}>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
               By {assessment?.teacher || "Teacher"}
             </p>
           </div>
@@ -675,18 +666,18 @@ export default function StudentPortal({
             <div>
               {(Array.isArray(materialData) ? materialData : materialData.questions || materialData.cards || []).map(function(item, idx) {
                 return (
-                  <div key={idx} style={{ background: "rgba(255,255,255,0.05)", padding: "16px 18px", borderRadius: "10px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  <div key={idx} style={{ background: "var(--glass-bg)", padding: "16px 18px", borderRadius: "10px", marginBottom: "10px", border: "1px solid var(--glass-border)" }}>
                     <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "8px" }}>{"Q" + (idx + 1) + ". " + (item.question || item.text || "")}</div>
                     {item.options && (
                       <div style={{ marginBottom: "8px" }}>
                         {item.options.map(function(opt, oi) {
                           var isCorrect = opt === item.answer || opt === item.correct_answer || oi === item.correct_index;
-                          return (<div key={oi} style={{ padding: "4px 0", fontSize: "0.9rem", color: isCorrect ? "#22c55e" : "rgba(255,255,255,0.7)" }}>{String.fromCharCode(65 + oi) + ") " + (typeof opt === "string" ? opt : opt.text || JSON.stringify(opt))}{isCorrect ? " " + String.fromCharCode(10003) : ""}</div>);
+                          return (<div key={oi} style={{ padding: "4px 0", fontSize: "0.9rem", color: isCorrect ? "var(--success)" : "var(--text-secondary)" }}>{String.fromCharCode(65 + oi) + ") " + (typeof opt === "string" ? opt : opt.text || JSON.stringify(opt))}{isCorrect ? " " + String.fromCharCode(10003) : ""}</div>);
                         })}
                       </div>
                     )}
                     {(item.answer || item.correct_answer) && (
-                      <div style={{ padding: "8px 12px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.1)", fontSize: "0.85rem", color: "#22c55e" }}><strong>Answer:</strong> {item.answer || item.correct_answer}</div>
+                      <div style={{ padding: "8px 12px", borderRadius: "8px", background: "var(--success-bg)", fontSize: "0.85rem", color: "var(--success)" }}><strong>Answer:</strong> {item.answer || item.correct_answer}</div>
                     )}
                   </div>
                 );
@@ -696,21 +687,21 @@ export default function StudentPortal({
 
           {/* Mind Map */}
           {ct === "mind_map" && materialData && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", padding: "16px", minHeight: "400px" }}>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", border: "1px solid var(--glass-border)", padding: "16px", minHeight: "400px" }}>
               <MindMapView data={materialData} />
             </div>
           )}
 
           {/* Study Guide */}
           {ct === "study_guide" && materialContent && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", padding: "24px", fontSize: "0.95rem", lineHeight: 1.7, whiteSpace: "pre-wrap", color: "rgba(255,255,255,0.85)" }}>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", border: "1px solid var(--glass-border)", padding: "24px", fontSize: "0.95rem", lineHeight: 1.7, whiteSpace: "pre-wrap", color: "var(--text-primary)" }}>
               {materialContent}
             </div>
           )}
 
           {/* Audio Overview */}
           {ct === "audio_overview" && mediaUrl && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "30px", textAlign: "center" }}>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", padding: "30px", textAlign: "center" }}>
               <div style={{ fontSize: "3rem", marginBottom: "15px" }}>🎧</div>
               <audio controls style={{ width: "100%" }} src={mediaUrl}>Your browser does not support the audio element.</audio>
             </div>
@@ -718,31 +709,31 @@ export default function StudentPortal({
 
           {/* Video Overview */}
           {ct === "video_overview" && mediaUrl && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
               <video controls style={{ width: "100%", maxHeight: "500px", borderRadius: "8px" }} src={mediaUrl}>Your browser does not support the video element.</video>
             </div>
           )}
 
           {/* Infographic */}
           {ct === "infographic" && mediaUrl && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "12px", textAlign: "center", maxHeight: "600px", overflow: "auto" }}>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", padding: "12px", textAlign: "center", maxHeight: "600px", overflow: "auto" }}>
               <img src={mediaUrl} alt="Infographic" style={{ maxWidth: "100%", borderRadius: "8px" }} />
             </div>
           )}
 
           {/* Data Table */}
           {ct === "data_table" && mediaUrl && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "20px", textAlign: "center" }}>
-              <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>Data table available for download:</p>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", padding: "20px", textAlign: "center" }}>
+              <p style={{ color: "var(--text-secondary)", marginBottom: "15px" }}>Data table available for download:</p>
               <a href={mediaUrl} download style={{ ...buttonStyle, maxWidth: "250px", margin: "0 auto", textDecoration: "none" }}>Download CSV</a>
             </div>
           )}
 
           {/* Slide Deck */}
           {ct === "slide_deck" && mediaUrl && (
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "20px", textAlign: "center" }}>
+            <div style={{ background: "var(--glass-bg)", borderRadius: "12px", padding: "20px", textAlign: "center" }}>
               <div style={{ fontSize: "3rem", marginBottom: "15px" }}>📊</div>
-              <p style={{ color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>Slide deck available for download:</p>
+              <p style={{ color: "var(--text-secondary)", marginBottom: "15px" }}>Slide deck available for download:</p>
               <a href={mediaUrl} download style={{ ...buttonStyle, maxWidth: "250px", margin: "0 auto", textDecoration: "none" }}>Download Slides</a>
             </div>
           )}
