@@ -1756,3 +1756,8 @@ export async function getInProgressDrafts(contentId) {
 export async function getContentSubmissions(contentId) {
   return fetchApi('/api/teacher/content/' + contentId + '/submissions')
 }
+
+export async function getClassProgressRank(classId, attemptMode) {
+  var mode = attemptMode || 'latest';
+  return fetchApi('/api/teacher/class/' + classId + '/progress-rank?attempt_mode=' + mode);
+}
