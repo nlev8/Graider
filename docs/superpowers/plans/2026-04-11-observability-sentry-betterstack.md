@@ -1,12 +1,18 @@
 # Observability v1 Implementation Plan — Sentry + BetterStack
 
+> ⚠️ **HISTORICAL PLAN — NOT AS-SHIPPED.** This plan describes the original paid-tier rollout (Sentry Cloud + BetterStack Team $10/mo + SMS/voice escalation + Vercel DNS). During execution, the user chose the BetterStack free plan instead, which does not include SMS or voice. The shipped implementation uses BetterStack Error Tracking (Sentry SDK-compatible, free tier, 100k events/mo, EU data region) + iOS Critical Alerts via the BetterStack mobile app as the pager substitute. DNS for `status.graider.live` was added in **Cloudflare** (the authoritative DNS for `graider.live`), not Vercel as documented in Task 11.
+>
+> **Tasks 1-10 executed as described here and are architecturally correct.** Task 11 (manual BetterStack setup) diverged significantly to the free-tier flow. Task 12 is running now.
+>
+> **For the actual as-shipped state, read `docs/observability.md` (runbook).** This plan is retained as a historical record of the original paid-tier design and the step-by-step code implementation that still reflects the shipped Python backend.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give Graider its first production observability layer — Sentry error tracking with PII-scrubbed capture, plus BetterStack uptime monitoring with a public status page — so operational failures become visible before districts notice.
+**Goal:** Give Graider its first production observability layer — error tracking with PII-scrubbed capture, plus BetterStack uptime monitoring with a public status page — so operational failures become visible before districts notice.
 
-**Architecture:** Two independent sub-projects shipped in one plan/PR but deployable and reversible separately. Sub-project A (Sentry) is all Python code in a new `backend/observability/` package, wired into the existing Flask app via `init_sentry()` at app startup and a `@critical_path` decorator on 5 high-risk entrypoints. Sub-project B (BetterStack) is pure runbook — web UI configuration plus one Vercel DNS record. Both sub-projects use the same Slack webhook + on-call policy for alert routing.
+**Architecture (as-shipped):** Two independent sub-projects shipped in one plan/PR but deployable and reversible separately. Sub-project A (error tracking) is all Python code in a new `backend/observability/` package, wired into the existing Flask app via `init_sentry()` at app startup and a `@critical_path` decorator on 5 high-risk entrypoints. Sub-project B (BetterStack) is pure runbook — web UI configuration plus one Cloudflare DNS record. Both sub-projects route alerts through the same Slack integration + BetterStack mobile app for iOS Critical Alerts.
 
-**Tech Stack:** Python 3.14, `sentry-sdk[flask]>=2.0`, existing Flask backend, BetterStack (Team tier, $10/mo), Slack webhook, Railway auto-deploy, Vercel DNS
+**Tech Stack:** Python 3.14, `sentry-sdk[flask]>=2.0`, existing Flask backend, BetterStack (free tier, $0/mo), Slack webhook, Railway auto-deploy, Cloudflare DNS
 
 **Feature branch:** `feat/observability-sentry` (already checked out)
 

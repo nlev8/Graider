@@ -1,6 +1,10 @@
 # Observability v1: Sentry error tracking + BetterStack uptime — Design Spec
 
-**Status:** Draft — awaiting user approval before writing implementation plan.
+> ⚠️ **HISTORICAL DESIGN — NOT AS-SHIPPED.** This spec describes the original paid-tier design (Sentry Cloud + BetterStack Team $10/mo + SMS/voice escalation). During Task 11 (manual BetterStack setup), the user chose the BetterStack free plan instead, which does not include SMS or voice. The shipped implementation uses BetterStack Error Tracking (Sentry SDK-compatible, free tier, 100k events/mo, EU data region) + iOS Critical Alerts via the BetterStack mobile app as the pager substitute. DNS authority for `graider.live` is Cloudflare, not Vercel as documented below.
+>
+> **For the actual as-shipped state, read `docs/observability.md` (runbook).** This spec is retained as a design-decision record and to document the trade-offs the original paid-tier approach would have provided.
+
+**Status:** Historical — shipped as a free-tier variant described in `docs/observability.md`.
 **Author:** Alex + Claude (brainstorming 2026-04-11)
 **Reviewers:** Codex (approved Sections 1 & 2 with tighten-ups folded in), Gemini (approved Sections 1 & 2).
 **Tier 1 item:** District production reliability #3 (monitoring/alerting).
