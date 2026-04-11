@@ -11,6 +11,8 @@ import sys
 import threading
 from datetime import datetime, timezone
 
+from backend.observability import critical_path
+
 logger = logging.getLogger(__name__)
 
 # Track active grading threads for graceful shutdown
@@ -204,6 +206,7 @@ def build_result_record(student_name, student_id, assignment_title, score,
     }
 
 
+@critical_path
 def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                               teacher_config, teacher_id,
                               supabase_table="student_submissions",
