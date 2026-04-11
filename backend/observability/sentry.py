@@ -177,28 +177,59 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
 def critical_path(fn):
     """Decorator — tag escaping exceptions with severity=critical.
 
-    Wraps the decorated callable in a Sentry scope that sets
-    `severity=critical`. Any unhandled exception that escapes the
-    function carries this tag, which the Sentry issue-alert rules
-    use to trigger SMS/voice escalation via BetterStack.
+    Wraps the decorated callable so that any unhandled exception
+    escaping it is tagged `severity=critical` on the current Sentry
+    isolation scope. BetterStack's alert routing (Rule 3) uses this
+    tag to trigger iOS Critical Alert escalation on sustained
+    critical-path failures.
 
     Apply only to outermost entrypoints — never to inner helpers
     called from within an already-decorated function. The 5 target
     functions are documented in docs/observability.md § "Critical-path
     tag convention".
 
-    Safe when Sentry is uninitialized: sentry_sdk.push_scope() is a
-    no-op on the default dummy hub, so local dev / CI / tests see
-    this decorator as transparent.
+    Safe when Sentry is uninitialized: sentry_sdk.set_tag() is a
+    no-op on the default uninitialized hub, so local dev / CI /
+    tests see this decorator as transparent.
+
+    Why not `with sentry_sdk.push_scope()`:
+        In sentry-sdk 2.x, `push_scope()` creates a forked scope
+        that is popped when the `with` block exits — INCLUDING when
+        it exits via exception propagation. When the wrapped fn
+        raises, the scope is popped BEFORE Flask's integration
+        captures the exception, so any tag set on the forked scope
+        is gone by the time the event is built. (We verified this
+        in production: 2026-04-11, both debug events arrived at
+        BetterStack with the scrubber-set user.id but no
+        severity=critical tag on the critical event.) The SDK's
+        deprecation warning was the signal that this pattern no
+        longer works.
+
+    The correct pattern in SDK 2.x is to call `sentry_sdk.set_tag`
+    on the current isolation scope AFTER catching the exception
+    but BEFORE re-raising it. Flask's FlaskIntegration captures
+    the exception in its own error hook AFTER this line runs, and
+    reads the current scope state at capture time — which now
+    includes our tag.
     """
     import functools
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        import sentry_sdk
-        with sentry_sdk.push_scope() as scope:
-            scope.set_tag("severity", "critical")
+        try:
             return fn(*args, **kwargs)
+        except Exception:
+            # Attach the tag to the current isolation scope just
+            # before the exception propagates to Flask's error
+            # handler. Wrapped in an inner try/except so a broken
+            # observability layer can never mask the original
+            # production error.
+            try:
+                import sentry_sdk
+                sentry_sdk.set_tag("severity", "critical")
+            except Exception:
+                pass
+            raise
 
     return wrapper
 
