@@ -170,8 +170,32 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
 
 
 def critical_path(fn):
-    """Stub — populated by Task 4."""
-    return fn
+    """Decorator — tag escaping exceptions with severity=critical.
+
+    Wraps the decorated callable in a Sentry scope that sets
+    `severity=critical`. Any unhandled exception that escapes the
+    function carries this tag, which the Sentry issue-alert rules
+    use to trigger SMS/voice escalation via BetterStack.
+
+    Apply only to outermost entrypoints — never to inner helpers
+    called from within an already-decorated function. The 5 target
+    functions are documented in docs/observability.md § "Critical-path
+    tag convention".
+
+    Safe when Sentry is uninitialized: sentry_sdk.push_scope() is a
+    no-op on the default dummy hub, so local dev / CI / tests see
+    this decorator as transparent.
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        import sentry_sdk
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("severity", "critical")
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def init_sentry() -> None:
