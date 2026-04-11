@@ -10,9 +10,14 @@ See docs/superpowers/specs/2026-04-11-observability-sentry-betterstack-design.md
 
 import hashlib
 import logging
+import os
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Module-level guard to prevent sentry_sdk.init() from running twice when
+# backend.app is imported multiple times (common in test teardown/setup).
+_initialized = False
 
 # PII field names scrubbed from stack frame locals.
 # Keep this list in sync with docs/observability.md § "Known noise sources".
@@ -219,18 +224,30 @@ def init_sentry() -> None:
       - send_default_pii=False     — belt + suspenders with our before_send
                                      scrubber.
       - before_send=before_send    — the PII scrubber from Task 3.
+      - transaction_style="endpoint" — Flask route function name, not URL.
+                                     URL grouping would explode cardinality
+                                     on ID-bearing routes like
+                                     /api/student/submission/<id>/draft.
       - ignore_errors=[4xx]        — backstop for the rare case where
                                      code explicitly raises a Werkzeug
-                                     HTTP exception inside a try/except
-                                     (Flask's middleware normally converts
-                                     these to responses before they
-                                     reach Sentry).
+                                     HTTP exception inside a try/except.
+
+    Idempotent: calling this function twice is safe. The second call
+    short-circuits via the module-level _initialized flag.
+
+    Failure-resilient: if sentry_sdk.init() raises (e.g., malformed DSN
+    from a Railway env-var typo), the exception is caught and logged as
+    a warning. The app continues booting with Sentry disabled — a solo
+    founder can still reach the backend to fix the typo.
     """
-    import os
+    global _initialized
+    if _initialized:
+        return
 
     dsn = os.getenv("SENTRY_DSN")
     if not dsn:
         logger.info("SENTRY_DSN not set; Sentry disabled")
+        _initialized = True
         return
 
     try:
@@ -239,24 +256,35 @@ def init_sentry() -> None:
         import werkzeug.exceptions as wex
     except ImportError as exc:
         logger.warning("sentry-sdk unavailable; Sentry disabled: %s", exc)
+        _initialized = True
         return
 
-    release = os.getenv("RAILWAY_GIT_COMMIT_SHA", "unknown")[:7]
+    sha = os.getenv("RAILWAY_GIT_COMMIT_SHA")
+    release = sha[:7] if sha else "unknown"
 
-    sentry_sdk.init(
-        dsn=dsn,
-        environment="production",
-        release=release,
-        traces_sample_rate=0.0,
-        send_default_pii=False,
-        integrations=[FlaskIntegration(transaction_style="url")],
-        before_send=before_send,
-        ignore_errors=[
-            wex.BadRequest,
-            wex.Unauthorized,
-            wex.Forbidden,
-            wex.NotFound,
-            wex.MethodNotAllowed,
-        ],
-    )
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment="production",
+            release=release,
+            traces_sample_rate=0.0,
+            send_default_pii=False,
+            integrations=[FlaskIntegration(transaction_style="endpoint")],
+            before_send=before_send,
+            ignore_errors=[
+                wex.BadRequest,
+                wex.Unauthorized,
+                wex.Forbidden,
+                wex.NotFound,
+                wex.MethodNotAllowed,
+            ],
+        )
+    except Exception as exc:
+        # Malformed DSN, network issues during init, etc. Log and continue
+        # with Sentry disabled rather than crashing the app at startup.
+        logger.warning("sentry_sdk.init() failed; Sentry disabled: %s", exc)
+        _initialized = True
+        return
+
+    _initialized = True
     logger.info("Sentry initialized (release=%s)", release)
