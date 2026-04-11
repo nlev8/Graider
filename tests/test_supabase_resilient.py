@@ -80,6 +80,12 @@ class TestPreflightRetryFilter:
         err = OSError("[Errno -2] Name or service not known")
         assert _is_preflight_error(err) is True
 
+    def test_protocol_error_is_not_preflight(self):
+        """RemoteProtocolError means the stream was mid-flight — not safe for insert retry."""
+        from backend.supabase_resilient import _is_preflight_error
+        import httpcore
+        assert _is_preflight_error(httpcore.RemoteProtocolError("mid-stream reset")) is False
+
 
 class TestResilientExecute:
     """Tests for the execute() wrapper's retry behavior."""
@@ -174,6 +180,27 @@ class TestResilientExecute:
         with pytest.raises(ValueError):
             _resilient_execute(q)
         assert q.execute.call_count == 1
+
+    def test_upsert_retries_protocol_error(self):
+        """httpcore.RemoteProtocolError (HTTP/2 stream reset) should be retried on upsert."""
+        from backend.supabase_resilient import _resilient_execute
+        import httpcore
+
+        call_count = {"n": 0}
+        q = MagicMock()
+        q.request.http_method = "POST"
+        q.request.headers = {"Prefer": "return=representation,resolution=merge-duplicates"}
+
+        def fake_execute():
+            call_count["n"] += 1
+            if call_count["n"] < 3:
+                raise httpcore.RemoteProtocolError("stream reset")
+            return MagicMock(data=[{"id": "xxx"}])
+
+        q.execute = fake_execute
+        with patch("time.sleep"):
+            result = _resilient_execute(q)
+        assert call_count["n"] == 3
 
 
 class TestProxyBehavior:

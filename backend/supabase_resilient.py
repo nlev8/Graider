@@ -52,9 +52,7 @@ def _is_supabase_retryable(error: BaseException) -> bool:
     ``httpcore`` exceptions do not subclass ``OSError``/``ConnectionError``,
     so the core retry helper does not catch them on its own.
     """
-    if isinstance(error, httpcore.NetworkError):
-        return True
-    if isinstance(error, httpcore.TimeoutException):
+    if isinstance(error, (httpcore.NetworkError, httpcore.TimeoutException, httpcore.ProtocolError)):
         return True
     return is_retryable_error(error)
 
