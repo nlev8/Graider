@@ -3389,15 +3389,31 @@ def get_user_manual():
 def healthz():
     """General health check for Railway load balancer."""
     status = {"app": "ok"}
+    # Supabase — raw httpx GET with a short timeout.
+    # Deliberately bypasses ResilientClient: a healthcheck must fail fast,
+    # not retry for 30s while the pod reports healthy. If this check fails
+    # the pod should be marked degraded immediately so the orchestrator can
+    # route around it.
     try:
-        from supabase_client import get_supabase
-        sb = get_supabase()
-        if sb:
-            sb.table('published_assessments').select('id').limit(1).execute()
-            status["supabase"] = "ok"
-        else:
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
+        if not supabase_url or not supabase_key:
             status["supabase"] = "not configured"
-    except Exception as e:
+        else:
+            import httpx
+            resp = httpx.get(
+                f"{supabase_url.rstrip('/')}/rest/v1/published_assessments?select=id&limit=1",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                },
+                timeout=3.0,
+            )
+            if resp.status_code == 200:
+                status["supabase"] = "ok"
+            else:
+                status["supabase"] = f"degraded (status {resp.status_code})"
+    except Exception:
         status["supabase"] = "error"
 
     # Check Redis if configured

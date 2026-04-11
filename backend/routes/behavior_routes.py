@@ -24,19 +24,14 @@ behavior_bp = Blueprint('behavior', __name__)
 
 PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
 
-_supabase = None
-
-
 def _get_supabase():
-    global _supabase
-    if _supabase is None:
-        from supabase import create_client
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_KEY")
-        if not url or not key:
-            raise Exception("Supabase credentials not configured")
-        _supabase = create_client(url, key)
-    return _supabase
+    """Return the canonical resilient Supabase client.
+
+    Delegates to backend.supabase_client so all behavior calls route
+    through ResilientClient and get automatic retry on transient failures.
+    """
+    from backend.supabase_client import get_supabase_or_raise
+    return get_supabase_or_raise()
 
 
 def _get_teacher_id():
