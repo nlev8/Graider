@@ -19,6 +19,7 @@ _logger = logging.getLogger(__name__)
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
+from backend.observability import critical_path
 
 
 def generate_join_code():
@@ -200,6 +201,7 @@ def _aggregate_mastery_for_student(selected_submissions_by_content, content_titl
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
 @require_teacher
 @handle_route_errors
+@critical_path
 def publish_assessment():
     """
     Publish an assessment for students to take.
@@ -694,6 +696,7 @@ def get_assessment_for_student(code):
 
 @student_portal_bp.route('/api/student/submit/<code>', methods=['POST'])
 @handle_route_errors
+@critical_path
 def submit_assessment(code):
     """
     Submit student answers for grading.

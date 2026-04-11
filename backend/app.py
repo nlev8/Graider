@@ -79,6 +79,11 @@ except ImportError:
         storage_save = None
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+
+# Initialize Sentry error tracking. No-op if SENTRY_DSN is unset (local dev, CI).
+from backend.observability import init_sentry
+init_sentry()
+
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 CORS(app, resources={r"/api/*": {"origins": [
     "https://app.graider.live",
@@ -3388,6 +3393,13 @@ def get_user_manual():
 @app.route('/healthz')
 def healthz():
     """General health check for Railway load balancer."""
+    # Alert-drill short-circuit — exercises the full BetterStack alert
+    # pipeline without touching Supabase, so student/teacher API traffic
+    # is unaffected during drills. See docs/observability.md § "Quarterly
+    # drill procedure" for the full runbook.
+    if os.getenv('FORCE_HEALTHZ_FAIL') == '1':
+        return jsonify({"app": "ok", "supabase": "drill_forced_failure"}), 503
+
     status = {"app": "ok"}
     # Supabase — raw httpx GET with a short timeout.
     # Deliberately bypasses ResilientClient: a healthcheck must fail fast,
@@ -3430,6 +3442,36 @@ def healthz():
         status["redis"] = "error"
 
     return jsonify(status)
+
+
+# ══════════════════════════════════════════════════════════════
+# SENTRY DEBUG ROUTE (guarded by SENTRY_TEST_ROUTE_ENABLED)
+# ══════════════════════════════════════════════════════════════
+# Used ONLY during post-deploy production verification of Sentry.
+# The route is only registered when SENTRY_TEST_ROUTE_ENABLED=1 is set
+# in the env at app startup. Unset (the default), it returns 404.
+#
+# IMPORTANT: Do NOT use FLASK_DEBUG or DEBUG for this gate. Those env
+# vars enable the Werkzeug interactive debugger, which allows anyone
+# who hits an error page to execute arbitrary Python on the server —
+# a severe production security hole. Use SENTRY_TEST_ROUTE_ENABLED,
+# which only controls this single route.
+#
+# Post-rollout cleanup (see docs/observability.md): delete this block
+# entirely in a follow-up PR within 7 days of sub-project A merging.
+if os.getenv("SENTRY_TEST_ROUTE_ENABLED") == "1":
+    from backend.observability import critical_path as _critical_path_for_debug
+
+    @app.route('/_debug/sentry-boom')
+    def _debug_sentry_boom():
+        severity = request.args.get("severity", "normal")
+        if severity == "critical":
+            @_critical_path_for_debug
+            def _raise():
+                raise RuntimeError("sentry critical smoke test")
+            _raise()
+        else:
+            raise RuntimeError("sentry normal smoke test")
 
 
 # ══════════════════════════════════════════════════════════════

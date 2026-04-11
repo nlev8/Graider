@@ -23,6 +23,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
 from backend.extensions import limiter
+from backend.observability import critical_path
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -734,6 +735,7 @@ def get_student_content(content_id):
 
 @student_account_bp.route('/api/student/submit/<content_id>', methods=['POST'])
 @handle_route_errors
+@critical_path
 def submit_student_work(content_id):
     """Submit answers for an assessment or assignment."""
     session = _validate_student_session()
@@ -1221,6 +1223,7 @@ def student_resource_content(content_id):
 
 @student_account_bp.route('/api/student/submission/<content_id>/draft', methods=['POST'])
 @handle_route_errors
+@critical_path
 def save_submission_draft(content_id):
     """Save or update a draft submission for the authenticated student."""
     session_info = _validate_student_session()
