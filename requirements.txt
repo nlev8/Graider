@@ -67,4 +67,5 @@ python-pptx>=1.0.0
 # Production Server
 gunicorn>=21.0.0
 flask-wtf>=1.2.0
+sentry-sdk[flask]>=2.0
 pytest-cov>=4.0
