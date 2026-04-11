@@ -79,6 +79,11 @@ except ImportError:
         storage_save = None
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+
+# Initialize Sentry error tracking. No-op if SENTRY_DSN is unset (local dev, CI).
+from backend.observability import init_sentry
+init_sentry()
+
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 CORS(app, resources={r"/api/*": {"origins": [
     "https://app.graider.live",

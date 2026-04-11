@@ -199,5 +199,64 @@ def critical_path(fn):
 
 
 def init_sentry() -> None:
-    """Stub — populated by Task 5."""
-    pass
+    """Initialize Sentry if SENTRY_DSN is set; hard no-op otherwise.
+
+    Reads configuration from environment variables:
+      - SENTRY_DSN                 — required to enable. If unset, this
+                                     function returns immediately without
+                                     initializing any client. Local dev,
+                                     CI, and tests stay silent.
+      - RAILWAY_GIT_COMMIT_SHA     — Railway build-time env var. Used as
+                                     the Sentry release tag (short form).
+
+    Configuration (hardcoded — intentional, not env-driven):
+      - environment="production"   — if/when staging is added, it gets
+                                     its own separate DSN, not an env
+                                     override here.
+      - traces_sample_rate=0.0     — APM off. Separate Sentry billing
+                                     axis, can be enabled later with no
+                                     code change needed.
+      - send_default_pii=False     — belt + suspenders with our before_send
+                                     scrubber.
+      - before_send=before_send    — the PII scrubber from Task 3.
+      - ignore_errors=[4xx]        — backstop for the rare case where
+                                     code explicitly raises a Werkzeug
+                                     HTTP exception inside a try/except
+                                     (Flask's middleware normally converts
+                                     these to responses before they
+                                     reach Sentry).
+    """
+    import os
+
+    dsn = os.getenv("SENTRY_DSN")
+    if not dsn:
+        logger.info("SENTRY_DSN not set; Sentry disabled")
+        return
+
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        import werkzeug.exceptions as wex
+    except ImportError as exc:
+        logger.warning("sentry-sdk unavailable; Sentry disabled: %s", exc)
+        return
+
+    release = os.getenv("RAILWAY_GIT_COMMIT_SHA", "unknown")[:7]
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment="production",
+        release=release,
+        traces_sample_rate=0.0,
+        send_default_pii=False,
+        integrations=[FlaskIntegration(transaction_style="url")],
+        before_send=before_send,
+        ignore_errors=[
+            wex.BadRequest,
+            wex.Unauthorized,
+            wex.Forbidden,
+            wex.NotFound,
+            wex.MethodNotAllowed,
+        ],
+    )
+    logger.info("Sentry initialized (release=%s)", release)
