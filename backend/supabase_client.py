@@ -6,12 +6,25 @@ Provides three variants:
   - get_supabase()          → returns resilient client or None (lenient, for optional features)
   - get_supabase_or_raise() → returns resilient client or raises Exception (strict, for required features)
   - get_raw_supabase()      → returns the unwrapped raw client (opt-out for streaming / custom retry / healthchecks)
+
+Default for new code: get_supabase() / get_supabase_or_raise(). Only reach for
+get_raw_supabase() when you specifically need to bypass the retry wrapper.
 """
 import os
+import threading
+
 from supabase import create_client, Client
 
 _supabase_raw: Client = None
 _supabase_resilient = None
+
+# Guards cold-start singleton initialization across Flask request threads and
+# background grading threads. The GIL makes attribute reads atomic, but the
+# check-then-create pattern below is not — without the lock, two concurrent
+# first calls can each construct a client and silently discard one.
+# RLock (not Lock) because get_supabase() acquires the lock and then calls
+# get_raw_supabase(), which acquires the same lock — a plain Lock would deadlock.
+_init_lock = threading.RLock()
 
 
 def get_raw_supabase() -> Client:
@@ -22,7 +35,12 @@ def get_raw_supabase() -> Client:
     Most callers should use get_supabase() or get_supabase_or_raise() instead.
     """
     global _supabase_raw
-    if _supabase_raw is None:
+    if _supabase_raw is not None:
+        return _supabase_raw
+    with _init_lock:
+        # Double-check: another thread may have initialized while we waited.
+        if _supabase_raw is not None:
+            return _supabase_raw
         url = os.getenv('SUPABASE_URL')
         key = os.getenv('SUPABASE_SERVICE_KEY')
         if url and key:
@@ -38,7 +56,11 @@ def get_supabase():
     if not configured.
     """
     global _supabase_resilient
-    if _supabase_resilient is None:
+    if _supabase_resilient is not None:
+        return _supabase_resilient
+    with _init_lock:
+        if _supabase_resilient is not None:
+            return _supabase_resilient
         raw = get_raw_supabase()
         if raw is not None:
             from backend.supabase_resilient import ResilientClient
@@ -47,8 +69,27 @@ def get_supabase():
 
 
 def get_supabase_or_raise():
-    """Lazy-init resilient Supabase client. Raises if not configured."""
+    """Lazy-init resilient Supabase client. Raises if not configured.
+
+    Names the specific missing env var so misconfigurations are easy to diagnose.
+    """
     client = get_supabase()
-    if client is None:
-        raise Exception("Supabase credentials not configured. Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env")
-    return client
+    if client is not None:
+        return client
+
+    # Identify which var is missing so the error message is actionable.
+    missing = []
+    if not os.getenv('SUPABASE_URL'):
+        missing.append('SUPABASE_URL')
+    if not os.getenv('SUPABASE_SERVICE_KEY'):
+        missing.append('SUPABASE_SERVICE_KEY')
+    if missing:
+        raise Exception(
+            f"Supabase credentials not configured. Missing: {', '.join(missing)}. "
+            "Check your .env file."
+        )
+    # Both env vars are set but client still None — something else went wrong.
+    raise Exception(
+        "Supabase client initialization failed despite SUPABASE_URL and "
+        "SUPABASE_SERVICE_KEY being set. Check logs for create_client() errors."
+    )
