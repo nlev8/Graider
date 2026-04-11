@@ -44,6 +44,7 @@ def _make_chain(execute_data=None):
     chain = MagicMock()
     chain.select.return_value = chain
     chain.insert.return_value = chain
+    chain.upsert.return_value = chain
     chain.update.return_value = chain
     chain.delete.return_value = chain
     chain.eq.return_value = chain
@@ -79,13 +80,14 @@ class TestPublishAssessment:
 
         def table_side_effect(name):
             chain = _make_chain()
-            # insert call for publishing returns a row
+            # insert/upsert call for publishing returns a row
             insert_chain = MagicMock()
             insert_chain.execute.return_value = MagicMock(data=[{
                 'id': 'pub-001',
                 'join_code': 'ABC123',
             }])
             chain.insert.return_value = insert_chain
+            chain.upsert.return_value = insert_chain
             return chain
 
         mock_sb.table.side_effect = table_side_effect
@@ -253,10 +255,11 @@ class TestStudentJoinCode:
             elif name == 'submissions':
                 # duplicate check returns empty
                 chain.execute.return_value = MagicMock(data=[])
-                # insert returns a row with id
+                # insert/upsert returns a row with id
                 insert_chain = MagicMock()
                 insert_chain.execute.return_value = MagicMock(data=[{'id': 'sub-001'}])
                 chain.insert.return_value = insert_chain
+                chain.upsert.return_value = insert_chain
             return chain
 
         mock_sb.table.side_effect = table_side_effect

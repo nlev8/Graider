@@ -17,6 +17,7 @@ import json
 import os
 import random
 import secrets
+import uuid
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, g
@@ -818,8 +819,14 @@ def submit_student_work(content_id):
             submission_row['percentage'] = instant_results.get('percentage')
             submission_row['total_points'] = instant_results.get('total_points')
 
+        # Caller-generated UUID + upsert on id makes this retry-safe: if a
+        # transient error drops the response after the server committed,
+        # the retry merges-duplicates on the same id (no double-write).
+        submission_row['id'] = str(uuid.uuid4())
         try:
-            result = db.table('student_submissions').insert(submission_row).execute()
+            result = db.table('student_submissions').upsert(
+                submission_row, on_conflict='id'
+            ).execute()
         except Exception as insert_err:
             if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
                 return jsonify({"error": "You have already submitted this assignment."}), 400
@@ -1269,7 +1276,8 @@ def save_submission_draft(content_id):
                 'first_name, last_name, student_id_number, period'
             ).eq('id', student_id).execute()
             sdata = student_row.data[0] if student_row.data else {}
-            db.table('student_submissions').insert({
+            db.table('student_submissions').upsert({
+                'id': str(uuid.uuid4()),
                 'student_id': student_id,
                 'content_id': content_id,
                 'student_name': (sdata.get('first_name', '') + ' ' + sdata.get('last_name', '')).strip(),
@@ -1280,7 +1288,7 @@ def save_submission_draft(content_id):
                 'question_times': question_times,
                 'marked_for_review': marked_for_review,
                 'time_started_at': now_iso,
-            }).execute()
+            }, on_conflict='id').execute()
             time_started_at = now_iso
 
         # Calculate remaining time

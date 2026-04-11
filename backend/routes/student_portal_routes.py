@@ -8,6 +8,7 @@ import logging
 import os
 import random
 import string
+import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as get_supabase
@@ -254,8 +255,9 @@ def publish_assessment():
             "due_date": settings.get('due_date'),
         }
 
-        # Insert into Supabase
-        result = db.table('published_assessments').insert({
+        # Caller-generated UUID makes this retry-safe under full retry policy.
+        result = db.table('published_assessments').upsert({
+            "id": str(uuid.uuid4()),
             "join_code": join_code,
             "title": assessment.get('title', 'Untitled Assessment'),
             "assessment": assessment,
@@ -264,7 +266,7 @@ def publish_assessment():
             "teacher_name": settings.get('teacher_name', 'Teacher'),
             "teacher_email": settings.get('teacher_email'),
             "is_active": True,
-        }).execute()
+        }, on_conflict='id').execute()
 
         if not result.data:
             return jsonify({"error": "Failed to publish assessment"}), 500
@@ -773,8 +775,12 @@ def submit_assessment(code):
             submission_row["total_points"] = results.get('total_points')
             submission_row["percentage"] = results.get('percentage')
 
+        # Caller-generated UUID + upsert on id makes this retry-safe.
+        submission_row['id'] = str(uuid.uuid4())
         try:
-            submission_result = db.table('submissions').insert(submission_row).execute()
+            submission_result = db.table('submissions').upsert(
+                submission_row, on_conflict='id'
+            ).execute()
         except Exception as insert_err:
             if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
                 return jsonify({
