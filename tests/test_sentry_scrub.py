@@ -31,6 +31,15 @@ class TestBeforeSend:
         event = _make_event(exception={"values": [{"type": "BadRequest", "value": "bad"}]})
         assert before_send(event, {}) is None
 
+    def test_4xx_dropped_with_dotted_type_path(self):
+        """Sentry sometimes emits fully-qualified class paths; both forms must drop."""
+        from backend.observability.sentry import before_send
+        event = _make_event(exception={"values": [{
+            "type": "werkzeug.exceptions.BadRequest",
+            "value": "bad request",
+        }]})
+        assert before_send(event, {}) is None
+
     def test_request_data_stripped(self):
         from backend.observability.sentry import before_send
         event = _make_event(request={"data": "sensitive stuff", "method": "POST"})
@@ -60,21 +69,38 @@ class TestBeforeSend:
         assert "foo=bar" in query
 
     def test_frame_locals_scrubbed(self):
+        """Pins both the sentinel-replacement contract AND in-place mutation.
+
+        In-place mutation matters because Sentry's SDK passes the same event
+        dict to before_send that it will later serialize. If the scrubber
+        returned a new dict instead of mutating, the original (unscrubbed)
+        frame vars would leak to Sentry Cloud.
+        """
         from backend.observability.sentry import before_send
+        # Keep a direct reference to the frame vars dict BEFORE calling
+        # before_send, so we can assert the scrubber mutated it in place.
+        original_frame_vars = {
+            "student_name": "Alice",
+            "answers": {"q1": "yes"},
+            "safe_value": 42,
+        }
         event = _make_event(exception={"values": [{
             "type": "RuntimeError",
             "value": "test",
-            "stacktrace": {"frames": [{"vars": {
-                "student_name": "Alice",
-                "answers": {"q1": "yes"},
-                "safe_value": 42,
-            }}]},
+            "stacktrace": {"frames": [{"vars": original_frame_vars}]},
         }]})
         result = before_send(event, {})
-        frame_vars = result["exception"]["values"][0]["stacktrace"]["frames"][0]["vars"]
-        assert frame_vars["student_name"] == "[PII-scrubbed]"
-        assert frame_vars["answers"] == "[PII-scrubbed]"
-        assert frame_vars["safe_value"] == 42
+        returned_frame_vars = result["exception"]["values"][0]["stacktrace"]["frames"][0]["vars"]
+
+        # Sentinel values present on the returned event
+        assert returned_frame_vars["student_name"] == "[PII-scrubbed]"
+        assert returned_frame_vars["answers"] == "[PII-scrubbed]"
+        assert returned_frame_vars["safe_value"] == 42
+
+        # CRITICAL: the returned frame vars dict MUST be the same object as
+        # the original — scrubber must mutate in place, not return a copy.
+        assert returned_frame_vars is original_frame_vars
+        assert original_frame_vars["student_name"] == "[PII-scrubbed]"
 
     def test_frame_locals_non_pii_preserved(self):
         from backend.observability.sentry import before_send

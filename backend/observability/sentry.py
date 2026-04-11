@@ -36,11 +36,21 @@ _CLIENT_ERROR_TYPES = frozenset({
 
 
 def _is_client_error(event: dict) -> bool:
-    """Return True if the event represents a 4xx client error that should be dropped."""
+    """Return True if the event represents a 4xx client error that should be dropped.
+
+    Sentry's event format emits the exception type as either a bare class
+    name ("BadRequest") or a fully-qualified dotted path
+    ("werkzeug.exceptions.BadRequest"), depending on the capturing
+    integration and Python version. Check both forms by comparing the
+    rightmost dotted segment of the type string.
+    """
     try:
         exceptions = event.get("exception", {}).get("values", [])
         for exc in exceptions:
-            if exc.get("type", "") in _CLIENT_ERROR_TYPES:
+            exc_type = exc.get("type", "") or ""
+            # Match both "BadRequest" and "werkzeug.exceptions.BadRequest"
+            bare_name = exc_type.rsplit(".", 1)[-1]
+            if bare_name in _CLIENT_ERROR_TYPES:
                 return True
     except Exception:
         # Defensive: never let the scrubber crash — a broken scrubber
