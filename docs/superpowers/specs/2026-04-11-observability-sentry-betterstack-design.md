@@ -85,7 +85,7 @@ Two independent sub-projects shipped together in one plan/PR but deployable and 
 |------|--------|----------------|
 | `backend/observability/__init__.py` | Create | Re-export `init_sentry`, `critical_path` |
 | `backend/observability/sentry.py` | Create | `init_sentry()`, `before_send()` scrubber, `@critical_path` decorator |
-| `backend/app.py` | Modify | Call `init_sentry()` immediately after `app = Flask(__name__)`, before route registration. Also add the `GRAIDER_SENTRY_DEBUG_ROUTE`-gated `/_debug/sentry-boom` route (see Testing section) and the `GRAIDER_HEALTHZ_FORCE_FAIL` short-circuit at the top of the existing `/healthz` handler. |
+| `backend/app.py` | Modify | Call `init_sentry()` immediately after `app = Flask(__name__)`, before route registration. Also add the `SENTRY_TEST_ROUTE_ENABLED`-gated `/_debug/sentry-boom` route (see Testing section) and the `FORCE_HEALTHZ_FAIL` short-circuit at the top of the existing `/healthz` handler. |
 | `backend/services/portal_grading.py` | Modify | Decorate `run_portal_grading_thread` with `@critical_path` |
 | `backend/routes/student_account_routes.py` | Modify | Decorate `submit_student_work` and `save_submission_draft` |
 | `backend/routes/student_portal_routes.py` | Modify | Decorate `publish_assessment` and join-code `submit_assessment` |
@@ -275,7 +275,7 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
 
   **Guard implementation** in `backend/app.py`:
   ```python
-  if os.getenv("GRAIDER_SENTRY_DEBUG_ROUTE") == "1":
+  if os.getenv("SENTRY_TEST_ROUTE_ENABLED") == "1":
       @app.route("/_debug/sentry-boom")
       def _debug_sentry_boom():
           from flask import request
@@ -289,10 +289,10 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
               raise RuntimeError("sentry normal smoke test")
   ```
 
-  When `GRAIDER_SENTRY_DEBUG_ROUTE` is unset (the default for production), the route is never registered — hits return 404.
+  When `SENTRY_TEST_ROUTE_ENABLED` is unset (the default for production), the route is never registered — hits return 404.
 
   **Production verification procedure:**
-  1. Set `GRAIDER_SENTRY_DEBUG_ROUTE=1` in Railway env vars. Do NOT set `FLASK_DEBUG`, `DEBUG`, or `app.debug` — those enable Werkzeug's debugger and are a security risk in production.
+  1. Set `SENTRY_TEST_ROUTE_ENABLED=1` in Railway env vars. Do NOT set `FLASK_DEBUG`, `DEBUG`, or `app.debug` — those enable Werkzeug's debugger and are a security risk in production.
   2. Wait for Railway auto-deploy (~60 seconds).
   3. Hit `https://app.graider.live/_debug/sentry-boom?severity=normal` and `?severity=critical` once each.
   4. In Sentry dashboard, verify:
@@ -300,7 +300,7 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
      - Only `?severity=critical` has the `severity=critical` tag
      - Neither event contains `request.data`, `Authorization` header, or scrubbed local variable names (check a frame's `vars` dict for the `[PII-scrubbed]` sentinel)
      - `user.id` is a 12-char hex string (authenticated caller) or `"anonymous"` (unauth probe)
-  5. Unset `GRAIDER_SENTRY_DEBUG_ROUTE` in Railway. Wait for auto-deploy. Confirm the debug route returns 404 again.
+  5. Unset `SENTRY_TEST_ROUTE_ENABLED` in Railway. Wait for auto-deploy. Confirm the debug route returns 404 again.
 - **Post-rollout cleanup (explicit runbook step):** delete the `/_debug/sentry-boom` route code (the `if os.getenv(...)` block) in a follow-up PR titled `chore: remove post-rollout sentry debug route`. This is a **required cleanup step**, not an optional one — leaving dormant debug code behind a flag invites accidents. The runbook lists it with a checklist and a target date (within 7 days of sub-project A merging). The env-var gate means the route is 404 without the flag even if the code is still present, so the cleanup PR is about code hygiene, not security.
 
 ### Sub-project B: BetterStack — live verification
@@ -315,7 +315,7 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
    def healthz():
        # Alert-drill short-circuit — exercises the full alert pipeline without
        # touching Supabase, so student-facing traffic is unaffected during the drill.
-       if os.getenv('GRAIDER_HEALTHZ_FORCE_FAIL') == '1':
+       if os.getenv('FORCE_HEALTHZ_FAIL') == '1':
            return jsonify({"app": "ok", "supabase": "drill_forced_failure"}), 503
 
        status = {"app": "ok"}
@@ -323,11 +323,11 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
    ```
 
    **Drill procedure (zero customer impact):**
-   1. Set `GRAIDER_HEALTHZ_FORCE_FAIL=1` in Railway env vars. Wait for auto-deploy (~60 seconds).
+   1. Set `FORCE_HEALTHZ_FAIL=1` in Railway env vars. Wait for auto-deploy (~60 seconds).
    2. Within 3 minutes, BetterStack should observe 2 consecutive 503 responses and fire a Slack alert.
    3. Status page should show the monitor as "down."
    4. Student and teacher API calls continue working normally — they do not route through `/healthz`.
-   5. Unset `GRAIDER_HEALTHZ_FORCE_FAIL`. Wait for auto-deploy.
+   5. Unset `FORCE_HEALTHZ_FAIL`. Wait for auto-deploy.
    6. Verify the "resolved" notification fires and the monitor returns to green.
 
 3. **After-hours SMS drill:** run step 2 outside 9am-6pm ET. Confirm SMS arrives within 5 minutes of the initial Slack alert, voice call arrives within 10 minutes if unacknowledged.
@@ -337,7 +337,7 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
 
 `docs/observability.md` includes a "Quarterly alert drill" section that re-runs steps 2 and 3 above on a calendar cadence (Jan / Apr / Jul / Oct, first Monday). The drill is safe to run during business hours because it only affects the external monitor — student and teacher traffic is unaffected. Catches silent regressions — e.g., someone accidentally disabled a monitor, Slack webhook expired, phone number changed.
 
-**Why not corrupt `SUPABASE_URL` instead?** The earlier draft of this spec suggested corrupting `SUPABASE_URL` to force the `/healthz` probe to fail. That would cause a real Supabase outage for every live request during the drill window (3-15 minutes), affecting any student mid-assessment or teacher mid-grade. The `GRAIDER_HEALTHZ_FORCE_FAIL` flag gives the same alert signal with zero customer impact, so there is no reason to ever corrupt Supabase credentials for drill purposes.
+**Why not corrupt `SUPABASE_URL` instead?** The earlier draft of this spec suggested corrupting `SUPABASE_URL` to force the `/healthz` probe to fail. That would cause a real Supabase outage for every live request during the drill window (3-15 minutes), affecting any student mid-assessment or teacher mid-grade. The `FORCE_HEALTHZ_FAIL` flag gives the same alert signal with zero customer impact, so there is no reason to ever corrupt Supabase credentials for drill purposes.
 
 ---
 
@@ -363,15 +363,15 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
    - Wait for CI green; auto-merge
 3. **Day 2 — Production verification:**
    - Railway auto-deploys on merge
-   - Flip `DEBUG=1` env var temporarily
+   - Set `SENTRY_TEST_ROUTE_ENABLED=1` in Railway env vars temporarily
    - Hit `/_debug/sentry-boom` twice (critical and normal)
    - Verify both events in Sentry with correct tags and scrubbed payloads
-   - Flip `DEBUG=1` off again
-   - Open cleanup PR to delete the debug route
+   - **Unset `SENTRY_TEST_ROUTE_ENABLED`** (or set it back to `0`) in Railway env vars — do NOT leave the flag on
+   - Open cleanup PR to delete the debug route code
 4. **Day 3 — Alert drill:**
-   - Break `/healthz` on purpose via `SUPABASE_URL` override
+   - Set `FORCE_HEALTHZ_FAIL=1` in Railway env vars to exercise the `/healthz` short-circuit (student/teacher traffic unaffected — they call Supabase directly, not `/healthz`)
    - Confirm the BetterStack escalation chain (Slack → SMS → voice) fires correctly
-   - Revert and confirm recovery
+   - **Unset `FORCE_HEALTHZ_FAIL`** (or set it back to `0`) and confirm the "recovered" notification fires
 
 ### Rollback
 
@@ -391,11 +391,11 @@ The runbook lives at `docs/observability.md` and is the single source of truth f
 4. **Feature flags reference** — all four env vars, what they do, safe vs unsafe values, who's allowed to flip them:
    - `SENTRY_DSN` — enables Sentry. Normally set. Unset to disable Sentry entirely.
    - `RAILWAY_GIT_COMMIT_SHA` — auto-set by Railway. Don't touch manually.
-   - `GRAIDER_SENTRY_DEBUG_ROUTE` — **default unset.** Temporarily set to `1` during production Sentry verification (step 3 of rollout). Always unset immediately after verification completes. **Do NOT confuse with `FLASK_DEBUG` / `DEBUG`** — those enable Werkzeug's interactive debugger and are production security holes. Never set them.
-   - `GRAIDER_HEALTHZ_FORCE_FAIL` — **default unset.** Temporarily set to `1` during alert drills. Exercises the BetterStack → Slack/SMS/voice pipeline by making `/healthz` return 503 without touching Supabase. Always unset immediately after the drill completes. Student and teacher API traffic is unaffected while it's set.
-5. **Post-rollout cleanup checklist** — delete the `/_debug/sentry-boom` route code entirely within 7 days of sub-project A merging (explicit deadline). The `GRAIDER_HEALTHZ_FORCE_FAIL` short-circuit stays in place permanently — it's the drill mechanism.
+   - `SENTRY_TEST_ROUTE_ENABLED` — **default unset.** Temporarily set to `1` during production Sentry verification (step 3 of rollout). Always unset immediately after verification completes. **Do NOT confuse with `FLASK_DEBUG` / `DEBUG`** — those enable Werkzeug's interactive debugger and are production security holes. Never set them.
+   - `FORCE_HEALTHZ_FAIL` — **default unset.** Temporarily set to `1` during alert drills. Exercises the BetterStack → Slack/SMS/voice pipeline by making `/healthz` return 503 without touching Supabase. Always unset immediately after the drill completes. Student and teacher API traffic is unaffected while it's set.
+5. **Post-rollout cleanup checklist** — delete the `/_debug/sentry-boom` route code entirely within 7 days of sub-project A merging (explicit deadline). The `FORCE_HEALTHZ_FAIL` short-circuit stays in place permanently — it's the drill mechanism.
 6. **Holiday / vacation override procedure** — how to use BetterStack's "Schedule overrides" feature, who to designate as a backup if needed
-7. **Quarterly drill procedure** — re-run the alert drills from the testing section via `GRAIDER_HEALTHZ_FORCE_FAIL`. Safe to run during business hours.
+7. **Quarterly drill procedure** — re-run the alert drills from the testing section via `FORCE_HEALTHZ_FAIL`. Safe to run during business hours.
 8. **Rollback procedure** — per above
 9. **Known noise sources** — 4xx drops, anonymous user bucketing (Rule 6's "distinct users" check collapses all unauth events into a single bucket), non-prod event dropping — so future operators don't waste time diagnosing expected behavior
 10. **Escalation contacts** — user's phone number, Slack handle, email, and any future backup contact
@@ -417,7 +417,7 @@ The runbook lives at `docs/observability.md` and is the single source of truth f
 | **Sub-projects** | 2 (Sentry error tracking + BetterStack uptime/status page) |
 | **New files** | 5 code files, 2 test files, 1 doc file (plus `requirements.txt` change) |
 | **Modified files** | 4 backend files (`app.py`, `portal_grading.py`, 2 route files) |
-| **New env vars (all default-off)** | `SENTRY_DSN` (enables Sentry), `RAILWAY_GIT_COMMIT_SHA` (auto-set by Railway), `GRAIDER_SENTRY_DEBUG_ROUTE` (gates `/_debug/sentry-boom`), `GRAIDER_HEALTHZ_FORCE_FAIL` (alert-drill short-circuit) |
+| **New env vars (all default-off)** | `SENTRY_DSN` (enables Sentry), `RAILWAY_GIT_COMMIT_SHA` (auto-set by Railway), `SENTRY_TEST_ROUTE_ENABLED` (gates `/_debug/sentry-boom`), `FORCE_HEALTHZ_FAIL` (alert-drill short-circuit) |
 | **Critical-path decorators** | 5 functions total |
 | **Unit tests added** | 14 (11 scrub tests + 3 decorator tests) |
 | **Monthly cost** | $10 (BetterStack Team) |
