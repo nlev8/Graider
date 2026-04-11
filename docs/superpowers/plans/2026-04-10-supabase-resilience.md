@@ -1,12 +1,14 @@
-# Supabase Resilience Under Load — Implementation Plan
+# Supabase Resilience Under Load — Implementation Plan (AS-SHIPPED)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status:** SHIPPED on `feat/supabase-resilience`. This document is a post-execution reference — every code block matches what actually landed in the repo after Codex reviews, thread-safety fixes, and healthcheck corrections.
+>
+> **Original plan deviations are called out inline under "Plan correction" headings.** Read those to understand *why* the shipped code differs from the initial design.
 
 **Goal:** Make every Supabase call in the backend automatically retry on transient failures, with an operation-aware retry policy that distinguishes idempotent operations from unsafe inserts, plus UUID-based idempotency for critical write paths.
 
-**Architecture:** Wrap the singleton Supabase client in a thin proxy that intercepts every `.execute()` call, inspects `query.request.http_method` and the `Prefer` header to classify the operation, and applies the appropriate retry policy via the existing `with_retry` helper. For non-idempotent inserts (`POST` without `resolution=merge-duplicates`), retry only on connect-phase errors so committed writes are never double-applied. Critical inserts (student_submissions, published_content, classes, class_students) are migrated to pass caller-generated UUIDs so that UNIQUE constraints make full retry safe even on response-phase failures.
+**Architecture:** Wrap the singleton Supabase client in a thin proxy that intercepts every `.execute()` call, inspects `query.request.http_method` and the `Prefer` header to classify the operation, and applies the appropriate retry policy. For non-idempotent inserts (`POST` without `resolution=merge-duplicates`), retry only on connect-phase errors so committed writes are never double-applied. Critical inserts (student_submissions, published_assessments, submissions) are migrated to pass caller-generated UUIDs so that `upsert(..., on_conflict='id')` makes full retry safe even on response-phase failures.
 
-**Tech Stack:** Python 3.14, `supabase-py` (wraps `postgrest-py` and `httpx`), existing `backend/retry.py`, Flask + gunicorn
+**Tech Stack:** Python 3.14, `supabase-py` (wraps `postgrest-py` and `httpx`/`httpcore`), existing `backend/retry.py`, Flask + gunicorn
 
 **Feature branch:** `feat/supabase-resilience`
 
@@ -24,39 +26,47 @@ This plan covers Tier 1 #2 (Supabase connection resilience) from the district pr
 
 ## Background findings
 
-Verified before writing this plan:
+Verified before and during execution:
 
-1. **`query.request.http_method` is reliably exposed** on the postgrest query builder after `db.table(...).select/insert/update/upsert/delete(...)`. Confirmed by live inspection:
+1. **`query.request.http_method` is reliably exposed** on the postgrest query builder. Confirmed by live inspection:
    - `select` → `GET`, no `Prefer` header
    - `insert` → `POST`, `Prefer: return=representation`
    - `upsert` → `POST`, `Prefer: return=representation,resolution=merge-duplicates`
    - `update` → `PATCH`, `Prefer: return=representation`
    - `delete` → `DELETE`, `Prefer: return=representation`
 
-2. **Existing `with_retry()` helper already catches** `ConnectionError`, `TimeoutError`, `OSError`, HTTP 408/429/5xx/529, and strings containing "temporarily unavailable". The `httpcore.ReadError: [Errno 35]` we saw today is an `OSError` subclass and **is already retryable** — we just aren't calling the helper for raw `.table()` calls.
+2. **`httpcore` exceptions do NOT subclass `OSError`, `ConnectionError`, or `TimeoutError`.** `httpcore.ConnectError`, `ReadError`, `WriteError`, etc. all inherit from `httpcore.NetworkError` → `Exception`. `httpcore.ConnectTimeout`, `ReadTimeout`, `WriteTimeout` inherit from `httpcore.TimeoutException` → `Exception`. `httpcore.ProtocolError` / `RemoteProtocolError` / `LocalProtocolError` inherit directly from `Exception`.
+   - **Plan correction:** the original plan claimed `backend/retry.py::is_retryable_error()` would already catch these because "`httpcore.ReadError` is an `OSError` subclass". That was wrong. The shipped implementation adds a local `_is_supabase_retryable()` adapter in `backend/supabase_resilient.py` that catches `httpcore.NetworkError`, `httpcore.TimeoutException`, and `httpcore.ProtocolError` *in addition to* whatever `is_retryable_error()` already handles.
 
 3. **~194 raw `.table().execute()` call sites** across route handlers are unprotected. Top offenders: `student_account_routes.py` (50), `student_portal_routes.py` (37), `admin_routes.py` (18), `roster_sync.py` (14), `clever_routes.py` (14).
 
-4. **Supabase client is a singleton** via `backend/supabase_client.py:15`. No connection pooling or keepalive config — default httpx behavior.
+4. **Two modules bypass the singleton entirely** and call `supabase.create_client()` directly: `backend/routes/behavior_routes.py` and `backend/services/assistant_tools_behavior.py`. Task 2.5 migrates both and adds a regression guard.
 
-5. **Grading thread** (`run_portal_grading_thread`) already marks failed submissions as `status='grading_failed'`, not stuck in `'grading'`. It does not retry the Supabase update call when the update itself fails.
+5. **Supabase client was a singleton** via `backend/supabase_client.py`. No thread safety. Task 2 adds an `RLock` to guard cold-start initialization.
+
+6. **Grading thread** (`run_portal_grading_thread`) already imports `get_supabase()` from `backend.supabase_client`, so after Task 2 ships it automatically routes through the resilient wrapper for free.
+
+7. **Existing `/healthz` had two bugs** discovered during Task 5:
+   - Broken import path: `from supabase_client import get_supabase` (should be `backend.supabase_client`). The Supabase probe silently fell through to the `except` branch and never actually ran.
+   - The original plan's fix (`with httpx.Client(timeout=3.0):`) was a **no-op** — it created and discarded an httpx client without passing it to supabase-py. **Plan correction:** the shipped healthcheck uses `httpx.get()` directly against the PostgREST REST API with a 3-second timeout.
 
 ---
 
-## File Structure
+## File Structure (as shipped)
 
 | File | Action | Responsibility |
 |------|--------|----------------|
-| `backend/supabase_resilient.py` | **Create** | New file. Defines `ResilientClient` proxy wrapping the singleton client with operation-aware retry. |
-| `backend/supabase_client.py` | **Modify** | `get_supabase()` now returns the `ResilientClient` wrapper instead of the raw client. One-line change inside the existing function; callers don't change. |
-| `tests/test_supabase_resilient.py` | **Create** | Unit tests for the proxy: operation classification, retry policy selection, preflight-only mode for inserts, error propagation for non-retryable failures, rpc() and schema() wrapping. |
-| `backend/routes/behavior_routes.py` | **Modify** | Drop the local `_get_supabase()` that calls `create_client()` directly; delegate to the canonical singleton so behavior writes run through the resilient wrapper. |
-| `backend/services/assistant_tools_behavior.py` | **Modify** | Same migration as above — route through `get_supabase()`. |
-| `tests/test_no_direct_create_client.py` | **Create** | Regression guard. Fails the suite if any module outside `backend/supabase_client.py` re-introduces a direct `create_client()` call and silently bypasses the wrapper. |
-| `backend/routes/student_account_routes.py` | **Modify** | Migrate the 2 critical insert paths (`submit_student_work`, `save_submission_draft`) to pass caller-generated UUIDs so retry is safe. |
-| `backend/routes/student_portal_routes.py` | **Modify** | Migrate the 2 critical insert paths (`submit_assessment` join-code path, `publish_assessment`) to pass caller-generated UUIDs. |
-| `backend/services/portal_grading.py` | **Modify** | Wrap the existing `student_submissions` update inside `run_portal_grading_thread` so transient failures during grading don't orphan the submission. No new logic — just runs through the resilient client. |
-| `docs/supabase-resilience.md` | **Create** | Short ops doc: how retry policy works, how to opt out, how to force strict mode for non-idempotent custom operations. |
+| `backend/supabase_resilient.py` | **Created** | `ResilientClient` proxy + operation classifier + `_is_supabase_retryable` adapter that handles httpcore exceptions. |
+| `tests/test_supabase_resilient.py` | **Created** | 24 unit tests covering classification, preflight detection, retry behavior, proxy passthrough, rpc/schema wrapping, ProtocolError handling, and grading-thread PATCH retry. |
+| `backend/supabase_client.py` | **Rewritten** | Adds `get_raw_supabase()` entry point. `get_supabase()` returns a `ResilientClient` wrapper. Thread-safe `RLock` guards singleton init. `get_supabase_or_raise()` names the specific missing env var. |
+| `backend/routes/behavior_routes.py` | **Modified** | Removed `_supabase = None` module-level and `create_client()` call. `_get_supabase()` now delegates to `get_supabase_or_raise()`. |
+| `backend/services/assistant_tools_behavior.py` | **Modified** | Same migration as behavior_routes.py. |
+| `tests/test_no_direct_create_client.py` | **Created** | Regression guard. Fails the suite if any module outside `backend/supabase_client.py` re-introduces a direct `create_client()` call. |
+| `backend/routes/student_account_routes.py` | **Modified** | `submit_student_work` and `save_submission_draft` insert → `upsert(..., on_conflict='id')` with caller-generated UUIDs. Added `import uuid`. |
+| `backend/routes/student_portal_routes.py` | **Modified** | `publish_assessment` and join-code `submit_assessment` insert → `upsert(..., on_conflict='id')` with caller-generated UUIDs. Added `import uuid`. |
+| `tests/test_integration_workflows.py` | **Modified** | Mechanical mock update — added `chain.upsert.return_value = insert_chain` alongside existing `chain.insert.return_value` so two integration tests survive the insert→upsert migration. No assertion logic changed. |
+| `backend/app.py` | **Modified** | `/healthz` rewritten to use raw `httpx.get()` against the PostgREST REST API with a 3s timeout (fail fast, no retry). |
+| `docs/supabase-resilience.md` | **Created** | Ops doc: retry policy table, UUID upsert pattern, opt-out via `get_raw_supabase()`, no-direct-`create_client` rule, retry budget, log labels. |
 
 ---
 
@@ -66,282 +76,44 @@ Verified before writing this plan:
 - Create: `backend/supabase_resilient.py`
 - Create: `tests/test_supabase_resilient.py`
 
-- [ ] **Step 1: Write failing tests**
+### Step 1: Write failing tests
 
-Create `tests/test_supabase_resilient.py`:
+Create `tests/test_supabase_resilient.py`. The shipped file has 24 tests across 5 classes. Import this header:
 
 ```python
 """Tests for the resilient Supabase client wrapper."""
 
 import pytest
 from unittest.mock import MagicMock, patch
-
-
-class TestOperationClassification:
-    """Tests for _classify_operation — picks retry policy from the query builder."""
-
-    def test_select_returns_full(self):
-        from backend.supabase_resilient import _classify_operation
-        q = MagicMock()
-        q.request.http_method = "GET"
-        q.request.headers = {}
-        assert _classify_operation(q) == "full"
-
-    def test_update_returns_full(self):
-        from backend.supabase_resilient import _classify_operation
-        q = MagicMock()
-        q.request.http_method = "PATCH"
-        q.request.headers = {"Prefer": "return=representation"}
-        assert _classify_operation(q) == "full"
-
-    def test_delete_returns_full(self):
-        from backend.supabase_resilient import _classify_operation
-        q = MagicMock()
-        q.request.http_method = "DELETE"
-        q.request.headers = {"Prefer": "return=representation"}
-        assert _classify_operation(q) == "full"
-
-    def test_upsert_returns_full(self):
-        from backend.supabase_resilient import _classify_operation
-        q = MagicMock()
-        q.request.http_method = "POST"
-        q.request.headers = {"Prefer": "return=representation,resolution=merge-duplicates"}
-        assert _classify_operation(q) == "full"
-
-    def test_insert_returns_preflight_only(self):
-        from backend.supabase_resilient import _classify_operation
-        q = MagicMock()
-        q.request.http_method = "POST"
-        q.request.headers = {"Prefer": "return=representation"}
-        assert _classify_operation(q) == "preflight_only"
-
-    def test_unknown_method_defaults_to_preflight(self):
-        from backend.supabase_resilient import _classify_operation
-        q = MagicMock()
-        q.request.http_method = "PUT"
-        q.request.headers = {}
-        assert _classify_operation(q) == "preflight_only"
-
-
-class TestPreflightRetryFilter:
-    """Tests for _is_preflight_error — distinguishes connect-phase from response-phase errors."""
-
-    def test_connect_error_is_preflight(self):
-        from backend.supabase_resilient import _is_preflight_error
-        import httpcore
-        assert _is_preflight_error(httpcore.ConnectError("refused")) is True
-
-    def test_connect_timeout_is_preflight(self):
-        from backend.supabase_resilient import _is_preflight_error
-        import httpcore
-        assert _is_preflight_error(httpcore.ConnectTimeout("dns")) is True
-
-    def test_read_error_is_not_preflight(self):
-        from backend.supabase_resilient import _is_preflight_error
-        import httpcore
-        # ReadError means bytes were in flight — server may have committed
-        assert _is_preflight_error(httpcore.ReadError("reset")) is False
-
-    def test_read_timeout_is_not_preflight(self):
-        from backend.supabase_resilient import _is_preflight_error
-        import httpcore
-        assert _is_preflight_error(httpcore.ReadTimeout("slow")) is False
-
-    def test_dns_oserror_is_preflight(self):
-        from backend.supabase_resilient import _is_preflight_error
-        # OSError with gaierror-style message
-        err = OSError("[Errno -2] Name or service not known")
-        assert _is_preflight_error(err) is True
-
-
-class TestResilientExecute:
-    """Tests for the execute() wrapper's retry behavior."""
-
-    def test_select_retries_on_oserror(self):
-        from backend.supabase_resilient import _resilient_execute
-
-        call_count = {"n": 0}
-        q = MagicMock()
-        q.request.http_method = "GET"
-        q.request.headers = {}
-
-        def fake_execute():
-            call_count["n"] += 1
-            if call_count["n"] < 3:
-                raise OSError("temporarily unavailable")
-            return MagicMock(data=[{"id": "xxx"}])
-
-        q.execute = fake_execute
-        # Patch time.sleep to speed up the test
-        with patch("time.sleep"):
-            result = _resilient_execute(q)
-        assert call_count["n"] == 3
-        assert result.data == [{"id": "xxx"}]
-
-    def test_insert_retries_connect_error(self):
-        from backend.supabase_resilient import _resilient_execute
-        import httpcore
-
-        call_count = {"n": 0}
-        q = MagicMock()
-        q.request.http_method = "POST"
-        q.request.headers = {"Prefer": "return=representation"}
-
-        def fake_execute():
-            call_count["n"] += 1
-            if call_count["n"] < 2:
-                raise httpcore.ConnectError("refused")
-            return MagicMock(data=[{"id": "xxx"}])
-
-        q.execute = fake_execute
-        with patch("time.sleep"):
-            result = _resilient_execute(q)
-        assert call_count["n"] == 2
-
-    def test_insert_does_not_retry_read_error(self):
-        from backend.supabase_resilient import _resilient_execute
-        import httpcore
-
-        call_count = {"n": 0}
-        q = MagicMock()
-        q.request.http_method = "POST"
-        q.request.headers = {"Prefer": "return=representation"}
-
-        def fake_execute():
-            call_count["n"] += 1
-            raise httpcore.ReadError("server disconnected mid-response")
-
-        q.execute = fake_execute
-        with patch("time.sleep"), pytest.raises(httpcore.ReadError):
-            _resilient_execute(q)
-        assert call_count["n"] == 1  # no retry
-
-    def test_upsert_retries_read_error(self):
-        from backend.supabase_resilient import _resilient_execute
-        import httpcore
-
-        call_count = {"n": 0}
-        q = MagicMock()
-        q.request.http_method = "POST"
-        q.request.headers = {"Prefer": "return=representation,resolution=merge-duplicates"}
-
-        def fake_execute():
-            call_count["n"] += 1
-            if call_count["n"] < 3:
-                raise httpcore.ReadError("reset")
-            return MagicMock(data=[{"id": "xxx"}])
-
-        q.execute = fake_execute
-        with patch("time.sleep"):
-            result = _resilient_execute(q)
-        assert call_count["n"] == 3
-
-    def test_non_retryable_error_propagates(self):
-        from backend.supabase_resilient import _resilient_execute
-
-        q = MagicMock()
-        q.request.http_method = "GET"
-        q.request.headers = {}
-        q.execute = MagicMock(side_effect=ValueError("invalid arg"))
-
-        with pytest.raises(ValueError):
-            _resilient_execute(q)
-        assert q.execute.call_count == 1
-
-
-class TestProxyBehavior:
-    """Tests that the ResilientClient proxy preserves the chained API surface."""
-
-    def test_table_returns_chainable_wrapper(self):
-        from backend.supabase_resilient import ResilientClient
-
-        mock_raw = MagicMock()
-        wrapper = ResilientClient(mock_raw)
-        result = wrapper.table("classes").select("id").eq("id", "xxx")
-        # The chain should have been forwarded through to the raw client
-        mock_raw.table.assert_called_once_with("classes")
-
-    def test_non_postgrest_attrs_passthrough(self):
-        """auth, storage, realtime, functions pass through untouched."""
-        from backend.supabase_resilient import ResilientClient
-
-        mock_raw = MagicMock()
-        mock_raw.auth = "auth_obj"
-        mock_raw.storage = "storage_obj"
-        mock_raw.realtime = "realtime_obj"
-        mock_raw.functions = "functions_obj"
-        wrapper = ResilientClient(mock_raw)
-        assert wrapper.auth == "auth_obj"
-        assert wrapper.storage == "storage_obj"
-        assert wrapper.realtime == "realtime_obj"
-        assert wrapper.functions == "functions_obj"
-
-    def test_rpc_returns_wrapped_builder(self):
-        """rpc() results have .execute() — they must be wrapped."""
-        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
-
-        # Raw rpc builder exposes .execute
-        raw_builder = MagicMock()
-        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
-
-        mock_raw = MagicMock()
-        mock_raw.rpc = MagicMock(return_value=raw_builder)
-
-        wrapper = ResilientClient(mock_raw)
-        result = wrapper.rpc("some_function", {"arg": 1})
-        assert isinstance(result, _ExecuteProxy)
-        mock_raw.rpc.assert_called_once_with("some_function", {"arg": 1})
-
-    def test_rpc_without_params(self):
-        """rpc() can be called with just the function name."""
-        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
-
-        raw_builder = MagicMock()
-        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
-
-        mock_raw = MagicMock()
-        mock_raw.rpc = MagicMock(return_value=raw_builder)
-
-        wrapper = ResilientClient(mock_raw)
-        result = wrapper.rpc("no_args_fn")
-        assert isinstance(result, _ExecuteProxy)
-        mock_raw.rpc.assert_called_once_with("no_args_fn")
-
-    def test_schema_returns_wrapped_sub_client(self):
-        """schema() returns a sub-client whose .from_()/.table()/.rpc() must also be wrapped."""
-        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
-
-        # Raw schema sub-client has table/from_/rpc
-        raw_builder = MagicMock()
-        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
-
-        sub_client = MagicMock(spec=["table", "from_", "rpc"])
-        sub_client.table = MagicMock(return_value=raw_builder)
-        sub_client.from_ = MagicMock(return_value=raw_builder)
-        sub_client.rpc = MagicMock(return_value=raw_builder)
-
-        mock_raw = MagicMock()
-        mock_raw.schema = MagicMock(return_value=sub_client)
-
-        wrapper = ResilientClient(mock_raw)
-        sub_wrapper = wrapper.schema("analytics")
-        # Sub-client should itself be a ResilientClient
-        assert isinstance(sub_wrapper, ResilientClient)
-        # Calls through the sub-wrapper should produce wrapped builders
-        assert isinstance(sub_wrapper.table("events"), _ExecuteProxy)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+**TestOperationClassification** (6 tests): `test_select_returns_full`, `test_update_returns_full`, `test_delete_returns_full`, `test_upsert_returns_full`, `test_insert_returns_preflight_only`, `test_unknown_method_defaults_to_preflight`. Each creates a `MagicMock` with `q.request.http_method` and `q.request.headers` set, then asserts `_classify_operation(q)` returns the expected policy string.
+
+**TestPreflightRetryFilter** (6 tests): `test_connect_error_is_preflight`, `test_connect_timeout_is_preflight`, `test_read_error_is_not_preflight`, `test_read_timeout_is_not_preflight`, `test_dns_oserror_is_preflight`, `test_protocol_error_is_not_preflight`. Each asserts `_is_preflight_error(err)` returns the expected bool.
+
+> **Plan correction:** the original plan listed only 5 preflight tests. `test_protocol_error_is_not_preflight` was added after Codex review noted `httpcore.ProtocolError` slips past `_is_supabase_retryable` if it isn't explicitly handled. The test pins the contract that ProtocolError is retryable for upserts but NOT safe for raw inserts (server may have committed mid-stream).
+
+**TestResilientExecute** (6 tests): `test_select_retries_on_oserror`, `test_insert_retries_connect_error`, `test_insert_does_not_retry_read_error`, `test_upsert_retries_read_error`, `test_non_retryable_error_propagates`, `test_upsert_retries_protocol_error`. Each builds a MagicMock `q`, sets `q.request.http_method` + `q.request.headers`, provides a `fake_execute` counter that raises N times then succeeds, patches `time.sleep`, and asserts the retry count matches.
+
+> **Plan correction:** `test_upsert_retries_protocol_error` was added in the same post-review pass as the preflight test above.
+
+**TestProxyBehavior** (5 tests): `test_table_returns_chainable_wrapper`, `test_non_postgrest_attrs_passthrough`, `test_rpc_returns_wrapped_builder`, `test_rpc_without_params`, `test_schema_returns_wrapped_sub_client`.
+
+**TestGradingThreadResilience** (1 test): `test_update_retries_on_transient_read_error`. Lives in this file (not a separate file) because it tests the retry loop, not the grading thread itself. Added in Task 4.
+
+See `tests/test_supabase_resilient.py` at commits `c47a3cf`, `2255db2`, and `7c7bb9c` for the full test source.
+
+### Step 2: Run tests to verify they fail
 
 ```bash
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_supabase_resilient.py -v 2>&1 | tail -20
 ```
 
-Expected: All tests FAIL with `ModuleNotFoundError: No module named 'backend.supabase_resilient'`
+Expected: All tests FAIL with `ModuleNotFoundError: No module named 'backend.supabase_resilient'`.
 
-- [ ] **Step 3: Create the resilient client module**
+### Step 3: Create `backend/supabase_resilient.py`
 
-Create `backend/supabase_resilient.py`:
+**Shipped source** (Python 3.14, 257 lines, commits `c47a3cf` + `2255db2`):
 
 ```python
 """Resilient Supabase client wrapper with operation-aware retry.
@@ -371,13 +143,36 @@ streaming queries) can import `get_raw_supabase()` from backend.supabase_client.
 """
 
 import logging
+import random
+import time
 from typing import Any
 
 import httpcore
 
-from backend.retry import with_retry, is_retryable_error, MAX_RETRIES
+from backend.retry import (
+    is_retryable_error,
+    MAX_RETRIES,
+    BASE_DELAY_S,
+    MAX_DELAY_S,
+    JITTER_FACTOR,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _is_supabase_retryable(error: BaseException) -> bool:
+    """Return True if *error* is a transient error worth retrying.
+
+    Extends ``backend.retry.is_retryable_error`` to also recognise
+    ``httpcore.NetworkError`` (ConnectError, ReadError, WriteError,
+    ConnectTimeout, ReadTimeout, WriteTimeout, ProtocolError), which are
+    what supabase-py surfaces when the underlying HTTP transport fails.
+    ``httpcore`` exceptions do not subclass ``OSError``/``ConnectionError``,
+    so the core retry helper does not catch them on its own.
+    """
+    if isinstance(error, (httpcore.NetworkError, httpcore.TimeoutException, httpcore.ProtocolError)):
+        return True
+    return is_retryable_error(error)
 
 
 # ---------------------------------------------------------------------------
@@ -452,44 +247,48 @@ def _resilient_execute(query: Any) -> Any:
     """Execute a postgrest query with operation-aware retry."""
     policy = _classify_operation(query)
 
+    try:
+        method = query.request.http_method.lower()
+    except AttributeError:
+        method = "unknown"
+
     if policy == "full":
-        return with_retry(
-            query.execute,
-            max_retries=MAX_RETRIES,
-            label=f"supabase-{query.request.http_method.lower()}",
-        )
+        label = f"supabase-{method}"
 
-    # preflight_only — wrap in a custom retry that only retries connect-phase errors
-    def _attempt():
-        return query.execute()
+        def _should_retry(exc: BaseException) -> bool:
+            return _is_supabase_retryable(exc)
+    else:
+        label = f"supabase-{method}-preflight"
 
-    last_error = None
-    for attempt in range(1, MAX_RETRIES + 2):
+        def _should_retry(exc: BaseException) -> bool:
+            # Raw inserts: only retry if the failure happened before any bytes
+            # reached the server. Response-phase errors may indicate the write
+            # was already committed and retrying would double-insert.
+            return _is_supabase_retryable(exc) and _is_preflight_error(exc)
+
+    last_error: BaseException | None = None
+    for attempt in range(1, MAX_RETRIES + 2):  # 1 initial + MAX_RETRIES retries
         try:
-            return _attempt()
+            return query.execute()
         except Exception as exc:
             last_error = exc
 
-            # Only retry if it's BOTH retryable AND preflight
-            if not (is_retryable_error(exc) and _is_preflight_error(exc)):
+            if not _should_retry(exc):
                 raise
 
             if attempt > MAX_RETRIES:
                 logger.error(
-                    "[supabase-insert-preflight] All %d retries exhausted. Last error: %s",
-                    MAX_RETRIES, exc,
+                    "[%s] All %d retries exhausted. Last error: %s",
+                    label, MAX_RETRIES, exc,
                 )
                 raise
 
-            import time
-            import random
-            from backend.retry import BASE_DELAY_S, MAX_DELAY_S, JITTER_FACTOR
             base = BASE_DELAY_S * (2 ** (attempt - 1))
             base = min(base, MAX_DELAY_S)
             delay = base + random.random() * JITTER_FACTOR * base
             logger.warning(
-                "[supabase-insert-preflight] Attempt %d/%d failed (%s). Retrying in %.2fs...",
-                attempt, MAX_RETRIES + 1, exc, delay,
+                "[%s] Attempt %d/%d failed (%s). Retrying in %.2fs...",
+                label, attempt, MAX_RETRIES + 1, exc, delay,
             )
             time.sleep(delay)
 
@@ -575,20 +374,26 @@ class ResilientClient:
         return getattr(self._raw, name)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+> **Plan corrections captured in this file:**
+>
+> 1. **`_is_supabase_retryable()` adapter** — original plan tried to call `with_retry(query.execute, ...)` directly for the full path. That would have failed because `with_retry()` doesn't catch httpcore exceptions. The shipped code unifies the full and preflight paths through a single loop that uses `_is_supabase_retryable` (extended helper) and, for the preflight branch, *also* requires `_is_preflight_error`.
+>
+> 2. **Explicit `rpc()` and `schema()` wrapping** — original plan's `ResilientClient` only wrapped `.table()` and `.from_()`. Codex flagged that `.rpc()` / `.schema()` results still expose `.execute()` and would silently escape the wrapper. The shipped code adds explicit `rpc()` and `schema()` methods plus a `_wrap_if_builder()` helper that returns a nested `ResilientClient` for schema sub-clients.
+>
+> 3. **`httpcore.ProtocolError` in `_is_supabase_retryable`** — HTTP/2 stream resets can surface as `RemoteProtocolError` rather than `ReadError`. Added after Codex noted ProtocolError inherits directly from `Exception`, not `NetworkError`, so it would slip through an isinstance-on-`NetworkError` check alone.
+
+### Step 4: Run tests to verify they pass
 
 ```bash
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_supabase_resilient.py -v 2>&1 | tail -30
 ```
 
-Expected: All 19 tests PASS.
+Expected: All 24 tests PASS (23 from Tasks 1-3 plus the grading thread resilience test added in Task 4).
 
-- [ ] **Step 5: Commit**
+### Step 5: Commits
 
-```bash
-git add backend/supabase_resilient.py tests/test_supabase_resilient.py
-git commit -m "feat: add ResilientClient proxy with operation-aware retry"
-```
+- `c47a3cf feat: add ResilientClient proxy with operation-aware retry`
+- `2255db2 fix: retry httpcore.ProtocolError on idempotent operations`
 
 ---
 
@@ -597,36 +402,54 @@ git commit -m "feat: add ResilientClient proxy with operation-aware retry"
 **Files:**
 - Modify: `backend/supabase_client.py`
 
-- [ ] **Step 1: Update `get_supabase()` to return the wrapper**
+### Step 1: Replace the full contents of `backend/supabase_client.py`
 
-Replace the full contents of `backend/supabase_client.py` with:
+**Shipped source** (commits `4f07220` + `853874b`):
 
 ```python
 """
 Canonical Supabase client for Graider.
 All modules should import from here instead of creating their own clients.
 
-Provides two variants:
+Provides three variants:
   - get_supabase()          → returns resilient client or None (lenient, for optional features)
   - get_supabase_or_raise() → returns resilient client or raises Exception (strict, for required features)
-  - get_raw_supabase()      → returns the unwrapped raw client (opt-out for streaming / custom retry)
+  - get_raw_supabase()      → returns the unwrapped raw client (opt-out for streaming / custom retry / healthchecks)
+
+Default for new code: get_supabase() / get_supabase_or_raise(). Only reach for
+get_raw_supabase() when you specifically need to bypass the retry wrapper.
 """
 import os
+import threading
+
 from supabase import create_client, Client
 
 _supabase_raw: Client = None
 _supabase_resilient = None
+
+# Guards cold-start singleton initialization across Flask request threads and
+# background grading threads. The GIL makes attribute reads atomic, but the
+# check-then-create pattern below is not — without the lock, two concurrent
+# first calls can each construct a client and silently discard one.
+# RLock (not Lock) because get_supabase() acquires the lock and then calls
+# get_raw_supabase(), which acquires the same lock — a plain Lock would deadlock.
+_init_lock = threading.RLock()
 
 
 def get_raw_supabase() -> Client:
     """Lazy-init raw Supabase admin client WITHOUT retry wrapping.
 
     Use this only when you need the underlying client — e.g. for long-running
-    streaming queries, custom retry logic, or testing. Most callers should use
-    get_supabase() or get_supabase_or_raise() instead.
+    streaming queries, custom retry logic, or healthchecks that must fail fast.
+    Most callers should use get_supabase() or get_supabase_or_raise() instead.
     """
     global _supabase_raw
-    if _supabase_raw is None:
+    if _supabase_raw is not None:
+        return _supabase_raw
+    with _init_lock:
+        # Double-check: another thread may have initialized while we waited.
+        if _supabase_raw is not None:
+            return _supabase_raw
         url = os.getenv('SUPABASE_URL')
         key = os.getenv('SUPABASE_SERVICE_KEY')
         if url and key:
@@ -638,11 +461,15 @@ def get_supabase():
     """Lazy-init Supabase admin client with automatic retry wrapping.
 
     Returns a ResilientClient instance (behaves like the raw client but
-    every .execute() call is routed through with_retry()), or None if
-    not configured.
+    every .execute() call is routed through operation-aware retry), or None
+    if not configured.
     """
     global _supabase_resilient
-    if _supabase_resilient is None:
+    if _supabase_resilient is not None:
+        return _supabase_resilient
+    with _init_lock:
+        if _supabase_resilient is not None:
+            return _supabase_resilient
         raw = get_raw_supabase()
         if raw is not None:
             from backend.supabase_resilient import ResilientClient
@@ -651,111 +478,116 @@ def get_supabase():
 
 
 def get_supabase_or_raise():
-    """Lazy-init resilient Supabase client. Raises if not configured."""
+    """Lazy-init resilient Supabase client. Raises if not configured.
+
+    Names the specific missing env var so misconfigurations are easy to diagnose.
+    """
     client = get_supabase()
-    if client is None:
-        raise Exception("Supabase credentials not configured. Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env")
-    return client
+    if client is not None:
+        return client
+
+    # Identify which var is missing so the error message is actionable.
+    missing = []
+    if not os.getenv('SUPABASE_URL'):
+        missing.append('SUPABASE_URL')
+    if not os.getenv('SUPABASE_SERVICE_KEY'):
+        missing.append('SUPABASE_SERVICE_KEY')
+    if missing:
+        raise Exception(
+            f"Supabase credentials not configured. Missing: {', '.join(missing)}. "
+            "Check your .env file."
+        )
+    # Both env vars are set but client still None — something else went wrong.
+    raise Exception(
+        "Supabase client initialization failed despite SUPABASE_URL and "
+        "SUPABASE_SERVICE_KEY being set. Check logs for create_client() errors."
+    )
 ```
 
-- [ ] **Step 2: Run the full backend test suite to verify nothing breaks**
+> **Plan corrections captured in this file:**
+>
+> 1. **`threading.RLock`, not `threading.Lock`** — the original plan had no locking at all. The code reviewer flagged a cold-start race condition across Flask request threads and background grading threads. The first fix used a plain `Lock`, which deadlocked immediately: `get_supabase()` holds the lock and then calls `get_raw_supabase()`, which tries to re-acquire the same lock. `RLock` (reentrant) is the correct primitive.
+>
+> 2. **Named-missing-var error message** — `get_supabase_or_raise()` now builds a list of specifically which env var is missing (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, or both) instead of a generic "not configured" error. Added after the code reviewer flagged that partial misconfigurations were hard to diagnose.
+>
+> 3. **Two-path raise for the "set but still None" case** — if both env vars are set but the client is still None, the code raises a distinct error pointing to `create_client()` logs. This surfaces SDK-level init failures that would otherwise look like a generic misconfig.
+
+### Step 2: Run the full backend test suite
 
 ```bash
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/load --ignore=tests/stress 2>&1 | tail -10
 ```
 
-Expected: All tests pass. The wrapper should be fully transparent to existing test code.
+Expected: All tests pass (~1026 as of Task 2). The wrapper should be fully transparent because `ResilientClient` forwards every call to the raw client.
 
-- [ ] **Step 3: Smoke test against the live Supabase instance**
+### Step 3: Smoke test against live Supabase
 
 ```bash
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python3 -c "
 from dotenv import load_dotenv; load_dotenv('.env', override=True)
-from backend.supabase_client import get_supabase_or_raise
+from backend.supabase_client import get_supabase_or_raise, get_raw_supabase
 db = get_supabase_or_raise()
 print('Wrapper type:', type(db).__name__)
-print('Select test...')
+raw = get_raw_supabase()
+print('Raw type:', type(raw).__name__)
 result = db.table('classes').select('id, name').limit(1).execute()
-print('  rows:', len(result.data))
+print('rows:', len(result.data))
 print('SUCCESS')
 "
 ```
 
-Expected: prints `Wrapper type: ResilientClient`, a row count, and `SUCCESS`.
+Expected: `Wrapper type: ResilientClient`, `Raw type: Client`, a row count, `SUCCESS`.
 
-- [ ] **Step 4: Commit**
+### Step 4: Commits
 
-```bash
-git add backend/supabase_client.py
-git commit -m "feat: wire get_supabase() through ResilientClient wrapper"
-```
+- `4f07220 feat: wire get_supabase() through ResilientClient wrapper`
+- `853874b fix: thread-safe singleton init + precise env var error message`
 
 ---
 
 ## Task 2.5: Eliminate direct `create_client()` call sites
 
-**Context:** Wrapping `get_supabase()` only protects modules that actually call it. Several helper modules bypass the singleton and build their own raw Supabase client via `supabase.create_client(...)`. Those paths still get zero retry coverage, silently defeating the wrapper for entire feature areas (behavior tracking, assistant tools, etc.). This task finds and fixes every offender.
+**Context:** Wrapping `get_supabase()` only protects modules that actually call it. Two modules bypass the singleton entirely and build their own raw Supabase client via `supabase.create_client(...)`, silently defeating retry protection for entire feature areas.
 
 **Files:**
-- Modify: `backend/routes/behavior_routes.py` (and any other offenders found by the audit grep)
-- Modify: `backend/services/assistant_tools_behavior.py` (and any other offenders found)
-- Create: `tests/test_no_direct_create_client.py` — regression guard
+- Modify: `backend/routes/behavior_routes.py`
+- Modify: `backend/services/assistant_tools_behavior.py`
+- Create: `tests/test_no_direct_create_client.py`
 
-- [ ] **Step 1: Run the audit grep to list every direct `create_client()` call outside `supabase_client.py`**
+### Step 1: Audit grep
 
 ```bash
-cd /Users/alexc/Downloads/Graider && grep -rn "from supabase import create_client\|supabase.create_client\|create_client(" backend/ --include='*.py' | grep -v "backend/supabase_client.py" | grep -v "^Binary"
+cd /Users/alexc/Downloads/Graider && grep -rn "from supabase import create_client\|supabase.create_client\|create_client(" backend/ --include='*.py' | grep -v "backend/supabase_client.py"
 ```
 
-Expected: Zero results at the end of this task. At the start, this lists (as of 2026-04-10):
-- `backend/routes/behavior_routes.py` (around lines 30-39)
-- `backend/services/assistant_tools_behavior.py` (around lines 33-42)
-- Any additional offenders surfaced by the grep
+Original offenders (2026-04-10):
+- `backend/routes/behavior_routes.py` — lines 27-39 (original `_supabase = None` + `_get_supabase()` with direct `create_client()`)
+- `backend/services/assistant_tools_behavior.py` — lines 29-42 (same pattern)
 
-Record the full list before making changes — each one must be migrated.
+### Step 2: Migrate `behavior_routes.py`
 
-- [ ] **Step 2: Migrate each offender to `get_supabase_or_raise()`**
-
-For each file surfaced by the grep, replace the pattern:
+**Shipped `_get_supabase()`** (replaces the old `_supabase = None` + direct-create-client pattern):
 
 ```python
-# BEFORE
-from supabase import create_client
-import os
-
 def _get_supabase():
-    url = os.getenv('SUPABASE_URL')
-    key = os.getenv('SUPABASE_SERVICE_KEY')
-    if not url or not key:
-        return None
-    return create_client(url, key)
-```
+    """Return the canonical resilient Supabase client.
 
-with:
-
-```python
-# AFTER
-from backend.supabase_client import get_supabase
-
-def _get_supabase():
-    # Delegates to the canonical singleton so calls run through ResilientClient.
-    return get_supabase()
-```
-
-If the module requires a valid client and raises on missing creds, use `get_supabase_or_raise` instead:
-
-```python
-from backend.supabase_client import get_supabase_or_raise
-
-def _get_supabase():
+    Delegates to backend.supabase_client so all behavior calls route
+    through ResilientClient and get automatic retry on transient failures.
+    """
+    from backend.supabase_client import get_supabase_or_raise
     return get_supabase_or_raise()
 ```
 
-Apply to every file in the list from Step 1. Remove the now-unused `from supabase import create_client` and `import os` lines if they were only used for this purpose.
+The module-level `_supabase = None` was removed because `get_supabase_or_raise()` has its own singleton. The lazy `from backend.supabase_client import get_supabase_or_raise` stays inside the function to avoid circular-import risk at module load time.
 
-- [ ] **Step 3: Add a regression test that fails if anyone re-introduces `create_client()`**
+### Step 3: Migrate `assistant_tools_behavior.py`
 
-Create `tests/test_no_direct_create_client.py`:
+Identical migration. `SETTINGS_FILE = os.path.expanduser(...)` is preserved. Only `_supabase = None` and the old `_get_supabase()` body are replaced with the snippet above (with its own docstring).
+
+### Step 4: Create `tests/test_no_direct_create_client.py`
+
+**Shipped source:**
 
 ```python
 """Regression guard: no module outside backend/supabase_client.py may call
@@ -765,8 +597,6 @@ wrapper is applied.
 """
 
 from pathlib import Path
-
-import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -787,7 +617,6 @@ def test_no_direct_create_client_calls():
         text = path.read_text(encoding="utf-8", errors="ignore")
         if "create_client(" in text and "from supabase import" in text:
             offenders.append(str(path.relative_to(REPO_ROOT)))
-        # Catch the aliased form too
         elif "supabase.create_client(" in text:
             offenders.append(str(path.relative_to(REPO_ROOT)))
 
@@ -800,231 +629,172 @@ def test_no_direct_create_client_calls():
     )
 ```
 
-- [ ] **Step 4: Run the regression test and the full suite**
+### Step 5: Run the guard + full suite
 
 ```bash
-cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_no_direct_create_client.py -v 2>&1 | tail -10
-```
-
-Expected: PASS (offender list is empty after Step 2).
-
-```bash
+cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_no_direct_create_client.py -v
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/load --ignore=tests/stress 2>&1 | tail -15
 ```
 
-Expected: Full suite still green. The migrated modules should work identically because they now delegate to the same underlying Supabase client, just with retry on top.
+Expected: 1027 passing (was 1026 before the new guard).
 
-- [ ] **Step 5: Commit**
+### Step 6: Commit
 
-```bash
-git add backend/routes/behavior_routes.py backend/services/assistant_tools_behavior.py tests/test_no_direct_create_client.py
-# Include any additional files the audit grep surfaced
-git commit -m "refactor: route all Supabase access through resilient singleton"
-```
+- `10265c4 refactor: route all Supabase access through resilient singleton`
 
 ---
 
 ## Task 3: Migrate critical inserts to use caller-generated UUIDs
 
-**Context:** With Task 2 shipped, all reads and idempotent writes are protected. Raw inserts only retry on connect-phase errors, which covers ~90% of transient failures but leaves a small gap: if a `POST /insert` gets a `ReadError` (server committed, response dropped), we surface the failure to the caller rather than double-insert. For the most critical tables, we close that gap by passing explicit UUIDs so the UNIQUE constraint makes retry safe.
+**Context:** With Task 2 shipped, all reads and idempotent writes are protected. Raw inserts only retry on connect-phase errors, which leaves a small gap: if a `POST /insert` gets a `ReadError` (server committed, response dropped), we surface the failure rather than double-insert. For the most critical tables, we close that gap by passing explicit UUIDs so the `on_conflict='id'` upsert path makes full retry safe.
 
-The 4 critical write paths:
+**The 4 critical write paths:**
 
-1. `student_submissions` insert in `submit_student_work` (`backend/routes/student_account_routes.py`)
-2. `student_submissions` insert in `save_submission_draft` (`backend/routes/student_account_routes.py`)
-3. `published_assessments` insert in `publish_assessment` (`backend/routes/student_portal_routes.py`)
-4. `submissions` insert in the join-code `submit_assessment` (`backend/routes/student_portal_routes.py`)
-
-For these, we:
-- Generate a UUID in Python (`uuid.uuid4()`)
-- Pass it as the `id` field in the insert payload
-- Upgrade the call from `insert()` to `upsert(..., on_conflict='id')` so the policy classifier treats it as fully retryable
-- Second retry attempt hits the UNIQUE constraint, merge-duplicates kicks in, no double-write
+1. `backend/routes/student_account_routes.py::submit_student_work` → `student_submissions`
+2. `backend/routes/student_account_routes.py::save_submission_draft` → `student_submissions`
+3. `backend/routes/student_portal_routes.py::publish_assessment` → `published_assessments`
+4. `backend/routes/student_portal_routes.py` join-code `submit_assessment` → `submissions`
 
 **Files:**
-- Modify: `backend/routes/student_account_routes.py` (2 sites)
-- Modify: `backend/routes/student_portal_routes.py` (2 sites)
+- Modify: `backend/routes/student_account_routes.py` (2 sites + `import uuid`)
+- Modify: `backend/routes/student_portal_routes.py` (2 sites + `import uuid`)
+- Modify: `tests/test_integration_workflows.py` (mechanical mock update)
 
-- [ ] **Step 1: Audit the 4 target tables accept explicit UUIDs**
+### Step 1: Audit target tables accept explicit UUIDs
 
-```bash
-cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python3 << 'EOF'
-from dotenv import load_dotenv; load_dotenv('.env', override=True)
-from backend.supabase_client import get_raw_supabase
-import uuid
+Codex schema review confirmed all four target tables have `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` and no INSERT-only triggers that would misbehave under `ON CONFLICT DO UPDATE`:
 
-db = get_raw_supabase()
+- `student_submissions` (cloud_migration.sql:208, supabase_student_portal_schema.sql:82)
+- `published_assessments` (cloud_migration.sql:14-17) — has `join_code VARCHAR(10) UNIQUE NOT NULL`; retries with the same UUID merge, genuine duplicates (different UUID, same join_code) still hit the UNIQUE constraint
+- `submissions` (cloud_migration.sql:31-33) — `trigger_increment_submissions` fires `AFTER INSERT`, which Postgres intentionally skips on conflict-update, preventing counter inflation during retries
 
-tests = [
-    # table, minimal row
-    ('student_submissions', {
-        'id': str(uuid.uuid4()),
-        'student_name': '_resilience_test_',
-        'status': 'draft',
-    }),
-]
+### Step 2: Migrate `submit_student_work` in `student_account_routes.py` (line ~822)
 
-for table, row in tests:
-    try:
-        # Insert
-        ins = db.table(table).insert(row).execute()
-        print(f'{table}: insert OK, id={ins.data[0]["id"]}')
-        # Upsert with the SAME id should be a no-op
-        ups = db.table(table).upsert(row, on_conflict='id').execute()
-        print(f'{table}: upsert with same id OK (merge-duplicates)')
-        # Cleanup
-        db.table(table).delete().eq('id', row['id']).execute()
-        print(f'{table}: cleanup OK')
-    except Exception as e:
-        print(f'{table}: FAILED — {e}')
-EOF
-```
-
-Expected: All three steps (insert, upsert, cleanup) report OK for `student_submissions`. If any fail, diagnose the specific schema issue before proceeding.
-
-- [ ] **Step 2: Migrate `submit_student_work` in `student_account_routes.py`**
-
-Read the current implementation:
-
-```bash
-grep -n "submit_student_work\|student_submissions.*insert" /Users/alexc/Downloads/Graider/backend/routes/student_account_routes.py | head -10
-```
-
-Find the insert call (currently `db.table('student_submissions').insert(submission_row).execute()` around line 820). Replace the insertion pattern:
-
-Change:
-```python
-        result = db.table('student_submissions').insert(submission_row).execute()
-```
-
-To:
-```python
-        import uuid as _uuid
-        submission_row['id'] = str(_uuid.uuid4())
-        result = db.table('student_submissions').upsert(
-            submission_row, on_conflict='id'
-        ).execute()
-```
-
-The insert is now an upsert with an explicit UUID. Full retry is safe: if the first attempt committed and the response dropped, the second attempt merges on the same id and returns the same row.
-
-- [ ] **Step 3: Migrate `save_submission_draft` in `student_account_routes.py`**
-
-Find the new-draft insert inside `save_submission_draft`. It currently looks like:
+**Shipped:**
 
 ```python
-            db.table('student_submissions').insert({
+        # Caller-generated UUID + upsert on id makes this retry-safe: if a
+        # transient error drops the response after the server committed,
+        # the retry merges-duplicates on the same id (no double-write).
+        submission_row['id'] = str(uuid.uuid4())
+        try:
+            result = db.table('student_submissions').upsert(
+                submission_row, on_conflict='id'
+            ).execute()
+        except Exception as insert_err:
+            if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
+                return jsonify({"error": "You have already submitted this assignment."}), 400
+            raise
+```
+
+The `except` block is unchanged — 23505 duplicate detection still works because a fresh session generates a fresh UUID, so the upsert falls through to insert and the unique index on `(student_id, content_id, attempt_number)` fires.
+
+### Step 3: Migrate `save_submission_draft` in `student_account_routes.py` (line ~1279)
+
+**Shipped:**
+
+```python
+            db.table('student_submissions').upsert({
+                'id': str(uuid.uuid4()),
                 'student_id': student_id,
                 'content_id': content_id,
-                ...
+                'student_name': (sdata.get('first_name', '') + ' ' + sdata.get('last_name', '')).strip(),
+                'student_id_number': sdata.get('student_id_number'),
+                'period': sdata.get('period'),
                 'status': 'draft',
-                ...
-            }).execute()
+                'draft_answers': draft_answers,
+                'question_times': question_times,
+                'marked_for_review': marked_for_review,
+                'time_started_at': now_iso,
+            }, on_conflict='id').execute()
 ```
 
-Replace with:
+All 10 original draft fields preserved; only `id` is added and the call changes from `.insert(...).execute()` to `.upsert(..., on_conflict='id').execute()`.
+
+### Step 4: Migrate `publish_assessment` in `student_portal_routes.py` (line ~258)
+
+**Shipped:**
 
 ```python
-            import uuid as _uuid
-            draft_row = {
-                'id': str(_uuid.uuid4()),
-                'student_id': student_id,
-                'content_id': content_id,
-                # ... keep the existing fields unchanged ...
-                'status': 'draft',
-                # ... etc ...
-            }
-            db.table('student_submissions').upsert(draft_row, on_conflict='id').execute()
+        # Caller-generated UUID makes this retry-safe under full retry policy.
+        result = db.table('published_assessments').upsert({
+            "id": str(uuid.uuid4()),
+            "join_code": join_code,
+            "title": assessment.get('title', 'Untitled Assessment'),
+            "assessment": assessment,
+            "settings": db_settings,
+            "teacher_id": g.teacher_id,
+            "teacher_name": settings.get('teacher_name', 'Teacher'),
+            "teacher_email": settings.get('teacher_email'),
+            "is_active": True,
+        }, on_conflict='id').execute()
 ```
 
-Preserve every existing field on the row — only add the `id` and swap `insert()` for `upsert(..., on_conflict='id')`.
+### Step 5: Migrate `submit_assessment` (join-code path) in `student_portal_routes.py` (line ~778)
 
-- [ ] **Step 4: Migrate `publish_assessment` in `student_portal_routes.py`**
-
-Find the `published_assessments` insert. It currently looks something like:
+**Shipped:**
 
 ```python
-        result = db.table('published_assessments').insert({
-            'join_code': join_code,
-            'title': title,
-            ...
-        }).execute()
+        # Caller-generated UUID + upsert on id makes this retry-safe.
+        submission_row['id'] = str(uuid.uuid4())
+        try:
+            submission_result = db.table('submissions').upsert(
+                submission_row, on_conflict='id'
+            ).execute()
+        except Exception as insert_err:
+            if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
+                return jsonify({
+                    "error": "You have already submitted this assessment.",
+                }), 400
+            raise
 ```
 
-Replace with:
+### Step 6: Add `import uuid` to both files
 
-```python
-        import uuid as _uuid
-        published_row = {
-            'id': str(_uuid.uuid4()),
-            'join_code': join_code,
-            'title': title,
-            # ... keep the existing fields ...
-        }
-        result = db.table('published_assessments').upsert(
-            published_row, on_conflict='id'
-        ).execute()
-```
+Add to the stdlib import section near the top of each file if not already present. Both files needed it added.
 
-- [ ] **Step 5: Migrate `submit_assessment` (join-code path) in `student_portal_routes.py`**
+### Step 7: Fix integration test mocks (Plan correction)
 
-Find the `submissions` insert in the join-code public submission handler. Replace the insert with an upsert on id.
+> **Plan correction:** the original plan did not mention `tests/test_integration_workflows.py`. Two integration tests (`test_submit_mc_only_returns_score`, `test_publish_returns_join_code`) stubbed `.insert().execute()` on a MagicMock chain but nothing on `.upsert().execute()`. After the migration, those tests raised `TypeError: MagicMock not JSON serializable` because the code now reaches for `.upsert`. The fix is purely mechanical: wherever the test set `chain.insert.return_value = insert_chain`, add `chain.upsert.return_value = insert_chain` alongside it. No assertion logic is changed.
 
-```python
-        import uuid as _uuid
-        submission_row['id'] = str(_uuid.uuid4())
-        result = db.table('submissions').upsert(
-            submission_row, on_conflict='id'
-        ).execute()
-```
-
-- [ ] **Step 6: Run backend tests**
+### Step 8: Run the full suite
 
 ```bash
 cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/load --ignore=tests/stress 2>&1 | tail -10
 ```
 
-Expected: All tests pass.
+Expected: 1027 passing.
 
-- [ ] **Step 7: Commit**
+### Step 9: Commit
 
-```bash
-git add backend/routes/student_account_routes.py backend/routes/student_portal_routes.py
-git commit -m "feat: use caller-generated UUIDs for critical inserts (idempotent retry)"
-```
+- `c8d2c81 feat: use caller-generated UUIDs for critical inserts (idempotent retry)`
 
 ---
 
 ## Task 4: Ensure grading thread uses the resilient client
 
 **Files:**
-- Modify: `backend/services/portal_grading.py`
+- Modify: `tests/test_supabase_resilient.py` (add TestGradingThreadResilience class)
 
-The grading thread already calls `get_supabase()` to get its client, so after Task 2 ships it will automatically route through the resilient wrapper. This task is a verification-and-wrap task: confirm the grading-thread `.update()` call benefits from retry, and surface the grading-failed state change through the wrapper too.
+The grading thread already calls `from backend.supabase_client import get_supabase` at three sites in `backend/services/portal_grading.py` (lines 234, 502, 547). After Task 2 ships, those calls return a `ResilientClient` automatically. **No code change needed in `portal_grading.py`.**
 
-- [ ] **Step 1: Confirm grading thread uses `get_supabase()`**
+This task is verification-plus-test: add a unit test that pins the contract that a PATCH (the grading thread's update pattern) retries through `httpcore.ReadError` — exactly the failure mode seen in production today.
 
-```bash
-grep -n "supabase\|get_supabase\|sb\s*=\|db\s*=" /Users/alexc/Downloads/Graider/backend/services/portal_grading.py | head -20
-```
+### Step 1: Append `TestGradingThreadResilience` to `tests/test_supabase_resilient.py`
 
-Confirm the supabase client in `run_portal_grading_thread` is obtained via `get_supabase()` (not `create_client()` directly).
-
-If it is: the resilient wrapper applies automatically — no code change needed.
-If it isn't: change the acquisition line to `from backend.supabase_client import get_supabase_or_raise; sb = get_supabase_or_raise()`.
-
-- [ ] **Step 2: Add an integration test that simulates Supabase flakiness during grading**
-
-At the end of `tests/test_supabase_resilient.py`, add:
+**Shipped source** (appended as the last class in the file):
 
 ```python
 class TestGradingThreadResilience:
-    """End-to-end-ish test for retry behavior during background grading."""
+    """End-to-end-ish test for retry behavior during background grading.
+
+    The grading thread updates student_submissions.results via PATCH after
+    multipass grading completes. Since PATCH is idempotent, it must retry
+    through transient Supabase failures (including httpcore.ReadError from
+    HTTP/2 stream resets) without surfacing an error to the grading worker.
+    """
 
     def test_update_retries_on_transient_read_error(self):
-        """The grading thread updates student_submissions.results via PATCH.
-        PATCH is fully idempotent so it should retry through transient failures.
-        """
         from backend.supabase_resilient import _resilient_execute
         from unittest.mock import MagicMock, patch
         import httpcore
@@ -1047,204 +817,140 @@ class TestGradingThreadResilience:
         assert result.data[0]["results"]["score"] == 90
 ```
 
-- [ ] **Step 3: Run the new test**
+### Step 2: Run the new test
 
 ```bash
-cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_supabase_resilient.py::TestGradingThreadResilience -v 2>&1 | tail -10
+cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/test_supabase_resilient.py::TestGradingThreadResilience -v
 ```
 
-Expected: PASS.
+Expected: 1 PASS. Total test file count is now 24.
 
-- [ ] **Step 4: Commit**
+### Step 3: Commit
 
-```bash
-git add tests/test_supabase_resilient.py backend/services/portal_grading.py
-git commit -m "test: grading-thread PATCH retries through transient read errors"
-```
-
-(If `portal_grading.py` had no changes, omit it from the `git add`.)
+- `7c7bb9c test: grading-thread PATCH retries through transient read errors`
 
 ---
 
-## Task 5: Add healthcheck timeout and resilience documentation
+## Task 5: Tighten healthcheck and write docs
 
 **Files:**
-- Create: `docs/supabase-resilience.md`
 - Modify: `backend/app.py` (just the `/healthz` route)
+- Create: `docs/supabase-resilience.md`
 
-- [ ] **Step 1: Tighten the healthcheck timeout**
+### Step 1: Replace the `/healthz` Supabase probe
 
-Find the `/healthz` route in `backend/app.py` (around line 3389). The Supabase probe currently calls `db.table('published_assessments').select('id').limit(1).execute()` with no timeout override. In production we want a short timeout so a hanging healthcheck doesn't mark the pod healthy.
+> **Plan correction:** the original plan's code used `with httpx.Client(timeout=3.0): raw.table('published_assessments').select('id').limit(1).execute()`. That was a **no-op** — the `httpx.Client(timeout=3.0)` context manager created and discarded a client without passing it to supabase-py. The supabase call ran with the default timeout. The shipped code bypasses supabase-py entirely and calls the PostgREST REST API directly with `httpx.get()`.
+>
+> **Also fixed:** the original `/healthz` had a broken import path (`from supabase_client import get_supabase` — missing the `backend.` prefix). The probe silently fell through to the `except` branch and never actually ran. The shipped code reads env vars directly without importing the supabase client module.
 
-Change the probe block to:
+**Shipped `/healthz` probe block** (in `backend/app.py`, replaces the old Supabase try block):
 
 ```python
-    # Supabase
+@app.route('/healthz')
+def healthz():
+    """General health check for Railway load balancer."""
+    status = {"app": "ok"}
+    # Supabase — raw httpx GET with a short timeout.
+    # Deliberately bypasses ResilientClient: a healthcheck must fail fast,
+    # not retry for 30s while the pod reports healthy. If this check fails
+    # the pod should be marked degraded immediately so the orchestrator can
+    # route around it.
     try:
-        from backend.supabase_client import get_raw_supabase
-        import httpx
-        raw = get_raw_supabase()
-        if raw is None:
-            supabase_status = "not configured"
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
+        if not supabase_url or not supabase_key:
+            status["supabase"] = "not configured"
         else:
-            # Healthcheck uses raw client with a short explicit timeout.
-            # We don't want the healthcheck itself to retry — if Supabase is
-            # slow, the pod should report degraded, not succeed after 30s.
-            with httpx.Client(timeout=3.0):
-                raw.table('published_assessments').select('id').limit(1).execute()
-            supabase_status = "ok"
-    except Exception as e:
-        supabase_status = f"error: {str(e)[:100]}"
+            import httpx
+            resp = httpx.get(
+                f"{supabase_url.rstrip('/')}/rest/v1/published_assessments?select=id&limit=1",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                },
+                timeout=3.0,
+            )
+            if resp.status_code == 200:
+                status["supabase"] = "ok"
+            else:
+                status["supabase"] = f"degraded (status {resp.status_code})"
+    except Exception:
+        status["supabase"] = "error"
+
+    # Check Redis if configured
+    try:
+        redis_url = os.getenv('REDIS_URL')
+        if redis_url:
+            import redis
+            r = redis.from_url(redis_url)
+            r.ping()
+            status["redis"] = "ok"
+        else:
+            status["redis"] = "not configured"
+    except Exception:
+        status["redis"] = "error"
+
+    return jsonify(status)
 ```
 
-Note: this uses `get_raw_supabase()` specifically so the healthcheck does NOT participate in retry. A failing healthcheck should fail fast.
+Critical details:
+- `timeout=3.0` on `httpx.get()` caps both connect and read phases
+- URL format is Supabase PostgREST: `{SUPABASE_URL}/rest/v1/{table}?select={col}&limit={n}`
+- Headers: `apikey` + `Authorization: Bearer` (Supabase service-role auth)
+- No `get_supabase()`, no `ResilientClient`, no retry
 
-- [ ] **Step 2: Create `docs/supabase-resilience.md`**
+### Step 2: Create `docs/supabase-resilience.md`
 
-```markdown
-# Supabase Resilience Pattern
+The full doc is at `docs/supabase-resilience.md` (commit `a6e3927`). Key sections:
 
-Graider's Supabase client is wrapped in a resilience proxy (`ResilientClient`) that automatically retries transient failures with exponential backoff.
+- **What's retried automatically** — the policy table for GET/PATCH/DELETE/upsert/insert
+- **When to use caller-generated UUIDs** — the Task 3 pattern, with code example and the list of current usages
+- **How to opt out of retry** — `get_raw_supabase()` for streaming/healthchecks
+- **Never bypass with `create_client()`** — points at the regression test from Task 2.5
+- **Retry budget** — 5 retries, 0.5s → 32s exponential with ±25% jitter
+- **Observability** — the log labels (`[supabase-get]`, `[supabase-patch]`, `[supabase-delete]`, `[supabase-post]`, `[supabase-insert-preflight]`)
 
-## What's retried automatically
-
-Every `.execute()` call on a query built through `db.table(...)` is routed through retry logic. The policy depends on the HTTP verb:
-
-| Verb    | Operation     | Retry policy    |
-|---------|---------------|-----------------|
-| `GET`   | select        | full            |
-| `PATCH` | update        | full            |
-| `DELETE`| delete        | full            |
-| `POST`  | upsert        | full            |
-| `POST`  | insert        | preflight only  |
-
-**full** = retry on any transient error (OSError, ConnectionError, TimeoutError, HTTP 408/429/5xx, httpcore ReadError/ReadTimeout, etc.)
-
-**preflight only** = retry only on errors that occurred before any bytes reached the server (`ConnectError`, `ConnectTimeout`, DNS failures). Response-phase errors during an insert are surfaced to the caller because the server may already have committed the write.
-
-## When to use caller-generated UUIDs
-
-If your insert MUST retry safely even on response-phase errors — i.e., you cannot tolerate a failed submission surfacing a 500 error to a student — pass a caller-generated UUID as the `id` field and call `upsert(..., on_conflict='id')` instead of `insert(...)`:
-
-```python
-import uuid
-row = {
-    'id': str(uuid.uuid4()),
-    # ... other fields ...
-}
-db.table('my_table').upsert(row, on_conflict='id').execute()
-```
-
-The upsert gets classified as "full retry". If the first attempt committed the row and the response dropped, the retry's UPSERT on the same id merges-duplicates to a no-op and returns the existing row.
-
-Used in:
-- `backend/routes/student_account_routes.py::submit_student_work`
-- `backend/routes/student_account_routes.py::save_submission_draft`
-- `backend/routes/student_portal_routes.py::publish_assessment`
-- `backend/routes/student_portal_routes.py::submit_assessment`
-
-## How to opt out of retry
-
-For long-running streaming queries or custom retry logic, import the raw client:
-
-```python
-from backend.supabase_client import get_raw_supabase
-raw = get_raw_supabase()
-raw.table('my_table').select('*').execute()  # no retry wrapping
-```
-
-The healthcheck endpoint uses this to fail fast instead of retrying.
-
-## Retry budget
-
-- 5 retries per operation (configurable in `backend/retry.py`)
-- Exponential backoff: 0.5s, 1s, 2s, 4s, 8s, capped at 32s
-- ±25% jitter
-- Honours `Retry-After` header
-
-## Observability
-
-Every retry is logged with `logger.warning` at:
-- `[supabase-get]` for selects
-- `[supabase-patch]` for updates
-- `[supabase-delete]` for deletes
-- `[supabase-post]` for upserts
-- `[supabase-insert-preflight]` for insert preflight retries
-
-Grep for these labels to see retry activity in production logs.
-```
-
-- [ ] **Step 3: Run the full test suite one more time**
+### Step 3: Verify healthcheck with Flask test client
 
 ```bash
-cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/load --ignore=tests/stress 2>&1 | tail -10
+cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python3 -c "
+from dotenv import load_dotenv; load_dotenv('.env', override=True)
+from backend.app import app
+with app.test_client() as c:
+    resp = c.get('/healthz')
+    print('STATUS:', resp.status_code)
+    print('BODY:', resp.get_json())
+"
 ```
 
-Expected: All tests pass.
+Expected: `STATUS: 200` and `BODY: {"app":"ok","redis":"not configured","supabase":"ok"}` (Redis status depends on env).
 
-- [ ] **Step 4: Commit**
+### Step 4: Run the full suite
 
 ```bash
-git add backend/app.py docs/supabase-resilience.md
-git commit -m "docs: supabase resilience pattern + tighten healthcheck timeout"
+cd /Users/alexc/Downloads/Graider && source venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/load --ignore=tests/stress 2>&1 | tail -15
 ```
+
+Expected: 1028 passing.
+
+### Step 5: Commit
+
+- `a6e3927 feat: healthcheck fails fast via raw httpx + resilience docs`
 
 ---
 
 ## Task 6: Open PR and let CI verify
 
-- [ ] **Step 1: Push the branch**
+### Step 1: Push the branch
 
 ```bash
 git push -u origin feat/supabase-resilience
 ```
 
-- [ ] **Step 2: Open a PR with auto-merge enabled**
+### Step 2: Open a PR with auto-merge enabled
 
 ```bash
-gh pr create --title "feat: Supabase resilience — operation-aware retry" --body "$(cat <<'EOF'
-## Summary
-
-Wraps the singleton Supabase client in a `ResilientClient` proxy that routes every `.execute()` call through operation-aware retry logic. Closes Tier 1 #2 in the district production reliability plan.
-
-## Retry policy by operation
-
-| Verb | Operation | Policy |
-|---|---|---|
-| GET | select | full retry |
-| PATCH | update | full retry |
-| DELETE | delete | full retry |
-| POST+merge-duplicates | upsert | full retry |
-| POST (raw) | insert | preflight-only (connect-phase errors only) |
-
-## Critical-write UUID migration
-
-The 4 critical insert paths now pass caller-generated UUIDs and use `upsert(..., on_conflict='id')` so they're fully retryable even on response-phase errors:
-
-- `submit_student_work` (student_submissions)
-- `save_submission_draft` (student_submissions)
-- `publish_assessment` (published_assessments)
-- `submit_assessment` join-code path (submissions)
-
-## Other changes
-
-- `/healthz` uses the raw client with 3s timeout (no retry during healthcheck)
-- `docs/supabase-resilience.md` documents the pattern and opt-out path
-- New test file `tests/test_supabase_resilient.py` with 17 unit tests covering classification, preflight detection, and retry behavior
-
-## Test plan
-
-- [x] 17 new unit tests pass
-- [x] Full test suite (1000+ tests) still green
-- [ ] CI green (this PR)
-- [ ] Manual smoke test against live Supabase
-EOF
-)"
-```
-
-- [ ] **Step 3: Enable auto-merge**
-
-```bash
+gh pr create --title "feat: Supabase resilience — operation-aware retry" --body "..."
 gh pr merge --auto --squash
 ```
 
@@ -1252,17 +958,33 @@ The PR will wait for CI (Backend Tests + Frontend Build) to pass, then squash-me
 
 ---
 
+## Commit history (as shipped)
+
+| # | SHA | Task | Summary |
+|---|-----|------|---------|
+| 1 | `c47a3cf` | 1 | add ResilientClient proxy with operation-aware retry |
+| 2 | `2255db2` | 1 | retry httpcore.ProtocolError on idempotent operations |
+| 3 | `4f07220` | 2 | wire get_supabase() through ResilientClient wrapper |
+| 4 | `853874b` | 2 | thread-safe singleton init + precise env var error message |
+| 5 | `10265c4` | 2.5 | route all Supabase access through resilient singleton |
+| 6 | `c8d2c81` | 3 | use caller-generated UUIDs for critical inserts (idempotent retry) |
+| 7 | `7c7bb9c` | 4 | grading-thread PATCH retries through transient read errors |
+| 8 | `a6e3927` | 5 | healthcheck fails fast via raw httpx + resilience docs |
+
+---
+
 ## Summary
 
-| Task | Files changed | Risk | What it accomplishes |
+| Task | Files changed | Risk | Shipped behaviour |
 |---|---|---|---|
-| 1 | new: `supabase_resilient.py`, test file | Low — pure new module with tests | Core proxy + operation classifier |
-| 2 | `supabase_client.py` | Low — 1 file, full-suite test gate | Wires proxy in transparently |
-| 3 | 2 route files | Medium — touches critical insert paths | UUID-based idempotency for 4 write sites |
-| 4 | maybe `portal_grading.py` + test | Low — verification only | Confirms grading thread benefits |
-| 5 | `app.py` healthcheck + new doc | Low — tightens healthcheck | Ops documentation |
+| 1 | new: `supabase_resilient.py`, test file | Low | Core proxy with `_is_supabase_retryable` httpcore adapter + explicit `rpc()`/`schema()` wrapping + ProtocolError coverage |
+| 2 | `supabase_client.py` | Low → Medium | Wires the proxy in transparently with `RLock`-guarded singleton init and precise env-var errors |
+| 2.5 | `behavior_routes.py`, `assistant_tools_behavior.py`, new regression test | Low | Kills the two direct `create_client()` offenders, adds a guard so future code cannot reintroduce them |
+| 3 | 2 route files + 1 test file | Medium | UUID-based idempotency for 4 critical write sites; integration test mocks updated for insert→upsert |
+| 4 | `test_supabase_resilient.py` only | None | Pins the PATCH-retry contract for the grading thread |
+| 5 | `app.py` healthz + new docs | Low | Healthcheck now uses raw `httpx.get()` (3s timeout) against PostgREST directly — fails fast, no retry |
 | 6 | none | None | Push + PR + auto-merge via CI |
 
-**Before:** 194 raw `.table().execute()` calls in route handlers can each fail with an unretried `httpcore.ReadError` when Supabase's HTTP/2 connection pool drops. The error we saw today in localhost would become a 500 in production.
+**Before:** 194 raw `.table().execute()` calls in route handlers could each fail with an unretried `httpcore.ReadError` when Supabase's HTTP/2 connection pool drops. Two modules bypassed the singleton entirely. The healthcheck Supabase probe was silently broken.
 
-**After:** Every Supabase call in the backend is automatically protected. Reads, updates, deletes, upserts retry on any transient failure. Raw inserts retry conservatively on connect-phase errors. The 4 most critical insert paths upgrade to full-retry via caller-generated UUIDs. Healthcheck fails fast without retry. Full docs and tests for the pattern.
+**After:** Every Supabase call in the backend is automatically protected. Reads, updates, deletes, upserts retry on any transient failure including httpcore's exception hierarchy. Raw inserts retry conservatively on connect-phase errors. The 4 most critical insert paths upgrade to full-retry via caller-generated UUIDs. No module can bypass the wrapper via `create_client()` without breaking the build. Healthcheck fails fast in 3s. Full docs at `docs/supabase-resilience.md` and 24 unit tests pinning the retry contract.
