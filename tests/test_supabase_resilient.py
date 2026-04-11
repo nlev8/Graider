@@ -283,3 +283,35 @@ class TestProxyBehavior:
         assert isinstance(sub_wrapper, ResilientClient)
         # Calls through the sub-wrapper should produce wrapped builders
         assert isinstance(sub_wrapper.table("events"), _ExecuteProxy)
+
+
+class TestGradingThreadResilience:
+    """End-to-end-ish test for retry behavior during background grading.
+
+    The grading thread updates student_submissions.results via PATCH after
+    multipass grading completes. Since PATCH is idempotent, it must retry
+    through transient Supabase failures (including httpcore.ReadError from
+    HTTP/2 stream resets) without surfacing an error to the grading worker.
+    """
+
+    def test_update_retries_on_transient_read_error(self):
+        from backend.supabase_resilient import _resilient_execute
+        from unittest.mock import MagicMock, patch
+        import httpcore
+
+        call_count = {"n": 0}
+        q = MagicMock()
+        q.request.http_method = "PATCH"
+        q.request.headers = {"Prefer": "return=representation"}
+
+        def fake_execute():
+            call_count["n"] += 1
+            if call_count["n"] < 3:
+                raise httpcore.ReadError("server reset connection mid-update")
+            return MagicMock(data=[{"id": "xxx", "results": {"score": 90}}])
+
+        q.execute = fake_execute
+        with patch("time.sleep"):
+            result = _resilient_execute(q)
+        assert call_count["n"] == 3
+        assert result.data[0]["results"]["score"] == 90
