@@ -3393,6 +3393,13 @@ def get_user_manual():
 @app.route('/healthz')
 def healthz():
     """General health check for Railway load balancer."""
+    # Alert-drill short-circuit — exercises the full BetterStack alert
+    # pipeline without touching Supabase, so student/teacher API traffic
+    # is unaffected during drills. See docs/observability.md § "Quarterly
+    # drill procedure" for the full runbook.
+    if os.getenv('FORCE_HEALTHZ_FAIL') == '1':
+        return jsonify({"app": "ok", "supabase": "drill_forced_failure"}), 503
+
     status = {"app": "ok"}
     # Supabase — raw httpx GET with a short timeout.
     # Deliberately bypasses ResilientClient: a healthcheck must fail fast,
