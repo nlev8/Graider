@@ -1,0 +1,1063 @@
+diff --git a/backend/app.py b/backend/app.py
+index ba71de3..7c9e57d 100644
+--- a/backend/app.py
++++ b/backend/app.py
+@@ -3389,15 +3389,31 @@ def get_user_manual():
+ def healthz():
+     """General health check for Railway load balancer."""
+     status = {"app": "ok"}
++    # Supabase — raw httpx GET with a short timeout.
++    # Deliberately bypasses ResilientClient: a healthcheck must fail fast,
++    # not retry for 30s while the pod reports healthy. If this check fails
++    # the pod should be marked degraded immediately so the orchestrator can
++    # route around it.
+     try:
+-        from supabase_client import get_supabase
+-        sb = get_supabase()
+-        if sb:
+-            sb.table('published_assessments').select('id').limit(1).execute()
+-            status["supabase"] = "ok"
+-        else:
++        supabase_url = os.getenv('SUPABASE_URL')
++        supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
++        if not supabase_url or not supabase_key:
+             status["supabase"] = "not configured"
+-    except Exception as e:
++        else:
++            import httpx
++            resp = httpx.get(
++                f"{supabase_url.rstrip('/')}/rest/v1/published_assessments?select=id&limit=1",
++                headers={
++                    "apikey": supabase_key,
++                    "Authorization": f"Bearer {supabase_key}",
++                },
++                timeout=3.0,
++            )
++            if resp.status_code == 200:
++                status["supabase"] = "ok"
++            else:
++                status["supabase"] = f"degraded (status {resp.status_code})"
++    except Exception:
+         status["supabase"] = "error"
+ 
+     # Check Redis if configured
+diff --git a/backend/routes/behavior_routes.py b/backend/routes/behavior_routes.py
+index 21113ae..524e7b0 100644
+--- a/backend/routes/behavior_routes.py
++++ b/backend/routes/behavior_routes.py
+@@ -24,19 +24,14 @@ behavior_bp = Blueprint('behavior', __name__)
+ 
+ PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
+ 
+-_supabase = None
+-
+-
+ def _get_supabase():
+-    global _supabase
+-    if _supabase is None:
+-        from supabase import create_client
+-        url = os.getenv("SUPABASE_URL")
+-        key = os.getenv("SUPABASE_SERVICE_KEY")
+-        if not url or not key:
+-            raise Exception("Supabase credentials not configured")
+-        _supabase = create_client(url, key)
+-    return _supabase
++    """Return the canonical resilient Supabase client.
++
++    Delegates to backend.supabase_client so all behavior calls route
++    through ResilientClient and get automatic retry on transient failures.
++    """
++    from backend.supabase_client import get_supabase_or_raise
++    return get_supabase_or_raise()
+ 
+ 
+ def _get_teacher_id():
+diff --git a/backend/routes/student_account_routes.py b/backend/routes/student_account_routes.py
+index f64a401..8c34b94 100644
+--- a/backend/routes/student_account_routes.py
++++ b/backend/routes/student_account_routes.py
+@@ -17,6 +17,7 @@ import json
+ import os
+ import random
+ import secrets
++import uuid
+ from collections import defaultdict
+ from datetime import datetime, timezone, timedelta
+ from flask import Blueprint, request, jsonify, g
+@@ -818,8 +819,14 @@ def submit_student_work(content_id):
+             submission_row['percentage'] = instant_results.get('percentage')
+             submission_row['total_points'] = instant_results.get('total_points')
+ 
++        # Caller-generated UUID + upsert on id makes this retry-safe: if a
++        # transient error drops the response after the server committed,
++        # the retry merges-duplicates on the same id (no double-write).
++        submission_row['id'] = str(uuid.uuid4())
+         try:
+-            result = db.table('student_submissions').insert(submission_row).execute()
++            result = db.table('student_submissions').upsert(
++                submission_row, on_conflict='id'
++            ).execute()
+         except Exception as insert_err:
+             if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
+                 return jsonify({"error": "You have already submitted this assignment."}), 400
+@@ -1269,7 +1276,8 @@ def save_submission_draft(content_id):
+                 'first_name, last_name, student_id_number, period'
+             ).eq('id', student_id).execute()
+             sdata = student_row.data[0] if student_row.data else {}
+-            db.table('student_submissions').insert({
++            db.table('student_submissions').upsert({
++                'id': str(uuid.uuid4()),
+                 'student_id': student_id,
+                 'content_id': content_id,
+                 'student_name': (sdata.get('first_name', '') + ' ' + sdata.get('last_name', '')).strip(),
+@@ -1280,7 +1288,7 @@ def save_submission_draft(content_id):
+                 'question_times': question_times,
+                 'marked_for_review': marked_for_review,
+                 'time_started_at': now_iso,
+-            }).execute()
++            }, on_conflict='id').execute()
+             time_started_at = now_iso
+ 
+         # Calculate remaining time
+diff --git a/backend/routes/student_portal_routes.py b/backend/routes/student_portal_routes.py
+index b97a2dd..db92d2c 100644
+--- a/backend/routes/student_portal_routes.py
++++ b/backend/routes/student_portal_routes.py
+@@ -8,6 +8,7 @@ import logging
+ import os
+ import random
+ import string
++import uuid
+ from datetime import datetime, timezone
+ from flask import Blueprint, request, jsonify, g
+ from backend.supabase_client import get_supabase_or_raise as get_supabase
+@@ -254,8 +255,9 @@ def publish_assessment():
+             "due_date": settings.get('due_date'),
+         }
+ 
+-        # Insert into Supabase
+-        result = db.table('published_assessments').insert({
++        # Caller-generated UUID makes this retry-safe under full retry policy.
++        result = db.table('published_assessments').upsert({
++            "id": str(uuid.uuid4()),
+             "join_code": join_code,
+             "title": assessment.get('title', 'Untitled Assessment'),
+             "assessment": assessment,
+@@ -264,7 +266,7 @@ def publish_assessment():
+             "teacher_name": settings.get('teacher_name', 'Teacher'),
+             "teacher_email": settings.get('teacher_email'),
+             "is_active": True,
+-        }).execute()
++        }, on_conflict='id').execute()
+ 
+         if not result.data:
+             return jsonify({"error": "Failed to publish assessment"}), 500
+@@ -773,8 +775,12 @@ def submit_assessment(code):
+             submission_row["total_points"] = results.get('total_points')
+             submission_row["percentage"] = results.get('percentage')
+ 
++        # Caller-generated UUID + upsert on id makes this retry-safe.
++        submission_row['id'] = str(uuid.uuid4())
+         try:
+-            submission_result = db.table('submissions').insert(submission_row).execute()
++            submission_result = db.table('submissions').upsert(
++                submission_row, on_conflict='id'
++            ).execute()
+         except Exception as insert_err:
+             if '23505' in str(insert_err) or 'duplicate' in str(insert_err).lower():
+                 return jsonify({
+diff --git a/backend/services/assistant_tools_behavior.py b/backend/services/assistant_tools_behavior.py
+index a3044c5..2f75774 100644
+--- a/backend/services/assistant_tools_behavior.py
++++ b/backend/services/assistant_tools_behavior.py
+@@ -26,20 +26,17 @@ from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_a
+ # SUPABASE CLIENT (lazy, same pattern as routes)
+ # ═══════════════════════════════════════════════════════
+ 
+-_supabase = None
+ SETTINGS_FILE = os.path.expanduser("~/.graider_global_settings.json")
+ 
+ 
+ def _get_supabase():
+-    global _supabase
+-    if _supabase is None:
+-        from supabase import create_client
+-        url = os.getenv("SUPABASE_URL")
+-        key = os.getenv("SUPABASE_SERVICE_KEY")
+-        if not url or not key:
+-            raise Exception("Supabase credentials not configured")
+-        _supabase = create_client(url, key)
+-    return _supabase
++    """Return the canonical resilient Supabase client.
++
++    Delegates to backend.supabase_client so all assistant tool calls route
++    through ResilientClient and get automatic retry on transient failures.
++    """
++    from backend.supabase_client import get_supabase_or_raise
++    return get_supabase_or_raise()
+ 
+ 
+ def _get_teacher_id():
+diff --git a/backend/supabase_client.py b/backend/supabase_client.py
+index 9aa4110..ee029ce 100644
+--- a/backend/supabase_client.py
++++ b/backend/supabase_client.py
+@@ -2,30 +2,94 @@
+ Canonical Supabase client for Graider.
+ All modules should import from here instead of creating their own clients.
+ 
+-Provides two variants:
+-  - get_supabase()          → returns client or None (lenient, for optional features)
+-  - get_supabase_or_raise() → returns client or raises Exception (strict, for required features)
++Provides three variants:
++  - get_supabase()          → returns resilient client or None (lenient, for optional features)
++  - get_supabase_or_raise() → returns resilient client or raises Exception (strict, for required features)
++  - get_raw_supabase()      → returns the unwrapped raw client (opt-out for streaming / custom retry / healthchecks)
++
++Default for new code: get_supabase() / get_supabase_or_raise(). Only reach for
++get_raw_supabase() when you specifically need to bypass the retry wrapper.
+ """
+ import os
++import threading
++
+ from supabase import create_client, Client
+ 
+-_supabase: Client = None
++_supabase_raw: Client = None
++_supabase_resilient = None
++
++# Guards cold-start singleton initialization across Flask request threads and
++# background grading threads. The GIL makes attribute reads atomic, but the
++# check-then-create pattern below is not — without the lock, two concurrent
++# first calls can each construct a client and silently discard one.
++# RLock (not Lock) because get_supabase() acquires the lock and then calls
++# get_raw_supabase(), which acquires the same lock — a plain Lock would deadlock.
++_init_lock = threading.RLock()
+ 
+ 
+-def get_supabase() -> Client:
+-    """Lazy-init Supabase admin client. Returns None if not configured."""
+-    global _supabase
+-    if _supabase is None:
++def get_raw_supabase() -> Client:
++    """Lazy-init raw Supabase admin client WITHOUT retry wrapping.
++
++    Use this only when you need the underlying client — e.g. for long-running
++    streaming queries, custom retry logic, or healthchecks that must fail fast.
++    Most callers should use get_supabase() or get_supabase_or_raise() instead.
++    """
++    global _supabase_raw
++    if _supabase_raw is not None:
++        return _supabase_raw
++    with _init_lock:
++        # Double-check: another thread may have initialized while we waited.
++        if _supabase_raw is not None:
++            return _supabase_raw
+         url = os.getenv('SUPABASE_URL')
+         key = os.getenv('SUPABASE_SERVICE_KEY')
+         if url and key:
+-            _supabase = create_client(url, key)
+-    return _supabase
++            _supabase_raw = create_client(url, key)
++    return _supabase_raw
++
+ 
++def get_supabase():
++    """Lazy-init Supabase admin client with automatic retry wrapping.
+ 
+-def get_supabase_or_raise() -> Client:
+-    """Lazy-init Supabase admin client. Raises if not configured."""
++    Returns a ResilientClient instance (behaves like the raw client but
++    every .execute() call is routed through operation-aware retry), or None
++    if not configured.
++    """
++    global _supabase_resilient
++    if _supabase_resilient is not None:
++        return _supabase_resilient
++    with _init_lock:
++        if _supabase_resilient is not None:
++            return _supabase_resilient
++        raw = get_raw_supabase()
++        if raw is not None:
++            from backend.supabase_resilient import ResilientClient
++            _supabase_resilient = ResilientClient(raw)
++    return _supabase_resilient
++
++
++def get_supabase_or_raise():
++    """Lazy-init resilient Supabase client. Raises if not configured.
++
++    Names the specific missing env var so misconfigurations are easy to diagnose.
++    """
+     client = get_supabase()
+-    if client is None:
+-        raise Exception("Supabase credentials not configured. Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env")
+-    return client
++    if client is not None:
++        return client
++
++    # Identify which var is missing so the error message is actionable.
++    missing = []
++    if not os.getenv('SUPABASE_URL'):
++        missing.append('SUPABASE_URL')
++    if not os.getenv('SUPABASE_SERVICE_KEY'):
++        missing.append('SUPABASE_SERVICE_KEY')
++    if missing:
++        raise Exception(
++            f"Supabase credentials not configured. Missing: {', '.join(missing)}. "
++            "Check your .env file."
++        )
++    # Both env vars are set but client still None — something else went wrong.
++    raise Exception(
++        "Supabase client initialization failed despite SUPABASE_URL and "
++        "SUPABASE_SERVICE_KEY being set. Check logs for create_client() errors."
++    )
+diff --git a/backend/supabase_resilient.py b/backend/supabase_resilient.py
+new file mode 100644
+index 0000000..31bb155
+--- /dev/null
++++ b/backend/supabase_resilient.py
+@@ -0,0 +1,256 @@
++"""Resilient Supabase client wrapper with operation-aware retry.
++
++Wraps the singleton Supabase client so that every `.execute()` call is
++automatically routed through `with_retry()` from backend.retry. The retry
++policy is chosen per operation:
++
++  - GET (select): full retry on any transient error
++  - PATCH (update): full retry (idempotent — setting the same value twice is safe)
++  - DELETE (delete): full retry (deleting an already-deleted row is a no-op)
++  - POST with resolution=merge-duplicates (upsert): full retry (idempotent by design)
++  - POST without resolution (raw insert): preflight-only retry
++       We only retry on errors that occurred before any bytes reached the server
++       (ConnectError, ConnectTimeout, DNS failures). For response-phase errors
++       (ReadError, ReadTimeout, ProtocolError) we surface the exception because
++       the server may already have committed the write — retrying would
++       double-insert.
++
++For critical writes that must remain safe under full retry even as raw inserts,
++callers should generate their own UUID primary key and rely on the
++schema-level UNIQUE constraint to reject duplicates. See
++`docs/supabase-resilience.md` for the pattern.
++
++Opt-out: callers that truly need the unwrapped client (e.g. for long-running
++streaming queries) can import `get_raw_supabase()` from backend.supabase_client.
++"""
++
++import logging
++import random
++import time
++from typing import Any
++
++import httpcore
++
++from backend.retry import (
++    is_retryable_error,
++    MAX_RETRIES,
++    BASE_DELAY_S,
++    MAX_DELAY_S,
++    JITTER_FACTOR,
++)
++
++logger = logging.getLogger(__name__)
++
++
++def _is_supabase_retryable(error: BaseException) -> bool:
++    """Return True if *error* is a transient error worth retrying.
++
++    Extends ``backend.retry.is_retryable_error`` to also recognise
++    ``httpcore.NetworkError`` (ConnectError, ReadError, WriteError,
++    ConnectTimeout, ReadTimeout, WriteTimeout, ProtocolError), which are
++    what supabase-py surfaces when the underlying HTTP transport fails.
++    ``httpcore`` exceptions do not subclass ``OSError``/``ConnectionError``,
++    so the core retry helper does not catch them on its own.
++    """
++    if isinstance(error, (httpcore.NetworkError, httpcore.TimeoutException, httpcore.ProtocolError)):
++        return True
++    return is_retryable_error(error)
++
++
++# ---------------------------------------------------------------------------
++# Operation classification
++# ---------------------------------------------------------------------------
++
++def _classify_operation(query: Any) -> str:
++    """Return the retry policy for a postgrest query builder.
++
++    Returns one of:
++      - "full"            — retry on any transient error
++      - "preflight_only"  — retry only on connect-phase errors
++    """
++    try:
++        method = query.request.http_method
++        headers = query.request.headers or {}
++    except AttributeError:
++        # Unknown builder shape — be conservative
++        return "preflight_only"
++
++    prefer = headers.get("Prefer", "") or ""
++
++    if method == "GET":
++        return "full"
++    if method in ("PATCH", "DELETE"):
++        return "full"
++    if method == "POST":
++        if "resolution=merge-duplicates" in prefer:
++            return "full"  # upsert
++        return "preflight_only"  # raw insert
++    return "preflight_only"
++
++
++# ---------------------------------------------------------------------------
++# Preflight error detection
++# ---------------------------------------------------------------------------
++
++# Errors that mean the request never reached the server (safe to retry even for inserts).
++_PREFLIGHT_EXCEPTIONS = (
++    httpcore.ConnectError,
++    httpcore.ConnectTimeout,
++)
++
++
++def _is_preflight_error(error: BaseException) -> bool:
++    """Return True if the error occurred before any bytes reached the server.
++
++    This is the set of errors where retrying an insert is safe even without
++    idempotency keys — the previous attempt never committed anything.
++    """
++    if isinstance(error, _PREFLIGHT_EXCEPTIONS):
++        return True
++
++    # DNS failures surface as OSError with errno -2 or -3 (gaierror on Linux/macOS)
++    if isinstance(error, OSError):
++        msg = str(error).lower()
++        if "name or service not known" in msg:
++            return True
++        if "nodename nor servname" in msg:
++            return True
++        if "temporary failure in name resolution" in msg:
++            return True
++
++    return False
++
++
++# ---------------------------------------------------------------------------
++# Execute wrapper
++# ---------------------------------------------------------------------------
++
++def _resilient_execute(query: Any) -> Any:
++    """Execute a postgrest query with operation-aware retry."""
++    policy = _classify_operation(query)
++
++    try:
++        method = query.request.http_method.lower()
++    except AttributeError:
++        method = "unknown"
++
++    if policy == "full":
++        label = f"supabase-{method}"
++
++        def _should_retry(exc: BaseException) -> bool:
++            return _is_supabase_retryable(exc)
++    else:
++        label = f"supabase-{method}-preflight"
++
++        def _should_retry(exc: BaseException) -> bool:
++            # Raw inserts: only retry if the failure happened before any bytes
++            # reached the server. Response-phase errors may indicate the write
++            # was already committed and retrying would double-insert.
++            return _is_supabase_retryable(exc) and _is_preflight_error(exc)
++
++    last_error: BaseException | None = None
++    for attempt in range(1, MAX_RETRIES + 2):  # 1 initial + MAX_RETRIES retries
++        try:
++            return query.execute()
++        except Exception as exc:
++            last_error = exc
++
++            if not _should_retry(exc):
++                raise
++
++            if attempt > MAX_RETRIES:
++                logger.error(
++                    "[%s] All %d retries exhausted. Last error: %s",
++                    label, MAX_RETRIES, exc,
++                )
++                raise
++
++            base = BASE_DELAY_S * (2 ** (attempt - 1))
++            base = min(base, MAX_DELAY_S)
++            delay = base + random.random() * JITTER_FACTOR * base
++            logger.warning(
++                "[%s] Attempt %d/%d failed (%s). Retrying in %.2fs...",
++                label, attempt, MAX_RETRIES + 1, exc, delay,
++            )
++            time.sleep(delay)
++
++    raise last_error  # type: ignore[misc]
++
++
++# ---------------------------------------------------------------------------
++# Proxy wrapper
++# ---------------------------------------------------------------------------
++
++class _ExecuteProxy:
++    """Wraps a postgrest query builder so .execute() routes through retry."""
++
++    def __init__(self, inner):
++        self._inner = inner
++
++    def execute(self):
++        return _resilient_execute(self._inner)
++
++    def __getattr__(self, name):
++        result = getattr(self._inner, name)
++        if callable(result):
++            def wrapped(*args, **kwargs):
++                sub = result(*args, **kwargs)
++                # If the sub-result has a .execute, it's still a query builder — wrap it
++                if hasattr(sub, "execute"):
++                    return _ExecuteProxy(sub)
++                return sub
++            return wrapped
++        return result
++
++
++def _wrap_if_builder(obj):
++    """Wrap any object that looks like a postgrest query builder.
++
++    A builder is anything that exposes `.execute()` — direct table/from_ chains,
++    rpc() results, and schema() sub-clients all satisfy this shape. Non-builder
++    objects (auth, storage, realtime) are returned unchanged so their own
++    APIs remain untouched.
++    """
++    if obj is None:
++        return obj
++    if hasattr(obj, "execute"):
++        return _ExecuteProxy(obj)
++    # schema() returns a SyncPostgrestClient whose .from_/.table/.rpc each
++    # return builders — wrap the sub-client so those chains are proxied too.
++    if hasattr(obj, "from_") or hasattr(obj, "table"):
++        return ResilientClient(obj)
++    return obj
++
++
++class ResilientClient:
++    """Proxies a Supabase client so every .execute() call goes through retry.
++
++    Covers .table(), .from_(), .rpc(), and .schema() so that no entry point
++    can reach `.execute()` without the retry wrapper. Non-postgrest attributes
++    (auth, storage, realtime, functions) pass through unchanged.
++    """
++
++    def __init__(self, raw_client):
++        self._raw = raw_client
++
++    def table(self, name: str):
++        return _ExecuteProxy(self._raw.table(name))
++
++    def from_(self, name: str):
++        return _ExecuteProxy(self._raw.from_(name))
++
++    def rpc(self, fn: str, params=None):
++        # supabase-py signature: rpc(fn, params=None)
++        builder = self._raw.rpc(fn, params) if params is not None else self._raw.rpc(fn)
++        return _wrap_if_builder(builder)
++
++    def schema(self, name: str):
++        sub_client = self._raw.schema(name)
++        return _wrap_if_builder(sub_client)
++
++    def __getattr__(self, name):
++        # Pass through non-postgrest attributes (auth, storage, realtime, functions).
++        # We deliberately do NOT auto-wrap here — these subsystems have their own
++        # APIs and don't expose `.execute()`, so wrapping would be a no-op at best
++        # and break their interfaces at worst.
++        return getattr(self._raw, name)
+diff --git a/docs/supabase-resilience.md b/docs/supabase-resilience.md
+new file mode 100644
+index 0000000..d561503
+--- /dev/null
++++ b/docs/supabase-resilience.md
+@@ -0,0 +1,74 @@
++# Supabase Resilience Pattern
++
++Graider's Supabase client is wrapped in a resilience proxy (`ResilientClient`) that automatically retries transient failures with exponential backoff.
++
++## What's retried automatically
++
++Every `.execute()` call on a query built through `db.table(...)`, `db.from_()`, `db.rpc(...)`, or `db.schema(...)` is routed through retry logic. The policy depends on the HTTP verb:
++
++| Verb    | Operation     | Retry policy    |
++|---------|---------------|-----------------|
++| `GET`   | select        | full            |
++| `PATCH` | update        | full            |
++| `DELETE`| delete        | full            |
++| `POST`  | upsert        | full            |
++| `POST`  | insert        | preflight only  |
++
++**full** = retry on any transient error (OSError, ConnectionError, TimeoutError, `httpcore.NetworkError`, `httpcore.TimeoutException`, `httpcore.ProtocolError`, HTTP 408/429/5xx, etc.)
++
++**preflight only** = retry only on errors that occurred *before* any bytes reached the server (`ConnectError`, `ConnectTimeout`, DNS failures). Response-phase errors during a raw insert are surfaced to the caller because the server may already have committed the write — retrying would double-insert.
++
++## When to use caller-generated UUIDs
++
++If your insert MUST retry safely even on response-phase errors — i.e., you cannot tolerate a failed submission surfacing a 500 to a student — pass a caller-generated UUID as the `id` field and call `upsert(..., on_conflict='id')` instead of `insert(...)`:
++
++```python
++import uuid
++row = {
++    'id': str(uuid.uuid4()),
++    # ... other fields ...
++}
++db.table('my_table').upsert(row, on_conflict='id').execute()
++```
++
++The upsert gets classified as "full retry". If the first attempt committed the row and the response dropped, the retry's `UPSERT` on the same id merges-duplicates to a no-op and returns the existing row. Unique indexes on other columns (like `student_id + content_id`) still fire for genuine duplicate submissions because a fresh session generates a fresh UUID.
++
++Currently used in:
++- `backend/routes/student_account_routes.py::submit_student_work`
++- `backend/routes/student_account_routes.py::save_submission_draft`
++- `backend/routes/student_portal_routes.py::publish_assessment`
++- `backend/routes/student_portal_routes.py::submit_assessment` (join-code path)
++
++## How to opt out of retry
++
++For long-running streaming queries, custom retry logic, or healthchecks that must fail fast:
++
++```python
++from backend.supabase_client import get_raw_supabase
++raw = get_raw_supabase()
++raw.table('my_table').select('*').execute()  # no retry wrapping
++```
++
++The `/healthz` endpoint in `backend/app.py` bypasses the wrapper entirely and does a raw `httpx.get()` with a 3-second timeout against the PostgREST REST API — a slow Supabase should mark the pod degraded, not succeed after retries.
++
++## Never bypass the wrapper with create_client()
++
++Do NOT call `supabase.create_client()` directly in route handlers or services. Use `backend.supabase_client.get_supabase()` or `get_supabase_or_raise()` instead. The regression test `tests/test_no_direct_create_client.py` will fail the build if any module outside `backend/supabase_client.py` introduces a direct `create_client()` call.
++
++## Retry budget
++
++- 5 retries per operation (configurable in `backend/retry.py`)
++- Exponential backoff: 0.5s, 1s, 2s, 4s, 8s, capped at 32s
++- ±25% jitter
++- Honours `Retry-After` header
++
++## Observability
++
++Every retry is logged with `logger.warning` at:
++- `[supabase-get]` for selects
++- `[supabase-patch]` for updates
++- `[supabase-delete]` for deletes
++- `[supabase-post]` for upserts
++- `[supabase-insert-preflight]` for insert preflight retries
++
++Grep for these labels to see retry activity in production logs.
+diff --git a/tests/test_integration_workflows.py b/tests/test_integration_workflows.py
+index b810021..d78f133 100644
+--- a/tests/test_integration_workflows.py
++++ b/tests/test_integration_workflows.py
+@@ -44,6 +44,7 @@ def _make_chain(execute_data=None):
+     chain = MagicMock()
+     chain.select.return_value = chain
+     chain.insert.return_value = chain
++    chain.upsert.return_value = chain
+     chain.update.return_value = chain
+     chain.delete.return_value = chain
+     chain.eq.return_value = chain
+@@ -79,13 +80,14 @@ class TestPublishAssessment:
+ 
+         def table_side_effect(name):
+             chain = _make_chain()
+-            # insert call for publishing returns a row
++            # insert/upsert call for publishing returns a row
+             insert_chain = MagicMock()
+             insert_chain.execute.return_value = MagicMock(data=[{
+                 'id': 'pub-001',
+                 'join_code': 'ABC123',
+             }])
+             chain.insert.return_value = insert_chain
++            chain.upsert.return_value = insert_chain
+             return chain
+ 
+         mock_sb.table.side_effect = table_side_effect
+@@ -253,10 +255,11 @@ class TestStudentJoinCode:
+             elif name == 'submissions':
+                 # duplicate check returns empty
+                 chain.execute.return_value = MagicMock(data=[])
+-                # insert returns a row with id
++                # insert/upsert returns a row with id
+                 insert_chain = MagicMock()
+                 insert_chain.execute.return_value = MagicMock(data=[{'id': 'sub-001'}])
+                 chain.insert.return_value = insert_chain
++                chain.upsert.return_value = insert_chain
+             return chain
+ 
+         mock_sb.table.side_effect = table_side_effect
+diff --git a/tests/test_no_direct_create_client.py b/tests/test_no_direct_create_client.py
+new file mode 100644
+index 0000000..62de707
+--- /dev/null
++++ b/tests/test_no_direct_create_client.py
+@@ -0,0 +1,37 @@
++"""Regression guard: no module outside backend/supabase_client.py may call
++supabase.create_client directly. All Supabase access must route through the
++canonical get_supabase()/get_supabase_or_raise() helpers so the ResilientClient
++wrapper is applied.
++"""
++
++from pathlib import Path
++
++
++REPO_ROOT = Path(__file__).resolve().parents[1]
++BACKEND = REPO_ROOT / "backend"
++ALLOWED = {BACKEND / "supabase_client.py"}
++
++
++def _python_files():
++    for path in BACKEND.rglob("*.py"):
++        if path in ALLOWED:
++            continue
++        yield path
++
++
++def test_no_direct_create_client_calls():
++    offenders = []
++    for path in _python_files():
++        text = path.read_text(encoding="utf-8", errors="ignore")
++        if "create_client(" in text and "from supabase import" in text:
++            offenders.append(str(path.relative_to(REPO_ROOT)))
++        elif "supabase.create_client(" in text:
++            offenders.append(str(path.relative_to(REPO_ROOT)))
++
++    assert not offenders, (
++        "Direct supabase.create_client() calls found outside "
++        "backend/supabase_client.py. These bypass the ResilientClient "
++        "wrapper and lose retry protection. Migrate them to "
++        "backend.supabase_client.get_supabase() or get_supabase_or_raise():\n  - "
++        + "\n  - ".join(offenders)
++    )
+diff --git a/tests/test_supabase_resilient.py b/tests/test_supabase_resilient.py
+new file mode 100644
+index 0000000..5a269bc
+--- /dev/null
++++ b/tests/test_supabase_resilient.py
+@@ -0,0 +1,317 @@
++"""Tests for the resilient Supabase client wrapper."""
++
++import pytest
++from unittest.mock import MagicMock, patch
++
++
++class TestOperationClassification:
++    """Tests for _classify_operation — picks retry policy from the query builder."""
++
++    def test_select_returns_full(self):
++        from backend.supabase_resilient import _classify_operation
++        q = MagicMock()
++        q.request.http_method = "GET"
++        q.request.headers = {}
++        assert _classify_operation(q) == "full"
++
++    def test_update_returns_full(self):
++        from backend.supabase_resilient import _classify_operation
++        q = MagicMock()
++        q.request.http_method = "PATCH"
++        q.request.headers = {"Prefer": "return=representation"}
++        assert _classify_operation(q) == "full"
++
++    def test_delete_returns_full(self):
++        from backend.supabase_resilient import _classify_operation
++        q = MagicMock()
++        q.request.http_method = "DELETE"
++        q.request.headers = {"Prefer": "return=representation"}
++        assert _classify_operation(q) == "full"
++
++    def test_upsert_returns_full(self):
++        from backend.supabase_resilient import _classify_operation
++        q = MagicMock()
++        q.request.http_method = "POST"
++        q.request.headers = {"Prefer": "return=representation,resolution=merge-duplicates"}
++        assert _classify_operation(q) == "full"
++
++    def test_insert_returns_preflight_only(self):
++        from backend.supabase_resilient import _classify_operation
++        q = MagicMock()
++        q.request.http_method = "POST"
++        q.request.headers = {"Prefer": "return=representation"}
++        assert _classify_operation(q) == "preflight_only"
++
++    def test_unknown_method_defaults_to_preflight(self):
++        from backend.supabase_resilient import _classify_operation
++        q = MagicMock()
++        q.request.http_method = "PUT"
++        q.request.headers = {}
++        assert _classify_operation(q) == "preflight_only"
++
++
++class TestPreflightRetryFilter:
++    """Tests for _is_preflight_error — distinguishes connect-phase from response-phase errors."""
++
++    def test_connect_error_is_preflight(self):
++        from backend.supabase_resilient import _is_preflight_error
++        import httpcore
++        assert _is_preflight_error(httpcore.ConnectError("refused")) is True
++
++    def test_connect_timeout_is_preflight(self):
++        from backend.supabase_resilient import _is_preflight_error
++        import httpcore
++        assert _is_preflight_error(httpcore.ConnectTimeout("dns")) is True
++
++    def test_read_error_is_not_preflight(self):
++        from backend.supabase_resilient import _is_preflight_error
++        import httpcore
++        # ReadError means bytes were in flight — server may have committed
++        assert _is_preflight_error(httpcore.ReadError("reset")) is False
++
++    def test_read_timeout_is_not_preflight(self):
++        from backend.supabase_resilient import _is_preflight_error
++        import httpcore
++        assert _is_preflight_error(httpcore.ReadTimeout("slow")) is False
++
++    def test_dns_oserror_is_preflight(self):
++        from backend.supabase_resilient import _is_preflight_error
++        # OSError with gaierror-style message
++        err = OSError("[Errno -2] Name or service not known")
++        assert _is_preflight_error(err) is True
++
++    def test_protocol_error_is_not_preflight(self):
++        """RemoteProtocolError means the stream was mid-flight — not safe for insert retry."""
++        from backend.supabase_resilient import _is_preflight_error
++        import httpcore
++        assert _is_preflight_error(httpcore.RemoteProtocolError("mid-stream reset")) is False
++
++
++class TestResilientExecute:
++    """Tests for the execute() wrapper's retry behavior."""
++
++    def test_select_retries_on_oserror(self):
++        from backend.supabase_resilient import _resilient_execute
++
++        call_count = {"n": 0}
++        q = MagicMock()
++        q.request.http_method = "GET"
++        q.request.headers = {}
++
++        def fake_execute():
++            call_count["n"] += 1
++            if call_count["n"] < 3:
++                raise OSError("temporarily unavailable")
++            return MagicMock(data=[{"id": "xxx"}])
++
++        q.execute = fake_execute
++        # Patch time.sleep to speed up the test
++        with patch("time.sleep"):
++            result = _resilient_execute(q)
++        assert call_count["n"] == 3
++        assert result.data == [{"id": "xxx"}]
++
++    def test_insert_retries_connect_error(self):
++        from backend.supabase_resilient import _resilient_execute
++        import httpcore
++
++        call_count = {"n": 0}
++        q = MagicMock()
++        q.request.http_method = "POST"
++        q.request.headers = {"Prefer": "return=representation"}
++
++        def fake_execute():
++            call_count["n"] += 1
++            if call_count["n"] < 2:
++                raise httpcore.ConnectError("refused")
++            return MagicMock(data=[{"id": "xxx"}])
++
++        q.execute = fake_execute
++        with patch("time.sleep"):
++            result = _resilient_execute(q)
++        assert call_count["n"] == 2
++
++    def test_insert_does_not_retry_read_error(self):
++        from backend.supabase_resilient import _resilient_execute
++        import httpcore
++
++        call_count = {"n": 0}
++        q = MagicMock()
++        q.request.http_method = "POST"
++        q.request.headers = {"Prefer": "return=representation"}
++
++        def fake_execute():
++            call_count["n"] += 1
++            raise httpcore.ReadError("server disconnected mid-response")
++
++        q.execute = fake_execute
++        with patch("time.sleep"), pytest.raises(httpcore.ReadError):
++            _resilient_execute(q)
++        assert call_count["n"] == 1  # no retry
++
++    def test_upsert_retries_read_error(self):
++        from backend.supabase_resilient import _resilient_execute
++        import httpcore
++
++        call_count = {"n": 0}
++        q = MagicMock()
++        q.request.http_method = "POST"
++        q.request.headers = {"Prefer": "return=representation,resolution=merge-duplicates"}
++
++        def fake_execute():
++            call_count["n"] += 1
++            if call_count["n"] < 3:
++                raise httpcore.ReadError("reset")
++            return MagicMock(data=[{"id": "xxx"}])
++
++        q.execute = fake_execute
++        with patch("time.sleep"):
++            result = _resilient_execute(q)
++        assert call_count["n"] == 3
++
++    def test_non_retryable_error_propagates(self):
++        from backend.supabase_resilient import _resilient_execute
++
++        q = MagicMock()
++        q.request.http_method = "GET"
++        q.request.headers = {}
++        q.execute = MagicMock(side_effect=ValueError("invalid arg"))
++
++        with pytest.raises(ValueError):
++            _resilient_execute(q)
++        assert q.execute.call_count == 1
++
++    def test_upsert_retries_protocol_error(self):
++        """httpcore.RemoteProtocolError (HTTP/2 stream reset) should be retried on upsert."""
++        from backend.supabase_resilient import _resilient_execute
++        import httpcore
++
++        call_count = {"n": 0}
++        q = MagicMock()
++        q.request.http_method = "POST"
++        q.request.headers = {"Prefer": "return=representation,resolution=merge-duplicates"}
++
++        def fake_execute():
++            call_count["n"] += 1
++            if call_count["n"] < 3:
++                raise httpcore.RemoteProtocolError("stream reset")
++            return MagicMock(data=[{"id": "xxx"}])
++
++        q.execute = fake_execute
++        with patch("time.sleep"):
++            result = _resilient_execute(q)
++        assert call_count["n"] == 3
++
++
++class TestProxyBehavior:
++    """Tests that the ResilientClient proxy preserves the chained API surface."""
++
++    def test_table_returns_chainable_wrapper(self):
++        from backend.supabase_resilient import ResilientClient
++
++        mock_raw = MagicMock()
++        wrapper = ResilientClient(mock_raw)
++        result = wrapper.table("classes").select("id").eq("id", "xxx")
++        # The chain should have been forwarded through to the raw client
++        mock_raw.table.assert_called_once_with("classes")
++
++    def test_non_postgrest_attrs_passthrough(self):
++        """auth, storage, realtime, functions pass through untouched."""
++        from backend.supabase_resilient import ResilientClient
++
++        mock_raw = MagicMock()
++        mock_raw.auth = "auth_obj"
++        mock_raw.storage = "storage_obj"
++        mock_raw.realtime = "realtime_obj"
++        mock_raw.functions = "functions_obj"
++        wrapper = ResilientClient(mock_raw)
++        assert wrapper.auth == "auth_obj"
++        assert wrapper.storage == "storage_obj"
++        assert wrapper.realtime == "realtime_obj"
++        assert wrapper.functions == "functions_obj"
++
++    def test_rpc_returns_wrapped_builder(self):
++        """rpc() results have .execute() — they must be wrapped."""
++        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
++
++        # Raw rpc builder exposes .execute
++        raw_builder = MagicMock()
++        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
++
++        mock_raw = MagicMock()
++        mock_raw.rpc = MagicMock(return_value=raw_builder)
++
++        wrapper = ResilientClient(mock_raw)
++        result = wrapper.rpc("some_function", {"arg": 1})
++        assert isinstance(result, _ExecuteProxy)
++        mock_raw.rpc.assert_called_once_with("some_function", {"arg": 1})
++
++    def test_rpc_without_params(self):
++        """rpc() can be called with just the function name."""
++        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
++
++        raw_builder = MagicMock()
++        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
++
++        mock_raw = MagicMock()
++        mock_raw.rpc = MagicMock(return_value=raw_builder)
++
++        wrapper = ResilientClient(mock_raw)
++        result = wrapper.rpc("no_args_fn")
++        assert isinstance(result, _ExecuteProxy)
++        mock_raw.rpc.assert_called_once_with("no_args_fn")
++
++    def test_schema_returns_wrapped_sub_client(self):
++        """schema() returns a sub-client whose .from_()/.table()/.rpc() must also be wrapped."""
++        from backend.supabase_resilient import ResilientClient, _ExecuteProxy
++
++        # Raw schema sub-client has table/from_/rpc
++        raw_builder = MagicMock()
++        raw_builder.execute = MagicMock(return_value=MagicMock(data=[]))
++
++        sub_client = MagicMock(spec=["table", "from_", "rpc"])
++        sub_client.table = MagicMock(return_value=raw_builder)
++        sub_client.from_ = MagicMock(return_value=raw_builder)
++        sub_client.rpc = MagicMock(return_value=raw_builder)
++
++        mock_raw = MagicMock()
++        mock_raw.schema = MagicMock(return_value=sub_client)
++
++        wrapper = ResilientClient(mock_raw)
++        sub_wrapper = wrapper.schema("analytics")
++        # Sub-client should itself be a ResilientClient
++        assert isinstance(sub_wrapper, ResilientClient)
++        # Calls through the sub-wrapper should produce wrapped builders
++        assert isinstance(sub_wrapper.table("events"), _ExecuteProxy)
++
++
++class TestGradingThreadResilience:
++    """End-to-end-ish test for retry behavior during background grading.
++
++    The grading thread updates student_submissions.results via PATCH after
++    multipass grading completes. Since PATCH is idempotent, it must retry
++    through transient Supabase failures (including httpcore.ReadError from
++    HTTP/2 stream resets) without surfacing an error to the grading worker.
++    """
++
++    def test_update_retries_on_transient_read_error(self):
++        from backend.supabase_resilient import _resilient_execute
++        from unittest.mock import MagicMock, patch
++        import httpcore
++
++        call_count = {"n": 0}
++        q = MagicMock()
++        q.request.http_method = "PATCH"
++        q.request.headers = {"Prefer": "return=representation"}
++
++        def fake_execute():
++            call_count["n"] += 1
++            if call_count["n"] < 3:
++                raise httpcore.ReadError("server reset connection mid-update")
++            return MagicMock(data=[{"id": "xxx", "results": {"score": 90}}])
++
++        q.execute = fake_execute
++        with patch("time.sleep"):
++            result = _resilient_execute(q)
++        assert call_count["n"] == 3
++        assert result.data[0]["results"]["score"] == 90
