@@ -85,7 +85,7 @@ Two independent sub-projects shipped together in one plan/PR but deployable and 
 |------|--------|----------------|
 | `backend/observability/__init__.py` | Create | Re-export `init_sentry`, `critical_path` |
 | `backend/observability/sentry.py` | Create | `init_sentry()`, `before_send()` scrubber, `@critical_path` decorator |
-| `backend/app.py` | Modify | Call `init_sentry()` immediately after `app = Flask(__name__)`, before route registration |
+| `backend/app.py` | Modify | Call `init_sentry()` immediately after `app = Flask(__name__)`, before route registration. Also add the `GRAIDER_SENTRY_DEBUG_ROUTE`-gated `/_debug/sentry-boom` route (see Testing section) and the `GRAIDER_HEALTHZ_FORCE_FAIL` short-circuit at the top of the existing `/healthz` handler. |
 | `backend/services/portal_grading.py` | Modify | Decorate `run_portal_grading_thread` with `@critical_path` |
 | `backend/routes/student_account_routes.py` | Modify | Decorate `submit_student_work` and `save_submission_draft` |
 | `backend/routes/student_portal_routes.py` | Modify | Decorate `publish_assessment` and join-code `submit_assessment` |
@@ -129,11 +129,29 @@ assessment_content, student_row, assessment_data
 
 Replace each removed key with the string `"[PII-scrubbed]"` so reviewers know the scrubber ran.
 
-**4. Set hashed user identifier (optional).** If the event has a `user` dict and `g.user_id` (teacher ID) is available via `flask.g`:
-- Replace `user.id` with `hashlib.sha256(str(g.user_id).encode()).hexdigest()[:12]`
-- Remove `user.email`, `user.username`, `user.ip_address`
+**4. Set hashed user identifier (context-safe).** Use `flask.has_request_context()` to gate every access to `flask.g`. Touching `g.user_id` from outside a Flask request (e.g., the background grading thread, import-time errors, the Sentry SDK's own worker thread flushing events) raises `RuntimeError: Working outside of application context` — which would crash the scrubber during the very events we most want to capture.
 
-**If `g.user_id` is absent** (unauthenticated routes, background grading thread, import-time errors): set `user.id = "anonymous"`. **Do NOT drop the event** — critical path failures can happen in contexts where `g` is empty.
+```python
+from flask import has_request_context, g
+
+def _resolve_user_id():
+    if not has_request_context():
+        return "anonymous"
+    try:
+        uid = getattr(g, "user_id", None)
+    except RuntimeError:
+        # Defensive: some Flask context edge cases raise even after has_request_context() check
+        return "anonymous"
+    if not uid:
+        return "anonymous"
+    return hashlib.sha256(str(uid).encode()).hexdigest()[:12]
+```
+
+Then in `before_send`:
+- Set `event["user"]["id"] = _resolve_user_id()`
+- Remove `event["user"]["email"]`, `event["user"]["username"]`, `event["user"]["ip_address"]`
+
+**Do NOT drop the event when the user is anonymous** — critical path failures in the grading thread are exactly the events that need to reach Sentry. Anonymous is a valid user identifier for grouping purposes.
 
 ### `@critical_path` decorator
 
@@ -160,7 +178,7 @@ def critical_path(fn):
 
 ### Tests
 
-**`tests/test_sentry_scrub.py` — 10 tests pinning `before_send` contract:**
+**`tests/test_sentry_scrub.py` — 11 tests pinning `before_send` contract:**
 
 | # | Test | Asserts |
 |---|---|---|
@@ -172,8 +190,9 @@ def critical_path(fn):
 | 6 | `test_frame_locals_scrubbed` | `student_name`, `answers`, etc. replaced with `"[PII-scrubbed]"` |
 | 7 | `test_frame_locals_non_pii_preserved` | `attempt_number`, `content_id`, etc. preserved |
 | 8 | `test_missing_request_context_ok` | Event with `hint["request"] = None` → scrub completes, event returned |
-| 9 | `test_teacher_id_hashed_when_present` | With `g.user_id = "abc"`, event `user.id` becomes `sha256("abc")[:12]` |
-| 10 | `test_anonymous_user_when_gid_missing` | No `g.user_id` → `user.id = "anonymous"`, event NOT dropped |
+| 9 | `test_teacher_id_hashed_when_present` | In Flask request context with `g.user_id = "abc"`, event `user.id` becomes `sha256("abc")[:12]` |
+| 10 | `test_anonymous_user_when_gid_missing` | In Flask request context with no `g.user_id` → `user.id = "anonymous"`, event NOT dropped |
+| 11 | `test_scrub_outside_request_context_does_not_crash` | Invoke `before_send` from a thread with no Flask context active → no `RuntimeError`, event returned with `user.id = "anonymous"`. Directly pins the background-grading-thread case. |
 
 **`tests/test_critical_path.py` — 3 tests pinning decorator contract:**
 
@@ -252,23 +271,73 @@ Sentry groups events by `user.id`, which our `before_send` scrubber sets to eith
 ### Sub-project A: Sentry — unit + integration
 
 - **Unit tests:** run in CI as part of `pytest tests/`. Both test files (`test_sentry_scrub.py` and `test_critical_path.py`) use a fake Sentry hub — no network calls, no DSN required. Tests pass in any environment.
-- **Integration test on production:** after merging, add a temporary `GET /_debug/sentry-boom` route (guarded by `DEBUG=1` env, which is NOT set in Railway production — so the route literally 404s unless the env is flipped). Flip `DEBUG=1`, hit the route with both `?severity=critical` and `?severity=normal`, verify:
-  1. Both events arrive in Sentry within 60 seconds
-  2. Only `?severity=critical` has the `severity=critical` tag
-  3. Neither event contains `request.data`, `Authorization` header, or scrubbed local variable names
-  4. `user.id` is a 12-char hex string (logged-in caller) or `"anonymous"` (unauth)
-- **Post-rollout cleanup (explicit runbook step):** delete the `/_debug/sentry-boom` route in a follow-up PR titled `chore: remove post-rollout sentry debug route`. This is a **required cleanup step**, not an optional one. The runbook lists it with a checklist and a target date (within 7 days of sub-project A merging).
+- **Integration test on production:** after merging, the debug route is gated by a dedicated feature flag — **NOT** Flask's `DEBUG` / `FLASK_DEBUG` env var. Using Flask's debug flag in production enables the Werkzeug interactive debugger, the auto-reloader, and detailed exception pages — all of which are production security holes. We need a flag that only affects the single debug route.
+
+  **Guard implementation** in `backend/app.py`:
+  ```python
+  if os.getenv("GRAIDER_SENTRY_DEBUG_ROUTE") == "1":
+      @app.route("/_debug/sentry-boom")
+      def _debug_sentry_boom():
+          from flask import request
+          severity = request.args.get("severity", "normal")
+          if severity == "critical":
+              @critical_path
+              def _raise():
+                  raise RuntimeError("sentry critical smoke test")
+              _raise()
+          else:
+              raise RuntimeError("sentry normal smoke test")
+  ```
+
+  When `GRAIDER_SENTRY_DEBUG_ROUTE` is unset (the default for production), the route is never registered — hits return 404.
+
+  **Production verification procedure:**
+  1. Set `GRAIDER_SENTRY_DEBUG_ROUTE=1` in Railway env vars. Do NOT set `FLASK_DEBUG`, `DEBUG`, or `app.debug` — those enable Werkzeug's debugger and are a security risk in production.
+  2. Wait for Railway auto-deploy (~60 seconds).
+  3. Hit `https://app.graider.live/_debug/sentry-boom?severity=normal` and `?severity=critical` once each.
+  4. In Sentry dashboard, verify:
+     - Both events arrive within 60 seconds
+     - Only `?severity=critical` has the `severity=critical` tag
+     - Neither event contains `request.data`, `Authorization` header, or scrubbed local variable names (check a frame's `vars` dict for the `[PII-scrubbed]` sentinel)
+     - `user.id` is a 12-char hex string (authenticated caller) or `"anonymous"` (unauth probe)
+  5. Unset `GRAIDER_SENTRY_DEBUG_ROUTE` in Railway. Wait for auto-deploy. Confirm the debug route returns 404 again.
+- **Post-rollout cleanup (explicit runbook step):** delete the `/_debug/sentry-boom` route code (the `if os.getenv(...)` block) in a follow-up PR titled `chore: remove post-rollout sentry debug route`. This is a **required cleanup step**, not an optional one — leaving dormant debug code behind a flag invites accidents. The runbook lists it with a checklist and a target date (within 7 days of sub-project A merging). The env-var gate means the route is 404 without the flag even if the code is still present, so the cleanup PR is about code hygiene, not security.
 
 ### Sub-project B: BetterStack — live verification
 
 1. Monitors green in dashboard within 5 minutes of creation.
-2. **Alert drill:** temporarily set `SUPABASE_URL` to an invalid value in Railway (`https://broken.supabase.co`). Within 3 minutes, `/healthz` should return non-200 twice in a row, BetterStack should fire a Slack alert, status page should show the monitor as "down." Revert the env var, verify recovery within 3 more minutes, confirm the "resolved" notification fires.
-3. **After-hours SMS drill:** run the alert drill above outside 9am-6pm ET. Confirm SMS arrives within 5 minutes of the initial Slack alert.
+2. **Alert drill (customer-safe via feature flag).** The drill must NOT corrupt `SUPABASE_URL` or otherwise break live database calls — that would cause a real outage for every student and teacher using the app during the drill window. Instead, the `/healthz` route is taught to short-circuit to a 503 when a dedicated drill env var is set. Student-facing API routes continue to work normally because they call `get_supabase()` directly, not `/healthz`.
+
+   **Additional code change to `backend/app.py`'s `/healthz` route** (small addition, Sub-project A scope):
+
+   ```python
+   @app.route('/healthz')
+   def healthz():
+       # Alert-drill short-circuit — exercises the full alert pipeline without
+       # touching Supabase, so student-facing traffic is unaffected during the drill.
+       if os.getenv('GRAIDER_HEALTHZ_FORCE_FAIL') == '1':
+           return jsonify({"app": "ok", "supabase": "drill_forced_failure"}), 503
+
+       status = {"app": "ok"}
+       # ... existing Supabase probe ...
+   ```
+
+   **Drill procedure (zero customer impact):**
+   1. Set `GRAIDER_HEALTHZ_FORCE_FAIL=1` in Railway env vars. Wait for auto-deploy (~60 seconds).
+   2. Within 3 minutes, BetterStack should observe 2 consecutive 503 responses and fire a Slack alert.
+   3. Status page should show the monitor as "down."
+   4. Student and teacher API calls continue working normally — they do not route through `/healthz`.
+   5. Unset `GRAIDER_HEALTHZ_FORCE_FAIL`. Wait for auto-deploy.
+   6. Verify the "resolved" notification fires and the monitor returns to green.
+
+3. **After-hours SMS drill:** run step 2 outside 9am-6pm ET. Confirm SMS arrives within 5 minutes of the initial Slack alert, voice call arrives within 10 minutes if unacknowledged.
 4. **Status page DNS verification:** `dig status.graider.live` returns a BetterStack CNAME; `curl -I https://status.graider.live` returns 200 with the BetterStack-branded status page HTML.
 
 ### Quarterly drill
 
-`docs/observability.md` includes a "Quarterly alert drill" section that re-runs steps 2 and 3 above on a calendar cadence (Jan / Apr / Jul / Oct, first Monday). Catches silent regressions — e.g., someone accidentally disabled a monitor, Slack webhook expired, phone number changed.
+`docs/observability.md` includes a "Quarterly alert drill" section that re-runs steps 2 and 3 above on a calendar cadence (Jan / Apr / Jul / Oct, first Monday). The drill is safe to run during business hours because it only affects the external monitor — student and teacher traffic is unaffected. Catches silent regressions — e.g., someone accidentally disabled a monitor, Slack webhook expired, phone number changed.
+
+**Why not corrupt `SUPABASE_URL` instead?** The earlier draft of this spec suggested corrupting `SUPABASE_URL` to force the `/healthz` probe to fail. That would cause a real Supabase outage for every live request during the drill window (3-15 minutes), affecting any student mid-assessment or teacher mid-grade. The `GRAIDER_HEALTHZ_FORCE_FAIL` flag gives the same alert signal with zero customer impact, so there is no reason to ever corrupt Supabase credentials for drill purposes.
 
 ---
 
@@ -319,12 +388,17 @@ The runbook lives at `docs/observability.md` and is the single source of truth f
 1. **What's monitored** — the alert routing table above, verbatim
 2. **Alert taxonomy** — what each alert means, expected response time, first 3 debugging steps
 3. **Critical-path tag convention** — the 5 currently-decorated functions, how to add a new one, when NOT to add one
-4. **Post-rollout cleanup checklist** — delete the `/_debug/sentry-boom` route within 7 days of sub-project A merging (explicit deadline)
-5. **Holiday / vacation override procedure** — how to use BetterStack's "Schedule overrides" feature, who to designate as a backup if needed
-6. **Quarterly drill procedure** — re-run the alert drills from the testing section
-7. **Rollback procedure** — per above
-8. **Known noise sources** — 4xx drops, anonymous user bucketing, non-prod event dropping — so future operators don't waste time diagnosing expected behavior
-9. **Escalation contacts** — user's phone number, Slack handle, email, and any future backup contact
+4. **Feature flags reference** — all four env vars, what they do, safe vs unsafe values, who's allowed to flip them:
+   - `SENTRY_DSN` — enables Sentry. Normally set. Unset to disable Sentry entirely.
+   - `RAILWAY_GIT_COMMIT_SHA` — auto-set by Railway. Don't touch manually.
+   - `GRAIDER_SENTRY_DEBUG_ROUTE` — **default unset.** Temporarily set to `1` during production Sentry verification (step 3 of rollout). Always unset immediately after verification completes. **Do NOT confuse with `FLASK_DEBUG` / `DEBUG`** — those enable Werkzeug's interactive debugger and are production security holes. Never set them.
+   - `GRAIDER_HEALTHZ_FORCE_FAIL` — **default unset.** Temporarily set to `1` during alert drills. Exercises the BetterStack → Slack/SMS/voice pipeline by making `/healthz` return 503 without touching Supabase. Always unset immediately after the drill completes. Student and teacher API traffic is unaffected while it's set.
+5. **Post-rollout cleanup checklist** — delete the `/_debug/sentry-boom` route code entirely within 7 days of sub-project A merging (explicit deadline). The `GRAIDER_HEALTHZ_FORCE_FAIL` short-circuit stays in place permanently — it's the drill mechanism.
+6. **Holiday / vacation override procedure** — how to use BetterStack's "Schedule overrides" feature, who to designate as a backup if needed
+7. **Quarterly drill procedure** — re-run the alert drills from the testing section via `GRAIDER_HEALTHZ_FORCE_FAIL`. Safe to run during business hours.
+8. **Rollback procedure** — per above
+9. **Known noise sources** — 4xx drops, anonymous user bucketing (Rule 6's "distinct users" check collapses all unauth events into a single bucket), non-prod event dropping — so future operators don't waste time diagnosing expected behavior
+10. **Escalation contacts** — user's phone number, Slack handle, email, and any future backup contact
 
 ---
 
@@ -343,8 +417,9 @@ The runbook lives at `docs/observability.md` and is the single source of truth f
 | **Sub-projects** | 2 (Sentry error tracking + BetterStack uptime/status page) |
 | **New files** | 5 code files, 2 test files, 1 doc file (plus `requirements.txt` change) |
 | **Modified files** | 4 backend files (`app.py`, `portal_grading.py`, 2 route files) |
+| **New env vars (all default-off)** | `SENTRY_DSN` (enables Sentry), `RAILWAY_GIT_COMMIT_SHA` (auto-set by Railway), `GRAIDER_SENTRY_DEBUG_ROUTE` (gates `/_debug/sentry-boom`), `GRAIDER_HEALTHZ_FORCE_FAIL` (alert-drill short-circuit) |
 | **Critical-path decorators** | 5 functions total |
-| **Unit tests added** | 13 (10 scrub tests + 3 decorator tests) |
+| **Unit tests added** | 14 (11 scrub tests + 3 decorator tests) |
 | **Monthly cost** | $10 (BetterStack Team) |
 | **Rollout time** | ~1 day for B, ~1 day for A + reviews, ~1 day for verification = 3 days |
 | **Rollback complexity** | Low — each sub-project reversible independently |
